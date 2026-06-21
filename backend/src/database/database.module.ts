@@ -12,9 +12,8 @@ import { DatabaseInitService } from './database-init.service';
         type: 'postgres',
         url: config.get<string>('DATABASE_URL'),
         autoLoadEntities: true,
-        // Prototype convenience: TypeORM keeps the schema in sync with the
-        // entities. Switch to migrations before production.
         synchronize: true,
+        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
       }),
     }),
   ],
