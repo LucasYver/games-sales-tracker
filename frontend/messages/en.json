@@ -1,0 +1,108 @@
+{
+  "common": {
+    "estimatedUnits": "est. units",
+    "freeToPlay": "Free-to-play",
+    "noImage": "No image",
+    "units": "units"
+  },
+  "platform": {
+    "GLOBAL": "All platforms",
+    "MOBILE": "Mobile",
+    "OTHER": "Other",
+    "PC": "PC",
+    "PLAYSTATION": "PlayStation",
+    "SWITCH": "Switch",
+    "XBOX": "Xbox"
+  },
+  "confidence": {
+    "HIGH": "High confidence",
+    "LOW": "Low confidence",
+    "MEDIUM": "Medium confidence"
+  },
+  "nav": {
+    "langSwitch": "Français"
+  },
+  "siteMeta": {
+    "description": "Video game sales estimates built from multiple cross-checked calculation methods to get as close to reality as possible.",
+    "keywords": "video game sales, sales tracker, estimates, copies sold, PC, PlayStation, Xbox, Switch",
+    "siteName": "Game Sales Tracker",
+    "title": "Game Sales Tracker — How many copies did that game sell?",
+    "titleTemplate": "%s · Game Sales Tracker"
+  },
+  "homeMeta": {
+    "description": "How many copies did that game sell? Cross-checked sales estimates for PC, PlayStation, Xbox and Switch — honest ranges built from multiple methods.",
+    "title": "Video game sales estimates"
+  },
+  "gamePageMeta": {
+    "description": "Live sales estimate for {name}, with a confidence score and a historical timeline of reported figures.",
+    "title": "{name} ({year}) — Estimated sales",
+    "titleNoYear": "{name} — Estimated sales"
+  },
+  "home": {
+    "badge": "Cross-checked data · honest ranges",
+    "gamesCount": "{count, number} games",
+    "listingEmpty": "No games found for these filters.",
+    "listingOldest": "Oldest games",
+    "listingPopular": "Popular games",
+    "listingRecent": "Newest games",
+    "releasedOn": "Released {date}",
+    "searchEmpty": "No game found. Try another spelling.",
+    "searchHeading": "Results for \"{query}\"",
+    "subtitle": "We cross several calculation methods to estimate how many copies a game has sold, on PC and consoles — as honest ranges rather than fake exact figures.",
+    "title": "How many copies did that game sell?"
+  },
+  "searchBar": {
+    "button": "Search",
+    "placeholder": "Search a game (e.g. Hades, Baldur's Gate)"
+  },
+  "filter": {
+    "platformAll": "All platforms",
+    "platformLabel": "Platform",
+    "sortLabel": "Sort",
+    "sortOldest": "Oldest",
+    "sortPopular": "Most popular",
+    "sortRecent": "Newest"
+  },
+  "gameCard": {
+    "noEstimate": "No estimate yet"
+  },
+  "gamePage": {
+    "asOfNow": "live estimate",
+    "back": "Back",
+    "estimateTitle": "Estimated sales today",
+    "freeToPlayNote": "No sales figure: this game is free-to-play.",
+    "noData": "No sales data yet for this game.",
+    "releasedOn": "Released {date}",
+    "infoTitle": "Game info",
+    "developer": "Developer",
+    "publisher": "Publisher",
+    "genres": "Genres",
+    "ratingsTitle": "Store ratings",
+    "steamReviews": "{count} Steam reviews",
+    "storeScore": "{score}/5",
+    "storeRatings": "{count} ratings"
+  },
+  "salesHistory": {
+    "estimated": "estimated",
+    "subtitle": "Cumulative sales over time.",
+    "title": "Sales over time",
+    "today": "Today"
+  },
+  "methodology": {
+    "paragraph1": "Our estimate combines several independent calculation methods that we continuously cross-check to get as close to the real figure as possible.",
+    "paragraph2": "The confidence score reflects how consistent these methods are: when they agree, the range tightens; when they diverge, we flag it clearly.",
+    "title": "How we estimate"
+  },
+  "refreshButton": {
+    "error": "Refresh failed. Try again.",
+    "label": "Refresh data",
+    "refreshing": "Refreshing…",
+    "successEmpty": "Refresh complete — no new figure.",
+    "successWithArticles": "{count} new figure(s) added."
+  },
+  "pagination": {
+    "nav": "Pagination",
+    "next": "Next page",
+    "previous": "Previous page"
+  }
+}

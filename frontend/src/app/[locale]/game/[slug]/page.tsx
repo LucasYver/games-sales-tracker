@@ -1,0 +1,346 @@
+import { useTranslations, useFormatter } from 'next-intl';
+import { getTranslations } from 'next-intl/server';
+import { notFound } from 'next/navigation';
+import type { Metadata } from 'next';
+import { ArrowLeft } from 'lucide-react';
+import {
+  getGame,
+  type ConfidenceLevel,
+  type GameDetail,
+  type Platform,
+  type StoreRatings,
+} from '@/lib/api';
+import { Link } from '@/i18n/navigation';
+import { ConfidenceBadge } from '@/components/ConfidenceBadge';
+import { RefreshButton } from '@/components/RefreshButton';
+import { SalesHistory } from '@/components/SalesHistory';
+import { MethodologyCard } from '@/components/MethodologyCard';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+
+function compact(
+  n: number,
+  format: ReturnType<typeof useFormatter>,
+): string {
+  return format.number(n, { notation: 'compact', maximumFractionDigits: 1 });
+}
+
+function range(
+  low: number,
+  high: number,
+  format: ReturnType<typeof useFormatter>,
+): string {
+  return low === high
+    ? compact(low, format)
+    : `${compact(low, format)} – ${compact(high, format)}`;
+}
+
+function headlineConfidence(total: GameDetail['totalSales']): ConfidenceLevel {
+  if (total?.confidence) return total.confidence;
+  if (total?.basis === 'reported') return 'MEDIUM';
+  return 'LOW';
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string; locale: string }>;
+}): Promise<Metadata> {
+  const { slug, locale } = await params;
+  const [game, t] = await Promise.all([
+    getGame(slug),
+    getTranslations({ locale, namespace: 'gamePageMeta' }),
+  ]);
+
+  if (!game) return { title: 'Game not found' };
+
+  const year = game.releaseDate
+    ? new Date(game.releaseDate).getFullYear()
+    : null;
+  const title = year
+    ? t('title', { name: game.name, year })
+    : t('titleNoYear', { name: game.name });
+  const description = t('description', { name: game.name });
+  const url = `/${locale}/game/${game.slug}`;
+
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: url,
+      languages: {
+        en: `/en/game/${game.slug}`,
+        fr: `/fr/game/${game.slug}`,
+      },
+    },
+    openGraph: {
+      title,
+      description,
+      type: 'article',
+      locale,
+      url,
+      images: game.coverUrl ? [{ url: game.coverUrl, alt: game.name }] : [],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: game.coverUrl ? [game.coverUrl] : [],
+    },
+  };
+}
+
+function GameInfoCard({ game }: { game: GameDetail }) {
+  const t = useTranslations('gamePage');
+
+  const hasInfo =
+    game.developer || game.publisher || game.genres.length > 0;
+  const hasRatings =
+    game.storeRatings.steam ||
+    game.storeRatings.playstation ||
+    game.storeRatings.xbox;
+
+  if (!hasInfo && !hasRatings) return null;
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      {hasInfo && (
+        <Card>
+          <CardContent className="flex flex-col gap-3 p-5">
+            <h2 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+              {t('infoTitle')}
+            </h2>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+              {game.developer && (
+                <>
+                  <dt className="text-muted-foreground font-medium">
+                    {t('developer')}
+                  </dt>
+                  <dd>{game.developer}</dd>
+                </>
+              )}
+              {game.publisher && (
+                <>
+                  <dt className="text-muted-foreground font-medium">
+                    {t('publisher')}
+                  </dt>
+                  <dd>{game.publisher}</dd>
+                </>
+              )}
+              {game.genres.length > 0 && (
+                <>
+                  <dt className="text-muted-foreground font-medium">
+                    {t('genres')}
+                  </dt>
+                  <dd>{game.genres.join(', ')}</dd>
+                </>
+              )}
+            </dl>
+          </CardContent>
+        </Card>
+      )}
+      {hasRatings && (
+        <StoreRatingsCard ratings={game.storeRatings} />
+      )}
+    </div>
+  );
+}
+
+function StoreRatingsCard({ ratings }: { ratings: StoreRatings }) {
+  const t = useTranslations('gamePage');
+  const format = useFormatter();
+
+  const rows: { label: string; reviews: number; score: number | null }[] = [];
+  if (ratings.steam) {
+    rows.push({ label: 'Steam', reviews: ratings.steam.reviews, score: null });
+  }
+  if (ratings.playstation) {
+    rows.push({
+      label: 'PlayStation',
+      reviews: ratings.playstation.reviews,
+      score: ratings.playstation.score,
+    });
+  }
+  if (ratings.xbox) {
+    rows.push({
+      label: 'Xbox',
+      reviews: ratings.xbox.reviews,
+      score: ratings.xbox.score,
+    });
+  }
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-3 p-5">
+        <h2 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+          {t('ratingsTitle')}
+        </h2>
+        <ul className="flex flex-col gap-2">
+          {rows.map(({ label, reviews, score }) => (
+            <li key={label} className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground font-medium">{label}</span>
+              <span className="text-right">
+                {score !== null && (
+                  <span className="mr-1 font-semibold">
+                    ★ {t('storeScore', { score: score.toFixed(1) })}
+                  </span>
+                )}
+                <span className="text-muted-foreground">
+                  {label === 'Steam'
+                    ? t('steamReviews', {
+                        count: format.number(reviews, { notation: 'compact' }),
+                      })
+                    : t('storeRatings', {
+                        count: format.number(reviews, { notation: 'compact' }),
+                      })}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+function GamePageContent({ game }: { game: GameDetail }) {
+  const t = useTranslations('gamePage');
+  const tPlatform = useTranslations('platform');
+  const tCommon = useTranslations('common');
+  const format = useFormatter();
+
+  const { totalSales, salesHistory } = game;
+  const todayEstimate = game.estimatedToday;
+  const confidence = headlineConfidence(totalSales);
+  const platformLabel = (p: Platform) => tPlatform(p);
+
+  // JSON-LD VideoGame schema for SEO. We expose the public-facing fields
+  // (name, cover, platforms, release date) — never the internal source
+  // pipeline.
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'VideoGame',
+    name: game.name,
+    image: game.coverUrl ?? undefined,
+    description: game.summary ?? undefined,
+    datePublished: game.releaseDate ?? undefined,
+    gamePlatform: game.platforms,
+  };
+
+  return (
+    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-8 px-6 py-10">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
+      <div className="flex items-center justify-between gap-4">
+        <Button asChild variant="ghost" size="sm">
+          <Link href="/">
+            <ArrowLeft aria-hidden="true" className="size-4" />
+            {t('back')}
+          </Link>
+        </Button>
+        <RefreshButton gameId={game.id} />
+      </div>
+
+      <header className="flex flex-col gap-5 sm:flex-row sm:items-start">
+        {game.coverUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={game.coverUrl}
+            alt={`${game.name} cover`}
+            className="border-border h-auto w-full rounded-xl border object-cover shadow-sm sm:w-56"
+          />
+        )}
+        <div className="flex flex-col gap-3">
+          <h1 className="text-3xl font-bold tracking-tight">{game.name}</h1>
+          <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
+            {game.releaseDate && (
+              <time dateTime={game.releaseDate}>
+                {t('releasedOn', {
+                  date: format.dateTime(new Date(game.releaseDate), {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                  }),
+                })}
+              </time>
+            )}
+          </div>
+          {game.platforms.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {game.platforms.map((p) => (
+                <Badge key={p} variant="secondary">
+                  {platformLabel(p)}
+                </Badge>
+              ))}
+            </div>
+          )}
+          {game.summary && (
+            <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
+              {game.summary}
+            </p>
+          )}
+        </div>
+      </header>
+
+      {todayEstimate ? (
+        <Card>
+          <CardContent className="flex flex-col gap-3 p-6">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
+                {t('estimateTitle')}
+              </h2>
+              <ConfidenceBadge level={confidence} />
+            </div>
+
+            <p className="text-primary text-5xl font-bold tracking-tight tabular-nums">
+              {range(todayEstimate.low, todayEstimate.high, format)}
+            </p>
+            <p className="text-muted-foreground text-sm">
+              {tCommon('units')} · {t('asOfNow')}
+            </p>
+          </CardContent>
+        </Card>
+      ) : game.isFree ? (
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-lg font-semibold text-emerald-600">
+              {tCommon('freeToPlay')}
+            </p>
+            <p className="text-muted-foreground mt-1 text-sm">
+              {t('freeToPlayNote')}
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-muted-foreground">{t('noData')}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      <GameInfoCard game={game} />
+
+      <SalesHistory history={salesHistory} todayEstimate={todayEstimate} />
+
+      <MethodologyCard />
+    </main>
+  );
+}
+
+export default async function GamePage({
+  params,
+}: {
+  params: Promise<{ slug: string; locale: string }>;
+}) {
+  const { slug } = await params;
+  const game = await getGame(slug);
+
+  if (!game) notFound();
+
+  return <GamePageContent game={game} />;
+}

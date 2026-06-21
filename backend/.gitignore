@@ -1,0 +1,17 @@
+# compiled output
+/dist
+/node_modules
+
+# logs
+*.log
+npm-debug.log*
+
+# environment
+.env
+.env.local
+
+# OS / editor
+.DS_Store
+
+# Prisma
+prisma/*.db

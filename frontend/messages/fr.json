@@ -1,0 +1,108 @@
+{
+  "common": {
+    "estimatedUnits": "unités estimées",
+    "freeToPlay": "Free-to-play",
+    "noImage": "Pas d'image",
+    "units": "unités"
+  },
+  "platform": {
+    "GLOBAL": "Toutes les plateformes",
+    "MOBILE": "Mobile",
+    "OTHER": "Autre",
+    "PC": "PC",
+    "PLAYSTATION": "PlayStation",
+    "SWITCH": "Switch",
+    "XBOX": "Xbox"
+  },
+  "confidence": {
+    "HIGH": "Haute confiance",
+    "LOW": "Faible confiance",
+    "MEDIUM": "Confiance moyenne"
+  },
+  "nav": {
+    "langSwitch": "English"
+  },
+  "siteMeta": {
+    "description": "Estimations de ventes de jeux vidéo construites à partir de plusieurs méthodes de calcul recoupées pour fournir le chiffre le plus proche de la réalité.",
+    "keywords": "ventes jeux vidéo, sales tracker, estimations, copies vendues, PC, PlayStation, Xbox, Switch",
+    "siteName": "Game Sales Tracker",
+    "title": "Game Sales Tracker — Combien de copies ce jeu a-t-il vendues ?",
+    "titleTemplate": "%s · Game Sales Tracker"
+  },
+  "homeMeta": {
+    "description": "Combien d'exemplaires ce jeu a-t-il vendus ? Découvrez les estimations de ventes — PC, PlayStation, Xbox, Switch — recoupées via plusieurs méthodes.",
+    "title": "Estimations de ventes de jeux vidéo"
+  },
+  "gamePageMeta": {
+    "description": "Estimation actuelle des ventes de {name}, avec score de confiance et historique des chiffres dans le temps.",
+    "title": "{name} ({year}) — Ventes estimées",
+    "titleNoYear": "{name} — Ventes estimées"
+  },
+  "home": {
+    "badge": "Données recoupées · estimations honnêtes",
+    "gamesCount": "{count, number} jeux",
+    "listingEmpty": "Aucun jeu trouvé pour ces filtres.",
+    "listingOldest": "Jeux les plus anciens",
+    "listingPopular": "Jeux populaires",
+    "listingRecent": "Jeux récents",
+    "releasedOn": "Sorti le {date}",
+    "searchEmpty": "Aucun jeu trouvé. Essayez une autre orthographe.",
+    "searchHeading": "Résultats pour « {query} »",
+    "subtitle": "Nous croisons plusieurs méthodes de calcul pour estimer le nombre d'exemplaires vendus, sur PC et consoles — sous forme de fourchettes honnêtes plutôt que de faux chiffres exacts.",
+    "title": "Combien d'exemplaires ce jeu a-t-il vendus ?"
+  },
+  "searchBar": {
+    "button": "Rechercher",
+    "placeholder": "Rechercher un jeu (ex. Hades, Baldur's Gate)"
+  },
+  "filter": {
+    "platformAll": "Toutes les plateformes",
+    "platformLabel": "Plateforme",
+    "sortLabel": "Tri",
+    "sortOldest": "Les plus anciens",
+    "sortPopular": "Les plus populaires",
+    "sortRecent": "Les plus récents"
+  },
+  "gameCard": {
+    "noEstimate": "Pas encore d'estimation"
+  },
+  "gamePage": {
+    "asOfNow": "estimation actuelle",
+    "back": "Retour",
+    "estimateTitle": "Ventes estimées aujourd'hui",
+    "freeToPlayNote": "Pas de chiffre de ventes : ce jeu est gratuit.",
+    "noData": "Aucune donnée de vente pour ce jeu.",
+    "releasedOn": "Sorti le {date}",
+    "infoTitle": "Infos du jeu",
+    "developer": "Développeur",
+    "publisher": "Éditeur",
+    "genres": "Genres",
+    "ratingsTitle": "Notes des stores",
+    "steamReviews": "{count} avis Steam",
+    "storeScore": "{score}/5",
+    "storeRatings": "{count} avis"
+  },
+  "salesHistory": {
+    "estimated": "estimé",
+    "subtitle": "Évolution des ventes cumulées au fil du temps.",
+    "title": "Ventes dans le temps",
+    "today": "Aujourd'hui"
+  },
+  "methodology": {
+    "paragraph1": "Notre estimation combine plusieurs méthodes de calcul indépendantes que nous recoupons en permanence afin de nous rapprocher du chiffre réel.",
+    "paragraph2": "Le score de confiance reflète la cohérence entre ces méthodes : quand elles convergent, la fourchette se resserre ; quand elles divergent, nous l'indiquons clairement.",
+    "title": "Notre méthodologie"
+  },
+  "refreshButton": {
+    "error": "L'actualisation a échoué. Réessayez.",
+    "label": "Actualiser les données",
+    "refreshing": "Actualisation…",
+    "successEmpty": "Actualisation terminée — aucun nouveau chiffre.",
+    "successWithArticles": "{count} nouveau(x) chiffre(s) ajouté(s)."
+  },
+  "pagination": {
+    "nav": "Pagination",
+    "next": "Page suivante",
+    "previous": "Page précédente"
+  }
+}
