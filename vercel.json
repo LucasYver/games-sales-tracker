@@ -15,5 +15,10 @@
             "src": "/api(.*)",
             "dest": "backend/api/index.ts"
         }
+    ],
+    "crons": [
+        { "path": "/api/cron/refresh-steam",  "schedule": "0 3 * * *" },
+        { "path": "/api/cron/poll-feeds",      "schedule": "*/30 * * * *" },
+        { "path": "/api/cron/discover-games",  "schedule": "0 2 * * *" }
     ]
 }

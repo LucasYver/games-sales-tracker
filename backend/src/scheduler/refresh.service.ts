@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { GameSource, SourceType } from '../entities';
@@ -22,7 +21,6 @@ export class RefreshService {
    * "Search trusted sources" button (refreshGame) to avoid per-game LLM costs
    * on every nightly cycle.
    */
-  @Cron(CronExpression.EVERY_DAY_AT_3AM)
   async refreshAllSteamApps() {
     const sources = await this.gameSources.find({
       where: { source: SourceType.STEAM },
@@ -47,7 +45,6 @@ export class RefreshService {
    * Continuously monitor trusted-source RSS feeds: every 30 minutes, ingest
    * any new article that mentions a tracked game and reports a sales figure.
    */
-  @Cron(CronExpression.EVERY_30_MINUTES)
   async pollTrustedFeeds() {
     try {
       await this.ingestion.pollFeeds();
@@ -61,7 +58,6 @@ export class RefreshService {
    * admitted by IGDB rating or live Steam reviews). Runs at 2 AM, ahead of the
    * 3 AM per-app refresh.
    */
-  @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async discoverNewGames() {
     try {
       const result = await this.ingestion.discoverIgdbGames();
