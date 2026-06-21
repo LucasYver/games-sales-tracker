@@ -32,7 +32,7 @@ export class RefreshService {
       const appId = Number(source.externalId);
       if (Number.isNaN(appId)) continue;
       try {
-        await this.ingestion.ingestSteamApp(appId, { skipWikipedia: true });
+        await this.ingestion.ingestSteamApp(appId);
       } catch (error) {
         this.logger.warn(`Refresh failed for app ${appId}: ${error}`);
       }

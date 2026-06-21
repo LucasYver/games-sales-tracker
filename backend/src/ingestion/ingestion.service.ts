@@ -388,7 +388,7 @@ export class IngestionService {
           `IGDB discovery ingest failed for "${candidate.name}" (igdb=${candidate.igdbId}): ${error}`,
         );
       }
-      await new Promise((r) => setTimeout(r, 300));
+      await new Promise((r) => setTimeout(r, 200));
     }
 
     this.logger.log(
@@ -455,16 +455,9 @@ export class IngestionService {
    * (reviews + estimated owners), recompute the PC sales estimate, and pull
    * multi-platform figures from console stores and Wikipedia.
    *
-   * Options:
-   *   skipStoreRatings — skip PS/Xbox store scraping (default false)
-   *   skipWikipedia    — skip Wikipedia LLM extraction (default false).
-   *                      Set true in automated crons to avoid per-game LLM
-   *                      costs; Wikipedia is then fetched on-demand via
-   *                      refreshGame (the "Search trusted sources" button).
    */
   async ingestSteamApp(
     appId: number,
-    options: { skipStoreRatings?: boolean; skipWikipedia?: boolean } = {},
   ): Promise<string | null> {
     const details = await this.steam.getAppDetails(appId);
     if (!details) {
@@ -496,12 +489,7 @@ export class IngestionService {
       );
     }
 
-    if (!options.skipStoreRatings) {
-      await this.scrapeStoreRatings(game.id, game.name);
-    }
-    if (!options.skipWikipedia) {
-      await this.scrapeWikipedia(game.id, game.name);
-    }
+    await this.scrapeStoreRatings(game.id, game.name);
 
     // Compute the PC estimate last so calibration can use any declared figure
     // pulled by the enrichment steps above.
