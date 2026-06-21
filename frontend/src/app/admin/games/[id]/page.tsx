@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DeleteButton } from '../../_components/DeleteButton';
 import { RefreshGameButton } from '../../_components/RefreshGameButton';
+import { EditGameForm } from '../../_components/EditGameForm';
 import { deleteGame, deleteSalesRecord } from '../../actions';
 
 export const dynamic = 'force-dynamic';
@@ -80,10 +81,18 @@ export default async function AdminGameDetailPage({
       </header>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-sm font-semibold tracking-wide uppercase">
             Metadata
           </CardTitle>
+          <EditGameForm
+            initial={{
+              id: game.id,
+              name: game.name,
+              releaseDate: game.releaseDate,
+              igdbId: game.igdbId,
+            }}
+          />
         </CardHeader>
         <CardContent>
           <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm sm:grid-cols-3">

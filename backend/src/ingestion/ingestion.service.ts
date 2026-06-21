@@ -512,13 +512,15 @@ export class IngestionService {
         return;
       }
 
+      const releaseDate = await this.getReleaseDate(gameId);
+
       await this.salesRecords.delete({
         gameId,
         source: SalesSource.WIKIPEDIA,
       });
 
       const rows = [];
-      if (sales.global) {
+      if (sales.global && this.isReportedAfterRelease(sales.global.reportedAt, releaseDate)) {
         rows.push(
           this.salesRecords.create({
             gameId,
@@ -534,6 +536,7 @@ export class IngestionService {
         );
       }
       for (const { platform, figure } of sales.perPlatform) {
+        if (!this.isReportedAfterRelease(figure.reportedAt, releaseDate)) continue;
         rows.push(
           this.salesRecords.create({
             gameId,
@@ -1011,6 +1014,8 @@ export class IngestionService {
 
   // Replace a game's records for one source URL with the freshly extracted
   // figures (a worldwide total as GLOBAL plus any per-platform figures).
+  // Records dated before the game's release date are dropped (they are
+  // almost always referring to an earlier title in the same series).
   private async storeArticleSales(
     gameId: string,
     url: string,
@@ -1020,8 +1025,10 @@ export class IngestionService {
   ): Promise<number> {
     await this.salesRecords.delete({ gameId, sourceUrl: url });
 
+    const releaseDate = await this.getReleaseDate(gameId);
+
     const rows: SalesRecord[] = [];
-    if (sales.global) {
+    if (sales.global && this.isReportedAfterRelease(sales.global.reportedAt, releaseDate)) {
       rows.push(
         this.salesRecords.create({
           gameId,
@@ -1038,6 +1045,7 @@ export class IngestionService {
       );
     }
     for (const { platform, figure } of sales.perPlatform) {
+      if (!this.isReportedAfterRelease(figure.reportedAt, releaseDate)) continue;
       rows.push(
         this.salesRecords.create({
           gameId,
@@ -1056,6 +1064,25 @@ export class IngestionService {
 
     if (rows.length > 0) await this.salesRecords.save(rows);
     return rows.length;
+  }
+
+  private async getReleaseDate(gameId: string): Promise<Date | null> {
+    const game = await this.games.findOne({
+      where: { id: gameId },
+      select: { id: true, releaseDate: true },
+    });
+    return game?.releaseDate ?? null;
+  }
+
+  // A reported sales date older than the game's release date almost always
+  // means the figure refers to a previous title in the same series. When the
+  // game has no known release date we keep the record (cannot tell).
+  private isReportedAfterRelease(
+    reportedAt: Date | null | undefined,
+    releaseDate: Date | null,
+  ): boolean {
+    if (!reportedAt || !releaseDate) return true;
+    return new Date(reportedAt) >= releaseDate;
   }
 
   private confidenceFromWeight(weight: number): ConfidenceLevel {

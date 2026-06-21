@@ -1,6 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
+import { Not, Repository, IsNull } from 'typeorm';
 import {
   Game,
   GameSource,
@@ -14,6 +18,13 @@ import {
   TrustedSource,
 } from '../entities';
 import { isPeriodicQuote } from '../ingestion/sales-figure.utils';
+import { slugify } from '../common/slug';
+
+export interface UpdateGameInput {
+  name?: string;
+  releaseDate?: string | null;
+  igdbId?: number | null;
+}
 
 export interface AdminStats {
   games: {
@@ -405,6 +416,78 @@ export class AdminService {
   async deleteGame(id: string): Promise<{ deleted: boolean }> {
     const result = await this.games.delete(id);
     return { deleted: (result.affected ?? 0) > 0 };
+  }
+
+  /**
+   * Patch a game's editable metadata. Currently supports name, releaseDate
+   * and igdbId. When name changes, the slug is regenerated and de-duplicated
+   * against existing games (collisions get a numeric suffix).
+   */
+  async updateGame(id: string, input: UpdateGameInput): Promise<Game> {
+    const game = await this.games.findOne({ where: { id } });
+    if (!game) throw new NotFoundException(`Game ${id} not found`);
+
+    if (input.name !== undefined) {
+      const trimmed = input.name.trim();
+      if (!trimmed) throw new BadRequestException('name cannot be empty');
+      if (trimmed !== game.name) {
+        game.name = trimmed;
+        game.slug = await this.buildUniqueSlug(trimmed, id);
+      }
+    }
+
+    if (input.releaseDate !== undefined) {
+      if (input.releaseDate === null || input.releaseDate === '') {
+        game.releaseDate = null;
+      } else {
+        const parsed = new Date(input.releaseDate);
+        if (Number.isNaN(parsed.getTime())) {
+          throw new BadRequestException('releaseDate must be a valid date');
+        }
+        game.releaseDate = parsed;
+      }
+    }
+
+    if (input.igdbId !== undefined) {
+      if (input.igdbId === null) {
+        game.igdbId = null;
+      } else {
+        if (!Number.isInteger(input.igdbId) || input.igdbId <= 0) {
+          throw new BadRequestException('igdbId must be a positive integer');
+        }
+        if (input.igdbId !== game.igdbId) {
+          const conflict = await this.games.findOne({
+            where: { igdbId: input.igdbId, id: Not(id) },
+          });
+          if (conflict) {
+            throw new BadRequestException(
+              `igdbId ${input.igdbId} is already used by "${conflict.name}"`,
+            );
+          }
+          game.igdbId = input.igdbId;
+        }
+      }
+    }
+
+    return this.games.save(game);
+  }
+
+  private async buildUniqueSlug(
+    name: string,
+    excludeGameId: string,
+  ): Promise<string> {
+    const base = slugify(name) || 'game';
+    let candidate = base;
+    let suffix = 2;
+    while (
+      await this.games.findOne({
+        where: { slug: candidate, id: Not(excludeGameId) },
+      })
+    ) {
+      candidate = `${base}-${suffix}`;
+      suffix += 1;
+    }
+    return candidate;
   }
 
   async listSalesRecords(opts: {

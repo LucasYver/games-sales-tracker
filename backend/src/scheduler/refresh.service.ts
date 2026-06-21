@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { GameSource, SourceType } from '../entities';
+import { Game, GameSource, SourceType } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
+import { getRefreshIntervalDays, isDueForRefresh } from './refresh-interval';
 
 @Injectable()
 export class RefreshService {
@@ -11,28 +12,38 @@ export class RefreshService {
   constructor(
     @InjectRepository(GameSource)
     private readonly gameSources: Repository<GameSource>,
+    @InjectRepository(Game)
+    private readonly games: Repository<Game>,
     private readonly ingestion: IngestionService,
   ) {}
 
   /**
-   * Daily refresh of every tracked Steam app so that signal snapshots build
-   * up a time series and estimates stay current. Wikipedia LLM extraction is
-   * intentionally skipped here — it is triggered on-demand via the
-   * "Search trusted sources" button (refreshGame) to avoid per-game LLM costs
-   * on every nightly cycle.
+   * Periodic refresh of tracked Steam apps. Each game has its own cadence
+   * based on its release date (newer titles refreshed more often). Games
+   * older than 5 years are skipped entirely. Wikipedia LLM extraction is
+   * intentionally skipped here to keep per-game cost low.
    */
   async refreshAllSteamApps() {
     const sources = await this.gameSources.find({
       where: { source: SourceType.STEAM },
+      relations: { game: true },
     });
 
-    this.logger.log(`Refreshing ${sources.length} Steam app(s)...`);
+    const now = new Date();
+    const eligible = sources.filter((source) =>
+      isDueForRefresh(source.game?.releaseDate, source.game?.lastRefreshedAt, now),
+    );
 
-    for (const source of sources) {
+    this.logger.log(
+      `Refreshing ${eligible.length} of ${sources.length} Steam app(s) (others not yet due).`,
+    );
+
+    for (const source of eligible) {
       const appId = Number(source.externalId);
       if (Number.isNaN(appId)) continue;
       try {
         await this.ingestion.ingestSteamApp(appId);
+        await this.games.update(source.gameId, { lastRefreshedAt: new Date() });
       } catch (error) {
         this.logger.warn(`Refresh failed for app ${appId}: ${error}`);
       }

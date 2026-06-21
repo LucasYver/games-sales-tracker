@@ -78,6 +78,12 @@ export class Game {
   @UpdateDateColumn()
   updatedAt: Date;
 
+  // Timestamp of the last successful Steam ingestion refresh. Used by the
+  // periodic refresh cron to skip games that were updated recently. The
+  // refresh cadence depends on the game's age (see refresh-interval.ts).
+  @Column({ type: 'timestamptz', nullable: true })
+  lastRefreshedAt: Date | null;
+
   @OneToMany(() => GameSource, (source) => source.game)
   sources: GameSource[];
 

@@ -12,7 +12,6 @@ import {
 } from '@/lib/api';
 import { Link } from '@/i18n/navigation';
 import { ConfidenceBadge } from '@/components/ConfidenceBadge';
-import { RefreshButton } from '@/components/RefreshButton';
 import { SalesHistory } from '@/components/SalesHistory';
 import { MethodologyCard } from '@/components/MethodologyCard';
 import { Badge } from '@/components/ui/badge';
@@ -235,14 +234,13 @@ function GamePageContent({ game }: { game: GameDetail }) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center gap-4">
         <Button asChild variant="ghost" size="sm">
           <Link href="/">
             <ArrowLeft aria-hidden="true" className="size-4" />
             {t('back')}
           </Link>
         </Button>
-        <RefreshButton gameId={game.id} />
       </div>
 
       <header className="flex flex-col gap-5 sm:flex-row sm:items-start">

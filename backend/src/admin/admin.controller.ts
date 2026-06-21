@@ -1,10 +1,12 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
   HttpCode,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -13,6 +15,7 @@ import { AdminService } from './admin.service';
 import { AdminTokenGuard } from './admin-token.guard';
 import { Platform, SalesSource } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
+import { UpdateGameDto } from './dto/update-game.dto';
 
 @Controller('admin')
 @UseGuards(AdminTokenGuard)
@@ -48,6 +51,15 @@ export class AdminController {
   @Get('games/:id')
   getGame(@Param('id', ParseUUIDPipe) id: string) {
     return this.admin.getGameDetail(id);
+  }
+
+  @Patch('games/:id')
+  @HttpCode(200)
+  updateGame(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateGameDto,
+  ) {
+    return this.admin.updateGame(id, body);
   }
 
   @Delete('games/:id')

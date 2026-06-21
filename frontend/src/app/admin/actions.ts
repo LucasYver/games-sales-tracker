@@ -49,6 +49,24 @@ export async function deleteGame(id: string): Promise<void> {
   revalidatePath('/admin');
 }
 
+export interface UpdateGamePayload {
+  name?: string;
+  releaseDate?: string | null;
+  igdbId?: number | null;
+}
+
+export async function updateGame(
+  id: string,
+  payload: UpdateGamePayload,
+): Promise<void> {
+  await adminFetch(`/games/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+  revalidatePath(`/admin/games/${id}`);
+  revalidatePath('/admin/games');
+}
+
 export async function refreshGame(
   id: string,
 ): Promise<{ found: boolean; articlesIngested: number }> {
