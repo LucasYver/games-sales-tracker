@@ -81,20 +81,12 @@ export default async function AdminGameDetailPage({
       </header>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader>
           <CardTitle className="text-sm font-semibold tracking-wide uppercase">
             Metadata
           </CardTitle>
-          <EditGameForm
-            initial={{
-              id: game.id,
-              name: game.name,
-              releaseDate: game.releaseDate,
-              igdbId: game.igdbId,
-            }}
-          />
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-4">
           <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm sm:grid-cols-3">
             <Field label="Slug" value={game.slug} mono />
             <Field
@@ -141,10 +133,18 @@ export default async function AdminGameDetailPage({
             <Field label="Updated" value={formatDateTime(game.updatedAt)} />
           </dl>
           {game.summary && (
-            <p className="text-muted-foreground mt-4 text-sm leading-relaxed">
+            <p className="text-muted-foreground text-sm leading-relaxed">
               {game.summary}
             </p>
           )}
+          <EditGameForm
+            initial={{
+              id: game.id,
+              name: game.name,
+              releaseDate: game.releaseDate,
+              igdbId: game.igdbId,
+            }}
+          />
         </CardContent>
       </Card>
 
