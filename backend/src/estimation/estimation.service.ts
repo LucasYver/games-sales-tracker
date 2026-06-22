@@ -77,6 +77,14 @@ const CALIBRATION_SOURCES = [
   SalesSource.MEDIA,
 ];
 
+// Minimum estimated share of a platform in the worldwide breakdown
+// required to calibrate it from a GLOBAL record (see
+// `recalibrateFromGlobal`). Platforms whose proxy share falls below this
+// threshold keep their default multiplier instead — splitting a
+// worldwide figure over a marginal platform produces volatile, untrust-
+// worthy multipliers.
+const GLOBAL_SPLIT_MIN_PLATFORM_SHARE = 0.05;
+
 interface PlatformConfig {
   platform: Platform;
   signalMetric: SignalMetric;
@@ -279,11 +287,20 @@ export class EstimationService {
    * that has both a reliable declared figure and a contemporaneous signal.
    * Each platform is calibrated independently; failures on one platform never
    * affect the others.
+   *
+   * Two passes:
+   *  1. Per-platform records (`PC` / `PLAYSTATION` / `XBOX`) drive the
+   *     primary calibration via `recalibratePlatform`.
+   *  2. As a fallback, worldwide (`GLOBAL`) records are split
+   *     proportionally across platforms in `recalibrateFromGlobal`. Per-
+   *     platform calibration always wins: GLOBAL split only fills
+   *     platforms left without a calibrated multiplier after pass 1.
    */
   async recalibrateAll(gameId: string): Promise<void> {
     for (const cfg of this.platforms) {
       await this.recalibratePlatform(gameId, cfg);
     }
+    await this.recalibrateFromGlobal(gameId);
   }
 
   // ───── internals ────────────────────────────────────────────────────────
@@ -545,6 +562,130 @@ export class EstimationService {
 
     await cfg.write(gameId, multiplier, best.source);
     return multiplier;
+  }
+
+  /**
+   * Calibrate per-platform multipliers from a worldwide (`platform =
+   * GLOBAL`) declared figure when no per-platform record is available.
+   * The vast majority of press/IR announcements are stated worldwide
+   * ("X million copies sold across all platforms") rather than broken
+   * down per platform, so this fallback unlocks calibration for cases
+   * `recalibratePlatform` cannot handle.
+   *
+   * Algorithm:
+   *  1. Pick the best GLOBAL record (priority OFFICIAL > ANNOUNCEMENT >
+   *     MEDIA, then most recent reportedAt).
+   *  2. For each tracked platform, find the signal snapshot closest to
+   *     the record's date (within `CALIBRATION_WINDOW_DAYS`).
+   *  3. Compute a proxy estimate per platform using the **midpoint of
+   *     the static default** multiplier (deliberately NOT the calibrated
+   *     value — using the calibrated value would create a feedback loop
+   *     that re-derives whatever was already stored).
+   *  4. Split the declared GLOBAL units proportionally to each
+   *     platform's share of the total proxy estimate.
+   *  5. For each platform NOT already calibrated by `recalibratePlatform`
+   *     AND whose share is at least `GLOBAL_SPLIT_MIN_PLATFORM_SHARE`,
+   *     derive `multiplier = declared_p / signal_p` and persist it
+   *     (with the GLOBAL record's source for spread modulation at read
+   *     time).
+   *
+   * Per-platform calibration always takes precedence: if any platform
+   * was already calibrated by a non-GLOBAL record in the same pass,
+   * we never overwrite it from the GLOBAL split.
+   */
+  private async recalibrateFromGlobal(gameId: string): Promise<void> {
+    const candidates = await this.salesRecords.find({
+      where: {
+        gameId,
+        platform: Platform.GLOBAL,
+        source: In(CALIBRATION_SOURCES),
+      },
+    });
+    if (candidates.length === 0) return;
+
+    candidates.sort((a, b) => {
+      const pa = CALIBRATION_SOURCES.indexOf(a.source);
+      const pb = CALIBRATION_SOURCES.indexOf(b.source);
+      if (pa !== pb) return pa - pb;
+      const ta = a.reportedAt?.getTime() ?? 0;
+      const tb = b.reportedAt?.getTime() ?? 0;
+      return tb - ta;
+    });
+    const best = candidates[0];
+    if (best.units <= 0 || !best.reportedAt) return;
+
+    // Reload game so we see the calibrations any per-platform
+    // recalibratePlatform call may have written earlier in this pass.
+    const game = await this.games.findOne({ where: { id: gameId } });
+    if (!game) return;
+
+    const target = best.reportedAt.getTime();
+
+    // For each platform: find the signal closest to the record's date
+    // within the calibration window, and compute a proxy weight from
+    // the static default multiplier midpoint.
+    type Slot = {
+      cfg: PlatformConfig;
+      signalValue: number;
+      proxy: number;
+    };
+    const slots: Slot[] = [];
+    for (const cfg of this.platforms) {
+      const snapshots = await this.signals.find({
+        where: { gameId, metric: cfg.signalMetric },
+      });
+      if (snapshots.length === 0) continue;
+      const closest = snapshots.reduce((acc, r) =>
+        Math.abs(r.capturedAt.getTime() - target) <
+        Math.abs(acc.capturedAt.getTime() - target)
+          ? r
+          : acc,
+      );
+      if (
+        Math.abs(closest.capturedAt.getTime() - target) >
+        CALIBRATION_WINDOW_DAYS * 24 * 3600 * 1000
+      ) {
+        continue;
+      }
+      if (closest.value <= 0) continue;
+
+      const defaultMid = (cfg.defaultLow + cfg.defaultHigh) / 2;
+      slots.push({
+        cfg,
+        signalValue: closest.value,
+        proxy: closest.value * defaultMid,
+      });
+    }
+
+    const totalProxy = slots.reduce((sum, s) => sum + s.proxy, 0);
+    if (totalProxy <= 0) return;
+
+    for (const slot of slots) {
+      // Per-platform calibration wins — don't overwrite.
+      if (slot.cfg.read(game) != null) continue;
+
+      const share = slot.proxy / totalProxy;
+      if (share < GLOBAL_SPLIT_MIN_PLATFORM_SHARE) continue;
+
+      const allocated = best.units * share;
+      const multiplier = allocated / slot.signalValue;
+      if (
+        multiplier < slot.cfg.plausibleMin ||
+        multiplier > slot.cfg.plausibleMax
+      ) {
+        this.logger.debug(
+          `Skipping implausible global-split ${slot.cfg.platform} calibration for ${gameId}: ${multiplier.toFixed(1)}`,
+        );
+        continue;
+      }
+
+      await slot.cfg.write(gameId, multiplier, best.source);
+      this.logger.log(
+        `[calibration:global-split] ${gameId} ${slot.cfg.platform}: ` +
+          `share=${(share * 100).toFixed(1)}% multiplier=${multiplier.toFixed(2)} ` +
+          `(from ${best.source} ${best.units.toLocaleString()} units)`,
+      );
+    }
   }
 
   private resolveConfidence(

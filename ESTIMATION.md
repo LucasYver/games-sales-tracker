@@ -90,6 +90,46 @@ WIKIPEDIA is deliberately **not** in `CALIBRATION_SOURCES`: it is
 secondhand by nature (it cites other sources) so we'd be calibrating on
 re-reported numbers without the original context.
 
+### Fallback: calibration from a worldwide figure
+
+> `EstimationService.recalibrateFromGlobal`.
+
+In practice, the press almost always quotes a worldwide total ("X
+million copies sold across all platforms") rather than per-platform
+breakdowns. Without a fallback, those `platform = GLOBAL` records can't
+calibrate anything and we stay on defaults forever.
+
+The fallback splits the GLOBAL figure proportionally to each platform's
+**proxy estimate** (signal × default-multiplier midpoint), then
+calibrates each platform with its allocated share. Per-platform
+calibration always takes precedence — GLOBAL split only fills the
+platforms that pass 1 left untouched.
+
+```
+proxy_p          = signal_p × midpoint(default_mult_p)
+share_p          = proxy_p / Σ proxy
+allocated_p      = declared.global × share_p
+multiplier_p     = allocated_p / signal_p           // = global × midpoint(default_p) / Σ proxy
+```
+
+Crucially we use the **static defaults** (not the calibrated values) as
+weights — otherwise calibration would feed back on itself.
+
+Guards (same spirit as the per-platform pass):
+
+- Platform's signal must exist within `CALIBRATION_WINDOW_DAYS = 180`
+  days of the declared date.
+- Platform's share must be at least
+  `GLOBAL_SPLIT_MIN_PLATFORM_SHARE = 5 %`. Splitting a worldwide figure
+  over a marginal platform (e.g. Xbox at 1 %) yields volatile
+  multipliers we don't trust.
+- Resulting multiplier still has to land inside
+  `[plausibleMin, plausibleMax]`.
+
+The persisted `calibrationSource*` is the GLOBAL record's source, so
+the per-source spread (OFFICIAL ±20 %, ANNOUNCEMENT ±30 %, MEDIA
+±45 %) applies normally at read time.
+
 ---
 
 ## 2. Per-platform estimate — Achievement-based (parallel)
@@ -288,6 +328,7 @@ All numbers live in `backend/src/games/sales-modeling.constants.ts`.
 | `ACHIEVEMENT_ESTIMATE_MIN/MAX_UNITS` | `1_000 / 500_000_000` | achievement sanity (range)  |
 | `RECENT_RELEASE_DAYS`             | `14`       | confidence (recent → LOW)              |
 | `CALIBRATION_WINDOW_DAYS`         | `180`      | recalibration (max age delta)          |
+| `GLOBAL_SPLIT_MIN_PLATFORM_SHARE` | `0.05`     | min share to calibrate from a GLOBAL record |
 | `DISCREPANCY_RATIO_HIGH`          | `2.0`      | discrepancy detector (under-estimate)  |
 | `DISCREPANCY_RATIO_LOW`           | `0.5`      | discrepancy detector (over-estimate)   |
 
