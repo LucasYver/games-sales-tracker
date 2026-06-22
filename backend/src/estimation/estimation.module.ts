@@ -1,6 +1,12 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Game, SalesEstimate, SalesRecord, SignalSnapshot } from '../entities';
+import {
+  AchievementSnapshot,
+  Game,
+  SalesEstimate,
+  SalesRecord,
+  SignalSnapshot,
+} from '../entities';
 import { EstimationService } from './estimation.service';
 
 @Module({
@@ -10,6 +16,7 @@ import { EstimationService } from './estimation.service';
       SignalSnapshot,
       SalesRecord,
       SalesEstimate,
+      AchievementSnapshot,
     ]),
   ],
   providers: [EstimationService],

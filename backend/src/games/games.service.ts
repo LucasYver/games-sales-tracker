@@ -1,19 +1,27 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, LessThan, LessThanOrEqual, Or, Repository } from 'typeorm';
 import {
+  AchievementSnapshot,
   ConfidenceLevel,
+  EstimateSnapshot,
+  EstimationDiscrepancy,
   Game,
   Platform,
   SalesEstimate,
   SalesRecord,
   SalesSource,
+  SerializedReconciliationEntry,
   SignalMetric,
   SignalSnapshot,
 } from '../entities';
+import type { Agreement } from '../entities';
+import { EstimationService } from '../estimation/estimation.service';
 import {
   AGREEMENT_GROWTH_PER_YEAR,
   AGREEMENT_OVERSHOOT_RATIO,
+  DISCREPANCY_RATIO_HIGH,
+  DISCREPANCY_RATIO_LOW,
   FALLBACK_ANNUAL_GROWTH,
   FALLBACK_GROWTH_CAP_YEARS,
   FRESHNESS_MIN_HEADROOM,
@@ -48,7 +56,8 @@ export type DisplaySource = SalesSource | 'ESTIMATE';
 // platform. 'strong' = estimate range brackets the figure; 'weak' = off but
 // plausible (e.g. growth since an old figure); 'conflict' = they disagree
 // beyond what time/uncertainty explains, flagging a figure or model to review.
-export type Agreement = 'strong' | 'weak' | 'conflict';
+// Defined in entities/enums.ts; re-exported here for backwards compatibility.
+export { type Agreement } from '../entities';
 
 export interface PlatformSales {
   platform: Platform;
@@ -125,17 +134,35 @@ const DEFAULT_CONFIDENCE: Record<SalesSource, ConfidenceLevel> = {
   [SalesSource.MEDIA]: ConfidenceLevel.MEDIUM,
 };
 
+function serializeReconciliationEntry(
+  entry: ReconciliationEntry,
+): SerializedReconciliationEntry {
+  return {
+    ...entry,
+    declaredAt: entry.declaredAt?.toISOString() ?? null,
+  };
+}
+
 @Injectable()
 export class GamesService {
+  private readonly logger = new Logger(GamesService.name);
+
   constructor(
     @InjectRepository(Game)
     private readonly games: Repository<Game>,
     @InjectRepository(SignalSnapshot)
     private readonly signals: Repository<SignalSnapshot>,
+    @InjectRepository(AchievementSnapshot)
+    private readonly achievements: Repository<AchievementSnapshot>,
     @InjectRepository(SalesEstimate)
     private readonly estimates: Repository<SalesEstimate>,
+    @InjectRepository(EstimateSnapshot)
+    private readonly estimateSnapshots: Repository<EstimateSnapshot>,
+    @InjectRepository(EstimationDiscrepancy)
+    private readonly discrepancies: Repository<EstimationDiscrepancy>,
     @InjectRepository(SalesRecord)
     private readonly salesRecords: Repository<SalesRecord>,
+    private readonly estimation: EstimationService,
   ) {}
 
   /**
@@ -366,6 +393,258 @@ export class GamesService {
         if (ta !== tb) return ta - tb;
         return a.capturedAt.getTime() - b.capturedAt.getTime();
       });
+  }
+
+  /**
+   * Persist a snapshot of the headline "today" range and the per-platform
+   * reconciliation as they stand right now (or as they stood at `asOf` for
+   * a historical replay). Idempotent: calling twice in the same second
+   * for the same game produces two rows — callers that don't want
+   * duplicates should dedupe upstream (the cron refresh is naturally
+   * de-duped because it runs at most once a day per game).
+   *
+   * When `asOf` is provided, declared figures dated *after* `asOf` are
+   * dropped (we reconstruct what the reconciliation would have looked
+   * like at that point in time), and only the most recent estimate per
+   * platform with `computedAt <= asOf` is considered.
+   */
+  async snapshotReconcile(gameId: string, asOf?: Date): Promise<void> {
+    const game = await this.games.findOne({ where: { id: gameId } });
+    if (!game) return;
+
+    const records = await this.recordsAsOf(gameId, asOf);
+    const estimates = await this.latestEstimatesByPlatform(gameId, asOf);
+    const { reconciliation, estimatedToday } = this.aggregateSales(
+      records,
+      estimates,
+      game.releaseDate,
+    );
+
+    if (!estimatedToday) return;
+
+    // aggregateSales returns floats (freshness cap multiplies by a real
+    // number); the column is `int`, so round before persisting.
+    await this.estimateSnapshots.save(
+      this.estimateSnapshots.create({
+        gameId,
+        estimatedTodayLow: Math.round(estimatedToday.low),
+        estimatedTodayHigh: Math.round(estimatedToday.high),
+        reconciliation: reconciliation.map(serializeReconciliationEntry),
+        computedAt: asOf ?? new Date(),
+      }),
+    );
+  }
+
+  /**
+   * Detect "model misses": records whose declared figure diverges by more
+   * than DISCREPANCY_RATIO_HIGH (or less than DISCREPANCY_RATIO_LOW) from
+   * the prior estimate that pre-dates the record.
+   *
+   * Each record produces at most one discrepancy row (unique on recordId).
+   * Once written, the row is **never updated** — even if a later
+   * recalibration aligns the live estimate with the figure, the frozen
+   * miss remains as a paper trail of past model error.
+   *
+   * Lookup strategy for "prior estimate":
+   *  - Reference moment T = record.reportedAt ?? record.capturedAt.
+   *  - For platform = GLOBAL → take the latest EstimateSnapshot with
+   *    computedAt < T (snapshot stores the aggregated total band).
+   *  - For per-platform records → take the latest SalesEstimate for the
+   *    same platform with computedAt < T (more precise than reading the
+   *    snapshot JSON, which only contains entries for platforms that had
+   *    a declared figure at T).
+   *
+   * Skipped silently when no prior estimate exists at T (e.g. first
+   * declared figure ever for a brand-new game).
+   */
+  async evaluateDiscrepanciesForGame(gameId: string): Promise<number> {
+    const records = await this.salesRecords.find({ where: { gameId } });
+    if (records.length === 0) return 0;
+
+    let created = 0;
+    for (const record of records) {
+      const existing = await this.discrepancies.findOne({
+        where: { recordId: record.id },
+      });
+      if (existing) continue;
+
+      const referenceMoment = record.reportedAt ?? record.capturedAt;
+      if (!referenceMoment) continue;
+
+      const prior = await this.findPriorEstimateBand(
+        gameId,
+        record.platform,
+        referenceMoment,
+      );
+      if (!prior) continue;
+
+      const mid = (prior.low + prior.high) / 2;
+      if (mid <= 0) continue;
+      const ratio = record.units / mid;
+
+      if (ratio >= DISCREPANCY_RATIO_LOW && ratio <= DISCREPANCY_RATIO_HIGH) {
+        continue;
+      }
+
+      await this.discrepancies.save(
+        this.discrepancies.create({
+          gameId,
+          platform: record.platform,
+          recordId: record.id,
+          declaredUnits: record.units,
+          declaredSource: record.source,
+          declaredAt: record.reportedAt,
+          priorEstimateLow: prior.low,
+          priorEstimateHigh: prior.high,
+          priorEstimateAt: prior.computedAt,
+          ratio,
+        }),
+      );
+      created++;
+    }
+
+    if (created > 0) {
+      this.logger.warn(
+        `[discrepancy] ${gameId}: ${created} new estimation miss(es) recorded`,
+      );
+    }
+    return created;
+  }
+
+  private async findPriorEstimateBand(
+    gameId: string,
+    platform: Platform,
+    before: Date,
+  ): Promise<{ low: number; high: number; computedAt: Date } | null> {
+    if (platform === Platform.GLOBAL) {
+      const snap = await this.estimateSnapshots.findOne({
+        where: { gameId, computedAt: LessThan(before) },
+        order: { computedAt: 'DESC' },
+      });
+      if (!snap) return null;
+      return {
+        low: snap.estimatedTodayLow,
+        high: snap.estimatedTodayHigh,
+        computedAt: snap.computedAt,
+      };
+    }
+
+    const estimate = await this.estimates.findOne({
+      where: { gameId, platform, computedAt: LessThan(before) },
+      order: { computedAt: 'DESC' },
+    });
+    if (!estimate) return null;
+    return {
+      low: estimate.estimatedLow,
+      high: estimate.estimatedHigh,
+      computedAt: estimate.computedAt,
+    };
+  }
+
+  /**
+   * Replay the entire estimate history for a game using current
+   * multipliers and constants. Useful after tweaking
+   * `sales-modeling.constants.ts` or after recalibration (so the past no
+   * longer mixes points computed with stale parameters).
+   *
+   * Pipeline:
+   *  1. Find every distinct signal-capture moment (SignalSnapshot ∪
+   *     AchievementSnapshot), dedup at minute granularity.
+   *  2. Wipe all existing SalesEstimate + EstimateSnapshot rows for the
+   *     game (clean slate; estimates are derivatives, never primary data).
+   *  3. For each capture moment T (ascending), run
+   *     `EstimationService.computeAndStoreAt(gameId, T)` then
+   *     `snapshotReconcile(gameId, T)`. Each step uses the multipliers
+   *     stored on `Game` today, not whatever they were at T.
+   *
+   * Returns the count of (estimate, snapshot) rows produced.
+   */
+  async rebuildEstimateHistory(
+    gameId: string,
+  ): Promise<{ points: number; estimates: number; snapshots: number }> {
+    const game = await this.games.findOne({ where: { id: gameId } });
+    if (!game) throw new NotFoundException(`Game ${gameId} not found`);
+
+    const moments = await this.collectCaptureMoments(gameId);
+    this.logger.log(
+      `[rebuild] "${game.name}" — ${moments.length} historical capture moments`,
+    );
+
+    await this.estimates.delete({ gameId });
+    await this.estimateSnapshots.delete({ gameId });
+
+    let estimates = 0;
+    let snapshots = 0;
+    for (const t of moments) {
+      const inserted = await this.estimation.computeAndStoreAt(gameId, t);
+      if (inserted.length === 0) continue;
+      estimates += inserted.length;
+
+      const before = await this.estimateSnapshots.count({ where: { gameId } });
+      await this.snapshotReconcile(gameId, t);
+      const after = await this.estimateSnapshots.count({ where: { gameId } });
+      snapshots += after - before;
+    }
+
+    // After rebuilding, some records may now have a prior estimate band
+    // to compare against. We never delete or rewrite existing
+    // discrepancies, so this only fills the gaps.
+    await this.evaluateDiscrepanciesForGame(gameId);
+
+    return { points: moments.length, estimates, snapshots };
+  }
+
+  /**
+   * Distinct minute-aligned capture timestamps across SignalSnapshot and
+   * AchievementSnapshot for a game, ascending. Dedup at minute granularity
+   * because a single cron run writes several signals within the same
+   * second/minute — we want one rebuild point per refresh, not one per
+   * signal.
+   */
+  private async collectCaptureMoments(gameId: string): Promise<Date[]> {
+    const [signals, achievements] = await Promise.all([
+      this.signals.find({
+        where: { gameId },
+        select: { capturedAt: true },
+        order: { capturedAt: 'ASC' },
+      }),
+      this.achievements.find({
+        where: { gameId },
+        select: { capturedAt: true },
+        order: { capturedAt: 'ASC' },
+      }),
+    ]);
+
+    const byMinute = new Map<number, Date>();
+    for (const row of [...signals, ...achievements]) {
+      const t = row.capturedAt;
+      const minuteKey = Math.floor(t.getTime() / 60_000);
+      if (!byMinute.has(minuteKey)) byMinute.set(minuteKey, t);
+    }
+    return Array.from(byMinute.values()).sort(
+      (a, b) => a.getTime() - b.getTime(),
+    );
+  }
+
+  /**
+   * Sales records visible at `asOf`. When `asOf` is undefined: all
+   * records (live mode). When provided: records whose `reportedAt` is
+   * before `asOf`, plus records with no `reportedAt` (knowledge whose
+   * date we can't pin — we keep them rather than drop them silently).
+   */
+  private async recordsAsOf(
+    gameId: string,
+    asOf?: Date,
+  ): Promise<SalesRecord[]> {
+    if (!asOf) {
+      return this.salesRecords.find({ where: { gameId } });
+    }
+    return this.salesRecords.find({
+      where: {
+        gameId,
+        reportedAt: Or(LessThanOrEqual(asOf), IsNull()),
+      },
+    });
   }
 
   /**
@@ -826,9 +1105,13 @@ export class GamesService {
 
   private async latestEstimatesByPlatform(
     gameId: string,
+    asOf?: Date,
   ): Promise<Map<Platform, SalesEstimate>> {
     const estimates = await this.estimates.find({
-      where: { gameId },
+      where: {
+        gameId,
+        ...(asOf ? { computedAt: LessThanOrEqual(asOf) } : {}),
+      },
       order: { computedAt: 'DESC' },
     });
 

@@ -14,7 +14,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DeleteButton } from '../../_components/DeleteButton';
 import { RefreshGameButton } from '../../_components/RefreshGameButton';
+import { RebuildEstimatesButton } from '../../_components/RebuildEstimatesButton';
 import { EditGameForm } from '../../_components/EditGameForm';
+import { EstimateHistoryChart } from '../../_components/EstimateHistoryChart';
 import { deleteGame, deleteSalesRecord } from '../../actions';
 
 export const dynamic = 'force-dynamic';
@@ -34,6 +36,16 @@ function formatDateTime(iso: string | null | undefined): string {
     dateStyle: 'medium',
     timeStyle: 'short',
   });
+}
+
+function formatCalibration(
+  multiplier: number | null,
+  source: string | null,
+): string {
+  if (multiplier === null || multiplier === undefined) return '—';
+  return source
+    ? `${multiplier.toFixed(2)}x (${source})`
+    : `${multiplier.toFixed(2)}x`;
 }
 
 export default async function AdminGameDetailPage({
@@ -72,6 +84,7 @@ export default async function AdminGameDetailPage({
         </div>
         <div className="flex items-center gap-2">
           <RefreshGameButton gameId={game.id} />
+          <RebuildEstimatesButton gameId={game.id} />
           <DeleteButton
             action={deleteGame.bind(null, game.id)}
             confirmMessage={`Permanently delete "${game.name}"?`}
@@ -97,27 +110,24 @@ export default async function AdminGameDetailPage({
             <Field label="Release date" value={formatDate(game.releaseDate)} />
             <Field
               label="Calibrated PC"
-              value={
-                game.calibratedMultiplier
-                  ? `${game.calibratedMultiplier.toFixed(2)}x`
-                  : '—'
-              }
+              value={formatCalibration(
+                game.calibratedMultiplier,
+                game.calibrationSourcePc,
+              )}
             />
             <Field
               label="Calibrated PlayStation"
-              value={
-                game.calibratedPsMultiplier
-                  ? `${game.calibratedPsMultiplier.toFixed(2)}x`
-                  : '—'
-              }
+              value={formatCalibration(
+                game.calibratedPsMultiplier,
+                game.calibrationSourcePs,
+              )}
             />
             <Field
               label="Calibrated Xbox"
-              value={
-                game.calibratedXboxMultiplier
-                  ? `${game.calibratedXboxMultiplier.toFixed(2)}x`
-                  : '—'
-              }
+              value={formatCalibration(
+                game.calibratedXboxMultiplier,
+                game.calibrationSourceXbox,
+              )}
             />
             <Field
               label="Latest Steam reviews"
@@ -235,6 +245,18 @@ export default async function AdminGameDetailPage({
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-semibold tracking-wide uppercase">
+            Estimated sales over time ({game.estimateSnapshots.length}{' '}
+            snapshots)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <EstimateHistoryChart snapshots={game.estimateSnapshots} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold tracking-wide uppercase">
             Estimates ({game.estimates.length})
           </CardTitle>
         </CardHeader>
@@ -275,6 +297,70 @@ export default async function AdminGameDetailPage({
                     </TableCell>
                     <TableCell className="text-muted-foreground text-xs">
                       {formatDateTime(e.computedAt)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold tracking-wide uppercase">
+            Achievement snapshots ({game.achievementSnapshots.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {game.achievementSnapshots.length === 0 ? (
+            <p className="text-muted-foreground p-6 text-sm">
+              No achievement data captured yet.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Platform</TableHead>
+                  <TableHead>Source</TableHead>
+                  <TableHead className="text-right">Achievements</TableHead>
+                  <TableHead className="text-right">Players tracked</TableHead>
+                  <TableHead>Most common</TableHead>
+                  <TableHead className="text-right">%</TableHead>
+                  <TableHead className="text-right">Players</TableHead>
+                  <TableHead>Captured</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {game.achievementSnapshots.map((a) => (
+                  <TableRow key={`${a.platform}-${a.source}`}>
+                    <TableCell>
+                      <Badge variant="secondary">{a.platform}</Badge>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {a.source}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {a.achievementsCount.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {a.playersTracked !== null
+                        ? a.playersTracked.toLocaleString()
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="max-w-[260px] truncate text-xs">
+                      {a.mostCommonName}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {a.mostCommonPercent.toFixed(2)}%
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {a.mostCommonPlayers !== null
+                        ? a.mostCommonPlayers.toLocaleString()
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs">
+                      {formatDateTime(a.capturedAt)}
                     </TableCell>
                   </TableRow>
                 ))}

@@ -1,6 +1,5 @@
 import {
   Column,
-  CreateDateColumn,
   Entity,
   Index,
   JoinColumn,
@@ -34,7 +33,10 @@ export class SalesEstimate {
   @Column()
   method: string;
 
-  @CreateDateColumn()
+  // Plain timestamp (not @CreateDateColumn) so historical rebuilds can
+  // backfill it to a past date when replaying estimates against the
+  // current multipliers.
+  @Column('timestamp', { default: () => 'now()' })
   computedAt: Date;
 
   @ManyToOne(() => Game, (game) => game.estimates, { onDelete: 'CASCADE' })

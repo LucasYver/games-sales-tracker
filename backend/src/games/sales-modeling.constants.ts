@@ -115,11 +115,103 @@ export const XBOX_BOXLEITER_PLAUSIBLE_MIN = 6;
 export const XBOX_BOXLEITER_PLAUSIBLE_MAX = 600;
 
 // Tightening factor applied around a calibrated multiplier when computing the
-// per-platform Boxleiter range: low = m * (1 - X), high = m * (1 + X). A
-// calibrated multiplier is per-game, so the range can be much tighter than
-// the platform default — but not infinitely tight, because review-to-units
-// is still noisy across regions and editions.
+// per-platform Boxleiter range: low = m * (1 - X), high = m * (1 + X).
+//
+// The spread depends on how trustworthy the declared figure that produced
+// the calibration was. An IR press release nails the number to the unit;
+// a journalist might round to the nearest million or cite an estimate.
+//
+// Mapped per `SalesSource` in `CALIBRATED_MULTIPLIER_SPREAD_BY_SOURCE`
+// below. The legacy `CALIBRATED_MULTIPLIER_SPREAD` constant is kept as
+// the OFFICIAL value (= the original ±20 %), so any code still importing
+// it gets the strict spread.
+
+import { SalesSource } from '../entities/enums';
+
 export const CALIBRATED_MULTIPLIER_SPREAD = 0.2;
+
+export const CALIBRATED_MULTIPLIER_SPREAD_BY_SOURCE: Record<
+  SalesSource,
+  number
+> = {
+  // IR / earnings press release — figure is audited, to the unit, dated.
+  [SalesSource.OFFICIAL]: 0.2,
+  // Publisher tweet, dev blog post — primary source but often rounded.
+  [SalesSource.ANNOUNCEMENT]: 0.3,
+  // Journalist reporting — secondhand, sometimes their own estimate.
+  [SalesSource.MEDIA]: 0.45,
+  // Compilation page citing multiple sources — quality varies wildly.
+  [SalesSource.WIKIPEDIA]: 0.45,
+};
+
+// ─── Achievement-based estimation (Exophase coverage) ───────────────────────
+//
+// Used by EstimationService to turn an Exophase `most-common achievement`
+// player count into a real per-platform owner count. The signal we feed in
+// is:
+//   signal = exophase.playersTracked × exophase.mostCommonPercent / 100
+//          = absolute number of Exophase users who actually launched the
+//            game on this platform.
+//
+// To extrapolate to all platform owners, we multiply by an "Exophase
+// coverage" factor: 1 / (fraction of platform owners that show up on
+// Exophase). The fraction itself is small (single-digit %), highly
+// dependent on the platform's achievement-tracker culture, and biased by
+// the fact that Exophase's user base is composed of achievement hunters
+// (so they unlock far more achievements than the average owner).
+//
+// Both effects are folded into a single per-platform multiplier range
+// below. These are deliberately wide because they are rough defaults: the
+// numbers will be replaced by per-game calibration once publisher IR
+// figures land (see BACKLOG.md, "Publisher IR / Earnings parsers"). When
+// that happens, follow the same pattern as `calibratedMultiplier` on
+// `Game` and use `CALIBRATED_MULTIPLIER_SPREAD` to tighten the range.
+//
+// The Steam (PC) range is informed by the bias measurement we get for
+// free from the Steam official achievement API (~1.15-1.30× on the few
+// titles tested). Console ranges are broader because no equivalent
+// ground-truth API exists yet.
+//
+// Used by `EstimationService.estimateFromAchievementsForPlatform`.
+
+export const EXOPHASE_COVERAGE_PC_LOW = 12;
+export const EXOPHASE_COVERAGE_PC_HIGH = 30;
+
+export const EXOPHASE_COVERAGE_PS_LOW = 10;
+export const EXOPHASE_COVERAGE_PS_HIGH = 28;
+
+export const EXOPHASE_COVERAGE_XBOX_LOW = 8;
+export const EXOPHASE_COVERAGE_XBOX_HIGH = 22;
+
+// Hard plausibility band: an Exophase-based estimate outside this range
+// (units) is treated as broken (the game probably has too small a sample
+// or a parsing glitch) and the row is skipped rather than persisted with
+// nonsense numbers.
+export const ACHIEVEMENT_ESTIMATE_MIN_UNITS = 1_000;
+export const ACHIEVEMENT_ESTIMATE_MAX_UNITS = 500_000_000;
+
+// Minimum sample size below which an Exophase snapshot is too noisy to
+// drive an estimate. Mirrors the MIN_PLAYERS_TRACKED guard inside the
+// scraper but is enforced again at estimation time in case stale data
+// pre-dating the guard slipped into the table.
+export const ACHIEVEMENT_MIN_PLAYERS_TRACKED = 500;
+
+// ─── Estimation discrepancy detector ────────────────────────────────────────
+//
+// When a new SalesRecord arrives, we compare its `units` against the
+// midpoint of our most recent estimate that pre-dates the record. If the
+// ratio `declaredUnits / midPriorEstimate` falls outside the band below,
+// we persist an `EstimationDiscrepancy` row so the miss is surfaced in
+// /admin/issues even after the model recalibrates.
+//
+// 2.0 / 0.5 = "the model was off by 2× in either direction" — clear
+// signal without flooding on every minor wobble. Tighten to catch more,
+// loosen to focus on the worst cases.
+//
+// Used by `GamesService.evaluateDiscrepanciesForGame`.
+
+export const DISCREPANCY_RATIO_HIGH = 2.0;
+export const DISCREPANCY_RATIO_LOW = 0.5;
 
 // ─── PC dominance guardrail ─────────────────────────────────────────────────
 //

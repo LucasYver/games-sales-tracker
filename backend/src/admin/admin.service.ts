@@ -6,6 +6,9 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository, IsNull } from 'typeorm';
 import {
+  AchievementSnapshot,
+  EstimateSnapshot,
+  EstimationDiscrepancy,
   Game,
   GameSource,
   Platform,
@@ -13,12 +16,15 @@ import {
   SalesEstimate,
   SalesRecord,
   SalesSource,
+  SerializedReconciliationEntry,
   SignalMetric,
   SignalSnapshot,
+  SourceType,
   TrustedSource,
 } from '../entities';
 import { isPeriodicQuote } from '../ingestion/sales-figure.utils';
 import { slugify } from '../common/slug';
+import { GamesService } from '../games/games.service';
 
 export interface UpdateGameInput {
   name?: string;
@@ -63,12 +69,43 @@ export interface AdminGameSummary {
   calibratedMultiplier: number | null;
   calibratedPsMultiplier: number | null;
   calibratedXboxMultiplier: number | null;
+  calibrationSourcePc: SalesSource | null;
+  calibrationSourcePs: SalesSource | null;
+  calibrationSourceXbox: SalesSource | null;
   salesRecordsCount: number;
   estimatesCount: number;
   latestReviews: number | null;
   latestReviewsAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/**
+ * Aggregated view of the latest achievement capture for a (platform, source)
+ * pair on a single game — what the admin UI shows. Each row collapses ~30-70
+ * individual snapshot rows into the headline numbers the operator actually
+ * cares about (sample size, most-common achievement, capture date).
+ */
+export interface AdminAchievementSummary {
+  platform: Platform;
+  source: SourceType;
+  achievementsCount: number;
+  playersTracked: number | null;
+  mostCommonName: string;
+  mostCommonPercent: number;
+  mostCommonPlayers: number | null;
+  capturedAt: Date;
+}
+
+/**
+ * One historical point of the headline reconciled estimate, used to draw
+ * the sales-over-time chart on the admin detail page.
+ */
+export interface AdminEstimateSnapshot {
+  computedAt: Date;
+  estimatedTodayLow: number;
+  estimatedTodayHigh: number;
+  reconciliation: SerializedReconciliationEntry[];
 }
 
 export interface AdminGameDetail extends AdminGameSummary {
@@ -80,6 +117,8 @@ export interface AdminGameDetail extends AdminGameSummary {
   salesRecords: SalesRecord[];
   estimates: SalesEstimate[];
   signals: SignalSnapshot[];
+  achievementSnapshots: AdminAchievementSummary[];
+  estimateSnapshots: AdminEstimateSnapshot[];
 }
 
 export interface PaginatedAdmin<T> {
@@ -108,6 +147,18 @@ export interface AdminIssues {
   }>;
   inactiveTrustedSources: IssueGroup<TrustedSource>;
   gamesWithoutAnySignal: IssueGroup<{ id: string; name: string; slug: string }>;
+  estimationDiscrepancies: IssueGroup<{
+    gameId: string;
+    gameName: string;
+    platform: Platform;
+    declaredUnits: number;
+    declaredSource: SalesSource;
+    declaredAt: Date | null;
+    priorEstimateLow: number;
+    priorEstimateHigh: number;
+    ratio: number;
+    detectedAt: Date;
+  }>;
 }
 
 const CALIBRATION_LOW_BOUND = 6;
@@ -131,6 +182,13 @@ export class AdminService {
     private readonly trustedSources: Repository<TrustedSource>,
     @InjectRepository(ProcessedArticle)
     private readonly processedArticles: Repository<ProcessedArticle>,
+    @InjectRepository(AchievementSnapshot)
+    private readonly achievements: Repository<AchievementSnapshot>,
+    @InjectRepository(EstimateSnapshot)
+    private readonly estimateSnapshots: Repository<EstimateSnapshot>,
+    @InjectRepository(EstimationDiscrepancy)
+    private readonly discrepancies: Repository<EstimationDiscrepancy>,
+    private readonly gamesService: GamesService,
   ) {}
 
   async stats(): Promise<AdminStats> {
@@ -275,6 +333,9 @@ export class AdminService {
         'g.calibratedMultiplier AS "calibratedMultiplier"',
         'g.calibratedPsMultiplier AS "calibratedPsMultiplier"',
         'g.calibratedXboxMultiplier AS "calibratedXboxMultiplier"',
+        'g.calibrationSourcePc AS "calibrationSourcePc"',
+        'g.calibrationSourcePs AS "calibrationSourcePs"',
+        'g.calibrationSourceXbox AS "calibrationSourceXbox"',
         'g.createdAt AS "createdAt"',
         'g.updatedAt AS "updatedAt"',
       ])
@@ -326,6 +387,9 @@ export class AdminService {
         calibratedMultiplier: string | null;
         calibratedPsMultiplier: string | null;
         calibratedXboxMultiplier: string | null;
+        calibrationSourcePc: SalesSource | null;
+        calibrationSourcePs: SalesSource | null;
+        calibrationSourceXbox: SalesSource | null;
         createdAt: Date;
         updatedAt: Date;
         salesRecordsCount: string;
@@ -353,6 +417,9 @@ export class AdminService {
         r.calibratedXboxMultiplier == null
           ? null
           : Number(r.calibratedXboxMultiplier),
+      calibrationSourcePc: r.calibrationSourcePc,
+      calibrationSourcePs: r.calibrationSourcePs,
+      calibrationSourceXbox: r.calibrationSourceXbox,
       salesRecordsCount: Number(r.salesRecordsCount ?? 0),
       estimatesCount: Number(r.estimatesCount ?? 0),
       latestReviews: r.latestReviews == null ? null : Number(r.latestReviews),
@@ -385,6 +452,22 @@ export class AdminService {
       (s) => s.metric === SignalMetric.STEAM_REVIEWS,
     );
 
+    const achievementSnapshots = await this.aggregateAchievementSnapshots(id);
+
+    const estimateSnapshotsRaw = await this.estimateSnapshots.find({
+      where: { gameId: id },
+      order: { computedAt: 'ASC' },
+      take: 500,
+    });
+    const estimateSnapshots: AdminEstimateSnapshot[] = estimateSnapshotsRaw.map(
+      (s) => ({
+        computedAt: s.computedAt,
+        estimatedTodayLow: s.estimatedTodayLow,
+        estimatedTodayHigh: s.estimatedTodayHigh,
+        reconciliation: s.reconciliation,
+      }),
+    );
+
     return {
       id: game.id,
       name: game.name,
@@ -395,6 +478,9 @@ export class AdminService {
       calibratedMultiplier: game.calibratedMultiplier,
       calibratedPsMultiplier: game.calibratedPsMultiplier,
       calibratedXboxMultiplier: game.calibratedXboxMultiplier,
+      calibrationSourcePc: game.calibrationSourcePc,
+      calibrationSourcePs: game.calibrationSourcePs,
+      calibrationSourceXbox: game.calibrationSourceXbox,
       salesRecordsCount: game.salesRecords.length,
       estimatesCount: game.estimates.length,
       latestReviews: latestReviews?.value ?? null,
@@ -412,12 +498,85 @@ export class AdminService {
       ),
       estimates: game.estimates,
       signals,
+      achievementSnapshots,
+      estimateSnapshots,
     };
+  }
+
+  /**
+   * Collapse the achievement_snapshot rows for a game into one row per
+   * (platform, source). For each group we keep the *latest* capture
+   * (max capturedAt) and reduce its individual achievements to: how many
+   * achievements were captured, total achievements declared for the game
+   * (from any row in the capture, all equal), the sample size, and the
+   * single most-common achievement (highest unlock %).
+   */
+  private async aggregateAchievementSnapshots(
+    gameId: string,
+  ): Promise<AdminAchievementSummary[]> {
+    const rows = await this.achievements.find({
+      where: { gameId },
+      order: { capturedAt: 'DESC' },
+    });
+    if (rows.length === 0) return [];
+
+    const groups = new Map<string, AchievementSnapshot[]>();
+    for (const row of rows) {
+      const key = `${row.platform}::${row.source}`;
+      const existing = groups.get(key);
+      if (!existing) {
+        groups.set(key, [row]);
+        continue;
+      }
+      const latestAt = existing[0].capturedAt.getTime();
+      const rowAt = row.capturedAt.getTime();
+      if (rowAt > latestAt) {
+        groups.set(key, [row]);
+      } else if (rowAt === latestAt) {
+        existing.push(row);
+      }
+    }
+
+    return Array.from(groups.values())
+      .map((capture) => {
+        const mostCommon = capture.reduce((max, a) =>
+          a.percentEarned > max.percentEarned ? a : max,
+        );
+        return {
+          platform: mostCommon.platform,
+          source: mostCommon.source,
+          achievementsCount: capture.length,
+          playersTracked: mostCommon.playersTracked,
+          mostCommonName: mostCommon.achievementName,
+          mostCommonPercent: mostCommon.percentEarned,
+          mostCommonPlayers: mostCommon.playersWithAchievement,
+          capturedAt: mostCommon.capturedAt,
+        };
+      })
+      .sort((a, b) => {
+        if (a.platform !== b.platform) return a.platform.localeCompare(b.platform);
+        return a.source.localeCompare(b.source);
+      });
   }
 
   async deleteGame(id: string): Promise<{ deleted: boolean }> {
     const result = await this.games.delete(id);
     return { deleted: (result.affected ?? 0) > 0 };
+  }
+
+  /**
+   * Wipe and replay the game's estimate history against the current
+   * multipliers + constants. Useful after tuning
+   * `sales-modeling.constants.ts` or after a recalibration so old
+   * estimates stop reflecting stale parameters. Delegates to
+   * `GamesService.rebuildEstimateHistory`.
+   */
+  async rebuildEstimateHistory(id: string): Promise<{
+    points: number;
+    estimates: number;
+    snapshots: number;
+  }> {
+    return this.gamesService.rebuildEstimateHistory(id);
   }
 
   /**
@@ -672,6 +831,20 @@ export class AdminService {
       .orderBy('ts.name', 'ASC')
       .getMany();
 
+    // Estimation discrepancies: declared figures that were >=2× off (or
+    // <=0.5×) from the prior estimate at the time they arrived. Rows are
+    // frozen at detection so recalibration doesn't hide past misses.
+    const [discrepancyRows, discrepancyCount] = await this.discrepancies
+      .createQueryBuilder('d')
+      .innerJoin('d.game', 'g')
+      .addSelect('g.name', 'gameName')
+      .orderBy('GREATEST(d.ratio, 1.0 / NULLIF(d.ratio, 0))', 'DESC')
+      .limit(ISSUE_PREVIEW_LIMIT)
+      .getManyAndCount();
+    const discrepancyNames = await this.gameNameMap(
+      discrepancyRows.map((d) => d.gameId),
+    );
+
     // Games tracked but never received a single signal snapshot.
     const noSignalRows = await this.games
       .createQueryBuilder('g')
@@ -720,6 +893,21 @@ export class AdminService {
       gamesWithoutAnySignal: {
         count: noSignalTotal,
         items: noSignalRows,
+      },
+      estimationDiscrepancies: {
+        count: discrepancyCount,
+        items: discrepancyRows.map((d) => ({
+          gameId: d.gameId,
+          gameName: discrepancyNames.get(d.gameId) ?? '',
+          platform: d.platform,
+          declaredUnits: d.declaredUnits,
+          declaredSource: d.declaredSource,
+          declaredAt: d.declaredAt,
+          priorEstimateLow: d.priorEstimateLow,
+          priorEstimateHigh: d.priorEstimateHigh,
+          ratio: d.ratio,
+          detectedAt: d.detectedAt,
+        })),
       },
     };
   }

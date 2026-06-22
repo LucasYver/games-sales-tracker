@@ -74,6 +74,12 @@ export class AdminController {
     return this.ingestion.refreshGame(id);
   }
 
+  @Post('games/:id/rebuild-estimates')
+  @HttpCode(200)
+  rebuildEstimateHistory(@Param('id', ParseUUIDPipe) id: string) {
+    return this.admin.rebuildEstimateHistory(id);
+  }
+
   @Get('sales-records')
   listSalesRecords(
     @Query('gameId') gameId?: string,

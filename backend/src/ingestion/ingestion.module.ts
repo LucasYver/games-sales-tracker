@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
+  AchievementSnapshot,
   Game,
   GameSource,
   ProcessedArticle,
@@ -21,6 +22,7 @@ import { ArticleClient } from './article.client';
 import { DiscoveryClient } from './discovery.client';
 import { RssClient } from './rss.client';
 import { TavilyClient } from './tavily.client';
+import { ExophaseClient } from './exophase.client';
 
 @Module({
   imports: [
@@ -30,6 +32,7 @@ import { TavilyClient } from './tavily.client';
       SignalSnapshot,
       SalesRecord,
       ProcessedArticle,
+      AchievementSnapshot,
     ]),
     EstimationModule,
     GamesModule,
@@ -47,6 +50,7 @@ import { TavilyClient } from './tavily.client';
     DiscoveryClient,
     RssClient,
     TavilyClient,
+    ExophaseClient,
   ],
   exports: [IngestionService],
 })

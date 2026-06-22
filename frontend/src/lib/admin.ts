@@ -93,6 +93,9 @@ export interface AdminGameSummary {
   calibratedMultiplier: number | null;
   calibratedPsMultiplier: number | null;
   calibratedXboxMultiplier: number | null;
+  calibrationSourcePc: SalesSource | null;
+  calibrationSourcePs: SalesSource | null;
+  calibrationSourceXbox: SalesSource | null;
   salesRecordsCount: number;
   estimatesCount: number;
   latestReviews: number | null;
@@ -147,6 +150,37 @@ export interface AdminSignal {
   capturedAt: string;
 }
 
+export interface AdminAchievementSummary {
+  platform: Platform;
+  source: string;
+  achievementsCount: number;
+  playersTracked: number | null;
+  mostCommonName: string;
+  mostCommonPercent: number;
+  mostCommonPlayers: number | null;
+  capturedAt: string;
+}
+
+export interface AdminReconciliationEntry {
+  platform: Platform;
+  declaredUnits: number;
+  declaredSource: string;
+  declaredAt: string | null;
+  estimateLow: number;
+  estimateHigh: number;
+  estimateMethod: string;
+  agreement: 'strong' | 'weak' | 'conflict';
+  ratio: number;
+  detail: string;
+}
+
+export interface AdminEstimateSnapshot {
+  computedAt: string;
+  estimatedTodayLow: number;
+  estimatedTodayHigh: number;
+  reconciliation: AdminReconciliationEntry[];
+}
+
 export interface AdminGameDetail extends AdminGameSummary {
   igdbId: number | null;
   coverUrl: string | null;
@@ -156,6 +190,8 @@ export interface AdminGameDetail extends AdminGameSummary {
   salesRecords: AdminSalesRecord[];
   estimates: AdminEstimate[];
   signals: AdminSignal[];
+  achievementSnapshots: AdminAchievementSummary[];
+  estimateSnapshots: AdminEstimateSnapshot[];
 }
 
 export interface AdminTrustedSource {
@@ -212,4 +248,18 @@ export interface AdminIssues {
   }>;
   inactiveTrustedSources: IssueGroup<AdminTrustedSource>;
   gamesWithoutAnySignal: IssueGroup<{ id: string; name: string; slug: string }>;
+  estimationDiscrepancies: IssueGroup<AdminEstimationDiscrepancy>;
+}
+
+export interface AdminEstimationDiscrepancy {
+  gameId: string;
+  gameName: string;
+  platform: Platform;
+  declaredUnits: number;
+  declaredSource: SalesSource;
+  declaredAt: string | null;
+  priorEstimateLow: number;
+  priorEstimateHigh: number;
+  ratio: number;
+  detectedAt: string;
 }

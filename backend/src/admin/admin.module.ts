@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
+  AchievementSnapshot,
+  EstimateSnapshot,
+  EstimationDiscrepancy,
   Game,
   GameSource,
   ProcessedArticle,
@@ -12,6 +15,7 @@ import {
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { IngestionModule } from '../ingestion/ingestion.module';
+import { GamesModule } from '../games/games.module';
 
 @Module({
   imports: [
@@ -23,8 +27,12 @@ import { IngestionModule } from '../ingestion/ingestion.module';
       SalesRecord,
       TrustedSource,
       ProcessedArticle,
+      AchievementSnapshot,
+      EstimateSnapshot,
+      EstimationDiscrepancy,
     ]),
     IngestionModule,
+    GamesModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

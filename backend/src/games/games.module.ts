@@ -1,12 +1,30 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Game, SalesEstimate, SalesRecord, SignalSnapshot } from '../entities';
+import {
+  AchievementSnapshot,
+  EstimateSnapshot,
+  EstimationDiscrepancy,
+  Game,
+  SalesEstimate,
+  SalesRecord,
+  SignalSnapshot,
+} from '../entities';
+import { EstimationModule } from '../estimation/estimation.module';
 import { GamesController } from './games.controller';
 import { GamesService } from './games.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Game, SignalSnapshot, SalesEstimate, SalesRecord]),
+    TypeOrmModule.forFeature([
+      Game,
+      SignalSnapshot,
+      AchievementSnapshot,
+      SalesEstimate,
+      EstimateSnapshot,
+      EstimationDiscrepancy,
+      SalesRecord,
+    ]),
+    EstimationModule,
   ],
   controllers: [GamesController],
   providers: [GamesService],

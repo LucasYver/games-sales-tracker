@@ -1,3 +1,11 @@
+/**
+ * Label of how a declared figure cross-checks against our independent
+ * estimate. `strong` = declared falls in [estLow, estHigh]; `weak` =
+ * slight mismatch explainable by growth or model spread; `conflict` =
+ * one side is likely wrong. Computed by `GamesService.classifyAgreement`.
+ */
+export type Agreement = 'strong' | 'weak' | 'conflict';
+
 export enum SourceType {
   IGDB = 'IGDB',
   STEAM = 'STEAM',
@@ -6,6 +14,7 @@ export enum SourceType {
   XBOX_STORE = 'XBOX_STORE',
   NINTENDO_ESHOP = 'NINTENDO_ESHOP',
   WIKIPEDIA = 'WIKIPEDIA',
+  EXOPHASE = 'EXOPHASE',
   MANUAL = 'MANUAL',
 }
 

@@ -4,6 +4,7 @@ import {
   CalendarX,
   Calculator,
   Quote,
+  Target,
   Wifi,
   Globe,
 } from 'lucide-react';
@@ -41,7 +42,8 @@ export default async function AdminIssuesPage() {
     issues.calibrationOutliers.count +
     issues.staleGames.count +
     issues.inactiveTrustedSources.count +
-    issues.gamesWithoutAnySignal.count;
+    issues.gamesWithoutAnySignal.count +
+    issues.estimationDiscrepancies.count;
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-8">
@@ -228,6 +230,79 @@ export default async function AdminIssuesPage() {
                     </TableCell>
                   </TableRow>
                 ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Estimation misses */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold tracking-wide uppercase">
+            <Target aria-hidden="true" className="size-4" />
+            Estimation misses ({issues.estimationDiscrepancies.count})
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {issues.estimationDiscrepancies.items.length === 0 ? (
+            <p className="text-muted-foreground p-6 text-sm">
+              No declared figure has diverged ≥2× from our prior estimate.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Game</TableHead>
+                  <TableHead>Platform</TableHead>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Declared</TableHead>
+                  <TableHead className="text-right">Declared units</TableHead>
+                  <TableHead className="text-right">Prior estimate</TableHead>
+                  <TableHead className="text-right">Ratio</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {issues.estimationDiscrepancies.items.map((d) => {
+                  const offBy = d.ratio >= 1 ? d.ratio : 1 / d.ratio;
+                  const direction = d.ratio >= 1 ? 'under' : 'over';
+                  return (
+                    <TableRow key={`${d.gameId}-${d.platform}-${d.detectedAt}`}>
+                      <TableCell>
+                        <Link
+                          href={`/admin/games/${d.gameId}`}
+                          className="hover:text-primary hover:underline"
+                        >
+                          {d.gameName}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{d.platform}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{d.declaredSource}</Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {formatDate(d.declaredAt)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {d.declaredUnits.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-right text-xs tabular-nums">
+                        {d.priorEstimateLow.toLocaleString()}–
+                        {d.priorEstimateHigh.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        <Badge
+                          variant={direction === 'under' ? 'default' : 'destructive'}
+                          title={`${direction}estimated by ${offBy.toFixed(1)}×`}
+                        >
+                          {offBy.toFixed(1)}× {direction}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

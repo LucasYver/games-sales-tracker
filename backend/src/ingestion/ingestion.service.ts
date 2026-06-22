@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Not, Repository } from 'typeorm';
 import {
+  AchievementSnapshot,
   ConfidenceLevel,
   Game,
   GameSource,
@@ -25,6 +26,7 @@ import { ArticleClient, ArticleSales } from './article.client';
 import { DiscoveryClient } from './discovery.client';
 import { RssClient } from './rss.client';
 import { TavilyClient } from './tavily.client';
+import { ExophaseClient } from './exophase.client';
 import { SourcesService } from '../sources/sources.service';
 import {
   DISCOVERY_RELEASE_FLOOR,
@@ -104,6 +106,8 @@ export class IngestionService {
     private readonly salesRecords: Repository<SalesRecord>,
     @InjectRepository(ProcessedArticle)
     private readonly processedArticles: Repository<ProcessedArticle>,
+    @InjectRepository(AchievementSnapshot)
+    private readonly achievements: Repository<AchievementSnapshot>,
     private readonly estimation: EstimationService,
     private readonly gamesService: GamesService,
     private readonly steam: SteamClient,
@@ -114,6 +118,7 @@ export class IngestionService {
     private readonly discovery: DiscoveryClient,
     private readonly rss: RssClient,
     private readonly tavily: TavilyClient,
+    private readonly exophase: ExophaseClient,
     private readonly sources: SourcesService,
   ) {}
 
@@ -423,6 +428,8 @@ export class IngestionService {
     const game = await this.upsertGameFromIgdb(candidate);
     await this.scrapeStoreRatings(game.id, game.name);
     await this.estimation.computeAndStore(game.id);
+    await this.gamesService.snapshotReconcile(game.id);
+    await this.gamesService.evaluateDiscrepanciesForGame(game.id);
   }
 
   private async upsertGameFromIgdb(candidate: IgdbGame): Promise<Game> {
@@ -491,9 +498,18 @@ export class IngestionService {
 
     await this.scrapeStoreRatings(game.id, game.name);
 
+    await Promise.all([
+      this.scrapeAchievements(game.id, game.name, Platform.PC),
+      this.scrapeAchievements(game.id, game.name, Platform.PLAYSTATION),
+      this.scrapeAchievements(game.id, game.name, Platform.XBOX),
+      this.scrapeSteamOfficialAchievements(game.id, game.name, appId),
+    ]);
+
     // Compute the PC estimate last so calibration can use any declared figure
     // pulled by the enrichment steps above.
     await this.estimation.computeAndStore(game.id);
+    await this.gamesService.snapshotReconcile(game.id);
+    await this.gamesService.evaluateDiscrepanciesForGame(game.id);
 
     return game.id;
   }
@@ -599,6 +615,112 @@ export class IngestionService {
       this.logger.log(`[stores] "${name}" — ${summary}`);
     } catch (error) {
       this.logger.warn(`Store ratings scrape failed for "${name}": ${error}`);
+    }
+  }
+
+  /**
+   * Capture achievement-unlock stats from Exophase for the given platform and
+   * persist one row per achievement in `AchievementSnapshot`. Best-effort: a
+   * silent skip on title mismatch, small sample, or HTTP error. Used later
+   * for sales estimation via the most-common-achievement player count, once
+   * the tracker→real coverage ratio is calibrated against publisher figures.
+   *
+   * Only persists when every validation check passes (see ExophaseClient).
+   */
+  /**
+   * Capture unbiased achievement-unlock percentages from Steam's official
+   * `GetGlobalAchievementPercentagesForApp` API and persist them with
+   * `source = STEAM`. The Steam API is the ground truth (full playerbase,
+   * no sample), used both as a per-game data point and to estimate
+   * Exophase's completionist bias on the same game. Best-effort: a silent
+   * skip on HTTP error or empty payload. No `playersTracked` is stored —
+   * Steam does not expose an absolute count.
+   */
+  async scrapeSteamOfficialAchievements(
+    gameId: string,
+    name: string,
+    appId: number,
+  ): Promise<void> {
+    try {
+      const list = await this.steam.getGlobalAchievementPercentages(appId);
+      if (!list || list.length === 0) return;
+
+      const capturedAt = new Date();
+      const rows = list.map((a) =>
+        this.achievements.create({
+          gameId,
+          platform: Platform.PC,
+          source: SourceType.STEAM,
+          achievementSlug: a.apiName,
+          // Steam's API does not return localized titles; keep the api name
+          // as both slug and display name for symmetry with Exophase rows.
+          achievementName: a.apiName,
+          percentEarned: a.percent,
+          playersTracked: null,
+          playersWithAchievement: null,
+          capturedAt,
+        }),
+      );
+
+      await this.achievements.save(rows);
+
+      const mostCommon = list.reduce((max, a) =>
+        a.percent > max.percent ? a : max,
+      );
+      this.logger.log(
+        `[achievements:steam-api] "${name}" (appId=${appId}) — ` +
+          `count=${list.length}, mostCommon="${mostCommon.apiName}" ${mostCommon.percent}%`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Steam official achievements scrape failed for "${name}" (appId=${appId}): ${error}`,
+      );
+    }
+  }
+
+  async scrapeAchievements(
+    gameId: string,
+    name: string,
+    platform: Platform,
+  ): Promise<void> {
+    try {
+      const result = await this.exophase.getAchievements(name, platform);
+      if (!result) return;
+
+      const capturedAt = new Date();
+      const rows = result.achievements.map((a) =>
+        this.achievements.create({
+          gameId,
+          platform,
+          source: SourceType.EXOPHASE,
+          achievementSlug: a.slug,
+          achievementName: a.name,
+          percentEarned: a.percentEarned,
+          playersTracked: result.playersTracked,
+          playersWithAchievement: Math.round(
+            (result.playersTracked * a.percentEarned) / 100,
+          ),
+          capturedAt,
+        }),
+      );
+
+      await this.achievements.save(rows);
+
+      const mostCommon = result.achievements.reduce((max, a) =>
+        a.percentEarned > max.percentEarned ? a : max,
+      );
+      const mostCommonPlayers = Math.round(
+        (result.playersTracked * mostCommon.percentEarned) / 100,
+      );
+      this.logger.log(
+        `[achievements] "${name}" (${platform}) — tracked=${result.playersTracked.toLocaleString()}, ` +
+          `achievements=${result.achievements.length}/${result.totalAchievements}, ` +
+          `mostCommon="${mostCommon.name}" ${mostCommon.percentEarned}% (${mostCommonPlayers.toLocaleString()} players on Exophase)`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Achievement scrape failed for "${name}" (${platform}): ${error}`,
+      );
     }
   }
 
@@ -871,6 +993,22 @@ export class IngestionService {
     await this.scrapeStoreRatings(game.id, game.name);
 
     this.logger.log(
+      `[refresh] "${game.name}" — achievements (Exophase Steam / PSN / Xbox + Steam official %)…`,
+    );
+    const steamSource = await this.gameSources.findOne({
+      where: { gameId: game.id, source: SourceType.STEAM },
+    });
+    const steamAppId = steamSource ? Number(steamSource.externalId) : NaN;
+    await Promise.all([
+      this.scrapeAchievements(game.id, game.name, Platform.PC),
+      this.scrapeAchievements(game.id, game.name, Platform.PLAYSTATION),
+      this.scrapeAchievements(game.id, game.name, Platform.XBOX),
+      Number.isFinite(steamAppId)
+        ? this.scrapeSteamOfficialAchievements(game.id, game.name, steamAppId)
+        : Promise.resolve(),
+    ]);
+
+    this.logger.log(
       `[refresh] "${game.name}" — running 3 discovery channels in parallel (trusted-search, Wikipedia bibliography, Tavily backlog)…`,
     );
     const [discovery, bib, backlog] = await Promise.all([
@@ -887,6 +1025,8 @@ export class IngestionService {
     // recalibrates the multiplier.
     this.logger.log(`[refresh] "${game.name}" — recomputing estimates…`);
     await this.estimation.computeAndStore(game.id);
+    await this.gamesService.snapshotReconcile(game.id);
+    await this.gamesService.evaluateDiscrepanciesForGame(game.id);
 
     await this.games.update(game.id, { lastRefreshedAt: new Date() });
 

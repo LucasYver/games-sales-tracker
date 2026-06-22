@@ -7,7 +7,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Platform } from './enums';
+import { Platform, SalesSource } from './enums';
 import { GameSource } from './game-source.entity';
 import { SignalSnapshot } from './signal-snapshot.entity';
 import { SalesEstimate } from './sales-estimate.entity';
@@ -71,6 +71,20 @@ export class Game {
 
   @Column({ type: 'float', nullable: true })
   calibratedXboxMultiplier: number | null;
+
+  // SalesSource of the record that produced each calibrated multiplier
+  // above. Drives the per-source spread in
+  // `CALIBRATED_MULTIPLIER_SPREAD_BY_SOURCE`: an OFFICIAL-derived
+  // multiplier gets a tight ±20 %, a MEDIA-derived one a looser ±45 %.
+  // Always populated when the corresponding `calibrated*Multiplier` is.
+  @Column({ type: 'enum', enum: SalesSource, nullable: true })
+  calibrationSourcePc: SalesSource | null;
+
+  @Column({ type: 'enum', enum: SalesSource, nullable: true })
+  calibrationSourcePs: SalesSource | null;
+
+  @Column({ type: 'enum', enum: SalesSource, nullable: true })
+  calibrationSourceXbox: SalesSource | null;
 
   @CreateDateColumn()
   createdAt: Date;

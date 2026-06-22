@@ -80,6 +80,18 @@ export async function refreshGame(
   return result;
 }
 
+export async function rebuildEstimateHistory(
+  id: string,
+): Promise<{ points: number; estimates: number; snapshots: number }> {
+  const result = await adminFetch<{
+    points: number;
+    estimates: number;
+    snapshots: number;
+  }>(`/games/${id}/rebuild-estimates`, { method: 'POST' });
+  revalidatePath(`/admin/games/${id}`);
+  return result;
+}
+
 export async function deleteSalesRecord(id: string): Promise<void> {
   await adminFetch(`/sales-records/${id}`, { method: 'DELETE' });
   revalidatePath('/admin/sales-records');

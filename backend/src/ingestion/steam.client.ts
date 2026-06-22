@@ -74,6 +74,42 @@ export class SteamClient {
   }
 
   /**
+   * Steam's public per-achievement global unlock percentages, computed by
+   * Valve over the entire Steam playerbase (not a sample). No API key
+   * required. Returns null if the app has no achievements or the call
+   * fails. The achievement `apiName` is Valve's internal slug (e.g.
+   * `ACH00`, `CHARMED`), not the localized display title.
+   */
+  async getGlobalAchievementPercentages(
+    appId: number,
+  ): Promise<Array<{ apiName: string; percent: number }> | null> {
+    try {
+      const { data } = await axios.get(
+        'https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v0002/',
+        { params: { gameid: appId, format: 'json' }, timeout: 15000 },
+      );
+      const raw = data?.achievementpercentages?.achievements;
+      if (!Array.isArray(raw) || raw.length === 0) return null;
+
+      const parsed: Array<{ apiName: string; percent: number }> = [];
+      for (const entry of raw as Array<{ name?: unknown; percent?: unknown }>) {
+        const apiName = typeof entry.name === 'string' ? entry.name : null;
+        const percent = Number(entry.percent);
+        if (!apiName || !Number.isFinite(percent) || percent < 0 || percent > 100) {
+          continue;
+        }
+        parsed.push({ apiName, percent });
+      }
+      return parsed.length > 0 ? parsed : null;
+    } catch (error) {
+      this.logger.warn(
+        `getGlobalAchievementPercentages failed for ${appId}: ${error}`,
+      );
+      return null;
+    }
+  }
+
+  /**
    * Total number of Steam reviews. This is the core signal for the Boxleiter
    * estimation method.
    */
