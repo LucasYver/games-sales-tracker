@@ -888,6 +888,8 @@ export class IngestionService {
     this.logger.log(`[refresh] "${game.name}" — recomputing estimates…`);
     await this.estimation.computeAndStore(game.id);
 
+    await this.games.update(game.id, { lastRefreshedAt: new Date() });
+
     const totalIngested = discovery.ingested + bib.ingested + backlog.ingested;
     this.logger.log(
       `[refresh] "${game.name}" — done in ${Date.now() - startedAt}ms, ${totalIngested} article(s) ingested with figures`,

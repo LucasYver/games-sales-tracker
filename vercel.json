@@ -18,7 +18,7 @@
         }
     ],
     "crons": [
-        { "path": "/api/cron/refresh-steam",  "schedule": "0 3 * * *" },
+        { "path": "/api/cron/refresh-games",  "schedule": "0 3 * * *" },
         { "path": "/api/cron/poll-feeds",      "schedule": "0 12 * * *" },
         { "path": "/api/cron/discover-games",  "schedule": "0 2 * * *" }
     ]

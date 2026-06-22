@@ -1,51 +1,49 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Game, GameSource, SourceType } from '../entities';
+import { Game } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
-import { getRefreshIntervalDays, isDueForRefresh } from './refresh-interval';
+import { isDueForRefresh } from './refresh-interval';
 
 @Injectable()
 export class RefreshService {
   private readonly logger = new Logger(RefreshService.name);
 
   constructor(
-    @InjectRepository(GameSource)
-    private readonly gameSources: Repository<GameSource>,
     @InjectRepository(Game)
     private readonly games: Repository<Game>,
     private readonly ingestion: IngestionService,
   ) {}
 
   /**
-   * Periodic refresh of tracked Steam apps. Each game has its own cadence
-   * based on its release date (newer titles refreshed more often). Games
-   * older than 5 years are skipped entirely. Wikipedia LLM extraction is
-   * intentionally skipped here to keep per-game cost low.
+   * Periodic full refresh of tracked games. Runs the same end-to-end chain as
+   * the admin "Refresh data" button (Steam details + reviews, Wikipedia LLM
+   * extraction, store ratings, trusted-search / bibliography / Tavily backlog
+   * discovery, and estimation). Each game has its own cadence based on its
+   * release date (newer titles refreshed more often); games older than 5 years
+   * are skipped entirely. The cron may not finish all eligible games in a
+   * single run — leftovers will be picked up by the next nightly execution.
+   *
+   * Covers every tracked game (PC + console-only) and excludes free-to-play
+   * titles, for which we don't compute sales estimates.
    */
-  async refreshAllSteamApps() {
-    const sources = await this.gameSources.find({
-      where: { source: SourceType.STEAM },
-      relations: { game: true },
-    });
+  async refreshAllGames() {
+    const games = await this.games.find({ where: { isFree: false } });
 
     const now = new Date();
-    const eligible = sources.filter((source) =>
-      isDueForRefresh(source.game?.releaseDate, source.game?.lastRefreshedAt, now),
+    const eligible = games.filter((game) =>
+      isDueForRefresh(game.releaseDate, game.lastRefreshedAt, now),
     );
 
     this.logger.log(
-      `Refreshing ${eligible.length} of ${sources.length} Steam app(s) (others not yet due).`,
+      `Refreshing ${eligible.length} of ${games.length} game(s) (others not yet due).`,
     );
 
-    for (const source of eligible) {
-      const appId = Number(source.externalId);
-      if (Number.isNaN(appId)) continue;
+    for (const game of eligible) {
       try {
-        await this.ingestion.ingestSteamApp(appId);
-        await this.games.update(source.gameId, { lastRefreshedAt: new Date() });
+        await this.ingestion.refreshGame(game.id);
       } catch (error) {
-        this.logger.warn(`Refresh failed for app ${appId}: ${error}`);
+        this.logger.warn(`Refresh failed for game ${game.id}: ${error}`);
       }
     }
 

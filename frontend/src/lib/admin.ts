@@ -151,6 +151,7 @@ export interface AdminGameDetail extends AdminGameSummary {
   igdbId: number | null;
   coverUrl: string | null;
   summary: string | null;
+  lastRefreshedAt: string | null;
   sources: AdminGameSource[];
   salesRecords: AdminSalesRecord[];
   estimates: AdminEstimate[];

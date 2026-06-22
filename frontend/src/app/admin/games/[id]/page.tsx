@@ -131,6 +131,10 @@ export default async function AdminGameDetailPage({
             />
             <Field label="Created" value={formatDateTime(game.createdAt)} />
             <Field label="Updated" value={formatDateTime(game.updatedAt)} />
+            <Field
+              label="Last refreshed"
+              value={formatDateTime(game.lastRefreshedAt)}
+            />
           </dl>
           {game.summary && (
             <p className="text-muted-foreground text-sm leading-relaxed">

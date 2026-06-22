@@ -75,6 +75,7 @@ export interface AdminGameDetail extends AdminGameSummary {
   igdbId: number | null;
   coverUrl: string | null;
   summary: string | null;
+  lastRefreshedAt: Date | null;
   sources: GameSource[];
   salesRecords: SalesRecord[];
   estimates: SalesEstimate[];
@@ -403,6 +404,7 @@ export class AdminService {
       igdbId: game.igdbId,
       coverUrl: game.coverUrl,
       summary: game.summary,
+      lastRefreshedAt: game.lastRefreshedAt,
       sources: game.sources,
       salesRecords: game.salesRecords.sort(
         (a, b) =>

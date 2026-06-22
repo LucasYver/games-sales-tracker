@@ -7,10 +7,10 @@ import { RefreshService } from './refresh.service';
 export class CronController {
   constructor(private readonly refresh: RefreshService) {}
 
-  @Get('refresh-steam')
+  @Get('refresh-games')
   @HttpCode(200)
-  refreshSteam() {
-    return this.refresh.refreshAllSteamApps();
+  refreshGames() {
+    return this.refresh.refreshAllGames();
   }
 
   @Get('poll-feeds')
