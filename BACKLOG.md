@@ -44,15 +44,24 @@ stable table. Will likely need an LLM extraction pass on the IR PDFs.
 - Once one publisher pipeline works end-to-end, the rest mostly differs
   by parser (HTML / PDF) and naming heuristics.
 
-## Calibrate Exophase coverage / bias from publisher figures
+## Re-enable achievement-based estimation (currently dormant)
 
-Today the achievement-based estimation uses **rough default coverage
-constants** in `sales-modeling.constants.ts`
-(`EXOPHASE_COVERAGE_*_LOW/HIGH`). Once the earnings pipeline above feeds
-`SalesRecord(source = OFFICIAL)` rows, extend `EstimationService.recalibrate*`
-to also fit the Exophase coverage per game (and per platform) against the
-declared figures, exactly the way `calibratedMultiplier` works today for
-the Boxleiter signals.
+The achievement-based estimate (`EstimationService.estimateFromAchievementsForPlatform`)
+is intentionally **not called** from `estimateAllPlatforms` today: the
+coverage constants are uncalibrated guesses and produce too much noise
+against the Boxleiter estimate. The scraping pipeline still runs on
+every refresh, so `achievement_snapshot` keeps accumulating per-game
+data ready to be used.
+
+Reactivation plan:
+1. Land the publisher IR / earnings pipeline above so we have OFFICIAL
+   ground truth.
+2. Calibrate `EXOPHASE_COVERAGE_*_LOW/HIGH` per game (and per platform)
+   against the declared figures, exactly the way `calibratedMultiplier`
+   works today for the Boxleiter signals — extend
+   `EstimationService.recalibrate*` accordingly.
+3. Uncomment the `estimateFromAchievementsForPlatform` call in
+   `estimateAllPlatforms` and remove the dormant marker from `ESTIMATION.md` §2.
 
 ## Other achievement sources to consider later
 

@@ -132,11 +132,18 @@ the per-source spread (OFFICIAL ±20 %, ANNOUNCEMENT ±30 %, MEDIA
 
 ---
 
-## 2. Per-platform estimate — Achievement-based (parallel)
+## 2. Per-platform estimate — Achievement-based (dormant)
 
-> `EstimationService.estimateFromAchievementsForPlatform`. Adds a second
-> `SalesEstimate` per platform (different `method`), it never replaces the
-> Boxleiter one.
+> `EstimationService.estimateFromAchievementsForPlatform`. **Currently
+> disabled** at the call site: the method is kept intact and
+> `AchievementSnapshot` rows keep flowing in (Exophase + Steam official
+> percentages, scraped on every refresh), but no `SalesEstimate` is
+> produced from them today. Reactivation is a one-line change once the
+> coverage constants below have been calibrated against publisher IR —
+> see `BACKLOG.md`.
+>
+> When re-enabled, this adds a second `SalesEstimate` per platform
+> (different `method`); it never replaces the Boxleiter one.
 
 The "most common achievement" of a game is a strong proxy for "players who
 actually launched the game". Exophase exposes:

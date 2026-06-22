@@ -192,11 +192,14 @@ export class EstimationService {
    * Estimate sales for every supported platform. For each platform, returns
    * up to two parallel estimates:
    *   - the classical Boxleiter (signal × per-platform multiplier)
-   *   - an achievement-based estimate from the latest Exophase snapshot,
-   *     when one exists for that platform
-   * Both share the same `platform` field and are differentiated by their
-   * `method` string. Platforms with no usable signal of either kind are
-   * skipped silently; the game is also skipped entirely if free-to-play.
+   * Only the Boxleiter estimate is produced today. The achievement-based
+   * path is intentionally **disabled** at the call site (the underlying
+   * computation, snapshots scraping and persistence are left intact so
+   * we can re-enable it once the coverage constants are calibrated
+   * against publisher IR — see `BACKLOG.md`).
+   *
+   * Platforms with no usable signal are skipped silently; the game is
+   * also skipped entirely if free-to-play.
    *
    * `asOf` time-travels every signal lookup to that date (only snapshots
    * with `capturedAt <= asOf` are considered). Used by the historical
@@ -214,12 +217,15 @@ export class EstimationService {
       const boxleiter = await this.estimateForPlatform(game, cfg, asOf);
       if (boxleiter) results.push(boxleiter);
 
-      const achievementBased = await this.estimateFromAchievementsForPlatform(
-        game,
-        cfg.platform,
-        asOf,
-      );
-      if (achievementBased) results.push(achievementBased);
+      // Achievement-based estimate intentionally disabled. Snapshots
+      // keep flowing into `achievement_snapshot` for future use; flip
+      // this back on once Exophase coverage constants are calibrated.
+      // const achievementBased = await this.estimateFromAchievementsForPlatform(
+      //   game,
+      //   cfg.platform,
+      //   asOf,
+      // );
+      // if (achievementBased) results.push(achievementBased);
     }
     return results;
   }
@@ -346,7 +352,13 @@ export class EstimationService {
    * before scaling. This typically cuts ~15-30 % of overestimation. We
    * tag the method `…-steam-corrected` so the source of the correction is
    * visible in the admin.
+   *
+   * NOTE: currently dormant — not called from `estimateAllPlatforms`.
+   * Kept here so re-enabling it once Exophase coverage constants are
+   * calibrated against publisher IR is a one-line change at the call
+   * site. AchievementSnapshot rows keep flowing in regardless.
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private async estimateFromAchievementsForPlatform(
     game: Game,
     platform: Platform,
