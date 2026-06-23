@@ -149,12 +149,7 @@ function buildLatestBatch(estimates: AdminEstimate[]): {
     (a, b) => platformRank(a.platform) - platformRank(b.platform),
   );
   for (const g of groups) {
-    g.methods.sort((a, b) => {
-      // Canonical rows first, then references; alphabetical within
-      // each section so the table is stable across renders.
-      if (a.isReference !== b.isReference) return a.isReference ? 1 : -1;
-      return a.method.localeCompare(b.method);
-    });
+    g.methods.sort((a, b) => a.method.localeCompare(b.method));
   }
 
   return {
@@ -887,27 +882,12 @@ function MethodsCard({ estimates }: { estimates: AdminEstimate[] }) {
                 </TableHeader>
                 <TableBody>
                   {estimates.map((e) => (
-                    <TableRow
-                      key={e.id}
-                      className={cn(
-                        e.isReference && 'text-muted-foreground bg-muted/30',
-                      )}
-                    >
+                    <TableRow key={e.id}>
                       <TableCell>
                         <Badge variant="secondary">{e.platform}</Badge>
                       </TableCell>
                       <TableCell className="font-mono text-xs">
-                        <div className="flex items-center gap-2">
-                          <span>{e.method}</span>
-                          {e.isReference && (
-                            <Badge
-                              variant="outline"
-                              className="border-dashed text-[10px] font-normal tracking-wide uppercase"
-                            >
-                              ref
-                            </Badge>
-                          )}
-                        </div>
+                        {e.method}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">{e.confidence}</Badge>
@@ -941,20 +921,10 @@ function PlatformMethodGroup({ group }: { group: PlatformGroup }) {
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b pb-2">
         <div className="flex items-center gap-2">
           <Badge variant="secondary">{group.platform}</Badge>
-          {(() => {
-            const main = group.methods.filter((m) => !m.isReference).length;
-            const refs = group.methods.length - main;
-            return (
-              <span className="text-muted-foreground text-xs">
-                {main} method{main > 1 ? 's' : ''} → consensus
-                {refs > 0 && (
-                  <span className="text-muted-foreground/70">
-                    {' '}· {refs} ref variant{refs > 1 ? 's' : ''}
-                  </span>
-                )}
-              </span>
-            );
-          })()}
+          <span className="text-muted-foreground text-xs">
+            {group.methods.length} method
+            {group.methods.length > 1 ? 's' : ''} → consensus
+          </span>
         </div>
         {group.aggregate ? (
           <div className="flex items-center gap-2 text-sm">
@@ -987,25 +957,8 @@ function PlatformMethodGroup({ group }: { group: PlatformGroup }) {
           </TableHeader>
           <TableBody>
             {group.methods.map((e) => (
-              <TableRow
-                key={e.id}
-                className={cn(
-                  e.isReference && 'text-muted-foreground bg-muted/30',
-                )}
-              >
-                <TableCell className="font-mono text-xs">
-                  <div className="flex items-center gap-2">
-                    <span>{e.method}</span>
-                    {e.isReference && (
-                      <Badge
-                        variant="outline"
-                        className="border-dashed text-[10px] font-normal tracking-wide uppercase"
-                      >
-                        ref
-                      </Badge>
-                    )}
-                  </div>
-                </TableCell>
+              <TableRow key={e.id}>
+                <TableCell className="font-mono text-xs">{e.method}</TableCell>
                 <TableCell>
                   <Badge variant="outline">{e.confidence}</Badge>
                 </TableCell>

@@ -10,6 +10,7 @@ import { AddGenrePeakCcuToWeekOne1782224894116 } from './1782224894116-AddGenreP
 import { AddPureEstimateToSnapshot1782227318714 } from './1782227318714-AddPureEstimateToSnapshot';
 import { AddPureBreakdownToSnapshot1782228030613 } from './1782228030613-AddPureBreakdownToSnapshot';
 import { AddIsReferenceToSalesEstimate1782228710396 } from './1782228710396-AddIsReferenceToSalesEstimate';
+import { RemoveIsReferenceFromSalesEstimate1782243179245 } from './1782243179245-RemoveIsReferenceFromSalesEstimate';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -31,4 +32,5 @@ export const migrations: MixedList<Function | string> = [
   AddPureEstimateToSnapshot1782227318714,
   AddPureBreakdownToSnapshot1782228030613,
   AddIsReferenceToSalesEstimate1782228710396,
+  RemoveIsReferenceFromSalesEstimate1782243179245,
 ];

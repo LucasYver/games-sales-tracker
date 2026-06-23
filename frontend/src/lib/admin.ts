@@ -139,11 +139,6 @@ export interface AdminEstimate {
   estimatedHigh: number;
   confidence: ConfidenceLevel;
   method: string;
-  // Reference rows are produced for diagnostic comparison only
-  // (alternative variants on the calibration / ccu-intersect / genre
-  // axes). They are excluded from the `aggregated` consensus and
-  // rendered with a muted style next to the canonical row.
-  isReference: boolean;
   computedAt: string;
 }
 

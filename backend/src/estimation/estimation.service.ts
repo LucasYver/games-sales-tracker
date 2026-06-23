@@ -176,32 +176,16 @@ const CONFIDENCE_BY_RANK = [
 ];
 
 /**
- * Knobs to switch on alternative estimation paths. Each axis is
- * independent; combining them lets the variant generator enumerate
- * the full cartesian product (calibration × ccu-intersect × genre)
- * for diagnostic display in the admin UI.
- *
- *   - `ignoreCalibration`: forces `resolveMultiplier` to skip
- *     `Game.calibratedMultiplier*` and use the platform default
- *     range. Used both for the "pure algo" snapshot total and as one
- *     axis of the reference-variant matrix.
- *   - `skipCcuIntersection`: PC only. Disables
- *     `applyCcuIntersection` so the row is the pure
- *     reviews-multiplier estimate without the CCU cross-check.
- *   - `ignoreGenreProfile`: forces the first-week extrapolation back
- *     onto the legacy size-bucket curve even when the game's genres
- *     resolve to a profile, AND uses the genre-blind global
- *     peak-CCU → week-1 ratio band.
- *   - `markAsReference`: when true, tags every produced
- *     `EstimateResult` with `isReference = true`. The aggregator
- *     filters those out so reference variants are persisted purely
- *     for side-by-side display, never blended into the consensus.
+ * Knobs to flip estimation into "pure algo" mode. When set,
+ * `resolveMultiplier` ignores `Game.calibratedMultiplier*` and falls
+ * back to the platform default range, so the produced
+ * `EstimateResult`s show what the model would have said with zero
+ * declared-figure help. Used by `snapshotReconcile` to populate the
+ * `pureEstimatedToday*` columns alongside the regular reconciled
+ * headline.
  */
 export interface EstimateOptions {
   ignoreCalibration?: boolean;
-  skipCcuIntersection?: boolean;
-  ignoreGenreProfile?: boolean;
-  markAsReference?: boolean;
 }
 
 interface PlatformConfig {
@@ -230,10 +214,6 @@ export interface EstimateResult {
   estimatedHigh: number;
   confidence: ConfidenceLevel;
   method: string;
-  // Set to true for rows produced by the variant generator. Kept
-  // optional so the dozens of result-construction sites that don't
-  // care don't need to be touched.
-  isReference?: boolean;
 }
 
 @Injectable()
@@ -347,89 +327,21 @@ export class EstimationService {
     // Steam peak CCU and (when captured close to launch) review count,
     // bucketed by launch size. Independent of any calibrated multiplier
     // so it adds signal especially for newer titles.
-    const firstWeek = await this.estimateFirstWeekExtrapolationForPc(
-      game,
-      asOf,
-      opts,
-    );
+    const firstWeek = await this.estimateFirstWeekExtrapolationForPc(game, asOf);
     if (firstWeek) results.push(firstWeek);
 
     return results;
   }
 
   /**
-   * Run `estimateAllPlatforms` for every cell of the variant matrix
-   * (calibration × ccu-intersect × genre profile) and tag every cell
-   * other than the canonical one with `isReference = true`.
-   *
-   * The "canonical" cell mirrors today's behaviour — the
-   * most-informed combination available for the game:
-   *   - calibrated multiplier when one exists;
-   *   - CCU intersection when CCU data is available;
-   *   - genre profile when the game's genres resolve.
-   *
-   * Reference cells whose options collapse to the canonical one
-   * (e.g. a game with no calibrated multiplier produces the same
-   * row for `ignoreCalibration: true` and `false`) are deduplicated
-   * by `(platform, method)` so we never persist two physically
-   * identical rows. The aggregator filters out reference rows so
-   * they never bias the `aggregated` consensus.
-   */
-  async estimateAllPlatformsWithVariants(
-    gameId: string,
-    asOf?: Date,
-  ): Promise<EstimateResult[]> {
-    const canonical = await this.estimateAllPlatforms(gameId, asOf);
-    if (canonical.length === 0) return [];
-
-    const dedupKey = (r: EstimateResult): string =>
-      `${r.platform}::${r.method}`;
-    const seen = new Set<string>(canonical.map(dedupKey));
-    const out: EstimateResult[] = [...canonical];
-
-    // Each axis flip we expose to the variant matrix. The empty
-    // flip (no option set) is omitted: that's the canonical run we
-    // already executed above.
-    const referenceOptions: EstimateOptions[] = [
-      { ignoreCalibration: true },
-      { skipCcuIntersection: true },
-      { ignoreCalibration: true, skipCcuIntersection: true },
-      { ignoreGenreProfile: true },
-      { ignoreCalibration: true, ignoreGenreProfile: true },
-      { skipCcuIntersection: true, ignoreGenreProfile: true },
-      {
-        ignoreCalibration: true,
-        skipCcuIntersection: true,
-        ignoreGenreProfile: true,
-      },
-    ];
-
-    for (const variant of referenceOptions) {
-      const refs = await this.estimateAllPlatforms(gameId, asOf, {
-        ...variant,
-        markAsReference: true,
-      });
-      for (const r of refs) {
-        const key = dedupKey(r);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push(r);
-      }
-    }
-
-    return out;
-  }
-
-  /**
    * Recalibrate (if possible) all per-platform multipliers, then compute and
    * persist a fresh SalesEstimate row for each platform that has a usable
-   * signal — including reference variant rows for diagnostic display.
-   * Returns every persisted estimate.
+   * signal. Returns every persisted estimate.
    */
   async computeAndStore(gameId: string): Promise<EstimateResult[]> {
     await this.recalibrateAll(gameId);
 
-    const results = await this.estimateAllPlatformsWithVariants(gameId);
+    const results = await this.estimateAllPlatforms(gameId);
     if (results.length === 0) return [];
 
     await this.persistEstimates(gameId, results);
@@ -447,7 +359,7 @@ export class EstimationService {
     gameId: string,
     asOf: Date,
   ): Promise<EstimateResult[]> {
-    const results = await this.estimateAllPlatformsWithVariants(gameId, asOf);
+    const results = await this.estimateAllPlatforms(gameId, asOf);
     if (results.length === 0) return [];
 
     await this.persistEstimates(gameId, results, asOf);
@@ -717,7 +629,6 @@ export class EstimationService {
       confidence: result.confidence,
       method: result.method,
       methodId: this.resolveMethodId(result.method),
-      isReference: result.isReference ?? false,
       ...(asOf ? { computedAt: asOf } : {}),
     });
   }
@@ -748,7 +659,6 @@ export class EstimationService {
     perPlatform: EstimateResult[],
   ): EstimateResult | null {
     const eligible = perPlatform
-      .filter((r) => !r.isReference)
       .map((r) => {
         const method = this.methods.findByCode(
           r.method.replace(/\+[^+]+/g, ''),
@@ -888,20 +798,18 @@ export class EstimationService {
     let confidenceOverride: ConfidenceLevel | null = null;
 
     if (cfg.platform === Platform.PC) {
-      if (!opts.skipCcuIntersection) {
-        const ccu = await this.applyCcuIntersection(
-          game.id,
-          estimatedLow,
-          estimatedHigh,
-          launcherProfile,
-          asOf,
-        );
-        if (ccu) {
-          estimatedLow = ccu.low;
-          estimatedHigh = ccu.high;
-          finalMethod = `${method}${ccu.methodSuffix}`;
-          confidenceOverride = ccu.confidenceOverride;
-        }
+      const ccu = await this.applyCcuIntersection(
+        game.id,
+        estimatedLow,
+        estimatedHigh,
+        launcherProfile,
+        asOf,
+      );
+      if (ccu) {
+        estimatedLow = ccu.low;
+        estimatedHigh = ccu.high;
+        finalMethod = `${method}${ccu.methodSuffix}`;
+        confidenceOverride = ccu.confidenceOverride;
       }
 
       const profileTag = LAUNCHER_PROFILE_METHOD_TAG[launcherProfile];
@@ -922,7 +830,6 @@ export class EstimationService {
       estimatedHigh: Math.round(estimatedHigh),
       confidence: cappedConfidence,
       method: finalMethod,
-      ...(opts.markAsReference ? { isReference: true } : {}),
     };
   }
 
@@ -1025,7 +932,6 @@ export class EstimationService {
   private async estimateFirstWeekExtrapolationForPc(
     game: Game,
     asOf?: Date,
-    opts: EstimateOptions = {},
   ): Promise<EstimateResult | null> {
     if (!game.releaseDate) return null;
 
@@ -1052,13 +958,8 @@ export class EstimationService {
     // resolve to a profile we use its empirical range (much lower for
     // high-engagement genres like grand strategy / MMO whose peak CCU
     // is large relative to sales); otherwise the genre-blind global
-    // [LOW, HIGH] band is the fallback. `ignoreGenreProfile` forces
-    // the fallback path even when a profile resolves — used by the
-    // reference-variant generator to surface the legacy size-bucket
-    // estimate side by side with the genre-aware one.
-    const genreProfile = opts.ignoreGenreProfile
-      ? null
-      : await this.genres.resolveProfileForGame(game);
+    // [LOW, HIGH] band is the fallback.
+    const genreProfile = await this.genres.resolveProfileForGame(game);
     const ccuRatioLow = genreProfile
       ? genreProfile.peakCcuToWeekOneLow
       : FIRST_WEEK_PEAK_CCU_LOW;
@@ -1174,7 +1075,6 @@ export class EstimationService {
       estimatedHigh: projectedHigh,
       confidence: cappedConfidence,
       method,
-      ...(opts.markAsReference ? { isReference: true } : {}),
     };
   }
 
