@@ -4,6 +4,7 @@ import { In, IsNull, LessThanOrEqual, Repository } from 'typeorm';
 import {
   AchievementSnapshot,
   ConfidenceLevel,
+  EstimationMethod,
   Game,
   LauncherProfile,
   Platform,
@@ -14,6 +15,10 @@ import {
   SignalSnapshot,
   SourceType,
 } from '../entities';
+import {
+  AGGREGATED_METHOD_CODE,
+  EstimationMethodService,
+} from './estimation-method.service';
 import {
   ACHIEVEMENT_ESTIMATE_MAX_UNITS,
   ACHIEVEMENT_ESTIMATE_MIN_UNITS,
@@ -26,6 +31,16 @@ import {
   EXOPHASE_COVERAGE_PS_LOW,
   EXOPHASE_COVERAGE_XBOX_HIGH,
   EXOPHASE_COVERAGE_XBOX_LOW,
+  FIRST_WEEK_BUCKET_LARGE_YEAR1_RATIO,
+  FIRST_WEEK_BUCKET_SMALL_YEAR1_RATIO,
+  FIRST_WEEK_BUCKET_THRESHOLD,
+  FIRST_WEEK_ESTIMATE_MAX_UNITS,
+  FIRST_WEEK_ESTIMATE_MIN_UNITS,
+  FIRST_WEEK_PEAK_CCU_HIGH,
+  FIRST_WEEK_PEAK_CCU_LOW,
+  FIRST_WEEK_REVIEWS_HIGH,
+  FIRST_WEEK_REVIEWS_LOW,
+  FIRST_WEEK_REVIEWS_WINDOW_DAYS,
   LAUNCHER_CCU_FACTOR,
   LAUNCHER_CONFIDENCE_CAP,
   LAUNCHER_REVIEWS_FACTOR,
@@ -43,6 +58,8 @@ import {
   XBOX_BOXLEITER_DEFAULT_LOW,
   XBOX_BOXLEITER_PLAUSIBLE_MAX,
   XBOX_BOXLEITER_PLAUSIBLE_MIN,
+  ageInDays,
+  firstWeekProjectionMultiplier,
 } from '../games/sales-modeling.constants';
 
 const CONFIDENCE_ORDER: ConfidenceLevel[] = [
@@ -117,6 +134,25 @@ const CALIBRATION_SOURCES = [
 // worthy multipliers.
 const GLOBAL_SPLIT_MIN_PLATFORM_SHARE = 0.05;
 
+// How aggressively `aggregateMethods` widens the combined band when the
+// input methods disagree about the midpoint. 0 = no inflation (pure
+// weighted average), 1 = inflate by the full relative spread. Picked
+// conservatively at 0.5 until we have multiple active methods to
+// observe and tune against.
+const AGGREGATION_DISAGREEMENT_ALPHA = 0.5;
+
+const CONFIDENCE_RANK: Record<ConfidenceLevel, number> = {
+  [ConfidenceLevel.LOW]: 0,
+  [ConfidenceLevel.MEDIUM]: 1,
+  [ConfidenceLevel.HIGH]: 2,
+};
+
+const CONFIDENCE_BY_RANK = [
+  ConfidenceLevel.LOW,
+  ConfidenceLevel.MEDIUM,
+  ConfidenceLevel.HIGH,
+];
+
 interface PlatformConfig {
   platform: Platform;
   signalMetric: SignalMetric;
@@ -161,6 +197,7 @@ export class EstimationService {
     private readonly estimates: Repository<SalesEstimate>,
     @InjectRepository(AchievementSnapshot)
     private readonly achievements: Repository<AchievementSnapshot>,
+    private readonly methods: EstimationMethodService,
   ) {
     this.platforms = [
       {
@@ -262,6 +299,14 @@ export class EstimationService {
       // );
       // if (achievementBased) results.push(achievementBased);
     }
+
+    // Lifecycle method: project today's PC units from the all-time
+    // Steam peak CCU and (when captured close to launch) review count,
+    // bucketed by launch size. Independent of any calibrated multiplier
+    // so it adds signal especially for newer titles.
+    const firstWeek = await this.estimateFirstWeekExtrapolationForPc(game, asOf);
+    if (firstWeek) results.push(firstWeek);
+
     return results;
   }
 
@@ -276,19 +321,7 @@ export class EstimationService {
     const results = await this.estimateAllPlatforms(gameId);
     if (results.length === 0) return [];
 
-    await this.estimates.save(
-      results.map((r) =>
-        this.estimates.create({
-          gameId,
-          platform: r.platform,
-          estimatedLow: r.estimatedLow,
-          estimatedHigh: r.estimatedHigh,
-          confidence: r.confidence,
-          method: r.method,
-        }),
-      ),
-    );
-
+    await this.persistEstimates(gameId, results);
     return results;
   }
 
@@ -306,21 +339,166 @@ export class EstimationService {
     const results = await this.estimateAllPlatforms(gameId, asOf);
     if (results.length === 0) return [];
 
-    await this.estimates.save(
-      results.map((r) =>
+    await this.persistEstimates(gameId, results, asOf);
+    return results;
+  }
+
+  /**
+   * Persist one `SalesEstimate` row per (platform, method) and then layer
+   * an `aggregated` row per platform on top, combining every enabled
+   * method for that platform at the same `computedAt`. The aggregate is
+   * what `GamesService.reconcile` consumes by default — see
+   * `aggregateMethodsForPlatform` for the formula.
+   *
+   * `asOf` is propagated to every row's `computedAt` so historical
+   * rebuilds produce a coherent point-in-time batch (all methods plus
+   * the aggregate share the exact same timestamp).
+   */
+  private async persistEstimates(
+    gameId: string,
+    results: EstimateResult[],
+    asOf?: Date,
+  ): Promise<void> {
+    const baseRows = results.map((r) => this.toSalesEstimate(gameId, r, asOf));
+    await this.estimates.save(baseRows);
+
+    const byPlatform = new Map<Platform, EstimateResult[]>();
+    for (const r of results) {
+      const bucket = byPlatform.get(r.platform) ?? [];
+      bucket.push(r);
+      byPlatform.set(r.platform, bucket);
+    }
+
+    const aggregateMethod = this.methods.requireByCode(AGGREGATED_METHOD_CODE);
+    const aggregateRows: SalesEstimate[] = [];
+    for (const [platform, perPlatform] of byPlatform) {
+      const aggregate = this.aggregateMethodsForPlatform(perPlatform);
+      if (!aggregate) continue;
+      aggregateRows.push(
         this.estimates.create({
           gameId,
-          platform: r.platform,
-          estimatedLow: r.estimatedLow,
-          estimatedHigh: r.estimatedHigh,
-          confidence: r.confidence,
-          method: r.method,
-          computedAt: asOf,
+          platform,
+          estimatedLow: aggregate.estimatedLow,
+          estimatedHigh: aggregate.estimatedHigh,
+          confidence: aggregate.confidence,
+          method: aggregate.method,
+          methodId: aggregateMethod.id,
+          ...(asOf ? { computedAt: asOf } : {}),
         }),
-      ),
-    );
+      );
+    }
+    if (aggregateRows.length > 0) {
+      await this.estimates.save(aggregateRows);
+    }
+  }
 
-    return results;
+  /**
+   * Translate one `EstimateResult` into a `SalesEstimate` entity. Resolves
+   * the canonical `methodId` from the method tag (stripping any dynamic
+   * `+xxx` modifier suffixes) and keeps the full tag as the legacy
+   * `method` string for backward compatibility.
+   */
+  private toSalesEstimate(
+    gameId: string,
+    result: EstimateResult,
+    asOf?: Date,
+  ): SalesEstimate {
+    return this.estimates.create({
+      gameId,
+      platform: result.platform,
+      estimatedLow: result.estimatedLow,
+      estimatedHigh: result.estimatedHigh,
+      confidence: result.confidence,
+      method: result.method,
+      methodId: this.resolveMethodId(result.method),
+      ...(asOf ? { computedAt: asOf } : {}),
+    });
+  }
+
+  private resolveMethodId(methodTag: string): string {
+    const canonical = methodTag.replace(/\+[^+]+/g, '');
+    return this.methods.requireByCode(canonical).id;
+  }
+
+  /**
+   * Combine every method's `[low, high]` for a single platform into one
+   * aggregated band. Weights come from `EstimationMethod.defaultWeight`
+   * (rows with weight 0 are skipped). The combined spread is widened
+   * proportionally to how much the inputs disagree about their midpoint:
+   *
+   *   weightedLow  = Σ (low_i  × w_i) / Σ w_i
+   *   weightedHigh = Σ (high_i × w_i) / Σ w_i
+   *   disagreement = (max(mid_i) − min(mid_i)) / weightedMid
+   *   aggLow  = weightedLow  × (1 − α × disagreement)
+   *   aggHigh = weightedHigh × (1 + α × disagreement)
+   *
+   * Single-method platforms (today's reality on every platform) collapse
+   * to a copy of the input band — disagreement = 0 leaves the spread
+   * untouched. Confidence is the **lowest** of the inputs: an aggregate
+   * is no more confident than its weakest contributor.
+   */
+  private aggregateMethodsForPlatform(
+    perPlatform: EstimateResult[],
+  ): EstimateResult | null {
+    const eligible = perPlatform
+      .map((r) => {
+        const method = this.methods.findByCode(
+          r.method.replace(/\+[^+]+/g, ''),
+        );
+        return method ? { result: r, method } : null;
+      })
+      .filter(
+        (entry): entry is { result: EstimateResult; method: EstimationMethod } =>
+          entry !== null &&
+          entry.method.isEnabled &&
+          !entry.method.isAggregate &&
+          Number(entry.method.defaultWeight) > 0,
+      );
+    if (eligible.length === 0) return null;
+
+    const totalWeight = eligible.reduce(
+      (sum, e) => sum + Number(e.method.defaultWeight),
+      0,
+    );
+    if (totalWeight <= 0) return null;
+
+    let weightedLow = 0;
+    let weightedHigh = 0;
+    let minMid = Infinity;
+    let maxMid = -Infinity;
+    let lowestConfidenceRank = Infinity;
+
+    for (const { result, method } of eligible) {
+      const weight = Number(method.defaultWeight);
+      weightedLow += result.estimatedLow * weight;
+      weightedHigh += result.estimatedHigh * weight;
+      const mid = (result.estimatedLow + result.estimatedHigh) / 2;
+      if (mid < minMid) minMid = mid;
+      if (mid > maxMid) maxMid = mid;
+      const rank = CONFIDENCE_RANK[result.confidence];
+      if (rank < lowestConfidenceRank) lowestConfidenceRank = rank;
+    }
+    weightedLow /= totalWeight;
+    weightedHigh /= totalWeight;
+
+    const weightedMid = (weightedLow + weightedHigh) / 2;
+    const disagreement =
+      weightedMid > 0 ? (maxMid - minMid) / weightedMid : 0;
+    const inflate = AGGREGATION_DISAGREEMENT_ALPHA * disagreement;
+
+    const aggLow = Math.max(0, weightedLow * (1 - inflate));
+    const aggHigh = weightedHigh * (1 + inflate);
+
+    return {
+      platform: eligible[0].result.platform,
+      estimatedLow: Math.round(aggLow),
+      estimatedHigh: Math.round(aggHigh),
+      confidence:
+        CONFIDENCE_BY_RANK[
+          Number.isFinite(lowestConfidenceRank) ? lowestConfidenceRank : 0
+        ],
+      method: AGGREGATED_METHOD_CODE,
+    };
   }
 
   /**
@@ -491,6 +669,191 @@ export class EstimationService {
       methodSuffix: '+ccu-conflict',
       confidenceOverride: ConfidenceLevel.LOW,
     };
+  }
+
+  /**
+   * Lifecycle estimate (PC): derive week-1 units from the all-time
+   * Steam peak CCU — and reviews captured close to launch when
+   * available — then project to "today" via a degressive curve that
+   * bumps year-1 to either 2.68× (large launches, > 100k week-1) or
+   * 3.77× (small launches) the week-1 baseline.
+   *
+   * Eligibility:
+   *   - Game has a `releaseDate` and is past day 1.
+   *   - We have at least one `STEAM_PEAK_CCU` snapshot (ordered by
+   *     `value DESC` because the historical-import path writes peaks
+   *     with the SteamCharts month of the peak as `capturedAt`).
+   *
+   * When a `STEAM_REVIEWS` snapshot was captured within ±
+   * `FIRST_WEEK_REVIEWS_WINDOW_DAYS` of `releaseDate + 7 days`, we
+   * average its derived week-1 band with the peak-CCU band — using the
+   * midpoint average and the widest spread of the two as a
+   * defensive-uncertainty floor. The method tag flips from
+   * `first-week-extrapolation-pc` to
+   * `first-week-extrapolation-pc+reviews-corrected` so admins can tell
+   * the two combos apart in the time series.
+   *
+   * Launcher profile scaling (multi-store / launcher-primary) is
+   * applied to both the CCU and reviews inputs since both are Steam-
+   * captured — they share the same "Steam → total PC" correction. We
+   * skip the scaling for calibrated-equivalent games (none today, but
+   * mirrors the Boxleiter behaviour so a future LIFECYCLE calibration
+   * would slot in cleanly).
+   */
+  private async estimateFirstWeekExtrapolationForPc(
+    game: Game,
+    asOf?: Date,
+  ): Promise<EstimateResult | null> {
+    if (!game.releaseDate) return null;
+
+    const referenceDate = asOf ?? new Date();
+    const age = ageInDays(game.releaseDate, referenceDate);
+    if (age <= 0) return null;
+
+    const launcherProfile =
+      game.publisherRecord?.launcherProfile ?? LauncherProfile.STEAM_DOMINANT;
+    const ccuScale = LAUNCHER_CCU_FACTOR[launcherProfile];
+    const reviewsScale = LAUNCHER_REVIEWS_FACTOR[launcherProfile];
+
+    const peak = await this.signals.findOne({
+      where: {
+        gameId: game.id,
+        metric: SignalMetric.STEAM_PEAK_CCU,
+        ...(asOf ? { capturedAt: LessThanOrEqual(asOf) } : {}),
+      },
+      order: { value: 'DESC' },
+    });
+    if (!peak || peak.value <= 0) return null;
+
+    const weekOneFromCcuLow =
+      peak.value * FIRST_WEEK_PEAK_CCU_LOW * ccuScale.low;
+    const weekOneFromCcuHigh =
+      peak.value * FIRST_WEEK_PEAK_CCU_HIGH * ccuScale.high;
+
+    const reviewsAtLaunch = await this.findReviewsNearLaunch(
+      game.id,
+      game.releaseDate,
+      asOf,
+    );
+    let weekOneLow = weekOneFromCcuLow;
+    let weekOneHigh = weekOneFromCcuHigh;
+    let combinedWithReviews = false;
+    if (reviewsAtLaunch && reviewsAtLaunch > 0) {
+      const weekOneFromReviewsLow =
+        reviewsAtLaunch * FIRST_WEEK_REVIEWS_LOW * reviewsScale.low;
+      const weekOneFromReviewsHigh =
+        reviewsAtLaunch * FIRST_WEEK_REVIEWS_HIGH * reviewsScale.high;
+
+      const ccuMid = (weekOneFromCcuLow + weekOneFromCcuHigh) / 2;
+      const reviewsMid =
+        (weekOneFromReviewsLow + weekOneFromReviewsHigh) / 2;
+      const combinedMid = (ccuMid + reviewsMid) / 2;
+
+      // Keep the widest spread of the two inputs so the combined
+      // uncertainty never narrows past what either signal alone
+      // tolerates.
+      const ccuHalfSpread = (weekOneFromCcuHigh - weekOneFromCcuLow) / 2;
+      const reviewsHalfSpread =
+        (weekOneFromReviewsHigh - weekOneFromReviewsLow) / 2;
+      const halfSpread = Math.max(ccuHalfSpread, reviewsHalfSpread);
+
+      weekOneLow = Math.max(0, combinedMid - halfSpread);
+      weekOneHigh = combinedMid + halfSpread;
+      combinedWithReviews = true;
+    }
+
+    const weekOneMid = (weekOneLow + weekOneHigh) / 2;
+    const year1Ratio =
+      weekOneMid > FIRST_WEEK_BUCKET_THRESHOLD
+        ? FIRST_WEEK_BUCKET_LARGE_YEAR1_RATIO
+        : FIRST_WEEK_BUCKET_SMALL_YEAR1_RATIO;
+
+    // The projection multiplier hits exactly `year1Ratio` at day 365,
+    // so we don't pre-multiply; the curve carries the ratio for us.
+    void year1Ratio;
+    const projection = firstWeekProjectionMultiplier(weekOneMid, age);
+
+    const projectedLow = Math.round(weekOneLow * projection);
+    const projectedHigh = Math.round(weekOneHigh * projection);
+
+    if (
+      projectedHigh < FIRST_WEEK_ESTIMATE_MIN_UNITS ||
+      projectedLow > FIRST_WEEK_ESTIMATE_MAX_UNITS ||
+      projectedLow > projectedHigh
+    ) {
+      this.logger.debug(
+        `[estimation:first-week] "${game.name}" — out-of-range [${projectedLow}, ${projectedHigh}], skipping`,
+      );
+      return null;
+    }
+
+    // Confidence floor mirrors the Boxleiter logic: very recent
+    // releases get LOW (peak hasn't matured), capped further by the
+    // launcher profile. Mid-size launches with both signals are most
+    // trustworthy.
+    let baseConfidence: ConfidenceLevel;
+    if (age < RECENT_RELEASE_DAYS) {
+      baseConfidence = ConfidenceLevel.LOW;
+    } else if (peak.value >= 50_000 && combinedWithReviews) {
+      baseConfidence = ConfidenceLevel.HIGH;
+    } else if (peak.value >= 10_000) {
+      baseConfidence = ConfidenceLevel.MEDIUM;
+    } else {
+      baseConfidence = ConfidenceLevel.LOW;
+    }
+    const cappedConfidence = capConfidence(
+      baseConfidence,
+      LAUNCHER_CONFIDENCE_CAP[launcherProfile],
+    );
+
+    const launcherTag = LAUNCHER_PROFILE_METHOD_TAG[launcherProfile];
+    const reviewsTag = combinedWithReviews ? '+reviews-corrected' : '';
+    const method = `first-week-extrapolation-pc${reviewsTag}${launcherTag}`;
+
+    return {
+      platform: Platform.PC,
+      estimatedLow: projectedLow,
+      estimatedHigh: projectedHigh,
+      confidence: cappedConfidence,
+      method,
+    };
+  }
+
+  /**
+   * Find a `STEAM_REVIEWS` snapshot captured within ±
+   * `FIRST_WEEK_REVIEWS_WINDOW_DAYS` of `releaseDate + 7 days`. Used
+   * by the first-week extrapolation to combine a peak-CCU estimate
+   * with an early-reviews estimate when we tracked the game from
+   * launch. Returns `null` when no snapshot lands in the window.
+   */
+  private async findReviewsNearLaunch(
+    gameId: string,
+    releaseDate: Date,
+    asOf?: Date,
+  ): Promise<number | null> {
+    const snapshots = await this.signals.find({
+      where: {
+        gameId,
+        metric: SignalMetric.STEAM_REVIEWS,
+        ...(asOf ? { capturedAt: LessThanOrEqual(asOf) } : {}),
+      },
+      order: { capturedAt: 'ASC' },
+    });
+    if (snapshots.length === 0) return null;
+
+    const target = releaseDate.getTime() + 7 * 24 * 3600 * 1000;
+    const windowMs = FIRST_WEEK_REVIEWS_WINDOW_DAYS * 24 * 3600 * 1000;
+
+    let best: { value: number; delta: number } | null = null;
+    for (const snap of snapshots) {
+      const delta = Math.abs(snap.capturedAt.getTime() - target);
+      if (delta > windowMs) continue;
+      if (snap.value <= 0) continue;
+      if (!best || delta < best.delta) {
+        best = { value: snap.value, delta };
+      }
+    }
+    return best?.value ?? null;
   }
 
   /**

@@ -217,6 +217,196 @@ For achievement-based estimates: always `LOW` (coverage is uncalibrated).
 
 ---
 
+## 2bis. Per-platform estimate — First-week extrapolation (PC)
+
+> Implemented in `EstimationService.estimateFirstWeekExtrapolationForPc`.
+> Method code: `first-week-extrapolation-pc` (family `LIFECYCLE`).
+> Active by default with `defaultWeight = 0.6` in the aggregation.
+
+A second, **independent** PC estimate that does not rely on a calibrated
+Boxleiter multiplier. Empirically grounded on an industry observation:
+
+> Games with > 100k week-1 PC sales reach a median year-1 of **2.68×**
+> their week-1; games with ≤ 100k week-1 reach **3.77×** (smaller
+> launches have a longer tail proportionally). Both follow a
+> **degressive** curve — most of the additional sales accrue in the
+> first month.
+
+### Step 1 — estimate week-1 units
+
+From the all-time Steam peak CCU snapshot
+(`SignalSnapshot.STEAM_PEAK_CCU`, ordered by `value DESC` because the
+historical-import path stores peaks with the SteamCharts month as
+`capturedAt`):
+
+```
+weekOneFromCcuLow  = peak × FIRST_WEEK_PEAK_CCU_LOW  × launcherCcuFactor.low
+weekOneFromCcuHigh = peak × FIRST_WEEK_PEAK_CCU_HIGH × launcherCcuFactor.high
+```
+
+When a `STEAM_REVIEWS` snapshot was captured within ±
+`FIRST_WEEK_REVIEWS_WINDOW_DAYS = 10` days of `releaseDate + 7 days`,
+we combine it with the CCU estimate:
+
+```
+weekOneFromReviewsLow  = reviewsT7 × FIRST_WEEK_REVIEWS_LOW  × launcherReviewsFactor.low
+weekOneFromReviewsHigh = reviewsT7 × FIRST_WEEK_REVIEWS_HIGH × launcherReviewsFactor.high
+
+weekOneMid    = (mid_ccu + mid_reviews) / 2
+weekOneSpread = max(spread_ccu, spread_reviews)        // floor uncertainty
+weekOneLow    = weekOneMid − weekOneSpread / 2
+weekOneHigh   = weekOneMid + weekOneSpread / 2
+```
+
+Method tag flips to `first-week-extrapolation-pc+reviews-corrected` so
+admins can tell the two combos apart in the time series.
+
+### Step 2 — bucket on launch size + degressive projection to today
+
+```
+bucket    = weekOneMid > FIRST_WEEK_BUCKET_THRESHOLD (100_000)
+            ? FIRST_WEEK_PROJECTION_CURVE_LARGE   // hits 2.68 at day 365
+            : FIRST_WEEK_PROJECTION_CURVE_SMALL   // hits 3.77 at day 365
+multiplier(age) = piecewise-linear interpolation over the chosen curve
+                  (`firstWeekProjectionMultiplier`)
+
+projectedLow  = weekOneLow  × multiplier(age)
+projectedHigh = weekOneHigh × multiplier(age)
+```
+
+Curves (multiplier of week-1 sales):
+
+| Age (days)         | LARGE bucket | SMALL bucket |
+| ------------------ | ------------ | ------------ |
+| 7 (week 1)         | `1.00`       | `1.00`       |
+| 30 (month 1)       | `1.70`       | `2.20`       |
+| 90 (Q1)            | `2.10`       | `2.85`       |
+| 180 (half-year)    | `2.45`       | `3.30`       |
+| 365 (year 1)       | `2.68`       | `3.77`       |
+| 730 (year 2)       | `3.00`       | `4.50`       |
+| 1825 (year 5+)     | `3.40`       | `5.50`       |
+
+Ages between 0 and 7 days ramp linearly from 0 to week-1 (pre-launch
+returns 0).
+
+### Step 3 — sanity check
+
+The estimate is dropped if it falls outside
+`[FIRST_WEEK_ESTIMATE_MIN_UNITS, FIRST_WEEK_ESTIMATE_MAX_UNITS] =
+[5_000, 200_000_000]`. Tightens against peak-CCU outliers and
+date-of-release glitches.
+
+### Confidence
+
+- `LOW` if released less than `RECENT_RELEASE_DAYS = 14` days ago, OR
+  if peak CCU < 10k (sample too small to project from).
+- `HIGH` only when peak CCU ≥ 50k **and** we have a launch-week reviews
+  snapshot (both signals agree).
+- `MEDIUM` otherwise.
+
+All capped by `LAUNCHER_CONFIDENCE_CAP[publisher.launcherProfile]`
+identically to the Boxleiter path.
+
+### Why a separate method (vs. patching `LIFETIME_SALES_CURVE`)
+
+The existing `LIFETIME_SALES_CURVE` says `year1/week1 ≈ 0.58/0.13 ≈
+4.46×`, larger than both empirical buckets. Rather than retrofit one
+curve to two regimes (large vs small launches), the lifecycle method
+encodes the empirical buckets directly and lets the aggregator average
+it with Boxleiter — the two methods disagree precisely where the
+existing curve was a poor fit, so the aggregate's disagreement
+inflation surfaces the uncertainty rather than hiding it.
+
+---
+
+## 3bis. Method registry and aggregation
+
+> Source of truth: the `estimation_method` table, cached in memory by
+> `EstimationMethodService`. Inputs are wired in
+> `EstimationService.persistEstimates`, output is computed by
+> `EstimateService.aggregateMethodsForPlatform`.
+
+Every `SalesEstimate` row is linked to a canonical method through
+`SalesEstimate.methodId` (FK to `estimation_method.id`). The free-form
+`SalesEstimate.method` string survives for backward compatibility and
+carries dynamic modifier suffixes (`+ccu-intersect`, `+ccu-conflict`,
+`+multi-store`, `+launcher-primary`) that aren't yet first-class
+methods. It will be dropped in a follow-up migration once nothing reads
+it.
+
+### Method codes (seeded by migration `AddEstimationMethodRegistry`)
+
+| Code                                            | Family       | Default weight | Enabled |
+| ----------------------------------------------- | ------------ | -------------- | ------- |
+| `boxleiter-default`                             | BOXLEITER    | `0.5`          | ✅      |
+| `boxleiter-calibrated-official`                 | BOXLEITER    | `1.0`          | ✅      |
+| `boxleiter-calibrated-announcement`             | BOXLEITER    | `0.7`          | ✅      |
+| `boxleiter-calibrated-media`                    | BOXLEITER    | `0.5`          | ✅      |
+| `boxleiter-calibrated-wikipedia`                | BOXLEITER    | `0.4`          | ✅      |
+| `ps-ratings-boxleiter-default`                  | BOXLEITER    | `0.5`          | ✅      |
+| `ps-ratings-boxleiter-calibrated-official`      | BOXLEITER    | `1.0`          | ✅      |
+| `ps-ratings-boxleiter-calibrated-announcement`  | BOXLEITER    | `0.7`          | ✅      |
+| `ps-ratings-boxleiter-calibrated-media`         | BOXLEITER    | `0.5`          | ✅      |
+| `ps-ratings-boxleiter-calibrated-wikipedia`     | BOXLEITER    | `0.4`          | ✅      |
+| `xbox-ratings-boxleiter-default`                | BOXLEITER    | `0.5`          | ✅      |
+| `xbox-ratings-boxleiter-calibrated-official`    | BOXLEITER    | `1.0`          | ✅      |
+| `xbox-ratings-boxleiter-calibrated-announcement`| BOXLEITER    | `0.7`          | ✅      |
+| `xbox-ratings-boxleiter-calibrated-media`       | BOXLEITER    | `0.5`          | ✅      |
+| `xbox-ratings-boxleiter-calibrated-wikipedia`   | BOXLEITER    | `0.4`          | ✅      |
+| `achievements-exophase-pc`                      | ACHIEVEMENTS | `0.3`          | ⛔ dormant |
+| `achievements-exophase-pc-steam-corrected`      | ACHIEVEMENTS | `0.3`          | ⛔ dormant |
+| `achievements-exophase-playstation`             | ACHIEVEMENTS | `0.3`          | ⛔ dormant |
+| `achievements-exophase-xbox`                    | ACHIEVEMENTS | `0.3`          | ⛔ dormant |
+| `first-week-extrapolation-pc`                   | LIFECYCLE    | `0.6`          | ✅      |
+| `aggregated`                                    | AGGREGATE    | `1.0`          | ✅ (output) |
+
+Adding a new method = inserting a row in `estimation_method` (via a
+migration) and producing `SalesEstimate` rows that reference it. The
+aggregator picks it up automatically as soon as `isEnabled = true` and
+`defaultWeight > 0`.
+
+### Aggregation formula
+
+`aggregateMethodsForPlatform` combines every input method for a single
+`(gameId, platform, computedAt)` tuple into one synthetic
+`method = 'aggregated'` row. It is **append-only**: the inputs are kept
+as-is alongside the aggregate so we can inspect each method's
+contribution after the fact.
+
+```
+weightedLow  = Σ (low_i  × w_i) / Σ w_i
+weightedHigh = Σ (high_i × w_i) / Σ w_i
+disagreement = (max(mid_i) − min(mid_i)) / weightedMid
+aggLow  = max(0, weightedLow  × (1 − α × disagreement))
+aggHigh = weightedHigh × (1 + α × disagreement)
+```
+
+with `α = AGGREGATION_DISAGREEMENT_ALPHA = 0.5`. Aggregate confidence
+is the **lowest** confidence among contributing methods.
+
+Properties:
+- **One method active** (today's reality) → `disagreement = 0`, the
+  aggregate copies the input band byte-for-byte. The refactor is a no-op
+  on the headline range.
+- **Multiple methods, agreeing midpoints** → near-zero `disagreement`,
+  the aggregate is a weighted average that narrows the band relative to
+  the constituents.
+- **Multiple methods, conflicting midpoints** → spread inflates
+  proportionally so the headline range honestly reflects the model's
+  internal uncertainty rather than picking a winner.
+
+### How the reconcile step picks an estimate
+
+`GamesService.latestEstimatesByPlatform` prefers the latest
+`aggregated` row per platform. If no aggregate exists (historical row
+predating this refactor, or future platform with no enabled method),
+it falls back on whatever non-aggregate row is most recent so the
+headline never goes blank. Rebuilding history with
+`POST /admin/games/:id/rebuild-estimates` regenerates aggregates for
+every capture point.
+
+---
+
 ## 4. Reconcile to one "today" range
 
 > `GamesService.reconcile`.
@@ -349,7 +539,8 @@ Three layers, each with a different timestamp:
 | --- | --- | --- | --- |
 | `SignalSnapshot` | `capturedAt` | scrapers (Steam, IGDB, store ratings) | raw public counts (reviews, ratings) |
 | `AchievementSnapshot` | `capturedAt` | Exophase / Steam API scrapers | per-achievement unlock % + sample size |
-| `SalesEstimate` | `computedAt` | `EstimationService.computeAndStore` | per-platform Boxleiter + achievement-based ranges |
+| `SalesEstimate` | `computedAt` | `EstimationService.computeAndStore` | per-platform per-method ranges, FK to `estimation_method` via `methodId`. Includes the synthetic `aggregated` row (one per platform per `computedAt`). |
+| `EstimationMethod` | `createdAt` / `updatedAt` | seeded by migration | registry of canonical method codes, default weights, enabled flag |
 | `EstimateSnapshot` | `computedAt` | `GamesService.snapshotReconcile` (called after every `computeAndStore`) | the reconciled headline `[estimatedTodayLow, estimatedTodayHigh]` + serialized `ReconciliationEntry[]` |
 | `SalesRecord` | `reportedAt` + `capturedAt` | scrapers (Wikipedia, articles, official IR) | dated declared figures, never overwritten |
 

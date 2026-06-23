@@ -54,6 +54,6 @@ import { ExophaseClient } from './exophase.client';
     PerplexityClient,
     ExophaseClient,
   ],
-  exports: [IngestionService],
+  exports: [IngestionService, IgdbClient],
 })
 export class IngestionModule {}

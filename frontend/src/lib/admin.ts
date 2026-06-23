@@ -289,6 +289,57 @@ export interface AdminIssues {
   estimationDiscrepancies: IssueGroup<AdminEstimationDiscrepancy>;
 }
 
+export type GenreConfidence = 'LOW' | 'MEDIUM' | 'HIGH';
+export type GenreSourceLabel = 'IGDB' | 'STEAM' | 'MANUAL';
+
+export type Year2Retention =
+  | 'NEGATIVE'
+  | 'VERY_LOW'
+  | 'LOW'
+  | 'LOW_MEDIUM'
+  | 'MEDIUM'
+  | 'MEDIUM_HIGH'
+  | 'HIGH'
+  | 'VERY_HIGH';
+
+export interface AdminGenreProfile {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  pcShare: number;
+  playstationShare: number;
+  xboxShare: number;
+  switchShare: number;
+  leanLabel: string | null;
+  confidence: GenreConfidence;
+  lifecycleIndex: number;
+  firstWeekToYearOneMultiplier: number;
+  year2Retention: Year2Retention;
+  lifecycleDriver: string | null;
+  genreCount: number;
+  updatedAt: string;
+}
+
+export interface AdminGenreRow {
+  id: string;
+  slug: string;
+  name: string;
+  source: GenreSourceLabel;
+  externalId: number | null;
+  profileId: string | null;
+  profileSlug: string | null;
+  profileName: string | null;
+  updatedAt: string;
+}
+
+export interface AdminGenreIgdbSyncResult {
+  fetched: number;
+  inserted: number;
+  updated: number;
+  skipped: number;
+}
+
 export interface AdminEstimationDiscrepancy {
   gameId: string;
   gameName: string;

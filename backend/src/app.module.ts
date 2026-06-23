@@ -8,6 +8,7 @@ import { EstimationModule } from './estimation/estimation.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
 import { SourcesModule } from './sources/sources.module';
 import { PublishersModule } from './publishers/publishers.module';
+import { GenresModule } from './genres/genres.module';
 import { AdminModule } from './admin/admin.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -23,6 +24,7 @@ import { AppService } from './app.service';
     SchedulerModule,
     SourcesModule,
     PublishersModule,
+    GenresModule,
     AdminModule,
   ],
   controllers: [AppController],

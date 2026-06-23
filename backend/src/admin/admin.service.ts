@@ -608,21 +608,6 @@ export class AdminService {
   }
 
   /**
-   * Wipe and replay the game's estimate history against the current
-   * multipliers + constants. Useful after tuning
-   * `sales-modeling.constants.ts` or after a recalibration so old
-   * estimates stop reflecting stale parameters. Delegates to
-   * `GamesService.rebuildEstimateHistory`.
-   */
-  async rebuildEstimateHistory(id: string): Promise<{
-    points: number;
-    estimates: number;
-    snapshots: number;
-  }> {
-    return this.gamesService.rebuildEstimateHistory(id);
-  }
-
-  /**
    * Patch a game's editable metadata. Currently supports name, releaseDate
    * and igdbId. When name changes, the slug is regenerated and de-duplicated
    * against existing games (collisions get a numeric suffix).

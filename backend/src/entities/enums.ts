@@ -6,7 +6,7 @@
  */
 export type Agreement = 'strong' | 'weak' | 'conflict';
 
-export enum SourceType {
+ export enum SourceType {
   IGDB = 'IGDB',
   STEAM = 'STEAM',
   STEAMSPY = 'STEAMSPY',
@@ -93,4 +93,60 @@ export enum LauncherProfile {
   STEAM_DOMINANT = 'STEAM_DOMINANT',
   MULTI_STORE = 'MULTI_STORE',
   LAUNCHER_PRIMARY = 'LAUNCHER_PRIMARY',
+}
+
+/**
+ * Qualitative grade for how much a game type keeps selling past
+ * year 1. Encoded as an ordered enum so callers can compare strengths.
+ * Levels map 1:1 to the French wording from the empirical lifecycle
+ * spreadsheet (Très forte → VERY_HIGH, etc.).
+ *
+ *   NEGATIVE   = year 2+ sells less than year 1 (e.g. annualised sport)
+ *   VERY_LOW   = quasi-flat, one-and-done (e.g. narrative / walking sim)
+ *   LOW        = finishable, modest tail
+ *   LOW_MEDIUM = mostly one-and-done with seasonal blips
+ *   MEDIUM     = healthy long tail driven by content updates
+ *   MEDIUM_HIGH = strong but variance-heavy (viral / streamer effects)
+ *   HIGH       = sustained live-service or replayable systemic
+ *   VERY_HIGH  = exceptional tail (mods, UGC, social — Minecraft tier)
+ */
+export enum Year2Retention {
+  NEGATIVE = 'NEGATIVE',
+  VERY_LOW = 'VERY_LOW',
+  LOW = 'LOW',
+  LOW_MEDIUM = 'LOW_MEDIUM',
+  MEDIUM = 'MEDIUM',
+  MEDIUM_HIGH = 'MEDIUM_HIGH',
+  HIGH = 'HIGH',
+  VERY_HIGH = 'VERY_HIGH',
+}
+
+/**
+ * Where a `Genre` row was sourced from. IGDB is our primary taxonomy
+ * (matches `Game.genres` populated by `IgdbClient`); MANUAL is reserved
+ * for hand-curated entries created in the admin. STEAM is a placeholder
+ * for future Steam-tag ingestion.
+ */
+export enum GenreSource {
+  IGDB = 'IGDB',
+  STEAM = 'STEAM',
+  MANUAL = 'MANUAL',
+}
+
+/**
+ * Logical grouping of estimation methods.
+ *  - BOXLEITER: signal × multiplier (default or calibrated).
+ *  - ACHIEVEMENTS: Exophase / Steam achievement-based, dormant today.
+ *  - LIFECYCLE: time-since-release projection (e.g. first-week sales
+ *    extrapolated through a degressive curve to today).
+ *  - AGGREGATE: weighted combination of other methods, written by
+ *    `EstimationService.aggregateMethods`. Excluded from its own input.
+ *  - MANUAL: reserved for future hand-entered overrides.
+ */
+export enum EstimationMethodFamily {
+  BOXLEITER = 'BOXLEITER',
+  ACHIEVEMENTS = 'ACHIEVEMENTS',
+  LIFECYCLE = 'LIFECYCLE',
+  AGGREGATE = 'AGGREGATE',
+  MANUAL = 'MANUAL',
 }

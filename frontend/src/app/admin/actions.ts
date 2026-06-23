@@ -6,8 +6,13 @@ import { revalidatePath } from 'next/cache';
 import {
   ADMIN_COOKIE,
   adminFetch,
+  type AdminGenreIgdbSyncResult,
+  type AdminGenreProfile,
+  type AdminGenreRow,
+  type GenreConfidence,
   type LauncherProfile,
   type SalesSource,
+  type Year2Retention,
 } from '@/lib/admin';
 import { API_URL } from '@/lib/api';
 
@@ -108,18 +113,6 @@ export async function refreshGame(
   return result;
 }
 
-export async function rebuildEstimateHistory(
-  id: string,
-): Promise<{ points: number; estimates: number; snapshots: number }> {
-  const result = await adminFetch<{
-    points: number;
-    estimates: number;
-    snapshots: number;
-  }>(`/games/${id}/rebuild-estimates`, { method: 'POST' });
-  revalidatePath(`/admin/games/${id}`);
-  return result;
-}
-
 export interface ImportCcuHistoryResult {
   appId: number | null;
   importedPeak: number | null;
@@ -186,5 +179,53 @@ export async function runPublisherBackfill(): Promise<{
     unmatched: number;
   }>('/publishers/backfill', { method: 'POST' });
   revalidatePath('/admin/publishers');
+  return result;
+}
+
+export interface UpdateGenreProfilePayload {
+  name?: string;
+  description?: string | null;
+  pcShare?: number;
+  playstationShare?: number;
+  xboxShare?: number;
+  switchShare?: number;
+  leanLabel?: string | null;
+  confidence?: GenreConfidence;
+  lifecycleIndex?: number;
+  firstWeekToYearOneMultiplier?: number;
+  year2Retention?: Year2Retention;
+  lifecycleDriver?: string | null;
+}
+
+export async function updateGenreProfile(
+  id: string,
+  payload: UpdateGenreProfilePayload,
+): Promise<AdminGenreProfile> {
+  const result = await adminFetch<AdminGenreProfile>(`/genre-profiles/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+  revalidatePath('/admin/genre-profiles');
+  return result;
+}
+
+export async function updateGenreProfileAssignment(
+  id: string,
+  profileId: string | null,
+): Promise<AdminGenreRow> {
+  const result = await adminFetch<AdminGenreRow>(`/genres/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ profileId }),
+  });
+  revalidatePath('/admin/genre-profiles');
+  return result;
+}
+
+export async function syncGenresFromIgdb(): Promise<AdminGenreIgdbSyncResult> {
+  const result = await adminFetch<AdminGenreIgdbSyncResult>(
+    '/genres/sync-igdb',
+    { method: 'POST' },
+  );
+  revalidatePath('/admin/genre-profiles');
   return result;
 }

@@ -325,6 +325,101 @@ export const DISCREPANCY_RATIO_LOW = 0.5;
 
 export const PC_DOMINANCE_RATIO_THRESHOLD = 0.2;
 
+// ─── First-week extrapolation (LIFECYCLE method, PC) ────────────────────────
+//
+// Independent estimation pathway that bypasses the Boxleiter "signal-to-
+// lifetime-units" relationship entirely. Instead, it:
+//   1. Estimates **week-1 units** from the all-time Steam peak CCU (and
+//      reviews captured close to release when available);
+//   2. Multiplies by an empirical year-1/week-1 ratio bucketed on week-1
+//      size — empirically observed median of 2.68× for big releases
+//      (> 100k week-1) and 3.77× for smaller titles (long-tail effect);
+//   3. Projects from week-1 to "today" via a degressive piecewise curve
+//      that lands exactly on the bucket multiplier at day 365.
+//
+// Why a separate method:
+//   - It does not require a calibrated multiplier — it produces a
+//     useful estimate the day we capture the all-time peak.
+//   - The growth shape is degressive (most sales in the first month,
+//     long tail flat-ish), which the existing `LIFETIME_SALES_CURVE`
+//     overweights — the user's empirical ratios are smaller than what
+//     the existing curve implies (`year-1/week-1 ≈ 4.46× from the
+//     0.58/0.13 anchors`).
+//   - It will be the foundation for the upcoming "PC peak CCU →
+//     console units" cross-extrapolation.
+//
+// Used by `EstimationService.estimateFirstWeekExtrapolationForPc`.
+
+// Peak CCU → first-week sales range. Anchors:
+//   Cyberpunk     1.0M peak → ~5-8M week-1   (~5-8×)
+//   Helldivers 2  458K peak → ~2-4M week-1   (~4-9×)
+//   Elden Ring    953K peak → ~3-5M week-1   (~3-5×)
+//   Palworld      2.1M peak → ~5-8M week-1   (~2.5-4×)
+// Range stays wide because peak/week-1 varies with how multiplayer-
+// driven the game is (single-player shifts vs simultaneous play).
+export const FIRST_WEEK_PEAK_CCU_LOW = 3;
+export const FIRST_WEEK_PEAK_CCU_HIGH = 7;
+
+// Reviews captured within ± this many days of release-date + 7 are
+// treated as a "week-1 review snapshot" and combined with the peak-CCU
+// estimate. Wider window than refresh cadence so we can still match a
+// snapshot taken a few days off launch week.
+export const FIRST_WEEK_REVIEWS_WINDOW_DAYS = 10;
+
+// Reviews-at-T+7 → first-week sales range. Reviewers are heavier
+// buyers, so the per-review unit count at launch is higher than the
+// mature Boxleiter ratio (25-70×). Anchors are tentative — refine once
+// we have more week-1 review snapshots tracked.
+export const FIRST_WEEK_REVIEWS_LOW = 20;
+export const FIRST_WEEK_REVIEWS_HIGH = 80;
+
+// Above this week-1 sales mid-point (units), a game is "large launch"
+// and follows the more front-loaded year-1 ratio (2.68×). Below it,
+// "small launch" with the longer tail (3.77×).
+export const FIRST_WEEK_BUCKET_THRESHOLD = 100_000;
+export const FIRST_WEEK_BUCKET_LARGE_YEAR1_RATIO = 2.68;
+export const FIRST_WEEK_BUCKET_SMALL_YEAR1_RATIO = 3.77;
+
+// Degressive curves mapping age-in-days to a multiplier of week-1
+// sales. Both land on their bucket's year-1 ratio at day 365 and
+// extend through Y5 with a slow tail. Tuned so:
+//   - Most additional sales happen between day 7 and day 90.
+//   - Past year-1 the slope flattens (mature catalog regime).
+//
+// Source: derived from the user's empirical median (2.68 / 3.77 at
+// year-1) plus a generic degressive shape calibrated to industry
+// long-tail data. Tunable as we collect more dated declared figures.
+export const FIRST_WEEK_PROJECTION_CURVE_LARGE: ReadonlyArray<
+  readonly [number, number]
+> = [
+  [7, 1.0],
+  [30, 1.7],
+  [90, 2.1],
+  [180, 2.45],
+  [365, 2.68],
+  [730, 3.0],
+  [1825, 3.4],
+];
+
+export const FIRST_WEEK_PROJECTION_CURVE_SMALL: ReadonlyArray<
+  readonly [number, number]
+> = [
+  [7, 1.0],
+  [30, 2.2],
+  [90, 2.85],
+  [180, 3.3],
+  [365, 3.77],
+  [730, 4.5],
+  [1825, 5.5],
+];
+
+// Hard plausibility band for the first-week extrapolation. An estimate
+// outside this range (units) is treated as broken (peak CCU outlier,
+// wrong release date, etc.) and the method abstains rather than
+// emitting a nonsense row.
+export const FIRST_WEEK_ESTIMATE_MIN_UNITS = 5_000;
+export const FIRST_WEEK_ESTIMATE_MAX_UNITS = 200_000_000;
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 /**
@@ -354,4 +449,47 @@ export function ageInDays(from: Date, to: Date = new Date()): number {
 
 export function ageInYears(from: Date, to: Date = new Date()): number {
   return (to.getTime() - from.getTime()) / YEAR_MS;
+}
+
+/**
+ * Piecewise-linear interpolation over a monotonic (x, y) curve. Inputs
+ * below the first anchor clamp to its `y`; inputs above the last anchor
+ * clamp to the last `y` (matches `lifetimeSalesPct` semantics).
+ */
+function interpolateCurve(
+  curve: ReadonlyArray<readonly [number, number]>,
+  x: number,
+): number {
+  if (curve.length === 0) return 0;
+  if (x <= curve[0][0]) return curve[0][1];
+  const last = curve[curve.length - 1];
+  if (x >= last[0]) return last[1];
+  for (let i = 1; i < curve.length; i++) {
+    const [x1, y1] = curve[i];
+    if (x <= x1) {
+      const [x0, y0] = curve[i - 1];
+      const t = (x - x0) / (x1 - x0);
+      return y0 + t * (y1 - y0);
+    }
+  }
+  return last[1];
+}
+
+/**
+ * Multiplier of week-1 sales reached at a given age in days, picked
+ * from the small- or large-launch curve based on `weekOneMid`. Below
+ * day 7 it returns < 1 (sales still accruing) by linearly ramping from
+ * 0 at day 0 to 1 at day 7.
+ */
+export function firstWeekProjectionMultiplier(
+  weekOneMid: number,
+  ageDays: number,
+): number {
+  if (ageDays <= 0) return 0;
+  if (ageDays < 7) return ageDays / 7;
+  const curve =
+    weekOneMid > FIRST_WEEK_BUCKET_THRESHOLD
+      ? FIRST_WEEK_PROJECTION_CURVE_LARGE
+      : FIRST_WEEK_PROJECTION_CURVE_SMALL;
+  return interpolateCurve(curve, ageDays);
 }

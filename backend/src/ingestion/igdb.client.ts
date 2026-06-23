@@ -278,6 +278,46 @@ export class IgdbClient {
     return exact ?? candidates[0];
   }
 
+  /**
+   * Fetch the entire IGDB genre catalog (typically ~25 entries).
+   * Used by the admin `Sync IGDB` button to upsert any new genre we
+   * haven't seen yet (no migration needed). Returns an empty array
+   * when IGDB credentials are missing or the request fails — the
+   * caller treats that as a no-op.
+   */
+  async fetchAllGenres(): Promise<
+    Array<{ id: number; name: string; slug: string }>
+  > {
+    if (!this.isConfigured()) return [];
+
+    const token = await this.getAccessToken();
+    const clientId = this.config.get<string>('IGDB_CLIENT_ID')!;
+
+    try {
+      const { data } = await axios.post(
+        'https://api.igdb.com/v4/genres',
+        'fields id, name, slug; limit 500;',
+        {
+          headers: {
+            'Client-ID': clientId,
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'text/plain',
+          },
+          timeout: 15000,
+        },
+      );
+      return (data as Array<{ id?: number; name?: string; slug?: string }>)
+        .filter((g) => typeof g.id === 'number' && g.name && g.slug)
+        .map((g) => ({ id: g.id!, name: g.name!, slug: g.slug! }));
+    } catch (error) {
+      const detail = axios.isAxiosError(error)
+        ? JSON.stringify(error.response?.data ?? error.message)
+        : String(error);
+      this.logger.error(`IGDB /genres query failed: ${detail}`);
+      return [];
+    }
+  }
+
   // ───── internals ────────────────────────────────────────────────────────
 
   private async queryGames(body: string): Promise<IgdbGame[]> {

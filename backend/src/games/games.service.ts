@@ -16,6 +16,10 @@ import {
   SignalSnapshot,
 } from '../entities';
 import type { Agreement } from '../entities';
+import {
+  AGGREGATED_METHOD_CODE,
+  EstimationMethodService,
+} from '../estimation/estimation-method.service';
 import { EstimationService } from '../estimation/estimation.service';
 import {
   AGREEMENT_GROWTH_PER_YEAR,
@@ -168,6 +172,7 @@ export class GamesService {
     @InjectRepository(SalesRecord)
     private readonly salesRecords: Repository<SalesRecord>,
     private readonly estimation: EstimationService,
+    private readonly estimationMethods: EstimationMethodService,
   ) {}
 
   /**
@@ -652,19 +657,23 @@ export class GamesService {
 
   /**
    * Replay the entire estimate history for a game using current
-   * multipliers and constants. Useful after tweaking
-   * `sales-modeling.constants.ts` or after recalibration (so the past no
-   * longer mixes points computed with stale parameters).
+   * multipliers and constants. This is the canonical recompute pathway:
+   * the refresh flow calls it after every scrape (so a freshly arrived
+   * declared figure can recalibrate the multiplier and propagate
+   * backwards in time), and the admin "Refresh & rebuild" button hits
+   * the same code path through `IngestionService.refreshGame`.
    *
    * Pipeline:
-   *  1. Find every distinct signal-capture moment (SignalSnapshot ∪
+   *  1. `recalibrateAll`: re-derive `Game.calibrated*Multiplier` from
+   *     the latest declared figures. Idempotent when nothing changed.
+   *  2. Find every distinct signal-capture moment (SignalSnapshot ∪
    *     AchievementSnapshot), dedup at minute granularity.
-   *  2. Wipe all existing SalesEstimate + EstimateSnapshot rows for the
+   *  3. Wipe all existing SalesEstimate + EstimateSnapshot rows for the
    *     game (clean slate; estimates are derivatives, never primary data).
-   *  3. For each capture moment T (ascending), run
+   *  4. For each capture moment T (ascending), run
    *     `EstimationService.computeAndStoreAt(gameId, T)` then
    *     `snapshotReconcile(gameId, T)`. Each step uses the multipliers
-   *     stored on `Game` today, not whatever they were at T.
+   *     **as they stand after step 1**, not whatever they were at T.
    *
    * Returns the count of (estimate, snapshot) rows produced.
    */
@@ -673,6 +682,8 @@ export class GamesService {
   ): Promise<{ points: number; estimates: number; snapshots: number }> {
     const game = await this.games.findOne({ where: { id: gameId } });
     if (!game) throw new NotFoundException(`Game ${gameId} not found`);
+
+    await this.estimation.recalibrateAll(gameId);
 
     const moments = await this.collectCaptureMoments(gameId);
     this.logger.log(
@@ -1217,10 +1228,23 @@ export class GamesService {
       .filter(Boolean) as Platform[];
   }
 
+  /**
+   * Pick the estimate to feed into reconciliation, per platform. We
+   * prefer the `aggregated` row (weighted combination of every enabled
+   * method written at the same `computedAt`). If no aggregate exists yet
+   * for a platform — historical rows produced before the registry
+   * migration, or a platform with no method enabled — we fall back on
+   * whatever row is most recent. This keeps the headline stable during
+   * the rollout while encouraging the aggregate to take over once
+   * `rebuildEstimateHistory` has been replayed.
+   */
   private async latestEstimatesByPlatform(
     gameId: string,
     asOf?: Date,
   ): Promise<Map<Platform, SalesEstimate>> {
+    const aggregateMethod =
+      this.estimationMethods.findByCode(AGGREGATED_METHOD_CODE);
+
     const estimates = await this.estimates.find({
       where: {
         gameId,
@@ -1229,11 +1253,25 @@ export class GamesService {
       order: { computedAt: 'DESC' },
     });
 
-    const map = new Map<Platform, SalesEstimate>();
+    const aggregateByPlatform = new Map<Platform, SalesEstimate>();
+    const fallbackByPlatform = new Map<Platform, SalesEstimate>();
     for (const estimate of estimates) {
-      if (!map.has(estimate.platform)) {
-        map.set(estimate.platform, estimate);
+      if (
+        aggregateMethod &&
+        estimate.methodId === aggregateMethod.id &&
+        !aggregateByPlatform.has(estimate.platform)
+      ) {
+        aggregateByPlatform.set(estimate.platform, estimate);
+        continue;
       }
+      if (!fallbackByPlatform.has(estimate.platform)) {
+        fallbackByPlatform.set(estimate.platform, estimate);
+      }
+    }
+
+    const map = new Map<Platform, SalesEstimate>();
+    for (const [platform, estimate] of fallbackByPlatform) {
+      map.set(platform, aggregateByPlatform.get(platform) ?? estimate);
     }
     return map;
   }

@@ -7,6 +7,7 @@ import {
   Receipt,
   Globe,
   Building2,
+  Tags,
   AlertTriangle,
   LogOut,
 } from 'lucide-react';
@@ -52,6 +53,12 @@ const NAV_ITEMS = [
     href: '/admin/publishers',
     label: 'Publishers',
     icon: Building2,
+    exact: false,
+  },
+  {
+    href: '/admin/genre-profiles',
+    label: 'Genre profiles',
+    icon: Tags,
     exact: false,
   },
   {

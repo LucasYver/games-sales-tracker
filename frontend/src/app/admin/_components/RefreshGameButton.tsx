@@ -13,18 +13,21 @@ export function RefreshGameButton({ gameId }: Props) {
   const [pending, start] = useTransition();
 
   function onClick() {
+    const confirmed = window.confirm(
+      'Re-scrape every source for this game and rebuild the full estimate history from scratch. All SalesEstimate and EstimateSnapshot rows will be replayed against the current multipliers.',
+    );
+    if (!confirmed) return;
+
     start(async () => {
       try {
         const result = await refreshGame(gameId);
-        // eslint-disable-next-line no-alert
-        alert(
+        window.alert(
           result.found
-            ? `Refresh done — ${result.articlesIngested} article(s) ingested with figures.`
+            ? `Refresh done — ${result.articlesIngested} article(s) ingested with figures. Estimate history rebuilt.`
             : 'Game not found.',
         );
       } catch (err) {
-        // eslint-disable-next-line no-alert
-        alert(err instanceof Error ? err.message : 'Refresh failed');
+        window.alert(err instanceof Error ? err.message : 'Refresh failed');
       }
     });
   }
@@ -41,7 +44,7 @@ export function RefreshGameButton({ gameId }: Props) {
         aria-hidden="true"
         className={`size-4 ${pending ? 'animate-spin' : ''}`}
       />
-      {pending ? 'Refreshing…' : 'Refresh data'}
+      {pending ? 'Refreshing…' : 'Refresh & rebuild'}
     </Button>
   );
 }

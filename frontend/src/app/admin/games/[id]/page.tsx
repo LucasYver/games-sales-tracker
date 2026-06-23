@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { adminFetch, type AdminGameDetail } from '@/lib/admin';
+import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -12,9 +13,14 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs';
 import { DeleteButton } from '../../_components/DeleteButton';
 import { RefreshGameButton } from '../../_components/RefreshGameButton';
-import { RebuildEstimatesButton } from '../../_components/RebuildEstimatesButton';
 import { ImportCcuHistoryButton } from '../../_components/ImportCcuHistoryButton';
 import { EditGameForm } from '../../_components/EditGameForm';
 import { EstimateHistoryChart } from '../../_components/EstimateHistoryChart';
@@ -116,7 +122,6 @@ export default async function AdminGameDetailPage({
         <div className="flex items-center gap-2">
           <RefreshGameButton gameId={game.id} />
           <ImportCcuHistoryButton gameId={game.id} />
-          <RebuildEstimatesButton gameId={game.id} />
           <DeleteButton
             action={deleteGame.bind(null, game.id)}
             confirmMessage={`Permanently delete "${game.name}"?`}
@@ -235,112 +240,6 @@ export default async function AdminGameDetailPage({
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-            Sales records ({game.salesRecords.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {game.salesRecords.length === 0 ? (
-            <p className="text-muted-foreground p-6 text-sm">
-              No sales records yet.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Source tier</TableHead>
-                  <TableHead>Reported by</TableHead>
-                  <TableHead>Attribution</TableHead>
-                  <TableHead>Platform</TableHead>
-                  <TableHead className="text-right">Units</TableHead>
-                  <TableHead>Reported</TableHead>
-                  <TableHead>Note</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {game.salesRecords.map((sr) => (
-                  <TableRow key={sr.id}>
-                    <TableCell>
-                      <div className="flex flex-wrap items-center gap-1">
-                        <Badge variant="outline">{sr.source}</Badge>
-                        {sr.confidence && (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] tracking-wide uppercase opacity-70"
-                          >
-                            {sr.confidence}
-                          </Badge>
-                        )}
-                        {sr.isEngagement && (
-                          <Badge
-                            variant="secondary"
-                            className="border-amber-300 bg-amber-100 text-[10px] tracking-wide text-amber-800 uppercase dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
-                            title="Players-reached / engagement milestone (includes subscription users like Ubisoft+/Game Pass). Excluded from estimation."
-                          >
-                            Engagement
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {sr.sourceUrl ? (
-                        <a
-                          href={sr.sourceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title={sr.sourceUrl}
-                          className="text-primary inline-flex max-w-[200px] items-center gap-1 truncate text-xs hover:underline"
-                        >
-                          {hostnameOf(sr.sourceUrl)}
-                          <ExternalLink
-                            aria-hidden="true"
-                            className="size-3 shrink-0"
-                          />
-                        </a>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell
-                      className="text-muted-foreground max-w-[160px] truncate text-sm"
-                      title={sr.publisher ?? undefined}
-                    >
-                      {sr.publisher ?? '—'}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{sr.platform}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {sr.units.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {formatDate(sr.reportedAt)}
-                    </TableCell>
-                    <TableCell
-                      className="text-muted-foreground max-w-xs truncate text-xs"
-                      title={sr.note ?? undefined}
-                    >
-                      {sr.note ?? '—'}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DeleteButton
-                        action={deleteSalesRecord.bind(null, sr.id)}
-                        confirmMessage="Delete this sales record?"
-                        iconOnly
-                        label="Delete record"
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
         <CardHeader>
           <CardTitle className="text-sm font-semibold tracking-wide uppercase">
             Current estimate
@@ -388,10 +287,21 @@ export default async function AdminGameDetailPage({
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-            Estimates ({game.estimates.length})
+            Steam concurrent players over time
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
+          <CcuHistoryChart signals={game.signals} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold tracking-wide uppercase">
+            Calculation methods ({game.estimates.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4 p-0">
           {game.estimates.length === 0 ? (
             <p className="text-muted-foreground p-6 text-sm">
               No estimates yet.
@@ -434,163 +344,330 @@ export default async function AdminGameDetailPage({
               </TableBody>
             </Table>
           )}
+          <MethodLegend className="px-6 pb-6" />
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-            Achievement snapshots ({game.achievementSnapshots.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {game.achievementSnapshots.length === 0 ? (
-            <p className="text-muted-foreground p-6 text-sm">
-              No achievement data captured yet.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Platform</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead className="text-right">Achievements</TableHead>
-                  <TableHead className="text-right">Players tracked</TableHead>
-                  <TableHead>Most common</TableHead>
-                  <TableHead className="text-right">%</TableHead>
-                  <TableHead className="text-right">Players</TableHead>
-                  <TableHead>Captured</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {game.achievementSnapshots.map((a) => (
-                  <TableRow key={`${a.platform}-${a.source}`}>
-                    <TableCell>
-                      <Badge variant="secondary">{a.platform}</Badge>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {a.source}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {a.achievementsCount.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {a.playersTracked !== null
-                        ? a.playersTracked.toLocaleString()
-                        : '—'}
-                    </TableCell>
-                    <TableCell className="max-w-[260px] truncate text-xs">
-                      {a.mostCommonName}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {a.mostCommonPercent.toFixed(2)}%
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {a.mostCommonPlayers !== null
-                        ? a.mostCommonPlayers.toLocaleString()
-                        : '—'}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-xs">
-                      {formatDateTime(a.capturedAt)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="sales" className="gap-4">
+        <TabsList className="h-auto flex-wrap">
+          <TabsTrigger value="sales">
+            Sales records ({game.salesRecords.length})
+          </TabsTrigger>
+          <TabsTrigger value="achievements">
+            Achievements ({game.achievementSnapshots.length})
+          </TabsTrigger>
+          <TabsTrigger value="signals">
+            Signals ({game.signals.length})
+          </TabsTrigger>
+          <TabsTrigger value="sources">
+            External sources ({game.sources.length})
+          </TabsTrigger>
+        </TabsList>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-            Steam concurrent players over time
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <CcuHistoryChart signals={game.signals} />
-        </CardContent>
-      </Card>
+        <TabsContent value="sales">
+          <Card>
+            <CardContent className="p-0">
+              {game.salesRecords.length === 0 ? (
+                <p className="text-muted-foreground p-6 text-sm">
+                  No sales records yet.
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Source tier</TableHead>
+                      <TableHead>Reported by</TableHead>
+                      <TableHead>Attribution</TableHead>
+                      <TableHead>Platform</TableHead>
+                      <TableHead className="text-right">Units</TableHead>
+                      <TableHead>Reported</TableHead>
+                      <TableHead>Note</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {game.salesRecords.map((sr) => (
+                      <TableRow key={sr.id}>
+                        <TableCell>
+                          <div className="flex flex-wrap items-center gap-1">
+                            <Badge variant="outline">{sr.source}</Badge>
+                            {sr.confidence && (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] tracking-wide uppercase opacity-70"
+                              >
+                                {sr.confidence}
+                              </Badge>
+                            )}
+                            {sr.isEngagement && (
+                              <Badge
+                                variant="secondary"
+                                className="border-amber-300 bg-amber-100 text-[10px] tracking-wide text-amber-800 uppercase dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
+                                title="Players-reached / engagement milestone (includes subscription users like Ubisoft+/Game Pass). Excluded from estimation."
+                              >
+                                Engagement
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {sr.sourceUrl ? (
+                            <a
+                              href={sr.sourceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={sr.sourceUrl}
+                              className="text-primary inline-flex max-w-[200px] items-center gap-1 truncate text-xs hover:underline"
+                            >
+                              {hostnameOf(sr.sourceUrl)}
+                              <ExternalLink
+                                aria-hidden="true"
+                                className="size-3 shrink-0"
+                              />
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">
+                              —
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell
+                          className="text-muted-foreground max-w-[160px] truncate text-sm"
+                          title={sr.publisher ?? undefined}
+                        >
+                          {sr.publisher ?? '—'}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{sr.platform}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {sr.units.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {formatDate(sr.reportedAt)}
+                        </TableCell>
+                        <TableCell
+                          className="text-muted-foreground max-w-xs truncate text-xs"
+                          title={sr.note ?? undefined}
+                        >
+                          {sr.note ?? '—'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DeleteButton
+                            action={deleteSalesRecord.bind(null, sr.id)}
+                            confirmMessage="Delete this sales record?"
+                            iconOnly
+                            label="Delete record"
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-            Signal snapshots (last 200, {game.signals.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {game.signals.length === 0 ? (
-            <p className="text-muted-foreground p-6 text-sm">
-              No signals recorded.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Metric</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead className="text-right">Value</TableHead>
-                  <TableHead>Captured</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {game.signals.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="font-mono text-xs">
-                      {s.metric}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-xs">
-                      {s.source}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {s.value.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-xs">
-                      {formatDateTime(s.capturedAt)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+        <TabsContent value="achievements">
+          <Card>
+            <CardContent className="p-0">
+              {game.achievementSnapshots.length === 0 ? (
+                <p className="text-muted-foreground p-6 text-sm">
+                  No achievement data captured yet.
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Platform</TableHead>
+                      <TableHead>Source</TableHead>
+                      <TableHead className="text-right">
+                        Achievements
+                      </TableHead>
+                      <TableHead className="text-right">
+                        Players tracked
+                      </TableHead>
+                      <TableHead>Most common</TableHead>
+                      <TableHead className="text-right">%</TableHead>
+                      <TableHead className="text-right">Players</TableHead>
+                      <TableHead>Captured</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {game.achievementSnapshots.map((a) => (
+                      <TableRow key={`${a.platform}-${a.source}`}>
+                        <TableCell>
+                          <Badge variant="secondary">{a.platform}</Badge>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {a.source}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {a.achievementsCount.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {a.playersTracked !== null
+                            ? a.playersTracked.toLocaleString()
+                            : '—'}
+                        </TableCell>
+                        <TableCell className="max-w-[260px] truncate text-xs">
+                          {a.mostCommonName}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {a.mostCommonPercent.toFixed(2)}%
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {a.mostCommonPlayers !== null
+                            ? a.mostCommonPlayers.toLocaleString()
+                            : '—'}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
+                          {formatDateTime(a.capturedAt)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-            Linked external sources ({game.sources.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {game.sources.length === 0 ? (
-            <p className="text-muted-foreground p-6 text-sm">
-              Not linked to any external source yet.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Source</TableHead>
-                  <TableHead>External ID</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {game.sources.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell>
-                      <Badge variant="outline">{s.source}</Badge>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {s.externalId}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+        <TabsContent value="signals">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold tracking-wide uppercase">
+                Signal snapshots (last 200)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {game.signals.length === 0 ? (
+                <p className="text-muted-foreground p-6 text-sm">
+                  No signals recorded.
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Metric</TableHead>
+                      <TableHead>Source</TableHead>
+                      <TableHead className="text-right">Value</TableHead>
+                      <TableHead>Captured</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {game.signals.map((s) => (
+                      <TableRow key={s.id}>
+                        <TableCell className="font-mono text-xs">
+                          {s.metric}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
+                          {s.source}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {s.value.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
+                          {formatDateTime(s.capturedAt)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="sources">
+          <Card>
+            <CardContent className="p-0">
+              {game.sources.length === 0 ? (
+                <p className="text-muted-foreground p-6 text-sm">
+                  Not linked to any external source yet.
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Source</TableHead>
+                      <TableHead>External ID</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {game.sources.map((s) => (
+                      <TableRow key={s.id}>
+                        <TableCell>
+                          <Badge variant="outline">{s.source}</Badge>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {s.externalId}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function MethodLegend({ className }: { className?: string }) {
+  const entries: { tag: string; description: string }[] = [
+    {
+      tag: 'boxleiter',
+      description:
+        'PC estimate: Steam reviews × Boxleiter multiplier. Default range when no calibration is available.',
+    },
+    {
+      tag: 'ps-ratings-boxleiter',
+      description:
+        'PlayStation estimate: PSN ratings × Boxleiter-style multiplier.',
+    },
+    {
+      tag: 'xbox-ratings-boxleiter',
+      description: 'Xbox estimate: Xbox ratings × Boxleiter-style multiplier.',
+    },
+    {
+      tag: '…-calibrated-{source}',
+      description:
+        'Multiplier is calibrated from a known sales record (OFFICIAL / ANNOUNCEMENT / MEDIA / WIKIPEDIA). Spread varies with source confidence.',
+    },
+    {
+      tag: '…-default',
+      description:
+        'No calibrated multiplier: uses the platform default range with a wider spread.',
+    },
+    {
+      tag: '…+ccu',
+      description:
+        'Suffix added when peak concurrent users (Steam CCU) raises or constrains the estimate.',
+    },
+    {
+      tag: '…+launcher-{profile}',
+      description:
+        'Suffix added when the publisher launcher profile (e.g. Steam-only vs multi-store) shifts the multiplier.',
+    },
+  ];
+
+  return (
+    <div className={cn('flex flex-col gap-2 text-xs', className)}>
+      <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
+        Method legend
+      </p>
+      <dl className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+        {entries.map((entry) => (
+          <div key={entry.tag} className="flex flex-col gap-0.5">
+            <dt className="font-mono text-[11px]">{entry.tag}</dt>
+            <dd className="text-muted-foreground">{entry.description}</dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }

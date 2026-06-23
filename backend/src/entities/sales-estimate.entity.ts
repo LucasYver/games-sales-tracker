@@ -7,10 +7,12 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { ConfidenceLevel, Platform } from './enums';
+import { EstimationMethod } from './estimation-method.entity';
 import { Game } from './game.entity';
 
 @Entity('sales_estimate')
 @Index(['gameId', 'platform', 'computedAt'])
+@Index(['gameId', 'platform', 'methodId', 'computedAt'])
 export class SalesEstimate {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -29,6 +31,19 @@ export class SalesEstimate {
 
   @Column({ type: 'enum', enum: ConfidenceLevel })
   confidence: ConfidenceLevel;
+
+  // Canonical method this estimate was produced by, looked up by `code`
+  // in `estimation_method`. The legacy free-form `method` string below
+  // remains for backward compatibility and carries dynamic modifier
+  // suffixes (e.g. `+ccu-intersect`, `+launcher-primary`) that aren't
+  // yet first-class methods. The string column will be dropped in a
+  // follow-up migration once nothing reads it anymore.
+  @Column('uuid')
+  methodId: string;
+
+  @ManyToOne(() => EstimationMethod, { onDelete: 'RESTRICT', eager: false })
+  @JoinColumn({ name: 'methodId' })
+  estimationMethod: EstimationMethod;
 
   @Column()
   method: string;

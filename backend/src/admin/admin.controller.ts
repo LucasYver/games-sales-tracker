@@ -16,9 +16,12 @@ import { AdminTokenGuard } from './admin-token.guard';
 import { Platform, SalesSource } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
 import { PublishersService } from '../publishers/publishers.service';
+import { GenresService } from '../genres/genres.service';
 import { AddGameDto } from './dto/add-game.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
 import { UpdatePublisherDto } from './dto/update-publisher.dto';
+import { UpdateGenreProfileDto } from './dto/update-genre-profile.dto';
+import { UpdateGenreDto } from './dto/update-genre.dto';
 
 @Controller('admin')
 @UseGuards(AdminTokenGuard)
@@ -27,6 +30,7 @@ export class AdminController {
     private readonly admin: AdminService,
     private readonly ingestion: IngestionService,
     private readonly publishers: PublishersService,
+    private readonly genres: GenresService,
   ) {}
 
   @Get('stats')
@@ -82,12 +86,6 @@ export class AdminController {
   @HttpCode(200)
   refreshGame(@Param('id', ParseUUIDPipe) id: string) {
     return this.ingestion.refreshGame(id);
-  }
-
-  @Post('games/:id/rebuild-estimates')
-  @HttpCode(200)
-  rebuildEstimateHistory(@Param('id', ParseUUIDPipe) id: string) {
-    return this.admin.rebuildEstimateHistory(id);
   }
 
   @Post('games/:id/import-ccu-history')
@@ -172,5 +170,39 @@ export class AdminController {
   @HttpCode(200)
   backfillPublisherLinks() {
     return this.publishers.backfillGameLinks();
+  }
+
+  @Get('genre-profiles')
+  listGenreProfiles() {
+    return this.genres.listProfiles();
+  }
+
+  @Patch('genre-profiles/:id')
+  @HttpCode(200)
+  updateGenreProfile(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateGenreProfileDto,
+  ) {
+    return this.genres.updateProfile(id, body);
+  }
+
+  @Get('genres')
+  listGenres() {
+    return this.genres.listGenres();
+  }
+
+  @Patch('genres/:id')
+  @HttpCode(200)
+  updateGenre(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateGenreDto,
+  ) {
+    return this.genres.updateGenre(id, body);
+  }
+
+  @Post('genres/sync-igdb')
+  @HttpCode(200)
+  syncGenresFromIgdb() {
+    return this.genres.syncFromIgdb();
   }
 }

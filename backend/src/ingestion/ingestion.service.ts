@@ -528,14 +528,14 @@ export class IngestionService {
 
   /**
    * Create a console-only game from IGDB data (no Steam source), seed its
-   * console store ratings as signals, and compute an initial estimate.
+   * console store ratings as signals, and compute an initial estimate via
+   * the canonical rebuild path so the (single) point lands consistently
+   * with later refreshes.
    */
   private async ingestIgdbGame(candidate: IgdbGame): Promise<void> {
     const game = await this.upsertGameFromIgdb(candidate);
     await this.scrapeStoreRatings(game.id, game.name);
-    await this.estimation.computeAndStore(game.id);
-    await this.gamesService.snapshotReconcile(game.id);
-    await this.gamesService.evaluateDiscrepanciesForGame(game.id);
+    await this.gamesService.rebuildEstimateHistory(game.id);
   }
 
   private async upsertGameFromIgdb(candidate: IgdbGame): Promise<Game> {
@@ -603,11 +603,11 @@ export class IngestionService {
       this.scrapeSteamOfficialAchievements(game.id, game.name, appId),
     ]);
 
-    // Compute the PC estimate last so calibration can use any declared figure
-    // pulled by the enrichment steps above.
-    await this.estimation.computeAndStore(game.id);
-    await this.gamesService.snapshotReconcile(game.id);
-    await this.gamesService.evaluateDiscrepanciesForGame(game.id);
+    // Canonical recompute path: rebuild the estimate history so the
+    // freshly seeded signals + any declared figure pulled by the
+    // enrichment steps above are reflected consistently with the
+    // refresh flow.
+    await this.gamesService.rebuildEstimateHistory(game.id);
 
     return game.id;
   }
@@ -1324,12 +1324,17 @@ export class IngestionService {
       `[refresh] "${game.name}" — backlog checked=${backlog.checked} ingested=${backlog.ingested} records=${backlog.records}`,
     );
 
-    // Recompute the PC estimate so a freshly scraped declared figure
-    // recalibrates the multiplier.
-    this.logger.log(`[refresh] "${game.name}" — recomputing estimates…`);
-    await this.estimation.computeAndStore(game.id);
-    await this.gamesService.snapshotReconcile(game.id);
-    await this.gamesService.evaluateDiscrepanciesForGame(game.id);
+    // Single canonical recompute path: rebuild the full estimate
+    // history with the (possibly just-updated) multipliers. This
+    // automatically includes the capture moment we wrote a few lines
+    // above (deduplicated by minute) and re-evaluates discrepancies at
+    // the end, so a declared figure that lands 4 weeks after release
+    // propagates back through the entire chart.
+    this.logger.log(`[refresh] "${game.name}" — rebuilding estimate history…`);
+    const rebuild = await this.gamesService.rebuildEstimateHistory(game.id);
+    this.logger.log(
+      `[refresh] "${game.name}" — rebuilt ${rebuild.points} point(s): ${rebuild.estimates} estimates, ${rebuild.snapshots} snapshots`,
+    );
 
     await this.games.update(game.id, { lastRefreshedAt: new Date() });
 
