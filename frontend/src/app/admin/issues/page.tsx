@@ -1,9 +1,7 @@
 import Link from 'next/link';
 import {
   AlertTriangle,
-  CalendarX,
   Calculator,
-  Quote,
   Target,
   Wifi,
   Globe,
@@ -20,7 +18,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { DeleteButton } from '../_components/DeleteButton';
-import { deleteSalesRecord, deleteTrustedSource } from '../actions';
+import { deleteTrustedSource } from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,8 +35,6 @@ export default async function AdminIssuesPage() {
   const issues = await adminFetch<AdminIssues>('/issues');
 
   const totalProblems =
-    issues.undatedSalesRecords.count +
-    issues.suspectQuotes.count +
     issues.calibrationOutliers.count +
     issues.staleGames.count +
     issues.inactiveTrustedSources.count +
@@ -60,134 +56,6 @@ export default async function AdminIssuesPage() {
           </p>
         </div>
       </header>
-
-      {/* Undated sales records */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm font-semibold tracking-wide uppercase">
-            <CalendarX aria-hidden="true" className="size-4" />
-            Undated sales records ({issues.undatedSalesRecords.count})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {issues.undatedSalesRecords.items.length === 0 ? (
-            <p className="text-muted-foreground p-6 text-sm">
-              All sales records have a reported date.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Game</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Platform</TableHead>
-                  <TableHead className="text-right">Units</TableHead>
-                  <TableHead>Quote</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {issues.undatedSalesRecords.items.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell>
-                      <Link
-                        href={`/admin/games/${r.gameId}`}
-                        className="hover:text-primary hover:underline"
-                      >
-                        {r.gameName}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{r.source}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{r.platform}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {r.units.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground max-w-md truncate text-xs">
-                      {r.note ?? '—'}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DeleteButton
-                        action={deleteSalesRecord.bind(null, r.id)}
-                        confirmMessage="Delete this undated record?"
-                        iconOnly
-                        label="Delete record"
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Suspect quotes */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm font-semibold tracking-wide uppercase">
-            <Quote aria-hidden="true" className="size-4" />
-            Suspect quotes ({issues.suspectQuotes.count})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {issues.suspectQuotes.items.length === 0 ? (
-            <p className="text-muted-foreground p-6 text-sm">
-              No suspicious quotes detected in the recent window.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Game</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead className="text-right">Units</TableHead>
-                  <TableHead>Reported</TableHead>
-                  <TableHead>Quote</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {issues.suspectQuotes.items.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell>
-                      <Link
-                        href={`/admin/games/${r.gameId}`}
-                        className="hover:text-primary hover:underline"
-                      >
-                        {r.gameName}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{r.source}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {r.units.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {formatDate(r.reportedAt)}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground max-w-md truncate text-xs">
-                      {r.note ?? '—'}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DeleteButton
-                        action={deleteSalesRecord.bind(null, r.id)}
-                        confirmMessage="Delete this suspect record?"
-                        iconOnly
-                        label="Delete record"
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
 
       {/* Calibration outliers */}
       <Card>

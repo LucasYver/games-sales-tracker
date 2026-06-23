@@ -6,28 +6,32 @@
  *
  * Two-tier logic:
  *  1. If the quote contains an explicit lifetime marker (`lifetime`,
- *     `cumulative`, `to date`, `since launch`, `worldwide sales`…) AND a
- *     copies/units count, we trust it and let it through — even if the
- *     same quote also mentions a fiscal-period anchor (e.g. "as of FY24")
- *     or an aside about revenue ("$200M in revenue"). This is necessary
- *     to capture publisher quotes like "5M units sold lifetime as of
- *     FY2024" that legitimately mix units + period + currency in one
- *     sentence.
+ *     `cumulative`, `to date`, `since launch`, `worldwide sales`,
+ *     milestone-passing verbs like `surpassed`/`exceeded`/`crossed`,
+ *     analyst phrasing like `estimated to have sold`, or a `through
+ *     <Month> <day>` cumulative cutoff…) AND a copies/units count, we
+ *     trust it and let it through — even if the same quote also mentions
+ *     a fiscal-period anchor (e.g. "as of FY24") or an aside about
+ *     revenue ("$200M in revenue"). This is necessary to capture both
+ *     publisher quotes like "5M units sold lifetime as of FY2024" and
+ *     analyst reports like "estimated to have sold 2.2 million copies,
+ *     generating $150 million in revenue", which legitimately mix
+ *     units + period + currency in one sentence.
  *  2. Otherwise, fall back to the periodic-pattern list below. Patterns
  *     are kept narrow: each one must encode a context that cannot
  *     reasonably mean "as of [period]". When in doubt, the LLM prompt
  *     and date-grounding catch the rest.
  */
 
-const LIFETIME_MARKERS =
-  /\b(?:lifetime|cumulative|to\s+date|in\s+total|since\s+(?:its\s+)?(?:launch|release)|all[- ]time|worldwide\s+sales?|total\s+sales?\s+(?:of|reach(?:ed|ing)?))\b/i;
+// const LIFETIME_MARKERS =
+//   /\b(?:lifetime|cumulative|to\s+date|in\s+total|since\s+(?:its\s+)?(?:launch|release)|all[- ]time|worldwide\s+sales?|total\s+sales?\s+(?:of|reach(?:ed|ing)?)|(?:has\s+|have\s+)?(?:surpassed|exceeded|crossed)|estimated\s+to\s+have\s+sold|through\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:,\s*\d{4})?)\b/i;
 
 const UNITS_COUNT =
   /\b\d[\d,.]*\s*(?:million|billion|thousand|k|m|bn)?\s+(?:copies|units)\b/i;
 
-function hasLifetimeUnitsLanguage(quote: string): boolean {
-  return LIFETIME_MARKERS.test(quote) && UNITS_COUNT.test(quote);
-}
+// function hasLifetimeUnitsLanguage(quote: string): boolean {
+//   return LIFETIME_MARKERS.test(quote) && UNITS_COUNT.test(quote);
+// }
 
 const PERIODIC_PATTERNS: RegExp[] = [
   // Launch / opening windows
@@ -74,6 +78,6 @@ const PERIODIC_PATTERNS: RegExp[] = [
 ];
 
 export function isPeriodicQuote(quote: string): boolean {
-  if (hasLifetimeUnitsLanguage(quote)) return false;
+  // if (hasLifetimeUnitsLanguage(quote)) return false;
   return PERIODIC_PATTERNS.some((re) => re.test(quote));
 }

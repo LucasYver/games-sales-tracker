@@ -20,6 +20,11 @@ export default async function AdminTrustedSourcesPage() {
 
   const active = sources.filter((s) => s.active);
   const inactive = sources.filter((s) => !s.active);
+  const autoCreated = sources.filter((s) => s.autoCreated).length;
+  const totalRecords = sources.reduce(
+    (sum, s) => sum + (s.recordCount ?? 0),
+    0,
+  );
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-8">
@@ -27,7 +32,8 @@ export default async function AdminTrustedSourcesPage() {
         <h1 className="text-2xl font-bold tracking-tight">Trusted sources</h1>
         <p className="text-muted-foreground text-sm">
           {sources.length} sources registered · {active.length} active ·{' '}
-          {inactive.length} inactive.
+          {inactive.length} inactive · {autoCreated} auto-created ·{' '}
+          {totalRecords.toLocaleString()} sales records linked.
         </p>
       </header>
 
@@ -41,6 +47,7 @@ export default async function AdminTrustedSourcesPage() {
               <TableHead>Host / Handle</TableHead>
               <TableHead>Lang</TableHead>
               <TableHead className="text-right">Weight</TableHead>
+              <TableHead className="text-right">Records</TableHead>
               <TableHead>Capabilities</TableHead>
               <TableHead>Active</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -50,7 +57,18 @@ export default async function AdminTrustedSourcesPage() {
             {sources.map((ts) => (
               <TableRow key={ts.id}>
                 <TableCell>
-                  <div className="font-medium">{ts.name}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{ts.name}</span>
+                    {ts.autoCreated && (
+                      <Badge
+                        variant="outline"
+                        className="border-amber-300 bg-amber-50 text-[10px] tracking-wide text-amber-800 uppercase dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200"
+                        title="Auto-created by the ingestion pipeline. Review the tier and weight before relying on it."
+                      >
+                        auto
+                      </Badge>
+                    )}
+                  </div>
                   <div className="text-muted-foreground font-mono text-xs">
                     {ts.slug}
                   </div>
@@ -69,6 +87,15 @@ export default async function AdminTrustedSourcesPage() {
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {ts.weight}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {ts.recordCount ? (
+                    <span className="font-medium">
+                      {ts.recordCount.toLocaleString()}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">0</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
@@ -117,7 +144,7 @@ export default async function AdminTrustedSourcesPage() {
             {sources.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={9}
+                  colSpan={10}
                   className="text-muted-foreground py-12 text-center"
                 >
                   No trusted sources registered.
@@ -130,8 +157,12 @@ export default async function AdminTrustedSourcesPage() {
 
       <Card>
         <CardContent className="text-muted-foreground pt-6 text-sm">
-          To add a new source, update the seed registry on the backend and
-          re-run the seeder. CRUD-style creation from the UI is not yet wired.
+          Auto-created entries appear with an{' '}
+          <span className="font-semibold">auto</span> badge and default to tier{' '}
+          <span className="font-mono">MEDIA</span> / weight{' '}
+          <span className="font-mono">40</span>. Review them after the ingestion
+          pipeline discovers a new host and bump the weight or change the tier
+          if appropriate.
         </CardContent>
       </Card>
     </div>

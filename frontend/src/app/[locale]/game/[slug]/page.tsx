@@ -12,7 +12,7 @@ import {
 } from '@/lib/api';
 import { Link } from '@/i18n/navigation';
 import { ConfidenceBadge } from '@/components/ConfidenceBadge';
-import { SalesHistory } from '@/components/SalesHistory';
+import { SalesHistoryChart } from '@/components/SalesHistoryChart';
 import { MethodologyCard } from '@/components/MethodologyCard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -203,13 +203,103 @@ function StoreRatingsCard({ ratings }: { ratings: StoreRatings }) {
   );
 }
 
+function GameHero({
+  game,
+  platformLabel,
+}: {
+  game: GameDetail;
+  platformLabel: (p: Platform) => string;
+}) {
+  const t = useTranslations('gamePage');
+  const format = useFormatter();
+
+  return (
+    <section
+      aria-label={game.name}
+      className="relative isolate overflow-hidden border-b border-border/60"
+    >
+      {game.coverUrl && (
+        <div aria-hidden className="absolute inset-0 -z-10">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={game.coverUrl}
+            alt=""
+            className="h-full w-full scale-110 object-cover blur-2xl brightness-75 saturate-150"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/30 via-background/70 to-background" />
+        </div>
+      )}
+
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 pt-6 pb-10 sm:pt-8 sm:pb-14">
+        <div>
+          <Button asChild variant="ghost" size="sm" className="-ml-3">
+            <Link href="/">
+              <ArrowLeft aria-hidden="true" className="size-4" />
+              {t('back')}
+            </Link>
+          </Button>
+        </div>
+
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:gap-8">
+          {game.coverUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={game.coverUrl}
+              alt={`${game.name} cover`}
+              className="ring-foreground/10 h-auto w-40 shrink-0 rounded-2xl object-cover shadow-2xl ring-1 sm:w-56 lg:w-64"
+            />
+          )}
+          <div className="flex flex-col gap-3">
+            <h1 className="text-4xl font-bold tracking-tight drop-shadow-sm sm:text-5xl">
+              {game.name}
+            </h1>
+            <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+              {game.releaseDate && (
+                <time dateTime={game.releaseDate}>
+                  {t('releasedOn', {
+                    date: format.dateTime(new Date(game.releaseDate), {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                    }),
+                  })}
+                </time>
+              )}
+              {game.developer && (
+                <>
+                  <span aria-hidden>·</span>
+                  <span>{game.developer}</span>
+                </>
+              )}
+            </div>
+            {game.platforms.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {game.platforms.map((p) => (
+                  <Badge key={p} variant="secondary">
+                    {platformLabel(p)}
+                  </Badge>
+                ))}
+              </div>
+            )}
+            {game.summary && (
+              <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">
+                {game.summary}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function GamePageContent({ game }: { game: GameDetail }) {
   const t = useTranslations('gamePage');
   const tPlatform = useTranslations('platform');
   const tCommon = useTranslations('common');
   const format = useFormatter();
 
-  const { totalSales, salesHistory } = game;
+  const { totalSales, estimateSnapshots } = game;
   const todayEstimate = game.estimatedToday;
   const confidence = headlineConfidence(totalSales);
   const platformLabel = (p: Platform) => tPlatform(p);
@@ -228,104 +318,58 @@ function GamePageContent({ game }: { game: GameDetail }) {
   };
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-8 px-6 py-10">
+    <main className="flex min-h-screen flex-col">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      <div className="flex items-center gap-4">
-        <Button asChild variant="ghost" size="sm">
-          <Link href="/">
-            <ArrowLeft aria-hidden="true" className="size-4" />
-            {t('back')}
-          </Link>
-        </Button>
-      </div>
+      <GameHero game={game} platformLabel={platformLabel} />
 
-      <header className="flex flex-col gap-5 sm:flex-row sm:items-start">
-        {game.coverUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={game.coverUrl}
-            alt={`${game.name} cover`}
-            className="border-border h-auto w-full rounded-xl border object-cover shadow-sm sm:w-56"
-          />
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 pt-6 pb-10">
+        {todayEstimate ? (
+          <Card>
+            <CardContent className="flex flex-col gap-3 p-6">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
+                  {t('estimateTitle')}
+                </h2>
+                <ConfidenceBadge level={confidence} />
+              </div>
+
+              <p className="text-primary text-5xl font-bold tracking-tight tabular-nums">
+                {range(todayEstimate.low, todayEstimate.high, format)}
+              </p>
+              <p className="text-muted-foreground text-sm">
+                {tCommon('units')} · {t('asOfNow')}
+              </p>
+            </CardContent>
+          </Card>
+        ) : game.isFree ? (
+          <Card>
+            <CardContent className="p-6">
+              <p className="text-lg font-semibold text-emerald-600">
+                {tCommon('freeToPlay')}
+              </p>
+              <p className="text-muted-foreground mt-1 text-sm">
+                {t('freeToPlayNote')}
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="p-6">
+              <p className="text-muted-foreground">{t('noData')}</p>
+            </CardContent>
+          </Card>
         )}
-        <div className="flex flex-col gap-3">
-          <h1 className="text-3xl font-bold tracking-tight">{game.name}</h1>
-          <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
-            {game.releaseDate && (
-              <time dateTime={game.releaseDate}>
-                {t('releasedOn', {
-                  date: format.dateTime(new Date(game.releaseDate), {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                  }),
-                })}
-              </time>
-            )}
-          </div>
-          {game.platforms.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {game.platforms.map((p) => (
-                <Badge key={p} variant="secondary">
-                  {platformLabel(p)}
-                </Badge>
-              ))}
-            </div>
-          )}
-          {game.summary && (
-            <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
-              {game.summary}
-            </p>
-          )}
-        </div>
-      </header>
 
-      {todayEstimate ? (
-        <Card>
-          <CardContent className="flex flex-col gap-3 p-6">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
-                {t('estimateTitle')}
-              </h2>
-              <ConfidenceBadge level={confidence} />
-            </div>
+        <GameInfoCard game={game} />
 
-            <p className="text-primary text-5xl font-bold tracking-tight tabular-nums">
-              {range(todayEstimate.low, todayEstimate.high, format)}
-            </p>
-            <p className="text-muted-foreground text-sm">
-              {tCommon('units')} · {t('asOfNow')}
-            </p>
-          </CardContent>
-        </Card>
-      ) : game.isFree ? (
-        <Card>
-          <CardContent className="p-6">
-            <p className="text-lg font-semibold text-emerald-600">
-              {tCommon('freeToPlay')}
-            </p>
-            <p className="text-muted-foreground mt-1 text-sm">
-              {t('freeToPlayNote')}
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardContent className="p-6">
-            <p className="text-muted-foreground">{t('noData')}</p>
-          </CardContent>
-        </Card>
-      )}
+        <SalesHistoryChart snapshots={estimateSnapshots} />
 
-      <GameInfoCard game={game} />
-
-      <SalesHistory history={salesHistory} todayEstimate={todayEstimate} />
-
-      <MethodologyCard />
+        <MethodologyCard />
+      </div>
     </main>
   );
 }

@@ -52,8 +52,25 @@ export class SalesRecord {
   @Column({ type: 'timestamptz', nullable: true })
   reportedAt: Date | null;
 
+  // Marks "engagement" figures (e.g. "1.17M players reached" — typically
+  // including subscription-service users like Ubisoft+/Game Pass) that are
+  // adjacent to sales but NOT a copies-sold count. Kept on the same table so
+  // they share the provenance/quote/rejection workflow, but they are excluded
+  // from estimation calibration, the per-platform breakdown headline total and
+  // discrepancy evaluation — they exist purely as an informational signal.
+  @Column({ type: 'boolean', default: false })
+  isEngagement: boolean;
+
   @CreateDateColumn()
   capturedAt: Date;
+
+  // Set when an admin manually drops the record. We keep the row (soft-delete)
+  // so the ingestion pipeline can recognize it on subsequent refreshes and
+  // refuse to re-insert the same figure (matched by gameId + platform + source
+  // + sourceUrl + units + reportedAt). All reads exclude rejected rows.
+  @Index()
+  @Column({ type: 'timestamptz', nullable: true })
+  rejectedAt: Date | null;
 
   @ManyToOne(() => Game, (game) => game.salesRecords, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'gameId' })

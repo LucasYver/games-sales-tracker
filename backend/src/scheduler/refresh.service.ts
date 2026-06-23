@@ -18,7 +18,7 @@ export class RefreshService {
   /**
    * Periodic full refresh of tracked games. Runs the same end-to-end chain as
    * the admin "Refresh data" button (Steam details + reviews, Wikipedia LLM
-   * extraction, store ratings, trusted-search / bibliography / Tavily backlog
+   * extraction, store ratings, trusted-search / Tavily backlog
    * discovery, and estimation). Each game has its own cadence based on its
    * release date (newer titles refreshed more often); games older than 5 years
    * are skipped entirely. The cron may not finish all eligible games in a

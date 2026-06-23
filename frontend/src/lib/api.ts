@@ -22,10 +22,16 @@ export interface GameListItem {
 }
 
 export interface PopularGame extends GameListItem {
+  genres: string[];
   isFree: boolean;
   reviews: number;
   estimatedLow: number | null;
   estimatedHigh: number | null;
+}
+
+export interface GenreOption {
+  name: string;
+  count: number;
 }
 
 export type SalesSourceLabel =
@@ -52,16 +58,10 @@ export interface ReviewPoint {
   value: number;
 }
 
-export interface SalesHistoryPoint {
-  platform: Platform;
-  units: number;
-  source: SalesSourceLabel;
-  confidence: ConfidenceLevel | null;
-  sourceUrl: string | null;
-  note: string | null;
-  publisher: string | null;
-  reportedAt: string | null;
-  capturedAt: string;
+export interface PublicEstimateSnapshot {
+  computedAt: string;
+  estimatedTodayLow: number;
+  estimatedTodayHigh: number;
 }
 
 export interface StoreRatings {
@@ -84,7 +84,7 @@ export interface GameDetail {
   genres: string[];
   totalSales: TotalSales | null;
   estimatedToday: { low: number; high: number } | null;
-  salesHistory: SalesHistoryPoint[];
+  estimateSnapshots: PublicEstimateSnapshot[];
   reviewHistory: ReviewPoint[];
   storeRatings: StoreRatings;
 }
@@ -100,27 +100,61 @@ export async function searchGames(query: string): Promise<GameListItem[]> {
 
 export type SortOption = 'popular' | 'recent' | 'oldest';
 
+export type StatusOption = 'released' | 'new' | 'upcoming';
+
 export interface PaginatedGames {
   items: PopularGame[];
   total: number;
 }
 
+export interface PopularGamesParams {
+  limit?: number;
+  sort?: SortOption;
+  platform?: string;
+  offset?: number;
+  genre?: string;
+  status?: StatusOption;
+  yearMin?: number;
+  yearMax?: number;
+  minReviews?: number;
+}
+
 export async function getPopularGames(
-  limit = 24,
-  sort: SortOption = 'popular',
-  platform?: string,
-  offset = 0,
+  params: PopularGamesParams = {},
 ): Promise<PaginatedGames> {
-  const params = new URLSearchParams({
+  const {
+    limit = 24,
+    sort = 'popular',
+    offset = 0,
+    platform,
+    genre,
+    status,
+    yearMin,
+    yearMax,
+    minReviews,
+  } = params;
+  const search = new URLSearchParams({
     limit: String(limit),
     sort,
     offset: String(offset),
   });
-  if (platform) params.set('platform', platform);
-  const res = await fetch(`${API_URL}/games/popular?${params}`, {
+  if (platform) search.set('platform', platform);
+  if (genre) search.set('genre', genre);
+  if (status) search.set('status', status);
+  if (yearMin != null) search.set('yearMin', String(yearMin));
+  if (yearMax != null) search.set('yearMax', String(yearMax));
+  if (minReviews != null && minReviews > 0)
+    search.set('minReviews', String(minReviews));
+  const res = await fetch(`${API_URL}/games/popular?${search}`, {
     cache: 'no-store',
   });
   if (!res.ok) return { items: [], total: 0 };
+  return res.json();
+}
+
+export async function getGenres(): Promise<GenreOption[]> {
+  const res = await fetch(`${API_URL}/games/genres`, { cache: 'no-store' });
+  if (!res.ok) return [];
   return res.json();
 }
 

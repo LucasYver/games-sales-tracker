@@ -56,15 +56,34 @@
     "placeholder": "Rechercher un jeu (ex. Hades, Baldur's Gate)"
   },
   "filter": {
+    "closeFilters": "Fermer les filtres",
+    "genreAll": "Tous les genres",
+    "genreLabel": "Genre",
+    "minReviewsAny": "Toutes popularités",
+    "minReviewsCount": "{count}+ avis Steam",
+    "minReviewsLabel": "Min. d'avis Steam",
+    "openFilters": "Filtres",
     "platformAll": "Toutes les plateformes",
     "platformLabel": "Plateforme",
+    "reset": "Réinitialiser",
     "sortLabel": "Tri",
     "sortOldest": "Les plus anciens",
     "sortPopular": "Les plus populaires",
-    "sortRecent": "Les plus récents"
+    "sortRecent": "Les plus récents",
+    "statusAll": "Tous",
+    "statusLabel": "Statut de sortie",
+    "statusNew": "Nouveautés (≤ 30 jours)",
+    "statusReleased": "Sortis",
+    "statusUpcoming": "À venir",
+    "title": "Filtres",
+    "yearFrom": "De",
+    "yearLabel": "Année de sortie",
+    "yearTo": "À"
   },
   "gameCard": {
-    "noEstimate": "Pas encore d'estimation"
+    "newBadge": "NOUVEAU",
+    "noEstimate": "Pas encore d'estimation",
+    "upcomingBadge": "À venir"
   },
   "gamePage": {
     "asOfNow": "estimation actuelle",

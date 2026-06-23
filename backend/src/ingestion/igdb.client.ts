@@ -229,6 +229,42 @@ export class IgdbClient {
   }
 
   /**
+   * Resolve an IGDB game from its URL slug (the trailing segment of the
+   * canonical `https://www.igdb.com/games/<slug>` page).
+   */
+  async findBySlug(slug: string): Promise<IgdbGame | null> {
+    if (!this.isConfigured()) return null;
+
+    const safeSlug = slug.replace(/"/g, '').trim();
+    if (!safeSlug) return null;
+
+    const body = [
+      `where slug = "${safeSlug}";`,
+      `fields ${IGDB_FIELDS};`,
+      'limit 1;',
+    ].join(' ');
+
+    const results = await this.queryGames(body);
+    return results[0] ?? null;
+  }
+
+  /**
+   * Resolve an IGDB game from its numeric id.
+   */
+  async findById(id: number): Promise<IgdbGame | null> {
+    if (!this.isConfigured()) return null;
+
+    const body = [
+      `where id = ${id};`,
+      `fields ${IGDB_FIELDS};`,
+      'limit 1;',
+    ].join(' ');
+
+    const results = await this.queryGames(body);
+    return results[0] ?? null;
+  }
+
+  /**
    * Best-effort match-by-name: returns the IGDB record whose name is closest
    * to `name`. Falls back to the first search hit when no name-equality match
    * is found. Returns null on no results or misconfiguration.

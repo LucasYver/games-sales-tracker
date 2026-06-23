@@ -14,6 +14,12 @@ export interface ArticleFigure {
 export interface ArticleSales {
   global: ArticleFigure | null;
   perPlatform: { platform: Platform; figure: ArticleFigure }[];
+  // Engagement milestone (e.g. "X million players reached", "X downloads").
+  // Reported separately from `global` because it conflates copies sold with
+  // subscription users (Ubisoft+/Game Pass) and free-trial play, so it cannot
+  // be fed into the calibration math — but it is still a useful informational
+  // signal that we want to surface and store.
+  engagement: ArticleFigure | null;
   attribution: string | null;
 }
 
@@ -27,6 +33,7 @@ interface LlmResult {
   attribution: string | null;
   global: LlmFigure | null;
   perPlatform: (LlmFigure & { platform: string })[];
+  engagement: LlmFigure | null;
 }
 interface LlmDateResult {
   date: string | null;
@@ -52,26 +59,31 @@ const SYSTEM_PROMPT = `You are a precise data extractor. You are given the plain
 - "matchesGame": true only if the article actually reports a sales figure for the target game. If the article is about a different game or gives no sales number for the target, set it to false and everything else to null/[].
 - "attribution": who the figure is credited to in the text (e.g. "the publisher", "Circana", "Sony", "the studio"); null if unstated.
 
-CUMULATIVE UNITS ONLY — this is critical. ONLY extract a figure that represents the TOTAL CUMULATIVE LIFETIME number of UNITS (copies) sold for the game ("has sold X copies", "X copies sold to date", "lifetime sales of X", "X copies since launch"). NEVER extract:
+CUMULATIVE UNITS ONLY for "global" / "perPlatform" — this is critical. ONLY extract a figure there that represents the TOTAL CUMULATIVE LIFETIME number of UNITS (copies) sold for the game ("has sold X copies", "X copies sold to date", "lifetime sales of X", "X copies since launch"). NEVER put in "global" or "perPlatform":
   - "sold X in its first week / first month / launch weekend"
   - "X copies in [year/quarter/period]" when it's clearly a periodic figure (e.g. "X copies in 2024 alone", "X units in Q1", "weekly sales of X")
   - Fiscal-period figures: "in FY2024", "during fiscal year ended…", "fiscal Q3" — these are PERIODIC, not lifetime
-  - "X players" / "X downloads" / "X concurrent users" / "X subscribers" — these are NOT sales
+  - "X players" / "X downloads" / "X concurrent users" / "X subscribers" — these are engagement metrics; see the "engagement" field below
   - MONETARY figures: any number with $/€/£/¥ or words like "revenue", "earnings", "turnover". In English finance, "sales" often means revenue: "$3.9 million in sales" is REVENUE, NOT 3.9M units. If a currency sign appears, REJECT.
   - DLC, expansions, bundles, remasters, the franchise/series, or other games
 
-EXAMPLES OF FIGURES TO REJECT (return null):
+EXAMPLES OF FIGURES TO REJECT for "global"/"perPlatform" (return null):
   - "Payday 2 brought in $3.9 million in sales in FY2024" → revenue + fiscal period
   - "moved 200,000 copies in the first week" → periodic
-  - "5 million Game Pass players" → engagement, not sales
   - "earned $50M in Q1" → revenue + periodic
 
-If the article only reports periodic, fiscal, monetary or non-sales figures with no cumulative unit total, set "global" to null and "perPlatform" to []. Do NOT try to infer a cumulative unit total from such data.
+If the article only reports periodic, fiscal or monetary figures with no cumulative unit total, set "global" to null and "perPlatform" to []. Do NOT try to infer a cumulative unit total from such data.
 
-- "global": the cumulative worldwide sales total. Convert to an integer (e.g. "5 million" -> 5000000).
+- "global": the cumulative worldwide sales total in UNITS. Convert to an integer (e.g. "5 million" -> 5000000).
   For "date": look EVERYWHERE in the provided text for a date associated with this figure — the article byline, publication metadata, introductory sentence, phrases like "as of [date]", "by [date]", "in fiscal Q… [year]", "announced [date]", etc. Use the most specific date you can find that is plausibly associated with the figure. Format as "YYYY-MM-DD", "YYYY-MM", or "YYYY". Only set null when no date can be inferred at all from the text.
   Put the verbatim sentence containing the figure in "quote".
 - "perPlatform": include a platform ONLY when the text gives a CUMULATIVE number specifically for that one platform (e.g. "3 million sold on PS5 to date"). NEVER split a worldwide/combined total across platforms; if only a combined total is given, "perPlatform" MUST be empty. The quote must itself name the platform AND describe a cumulative figure (not a periodic one). Map PS4/PS5 -> PLAYSTATION, Xbox One/Series -> XBOX, Windows/PC/Steam -> PC, else -> OTHER. We only track PC, PlayStation and Xbox; ignore Switch and mobile figures. Same date and cumulative rules apply.
+- "engagement": cumulative ENGAGEMENT milestones that are NOT copies sold but are still publisher-reported headline numbers about the target game. Examples to capture here (not in "global"):
+    - "X million players have played the game"
+    - "X million players reached" (especially when subscription users like Ubisoft+ / Xbox Game Pass / PS Plus are explicitly included)
+    - "X million downloads" / "X million unique players"
+  Must still be CUMULATIVE LIFETIME (not "X players this week"), must be about the TARGET game (not a series total), and must NOT be a monetary figure. Same "date" and "quote" rules as "global". Set null when no such figure exists.
+  Periodic engagement ("100k players over the weekend") must be rejected.
 
 Every "quote" MUST be copied verbatim from the provided text.`;
 
@@ -108,8 +120,18 @@ const SCHEMA: Record<string, unknown> = {
         required: ['platform', 'units', 'date', 'quote'],
       },
     },
+    engagement: {
+      type: ['object', 'null'],
+      additionalProperties: false,
+      properties: {
+        units: { type: 'integer' },
+        date: { type: ['string', 'null'] },
+        quote: { type: 'string' },
+      },
+      required: ['units', 'date', 'quote'],
+    },
   },
-  required: ['matchesGame', 'attribution', 'global', 'perPlatform'],
+  required: ['matchesGame', 'attribution', 'global', 'perPlatform', 'engagement'],
 };
 
 @Injectable()
@@ -173,6 +195,7 @@ export class ArticleClient {
       const needsDedicatedDatePass =
         !knownFallback &&
         ((result.global?.date == null && result.global != null) ||
+          (result.engagement?.date == null && result.engagement != null) ||
           (result.perPlatform ?? []).some((p) => p.date == null));
 
       const dedicatedDate = needsDedicatedDatePass
@@ -193,6 +216,19 @@ export class ArticleClient {
       const global =
         globalCandidate && globalCandidate.reportedAt ? globalCandidate : null;
 
+      const engagementCandidate =
+        result.engagement &&
+        isGrounded(result.engagement.quote) &&
+        !isPeriodicQuote(result.engagement.quote)
+          ? this.toFigure(result.engagement, effectiveFallback)
+          : null;
+      const engagement =
+        engagementCandidate &&
+        engagementCandidate.reportedAt &&
+        engagementCandidate.units > 0
+          ? engagementCandidate
+          : null;
+
       const perPlatform = (result.perPlatform ?? [])
         .filter((p) => isGrounded(p.quote) && !isPeriodicQuote(p.quote))
         .map((p) => ({
@@ -207,8 +243,13 @@ export class ArticleClient {
             this.quoteMentionsPlatform(p.platform, p.figure.quote),
         );
 
-      if (!global && perPlatform.length === 0) return null;
-      return { global, perPlatform, attribution: result.attribution };
+      if (!global && perPlatform.length === 0 && !engagement) return null;
+      return {
+        global,
+        perPlatform,
+        engagement,
+        attribution: result.attribution,
+      };
     } catch (error) {
       this.logger.warn(`Article extraction failed for "${url}": ${error}`);
       return null;

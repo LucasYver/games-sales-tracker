@@ -2,6 +2,35 @@
 
 Roadmap of improvements not yet implemented, in rough priority order.
 
+## Cross-game calibration (cluster-level priors)
+
+Today, calibration is strictly per-game: a `calibratedMultiplier` is only
+derived when *this title* has its own OFFICIAL/MEDIA declared figure with a
+contemporaneous signal snapshot. Games without a declared figure fall back
+to the static default range, which is the widest one.
+
+Vendors like Alinea Analytics get tighter estimates by also calibrating
+*across* comparable games (cluster-level priors): a fresh indie strategy
+game at $19.99 doesn't have its own milestone yet, but the average
+review-to-sales multiplier across other indie strategy games at $19.99 is a
+much better prior than the generic 25-70× band.
+
+Implementation sketch:
+1. Materialize per-game features already on `Game` (genre, price tier, age
+   band, platform mix, publisher tier) as queryable columns/indices.
+2. For each (signal_metric × platform), fit a multiplier prior from the
+   distribution of calibrated multipliers observed in the most relevant
+   cluster (start with `genre × price_tier × platform_mix`, extend with a
+   GBM/regression once enough OFFICIAL rows are available).
+3. Use the cluster prior instead of the static default range when a per-
+   game OFFICIAL figure is missing. Per-game calibration still wins when
+   available — clusters fill the gap, they do not override.
+4. Same treatment for the peak-CCU multiplier (currently
+   `PC_CCU_DEFAULT_LOW/HIGH` in `sales-modeling.constants.ts`).
+
+Pre-requisite: enough OFFICIAL data points to fit each cluster prior,
+which mostly depends on the publisher IR pipeline below landing first.
+
 ## Publisher IR / Earnings parsers — calibration ground truth
 
 Parse the official quarterly sales numbers that publishers release. Each

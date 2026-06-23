@@ -15,8 +15,11 @@ import { Button } from '@/components/ui/button';
 import { DeleteButton } from '../../_components/DeleteButton';
 import { RefreshGameButton } from '../../_components/RefreshGameButton';
 import { RebuildEstimatesButton } from '../../_components/RebuildEstimatesButton';
+import { ImportCcuHistoryButton } from '../../_components/ImportCcuHistoryButton';
 import { EditGameForm } from '../../_components/EditGameForm';
 import { EstimateHistoryChart } from '../../_components/EstimateHistoryChart';
+import { CcuHistoryChart } from '../../_components/CcuHistoryChart';
+import { LauncherProfileBadge } from '../../_components/LauncherProfileBadge';
 import { deleteGame, deleteSalesRecord } from '../../actions';
 
 export const dynamic = 'force-dynamic';
@@ -48,6 +51,29 @@ function formatCalibration(
     : `${multiplier.toFixed(2)}x`;
 }
 
+function formatUnitsCompact(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}k`;
+  return n.toString();
+}
+
+function formatRange(low: number, high: number): string {
+  return low === high
+    ? formatUnitsCompact(low)
+    : `${formatUnitsCompact(low)} – ${formatUnitsCompact(high)}`;
+}
+
+// Strip leading `www.` and any path/query so a long URL collapses to a
+// recognizable outlet identifier ("cdprojekt.com", "gamesindustry.biz", …).
+function hostnameOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
 export default async function AdminGameDetailPage({
   params,
 }: {
@@ -55,6 +81,11 @@ export default async function AdminGameDetailPage({
 }) {
   const { id } = await params;
   const game = await adminFetch<AdminGameDetail>(`/games/${id}`);
+
+  const latestSnapshot =
+    game.estimateSnapshots.length > 0
+      ? game.estimateSnapshots[game.estimateSnapshots.length - 1]
+      : null;
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-8">
@@ -84,6 +115,7 @@ export default async function AdminGameDetailPage({
         </div>
         <div className="flex items-center gap-2">
           <RefreshGameButton gameId={game.id} />
+          <ImportCcuHistoryButton gameId={game.id} />
           <RebuildEstimatesButton gameId={game.id} />
           <DeleteButton
             action={deleteGame.bind(null, game.id)}
@@ -139,12 +171,46 @@ export default async function AdminGameDetailPage({
                   : '—'
               }
             />
+            <Field
+              label="All-time peak CCU"
+              value={
+                game.allTimePeakCcu
+                  ? `${game.allTimePeakCcu.toLocaleString()} (${formatDate(
+                      game.allTimePeakCcuAt,
+                    )})`
+                  : '—'
+              }
+            />
             <Field label="Created" value={formatDateTime(game.createdAt)} />
             <Field label="Updated" value={formatDateTime(game.updatedAt)} />
             <Field
               label="Last refreshed"
               value={formatDateTime(game.lastRefreshedAt)}
             />
+            <div className="flex flex-col gap-1 text-sm">
+              <dt className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                Publisher
+              </dt>
+              <dd>
+                {game.publisherRecord ? (
+                  <Link
+                    href={`/admin/publishers/${game.publisherRecord.id}`}
+                    className="text-primary hover:underline"
+                  >
+                    {game.publisherRecord.name}
+                  </Link>
+                ) : (
+                  <span>{game.publisher ?? '—'}</span>
+                )}
+              </dd>
+              {game.publisherRecord && (
+                <dd className="mt-1">
+                  <LauncherProfileBadge
+                    profile={game.publisherRecord.launcherProfile}
+                  />
+                </dd>
+              )}
+            </div>
           </dl>
           {game.summary && (
             <p className="text-muted-foreground text-sm leading-relaxed">
@@ -157,6 +223,12 @@ export default async function AdminGameDetailPage({
               name: game.name,
               releaseDate: game.releaseDate,
               igdbId: game.igdbId,
+              calibratedMultiplier: game.calibratedMultiplier,
+              calibratedPsMultiplier: game.calibratedPsMultiplier,
+              calibratedXboxMultiplier: game.calibratedXboxMultiplier,
+              calibrationSourcePc: game.calibrationSourcePc,
+              calibrationSourcePs: game.calibrationSourcePs,
+              calibrationSourceXbox: game.calibrationSourceXbox,
             }}
           />
         </CardContent>
@@ -177,12 +249,12 @@ export default async function AdminGameDetailPage({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Source</TableHead>
+                  <TableHead>Source tier</TableHead>
+                  <TableHead>Reported by</TableHead>
+                  <TableHead>Attribution</TableHead>
                   <TableHead>Platform</TableHead>
                   <TableHead className="text-right">Units</TableHead>
                   <TableHead>Reported</TableHead>
-                  <TableHead>Publisher</TableHead>
-                  <TableHead>URL</TableHead>
                   <TableHead>Note</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -191,7 +263,51 @@ export default async function AdminGameDetailPage({
                 {game.salesRecords.map((sr) => (
                   <TableRow key={sr.id}>
                     <TableCell>
-                      <Badge variant="outline">{sr.source}</Badge>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Badge variant="outline">{sr.source}</Badge>
+                        {sr.confidence && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] tracking-wide uppercase opacity-70"
+                          >
+                            {sr.confidence}
+                          </Badge>
+                        )}
+                        {sr.isEngagement && (
+                          <Badge
+                            variant="secondary"
+                            className="border-amber-300 bg-amber-100 text-[10px] tracking-wide text-amber-800 uppercase dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
+                            title="Players-reached / engagement milestone (includes subscription users like Ubisoft+/Game Pass). Excluded from estimation."
+                          >
+                            Engagement
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {sr.sourceUrl ? (
+                        <a
+                          href={sr.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={sr.sourceUrl}
+                          className="text-primary inline-flex max-w-[200px] items-center gap-1 truncate text-xs hover:underline"
+                        >
+                          {hostnameOf(sr.sourceUrl)}
+                          <ExternalLink
+                            aria-hidden="true"
+                            className="size-3 shrink-0"
+                          />
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell
+                      className="text-muted-foreground max-w-[160px] truncate text-sm"
+                      title={sr.publisher ?? undefined}
+                    >
+                      {sr.publisher ?? '—'}
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary">{sr.platform}</Badge>
@@ -202,28 +318,10 @@ export default async function AdminGameDetailPage({
                     <TableCell className="text-muted-foreground text-sm">
                       {formatDate(sr.reportedAt)}
                     </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {sr.publisher ?? '—'}
-                    </TableCell>
-                    <TableCell>
-                      {sr.sourceUrl ? (
-                        <a
-                          href={sr.sourceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary inline-flex items-center gap-1 text-xs hover:underline"
-                        >
-                          link
-                          <ExternalLink
-                            aria-hidden="true"
-                            className="size-3"
-                          />
-                        </a>
-                      ) : (
-                        '—'
-                      )}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground max-w-xs truncate text-xs">
+                    <TableCell
+                      className="text-muted-foreground max-w-xs truncate text-xs"
+                      title={sr.note ?? undefined}
+                    >
                       {sr.note ?? '—'}
                     </TableCell>
                     <TableCell className="text-right">
@@ -238,6 +336,39 @@ export default async function AdminGameDetailPage({
                 ))}
               </TableBody>
             </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold tracking-wide uppercase">
+            Current estimate
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          {latestSnapshot ? (
+            <>
+              <p className="text-primary text-5xl font-bold tracking-tight tabular-nums">
+                {formatRange(
+                  latestSnapshot.estimatedTodayLow,
+                  latestSnapshot.estimatedTodayHigh,
+                )}
+              </p>
+              <p className="text-muted-foreground text-sm">
+                units · from latest snapshot{' '}
+                {formatDateTime(latestSnapshot.computedAt)}
+              </p>
+              <p className="text-muted-foreground text-xs tabular-nums">
+                {latestSnapshot.estimatedTodayLow.toLocaleString()} –{' '}
+                {latestSnapshot.estimatedTodayHigh.toLocaleString()} units
+              </p>
+            </>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              No snapshot yet. Trigger a refresh to compute the headline
+              estimate.
+            </p>
           )}
         </CardContent>
       </Card>
@@ -367,6 +498,17 @@ export default async function AdminGameDetailPage({
               </TableBody>
             </Table>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold tracking-wide uppercase">
+            Steam concurrent players over time
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <CcuHistoryChart signals={game.signals} />
         </CardContent>
       </Card>
 

@@ -3,7 +3,12 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { ADMIN_COOKIE, adminFetch } from '@/lib/admin';
+import {
+  ADMIN_COOKIE,
+  adminFetch,
+  type LauncherProfile,
+  type SalesSource,
+} from '@/lib/admin';
 import { API_URL } from '@/lib/api';
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
@@ -49,10 +54,33 @@ export async function deleteGame(id: string): Promise<void> {
   revalidatePath('/admin');
 }
 
+export interface AddGameResult {
+  gameId: string;
+  name: string;
+  alreadyExisted: boolean;
+  steamLinked: boolean;
+}
+
+export async function addGameByIgdbUrl(url: string): Promise<AddGameResult> {
+  const result = await adminFetch<AddGameResult>('/games', {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  });
+  revalidatePath('/admin/games');
+  revalidatePath('/admin');
+  return result;
+}
+
 export interface UpdateGamePayload {
   name?: string;
   releaseDate?: string | null;
   igdbId?: number | null;
+  calibratedMultiplier?: number | null;
+  calibratedPsMultiplier?: number | null;
+  calibratedXboxMultiplier?: number | null;
+  calibrationSourcePc?: SalesSource | null;
+  calibrationSourcePs?: SalesSource | null;
+  calibrationSourceXbox?: SalesSource | null;
 }
 
 export async function updateGame(
@@ -92,6 +120,25 @@ export async function rebuildEstimateHistory(
   return result;
 }
 
+export interface ImportCcuHistoryResult {
+  appId: number | null;
+  importedPeak: number | null;
+  peakAt: string | null;
+  priorPeak: number | null;
+  persisted: boolean;
+}
+
+export async function importCcuHistory(
+  id: string,
+): Promise<ImportCcuHistoryResult> {
+  const result = await adminFetch<ImportCcuHistoryResult>(
+    `/games/${id}/import-ccu-history`,
+    { method: 'POST' },
+  );
+  revalidatePath(`/admin/games/${id}`);
+  return result;
+}
+
 export async function deleteSalesRecord(id: string): Promise<void> {
   await adminFetch(`/sales-records/${id}`, { method: 'DELETE' });
   revalidatePath('/admin/sales-records');
@@ -114,4 +161,30 @@ export async function getIgdbBackfillStatus() {
   return adminFetch<import('@/lib/admin').IgdbBackfillStatus>(
     '/backfill/igdb',
   );
+}
+
+export async function updatePublisherLauncherProfile(
+  id: string,
+  launcherProfile: LauncherProfile,
+): Promise<void> {
+  await adminFetch(`/publishers/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ launcherProfile }),
+  });
+  revalidatePath('/admin/publishers');
+  revalidatePath(`/admin/publishers/${id}`);
+}
+
+export async function runPublisherBackfill(): Promise<{
+  linked: number;
+  alreadyLinked: number;
+  unmatched: number;
+}> {
+  const result = await adminFetch<{
+    linked: number;
+    alreadyLinked: number;
+    unmatched: number;
+  }>('/publishers/backfill', { method: 'POST' });
+  revalidatePath('/admin/publishers');
+  return result;
 }

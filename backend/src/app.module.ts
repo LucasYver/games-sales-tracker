@@ -7,6 +7,7 @@ import { IngestionModule } from './ingestion/ingestion.module';
 import { EstimationModule } from './estimation/estimation.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
 import { SourcesModule } from './sources/sources.module';
+import { PublishersModule } from './publishers/publishers.module';
 import { AdminModule } from './admin/admin.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -21,6 +22,7 @@ import { AppService } from './app.service';
     EstimationModule,
     SchedulerModule,
     SourcesModule,
+    PublishersModule,
     AdminModule,
   ],
   controllers: [AppController],

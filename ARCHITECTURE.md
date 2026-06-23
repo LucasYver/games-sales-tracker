@@ -49,6 +49,8 @@ ESTIMATE   Boxleiter / ratings-based model output
 | Metric | Source |
 |---|---|
 | `STEAM_REVIEWS` | Steam storefront review API |
+| `STEAM_CONCURRENT` | Steam `GetNumberOfCurrentPlayers` — raw daily reading |
+| `STEAM_PEAK_CCU` | Running all-time max of `STEAM_CONCURRENT`, written only on a new high. Used as a second independent PC estimate, intersected with the reviews-based Boxleiter range. |
 | `PS_RATINGS` | PlayStation Store scraping |
 | `XBOX_RATINGS` | Xbox Store scraping |
 
@@ -72,6 +74,16 @@ platform alongside a contemporaneous signal snapshot (within 180 days), the
 per-game multiplier is derived and persisted on `Game`
 (`calibratedMultiplier`, `calibratedPsMultiplier`, `calibratedXboxMultiplier`).
 Calibrated estimates use a ±20% spread around the derived multiplier.
+
+**PC second opinion (peak CCU intersection)**: on PC, the reviews-based
+Boxleiter range is intersected with a parallel range derived from the all-
+time peak concurrent player count (`STEAM_PEAK_CCU` signal × `PC_CCU_*`
+multiplier). When both ranges overlap, the intersection is a strictly
+tighter joint estimate (method tagged `…+ccu-intersect`). When they
+disagree (typical for Game Pass / live-service titles whose review:player
+ratio diverges from the catalog norm), the reviews-based range is kept
+but confidence is downgraded to `LOW` and the method tagged
+`…+ccu-conflict` to surface the disagreement.
 
 **PC guardrail (Option A)**: when console declared figures show that PC is < 20%
 of the total, the Boxleiter PC estimate is excluded from `estimatedToday` to
@@ -168,6 +180,7 @@ ratings. Free-to-play titles are blocked.
 | `GET /admin/trusted-sources` | Registry list |
 | `DELETE /admin/trusted-sources/:id` | Remove source |
 | `GET /admin/issues` | 6 issue buckets (undated, suspect quotes, calibration outliers, stale, no signal, inactive sources) |
+| `POST /admin/games/:id/import-ccu-history` | Scrape SteamCharts for the all-time peak CCU and seed a `STEAM_PEAK_CCU` snapshot at the peak's historical month (closes the gap for hits that spiked before we started polling) |
 | `POST /admin/backfill/igdb` | Start full-catalog IGDB backfill |
 | `GET /admin/backfill/igdb` | Backfill progress |
 

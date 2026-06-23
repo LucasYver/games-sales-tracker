@@ -1,10 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, LessThanOrEqual, Repository } from 'typeorm';
+import { In, IsNull, LessThanOrEqual, Repository } from 'typeorm';
 import {
   AchievementSnapshot,
   ConfidenceLevel,
   Game,
+  LauncherProfile,
   Platform,
   SalesEstimate,
   SalesRecord,
@@ -25,10 +26,15 @@ import {
   EXOPHASE_COVERAGE_PS_LOW,
   EXOPHASE_COVERAGE_XBOX_HIGH,
   EXOPHASE_COVERAGE_XBOX_LOW,
+  LAUNCHER_CCU_FACTOR,
+  LAUNCHER_CONFIDENCE_CAP,
+  LAUNCHER_REVIEWS_FACTOR,
   PC_BOXLEITER_DEFAULT_HIGH,
   PC_BOXLEITER_DEFAULT_LOW,
   PC_BOXLEITER_PLAUSIBLE_MAX,
   PC_BOXLEITER_PLAUSIBLE_MIN,
+  PC_CCU_DEFAULT_HIGH,
+  PC_CCU_DEFAULT_LOW,
   PS_BOXLEITER_DEFAULT_HIGH,
   PS_BOXLEITER_DEFAULT_LOW,
   PS_BOXLEITER_PLAUSIBLE_MAX,
@@ -38,6 +44,32 @@ import {
   XBOX_BOXLEITER_PLAUSIBLE_MAX,
   XBOX_BOXLEITER_PLAUSIBLE_MIN,
 } from '../games/sales-modeling.constants';
+
+const CONFIDENCE_ORDER: ConfidenceLevel[] = [
+  ConfidenceLevel.LOW,
+  ConfidenceLevel.MEDIUM,
+  ConfidenceLevel.HIGH,
+];
+
+/**
+ * Clamp a confidence level to at most `cap`. Returns `level` unchanged
+ * when no cap applies or when it's already below the cap.
+ */
+function capConfidence(
+  level: ConfidenceLevel,
+  cap: ConfidenceLevel | null,
+): ConfidenceLevel {
+  if (!cap) return level;
+  const li = CONFIDENCE_ORDER.indexOf(level);
+  const ci = CONFIDENCE_ORDER.indexOf(cap);
+  return li > ci ? cap : level;
+}
+
+const LAUNCHER_PROFILE_METHOD_TAG: Record<LauncherProfile, string> = {
+  [LauncherProfile.STEAM_DOMINANT]: '',
+  [LauncherProfile.MULTI_STORE]: '+multi-store',
+  [LauncherProfile.LAUNCHER_PRIMARY]: '+launcher-primary',
+};
 
 const ACHIEVEMENT_COVERAGE: Record<
   Platform.PC | Platform.PLAYSTATION | Platform.XBOX,
@@ -62,7 +94,7 @@ const RECENT_RELEASE_DAYS = 14;
 // Calibration only trusts a declared figure when a signal snapshot exists
 // within this window of the figure's reported date — otherwise units/signals
 // would mix points from very different times and produce a bogus multiplier.
-const CALIBRATION_WINDOW_DAYS = 180;
+const CALIBRATION_WINDOW_DAYS = 365;
 
 // Declared sources reliable enough to calibrate against, most reliable
 // first. The order matters: when a game has both an OFFICIAL figure and
@@ -209,7 +241,10 @@ export class EstimationService {
     gameId: string,
     asOf?: Date,
   ): Promise<EstimateResult[]> {
-    const game = await this.games.findOne({ where: { id: gameId } });
+    const game = await this.games.findOne({
+      where: { id: gameId },
+      relations: { publisherRecord: true },
+    });
     if (!game || game.isFree) return [];
 
     const results: EstimateResult[] = [];
@@ -327,14 +362,134 @@ export class EstimationService {
     if (!latestSignal || latestSignal.value <= 0) return null;
 
     const signalValue = latestSignal.value;
-    const { low, high, method } = this.resolveMultiplier(game, cfg);
+    const { low, high, method, isCalibrated } = this.resolveMultiplier(
+      game,
+      cfg,
+    );
+
+    // Launcher profile only modulates the *PC* estimation today (the
+    // Steam-vs-rest-of-PC fragmentation problem). PS / Xbox keep their
+    // native multipliers untouched.
+    const launcherProfile =
+      cfg.platform === Platform.PC
+        ? (game.publisherRecord?.launcherProfile ??
+          LauncherProfile.STEAM_DOMINANT)
+        : LauncherProfile.STEAM_DOMINANT;
+
+    // Per-game calibration (from a declared OFFICIAL/MEDIA figure) has
+    // already absorbed the launcher effect empirically — applying the
+    // profile scaling on top would double-count it. Only scale when we
+    // fall back on the static default multiplier range.
+    const reviewsScale =
+      !isCalibrated && cfg.platform === Platform.PC
+        ? LAUNCHER_REVIEWS_FACTOR[launcherProfile]
+        : { low: 1, high: 1 };
+
+    let estimatedLow = signalValue * low * reviewsScale.low;
+    let estimatedHigh = signalValue * high * reviewsScale.high;
+    let finalMethod = method;
+    let confidenceOverride: ConfidenceLevel | null = null;
+
+    if (cfg.platform === Platform.PC) {
+      const ccu = await this.applyCcuIntersection(
+        game.id,
+        estimatedLow,
+        estimatedHigh,
+        launcherProfile,
+        asOf,
+      );
+      if (ccu) {
+        estimatedLow = ccu.low;
+        estimatedHigh = ccu.high;
+        finalMethod = `${method}${ccu.methodSuffix}`;
+        confidenceOverride = ccu.confidenceOverride;
+      }
+
+      const profileTag = LAUNCHER_PROFILE_METHOD_TAG[launcherProfile];
+      if (profileTag) finalMethod = `${finalMethod}${profileTag}`;
+    }
+
+    const baseConfidence =
+      confidenceOverride ??
+      this.resolveConfidence(signalValue, game.releaseDate, cfg);
+    const cappedConfidence =
+      cfg.platform === Platform.PC
+        ? capConfidence(baseConfidence, LAUNCHER_CONFIDENCE_CAP[launcherProfile])
+        : baseConfidence;
 
     return {
       platform: cfg.platform,
-      estimatedLow: Math.round(signalValue * low),
-      estimatedHigh: Math.round(signalValue * high),
-      confidence: this.resolveConfidence(signalValue, game.releaseDate, cfg),
-      method,
+      estimatedLow: Math.round(estimatedLow),
+      estimatedHigh: Math.round(estimatedHigh),
+      confidence: cappedConfidence,
+      method: finalMethod,
+    };
+  }
+
+  /**
+   * Cross-check the PC reviews-based range against a second, independent
+   * estimate derived from the all-time peak concurrent player count
+   * (`STEAM_PEAK_CCU` signal). Returns one of three outcomes:
+   *
+   *  - **No peak yet** (CCU polling just started or app is console-only):
+   *    returns null, the reviews-based range is kept untouched.
+   *  - **Ranges overlap**: returns the intersection, which is a strictly
+   *    tighter range than either signal alone. Method tagged `+ccu-intersect`.
+   *  - **Ranges disagree**: returns the reviews-based range unchanged but
+   *    downgrades confidence to LOW and tags the method `+ccu-conflict`.
+   *    Typical for Game Pass titles (reviews undershoot vs CCU) or live-
+   *    service games where review:player ratios diverge from the catalog
+   *    norm. Surfaces the model uncertainty rather than picking a winner.
+   */
+  private async applyCcuIntersection(
+    gameId: string,
+    reviewsLow: number,
+    reviewsHigh: number,
+    launcherProfile: LauncherProfile,
+    asOf?: Date,
+  ): Promise<{
+    low: number;
+    high: number;
+    methodSuffix: string;
+    confidenceOverride: ConfidenceLevel | null;
+  } | null> {
+    // Sort by value DESC (not capturedAt): historical-imported peak rows
+    // carry an old `capturedAt` so the *largest* value is the true current
+    // all-time peak, not the most recently captured one.
+    const peak = await this.signals.findOne({
+      where: {
+        gameId,
+        metric: SignalMetric.STEAM_PEAK_CCU,
+        ...(asOf ? { capturedAt: LessThanOrEqual(asOf) } : {}),
+      },
+      order: { value: 'DESC' },
+    });
+    if (!peak || peak.value <= 0) return null;
+
+    // Same logic as the reviews multiplier: the CCU range assumes Steam
+    // captures all of PC. Scale it up for multi-store / launcher-primary
+    // publishers so the two ranges live in the same "total PC" space and
+    // their intersection is meaningful.
+    const ccuFactor = LAUNCHER_CCU_FACTOR[launcherProfile];
+    const ccuLow = peak.value * PC_CCU_DEFAULT_LOW * ccuFactor.low;
+    const ccuHigh = peak.value * PC_CCU_DEFAULT_HIGH * ccuFactor.high;
+
+    const lo = Math.max(reviewsLow, ccuLow);
+    const hi = Math.min(reviewsHigh, ccuHigh);
+    if (lo <= hi) {
+      return {
+        low: lo,
+        high: hi,
+        methodSuffix: '+ccu-intersect',
+        confidenceOverride: null,
+      };
+    }
+
+    return {
+      low: reviewsLow,
+      high: reviewsHigh,
+      methodSuffix: '+ccu-conflict',
+      confidenceOverride: ConfidenceLevel.LOW,
     };
   }
 
@@ -494,7 +649,7 @@ export class EstimationService {
   private resolveMultiplier(
     game: Game,
     cfg: PlatformConfig,
-  ): { low: number; high: number; method: string } {
+  ): { low: number; high: number; method: string; isCalibrated: boolean } {
     const calibrated = cfg.read(game);
     if (calibrated && calibrated > 0) {
       const source = cfg.readSource(game);
@@ -510,12 +665,14 @@ export class EstimationService {
         low: calibrated * (1 - spread),
         high: calibrated * (1 + spread),
         method: `${cfg.methodPrefix}-calibrated-${sourceSlug}`,
+        isCalibrated: true,
       };
     }
     return {
       low: cfg.defaultLow,
       high: cfg.defaultHigh,
       method: `${cfg.methodPrefix}-default`,
+      isCalibrated: false,
     };
   }
 
@@ -528,6 +685,8 @@ export class EstimationService {
         gameId,
         platform: cfg.platform,
         source: In(CALIBRATION_SOURCES),
+        rejectedAt: IsNull(),
+        isEngagement: false,
       },
     });
     if (candidates.length === 0) return null;
@@ -611,6 +770,8 @@ export class EstimationService {
         gameId,
         platform: Platform.GLOBAL,
         source: In(CALIBRATION_SOURCES),
+        rejectedAt: IsNull(),
+        isEngagement: false,
       },
     });
     if (candidates.length === 0) return;

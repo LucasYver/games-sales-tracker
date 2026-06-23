@@ -39,10 +39,16 @@ export interface PopularGame {
   releaseDate: Date | null;
   coverUrl: string | null;
   platforms: Platform[];
+  genres: string[];
   isFree: boolean;
   reviews: number;
   estimatedLow: number | null;
   estimatedHigh: number | null;
+}
+
+export interface GenreOption {
+  name: string;
+  count: number;
 }
 
 export interface PaginatedGames {
@@ -107,16 +113,15 @@ export interface StoreRatings {
   xbox: { reviews: number; score: number | null } | null;
 }
 
-export interface SalesHistoryPoint {
-  platform: Platform;
-  units: number;
-  source: SalesSource;
-  confidence: ConfidenceLevel | null;
-  sourceUrl: string | null;
-  note: string | null;
-  publisher: string | null;
-  reportedAt: Date | null;
-  capturedAt: Date;
+/**
+ * One historical point of the headline reconciled estimate, exposed on the
+ * public game detail to draw the sales-over-time chart. Mirrors the admin
+ * `AdminEstimateSnapshot` but stripped of the internal reconciliation jsonb.
+ */
+export interface PublicEstimateSnapshot {
+  computedAt: Date;
+  estimatedTodayLow: number;
+  estimatedTodayHigh: number;
 }
 
 // Higher value = more reliable. Used to pick the best figure per platform.
@@ -208,11 +213,30 @@ export class GamesService {
   }
 
   async listPopular(
-    limit = 24,
-    sort: 'popular' | 'recent' | 'oldest' = 'popular',
-    platform?: string,
-    offset = 0,
+    options: {
+      limit?: number;
+      sort?: 'popular' | 'recent' | 'oldest';
+      platform?: string;
+      offset?: number;
+      genre?: string;
+      status?: 'released' | 'new' | 'upcoming';
+      yearMin?: number;
+      yearMax?: number;
+      minReviews?: number;
+    } = {},
   ): Promise<PaginatedGames> {
+    const {
+      limit = 24,
+      sort = 'popular',
+      platform,
+      offset = 0,
+      genre,
+      status,
+      yearMin,
+      yearMax,
+      minReviews,
+    } = options;
+
     const qb = this.games
       .createQueryBuilder('g')
       .leftJoin('g.signals', 's', 's.metric = :metric', {
@@ -224,22 +248,65 @@ export class GamesService {
       .addSelect('g.releaseDate', 'releaseDate')
       .addSelect('g.coverUrl', 'coverUrl')
       .addSelect('g.platforms', 'platforms')
+      .addSelect('g.genres', 'genres')
       .addSelect('g.isFree', 'isFree')
       .addSelect('COALESCE(MAX(s.value), 0)', 'reviews')
       .groupBy('g.id');
 
     const countQb = this.games.createQueryBuilder('g');
 
-    if (platform) {
-      // PostgreSQL enum-array containment: platforms @> ARRAY['X']::platform_enum[]
-      qb.andWhere(
-        `g.platforms @> ARRAY[:platform]::game_platforms_enum[]`,
-        { platform },
-      );
-      countQb.andWhere(
-        `g.platforms @> ARRAY[:platform]::game_platforms_enum[]`,
-        { platform },
-      );
+    // Apply identical row-level filters to both query builders so the
+    // pagination total stays consistent with the visible page.
+    const applyRowFilters = (target: typeof qb) => {
+      if (platform) {
+        // PostgreSQL enum-array containment: platforms @> ARRAY['X']::platform_enum[]
+        target.andWhere(
+          `g.platforms @> ARRAY[:platform]::game_platforms_enum[]`,
+          { platform },
+        );
+      }
+
+      if (genre) {
+        // `genres` is stored as a comma-separated `simple-array`; match whole
+        // tokens (with optional surrounding spaces) so "RPG" doesn't
+        // accidentally hit "Role-playing (RPG)" via substring.
+        target.andWhere(
+          `string_to_array(g.genres, ',') ` +
+            `&& ARRAY[:genre, ' ' || :genre, :genre || ' ', ' ' || :genre || ' ']`,
+          { genre },
+        );
+      }
+
+      if (status === 'upcoming') {
+        target.andWhere('g.releaseDate > NOW()');
+      } else if (status === 'released') {
+        target.andWhere('g.releaseDate <= NOW()');
+      } else if (status === 'new') {
+        target.andWhere(
+          `g.releaseDate <= NOW() AND g.releaseDate >= NOW() - INTERVAL '30 days'`,
+        );
+      }
+
+      if (yearMin != null) {
+        target.andWhere(`EXTRACT(YEAR FROM g.releaseDate) >= :yearMin`, {
+          yearMin,
+        });
+      }
+
+      if (yearMax != null) {
+        target.andWhere(`EXTRACT(YEAR FROM g.releaseDate) <= :yearMax`, {
+          yearMax,
+        });
+      }
+    };
+
+    applyRowFilters(qb);
+    applyRowFilters(countQb);
+
+    // `minReviews` filters on an aggregate, so it must go through HAVING on
+    // the grouped query and be counted via a wrapping subquery.
+    if (minReviews != null && minReviews > 0) {
+      qb.having('COALESCE(MAX(s.value), 0) >= :minReviews', { minReviews });
     }
 
     if (sort === 'recent') {
@@ -250,24 +317,36 @@ export class GamesService {
       qb.orderBy('reviews', 'DESC');
     }
 
+    // When a HAVING filter is in play we can't rely on getCount() (which
+    // ignores GROUP BY/HAVING); count rows of the grouped projection instead.
+    const totalPromise =
+      minReviews != null && minReviews > 0
+        ? qb
+            .clone()
+            .offset(0)
+            .limit(undefined)
+            .getRawMany()
+            .then((r) => r.length)
+        : countQb.getCount();
+
     const [rows, total] = await Promise.all([
-      qb
-        .offset(offset)
-        .limit(limit)
-        .getRawMany<{
-          id: string;
-          name: string;
-          slug: string;
-          releaseDate: Date | null;
-          coverUrl: string | null;
-          platforms: Platform[];
-          isFree: boolean;
-          reviews: string;
-        }>(),
-      countQb.getCount(),
+      qb.offset(offset).limit(limit).getRawMany<{
+        id: string;
+        name: string;
+        slug: string;
+        releaseDate: Date | null;
+        coverUrl: string | null;
+        platforms: Platform[];
+        genres: string | null;
+        isFree: boolean;
+        reviews: string;
+      }>(),
+      totalPromise,
     ]);
 
-    const latestByGame = await this.latestEstimates(rows.map((r) => r.id));
+    const latestByGame = await this.latestReconciledEstimates(
+      rows.map((r) => r.id),
+    );
 
     const items = rows.map((r) => {
       const estimate = latestByGame.get(r.id);
@@ -278,14 +357,46 @@ export class GamesService {
         releaseDate: r.releaseDate,
         coverUrl: r.coverUrl,
         platforms: this.parsePlatforms(r.platforms),
+        genres: this.parseGenres(r.genres),
         isFree: r.isFree,
         reviews: Number(r.reviews),
-        estimatedLow: estimate?.estimatedLow ?? null,
-        estimatedHigh: estimate?.estimatedHigh ?? null,
+        estimatedLow: estimate?.low ?? null,
+        estimatedHigh: estimate?.high ?? null,
       };
     });
 
     return { items, total };
+  }
+
+  /**
+   * Distinct genres across all games with usage counts, sorted by popularity.
+   * Powers the genre filter dropdown on the public list. Bare minimum count
+   * filter to keep one-off / typo genres out of the UI.
+   */
+  async listGenres(): Promise<GenreOption[]> {
+    const rows = await this.games.query<{ name: string; count: string }[]>(
+      `
+      SELECT trim(g) AS name, COUNT(*) AS count
+      FROM (
+        SELECT regexp_split_to_table(genres, ',') AS g
+        FROM game
+        WHERE genres IS NOT NULL AND genres <> ''
+      ) sub
+      WHERE trim(g) <> ''
+      GROUP BY name
+      HAVING COUNT(*) >= 3
+      ORDER BY COUNT(*) DESC, name ASC
+      `,
+    );
+    return rows.map((r) => ({ name: r.name, count: Number(r.count) }));
+  }
+
+  private parseGenres(value: string | null): string[] {
+    if (!value) return [];
+    return value
+      .split(',')
+      .map((g) => g.trim())
+      .filter((g) => g.length > 0);
   }
 
   async getBySlug(slug: string) {
@@ -296,11 +407,15 @@ export class GamesService {
 
     if (!game) throw new NotFoundException(`Game "${slug}" not found`);
 
+    const visibleSalesRecords = game.salesRecords.filter(
+      (sr) => sr.rejectedAt == null,
+    );
+
     const latestEstimates = await this.latestEstimatesByPlatform(game.id);
 
     const { breakdown, total, reconciliation, estimatedToday } =
       this.aggregateSales(
-        game.salesRecords,
+        visibleSalesRecords,
         latestEstimates,
         game.releaseDate,
       );
@@ -312,6 +427,23 @@ export class GamesService {
     });
 
     const storeRatings = await this.buildStoreRatings(game.id);
+
+    const estimateSnapshotRows = await this.estimateSnapshots.find({
+      where: { gameId: game.id },
+      order: { computedAt: 'ASC' },
+      select: {
+        computedAt: true,
+        estimatedTodayLow: true,
+        estimatedTodayHigh: true,
+      },
+      take: 500,
+    });
+    const estimateSnapshots: PublicEstimateSnapshot[] =
+      estimateSnapshotRows.map((s) => ({
+        computedAt: s.computedAt,
+        estimatedTodayLow: s.estimatedTodayLow,
+        estimatedTodayHigh: s.estimatedTodayHigh,
+      }));
 
     return {
       id: game.id,
@@ -331,7 +463,7 @@ export class GamesService {
       totalSales: total,
       reconciliation,
       estimatedToday,
-      salesHistory: this.buildHistory(game.salesRecords),
+      estimateSnapshots,
       reviewHistory,
       storeRatings,
     };
@@ -368,31 +500,6 @@ export class GamesService {
         ? { reviews: xbox.value, score: xbox.averageRating ?? null }
         : null,
     };
-  }
-
-  // All recorded figures (official, Wikipedia, media, announcements) ordered
-  // chronologically by the date they were reported as of. Undated
-  // figures sort last. Estimates are excluded: they are a live "today" value,
-  // not a dated historical data point.
-  private buildHistory(records: SalesRecord[]): SalesHistoryPoint[] {
-    return records
-      .map((r) => ({
-        platform: r.platform,
-        units: r.units,
-        source: r.source,
-        confidence: r.confidence ?? DEFAULT_CONFIDENCE[r.source],
-        sourceUrl: r.sourceUrl,
-        note: r.note,
-        publisher: r.publisher,
-        reportedAt: r.reportedAt,
-        capturedAt: r.capturedAt,
-      }))
-      .sort((a, b) => {
-        const ta = a.reportedAt?.getTime() ?? Number.POSITIVE_INFINITY;
-        const tb = b.reportedAt?.getTime() ?? Number.POSITIVE_INFINITY;
-        if (ta !== tb) return ta - tb;
-        return a.capturedAt.getTime() - b.capturedAt.getTime();
-      });
   }
 
   /**
@@ -458,7 +565,9 @@ export class GamesService {
    * declared figure ever for a brand-new game).
    */
   async evaluateDiscrepanciesForGame(gameId: string): Promise<number> {
-    const records = await this.salesRecords.find({ where: { gameId } });
+    const records = await this.salesRecords.find({
+      where: { gameId, rejectedAt: IsNull(), isEngagement: false },
+    });
     if (records.length === 0) return 0;
 
     let created = 0;
@@ -637,11 +746,15 @@ export class GamesService {
     asOf?: Date,
   ): Promise<SalesRecord[]> {
     if (!asOf) {
-      return this.salesRecords.find({ where: { gameId } });
+      return this.salesRecords.find({
+        where: { gameId, rejectedAt: IsNull(), isEngagement: false },
+      });
     }
     return this.salesRecords.find({
       where: {
         gameId,
+        rejectedAt: IsNull(),
+        isEngagement: false,
         reportedAt: Or(LessThanOrEqual(asOf), IsNull()),
       },
     });
@@ -772,10 +885,7 @@ export class GamesService {
     // `estimatedToday` rather than let it set the headline number.
     let consoleEvidence = 0;
     for (const [platform, record] of bestByPlatform) {
-      if (
-        platform === Platform.PLAYSTATION ||
-        platform === Platform.XBOX
-      ) {
+      if (platform === Platform.PLAYSTATION || platform === Platform.XBOX) {
         consoleEvidence += record.units;
       }
     }
@@ -920,7 +1030,8 @@ export class GamesService {
       if (declaredPct > 0) {
         const expectedRatio = todayPct / declaredPct;
         const cap =
-          declared.units * (1 + (expectedRatio - 1) * FRESHNESS_VARIANCE_BUFFER);
+          declared.units *
+          (1 + (expectedRatio - 1) * FRESHNESS_VARIANCE_BUFFER);
         return Math.max(cap, declared.units * FRESHNESS_MIN_HEADROOM);
       }
     }
@@ -1063,7 +1174,10 @@ export class GamesService {
     return base;
   }
 
-  private isMoreReliable(candidate: SalesRecord, current: SalesRecord): boolean {
+  private isMoreReliable(
+    candidate: SalesRecord,
+    current: SalesRecord,
+  ): boolean {
     const candidatePriority = SOURCE_PRIORITY[candidate.source];
     const currentPriority = SOURCE_PRIORITY[current.source];
     if (candidatePriority !== currentPriority) {
@@ -1124,21 +1238,33 @@ export class GamesService {
     return map;
   }
 
-  private async latestEstimates(
+  /**
+   * Pull the latest reconciled "today" estimate per game from
+   * `estimate_snapshot`. This is the same source the public detail page and
+   * the chart consume, so the list cards and the detail headline always agree.
+   * Games without any snapshot are simply absent from the map (the card
+   * renders "no estimate yet" rather than falling back to a raw PC Boxleiter
+   * figure that would diverge from the detail headline).
+   */
+  private async latestReconciledEstimates(
     gameIds: string[],
-  ): Promise<Map<string, SalesEstimate>> {
-    const map = new Map<string, SalesEstimate>();
+  ): Promise<Map<string, { low: number; high: number }>> {
+    const map = new Map<string, { low: number; high: number }>();
     if (gameIds.length === 0) return map;
 
-    const estimates = await this.estimates.find({
-      where: { gameId: In(gameIds), platform: Platform.PC },
-      order: { computedAt: 'DESC' },
-    });
+    const rows = await this.estimateSnapshots
+      .createQueryBuilder('s')
+      .distinctOn(['s.gameId'])
+      .select('s.gameId', 'gameId')
+      .addSelect('s.estimatedTodayLow', 'low')
+      .addSelect('s.estimatedTodayHigh', 'high')
+      .where('s.gameId IN (:...gameIds)', { gameIds })
+      .orderBy('s.gameId')
+      .addOrderBy('s.computedAt', 'DESC')
+      .getRawMany<{ gameId: string; low: number; high: number }>();
 
-    for (const estimate of estimates) {
-      if (!map.has(estimate.gameId)) {
-        map.set(estimate.gameId, estimate);
-      }
+    for (const row of rows) {
+      map.set(row.gameId, { low: Number(row.low), high: Number(row.high) });
     }
     return map;
   }

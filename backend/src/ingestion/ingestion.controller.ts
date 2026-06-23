@@ -87,11 +87,6 @@ export class IngestionController {
     return this.ingestion.pollFeeds();
   }
 
-  @Post('mine-bibliography')
-  async mineBibliography(@Body('gameId') gameId: string) {
-    return this.ingestion.mineBibliographyByGameId(gameId);
-  }
-
   @Post('discover-backlog')
   async discoverBacklog(@Body('gameId') gameId: string) {
     return this.ingestion.discoverBacklogByGameId(gameId);

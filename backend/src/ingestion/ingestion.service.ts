@@ -1,6 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Not, Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 import {
   AchievementSnapshot,
   ConfidenceLevel,
@@ -23,11 +29,12 @@ import { IgdbClient, IgdbGame } from './igdb.client';
 import { StoreRatingsClient } from './store-ratings.client';
 import { WikipediaClient } from './wikipedia.client';
 import { ArticleClient, ArticleSales } from './article.client';
-import { DiscoveryClient } from './discovery.client';
 import { RssClient } from './rss.client';
-import { TavilyClient } from './tavily.client';
+import { TavilyClient, TavilyResult } from './tavily.client';
+import { PerplexityClient } from './perplexity.client';
 import { ExophaseClient } from './exophase.client';
 import { SourcesService } from '../sources/sources.service';
+import { PublishersService } from '../publishers/publishers.service';
 import {
   DISCOVERY_RELEASE_FLOOR,
   IGDB_MIN_RATING_COUNT,
@@ -52,7 +59,6 @@ const TAVILY_EXCLUDED_DOMAINS = [
   'newzoo.com',
   'steamdb.info',
   'steamspy.com',
-  'vgchartz.com',
   'gamerefinery.com',
   'statista.com',
   'similarweb.com',
@@ -91,6 +97,25 @@ export interface ArticleIngestResult {
   recordsStored: number;
 }
 
+/**
+ * Extract the URL slug from a canonical IGDB game URL. Accepts both bare
+ * slugs and full URLs (with or without protocol, query, hash, trailing slash).
+ * Returns null when no slug can be identified.
+ */
+function parseIgdbSlug(rawUrl: string): string | null {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return null;
+
+  const urlMatch = trimmed.match(/\/games\/([^/?#\s]+)/i);
+  if (urlMatch) return urlMatch[1].toLowerCase();
+
+  // Plain slug pasted without a URL prefix (alphanumerics + dashes).
+  if (/^[a-z0-9][a-z0-9-]*$/i.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+  return null;
+}
+
 @Injectable()
 export class IngestionService {
   private readonly logger = new Logger(IngestionService.name);
@@ -115,11 +140,13 @@ export class IngestionService {
     private readonly storeRatings: StoreRatingsClient,
     private readonly wikipedia: WikipediaClient,
     private readonly article: ArticleClient,
-    private readonly discovery: DiscoveryClient,
     private readonly rss: RssClient,
     private readonly tavily: TavilyClient,
+    private readonly perplexity: PerplexityClient,
     private readonly exophase: ExophaseClient,
     private readonly sources: SourcesService,
+    private readonly publishers: PublishersService,
+    private readonly config: ConfigService,
   ) {}
 
   // ───── IGDB backfill state (in-memory, single-instance) ─────────────────
@@ -297,6 +324,7 @@ export class IngestionService {
 
     if (changed) {
       await this.games.save(game);
+      await this.publishers.resolveAndLink(game.id, game.publisher);
     }
     return changed;
   }
@@ -421,6 +449,84 @@ export class IngestionService {
   }
 
   /**
+   * Manually add a game by IGDB URL (typically pasted from the admin UI).
+   * Accepts the canonical `https://www.igdb.com/games/<slug>` form. When the
+   * IGDB record links to a Steam app, runs the full Steam ingest path so the
+   * new game ships with live signals; otherwise falls back to the console-only
+   * IGDB ingest (store ratings + initial estimate). Idempotent: re-adding an
+   * already-tracked game returns the existing row with `alreadyExisted=true`.
+   */
+  async addGameFromIgdbUrl(rawUrl: string): Promise<{
+    gameId: string;
+    name: string;
+    alreadyExisted: boolean;
+    steamLinked: boolean;
+  }> {
+    const slug = parseIgdbSlug(rawUrl);
+    if (!slug) {
+      throw new BadRequestException(
+        'Invalid IGDB URL. Expected https://www.igdb.com/games/<slug>.',
+      );
+    }
+
+    const candidate = await this.igdb.findBySlug(slug);
+    if (!candidate) {
+      throw new NotFoundException(
+        `No IGDB game found for slug "${slug}".`,
+      );
+    }
+
+    const existing = await this.games.findOne({
+      where: { igdbId: candidate.igdbId },
+    });
+    if (existing) {
+      return {
+        gameId: existing.id,
+        name: existing.name,
+        alreadyExisted: true,
+        steamLinked: candidate.steamAppId != null,
+      };
+    }
+
+    // Mirror the discovery path: if no Steam external id is linked on IGDB but
+    // the title ships on PC, try resolving the appId by name search.
+    let steamAppId = candidate.steamAppId;
+    if (!steamAppId && candidate.platforms.includes(Platform.PC)) {
+      steamAppId = await this.steam.findAppIdByName(candidate.name);
+      if (steamAppId) {
+        this.logger.log(
+          `[admin-add] resolved Steam appId ${steamAppId} for "${candidate.name}" via name search`,
+        );
+      }
+    }
+
+    let gameId: string | null = null;
+    if (steamAppId) {
+      gameId = await this.ingestSteamApp(steamAppId);
+    }
+    if (!gameId) {
+      await this.ingestIgdbGame(candidate);
+      const created = await this.games.findOne({
+        where: { igdbId: candidate.igdbId },
+      });
+      gameId = created?.id ?? null;
+    }
+
+    if (!gameId) {
+      throw new BadRequestException(
+        `Failed to ingest IGDB game "${candidate.name}" (slug=${slug}).`,
+      );
+    }
+
+    return {
+      gameId,
+      name: candidate.name,
+      alreadyExisted: false,
+      steamLinked: steamAppId != null,
+    };
+  }
+
+  /**
    * Create a console-only game from IGDB data (no Steam source), seed its
    * console store ratings as signals, and compute an initial estimate.
    */
@@ -438,7 +544,7 @@ export class IngestionService {
     });
     if (existing) return existing;
 
-    return this.games.save(
+    const game = await this.games.save(
       this.games.create({
         igdbId: candidate.igdbId,
         name: candidate.name,
@@ -455,6 +561,8 @@ export class IngestionService {
         genres: candidate.genres.length > 0 ? candidate.genres : null,
       }),
     );
+    await this.publishers.resolveAndLink(game.id, game.publisher);
+    return game;
   }
 
   /**
@@ -484,17 +592,7 @@ export class IngestionService {
 
     const game = await this.upsertGameFromSteam(appId, details);
 
-    const reviews = await this.steam.getTotalReviews(appId);
-    if (reviews !== null) {
-      await this.signals.save(
-        this.signals.create({
-          gameId: game.id,
-          source: SourceType.STEAM,
-          metric: SignalMetric.STEAM_REVIEWS,
-          value: reviews,
-        }),
-      );
-    }
+    await this.pollSteamSignals(game.id, appId);
 
     await this.scrapeStoreRatings(game.id, game.name);
 
@@ -530,9 +628,12 @@ export class IngestionService {
 
       const releaseDate = await this.getReleaseDate(gameId);
 
+      // Only sweep the records we previously inserted from Wikipedia — never
+      // the ones an admin has soft-deleted, which we keep as fingerprints.
       await this.salesRecords.delete({
         gameId,
         source: SalesSource.WIKIPEDIA,
+        rejectedAt: IsNull(),
       });
 
       const rows = [];
@@ -567,14 +668,41 @@ export class IngestionService {
           }),
         );
       }
+      if (
+        sales.engagement &&
+        this.isReportedAfterRelease(sales.engagement.reportedAt, releaseDate)
+      ) {
+        rows.push(
+          this.salesRecords.create({
+            gameId,
+            platform: Platform.GLOBAL,
+            source: SalesSource.WIKIPEDIA,
+            units: sales.engagement.units,
+            confidence: ConfidenceLevel.LOW,
+            sourceUrl: sales.sourceUrl,
+            note: sales.engagement.quote,
+            reportedAt: sales.engagement.reportedAt,
+            region: 'GLOBAL',
+            isEngagement: true,
+          }),
+        );
+      }
 
-      if (rows.length > 0) {
-        await this.salesRecords.save(rows);
+      const accepted = await this.filterOutRejected(rows);
+      if (accepted.length > 0) {
+        await this.salesRecords.save(accepted);
         const globalLog = sales.global
           ? `global=${sales.global.units} (${sales.global.reportedAt?.toISOString().slice(0, 10) ?? 'no-date'})`
           : 'no global';
+        const engagementLog = sales.engagement
+          ? `, engagement=${sales.engagement.units} (${sales.engagement.reportedAt?.toISOString().slice(0, 10) ?? 'no-date'})`
+          : '';
         this.logger.log(
-          `[wikipedia] "${name}" — stored ${rows.length} record(s): ${globalLog}, ${sales.perPlatform.length} per-platform`,
+          `[wikipedia] "${name}" — stored ${accepted.length} record(s) (${rows.length - accepted.length} rejected-fingerprint skip): ${globalLog}, ${sales.perPlatform.length} per-platform${engagementLog}`,
+        );
+      } else if (rows.length > 0) {
+        this.logger.log(
+          `[wikipedia] "${name}" — extracted ${rows.length} record(s) but all match an admin-rejected fingerprint, skipping`,
         );
       } else {
         this.logger.log(`[wikipedia] "${name}" — extraction returned but no record met date/grounding requirements`);
@@ -678,6 +806,182 @@ export class IngestionService {
     }
   }
 
+  /**
+   * Poll every live Steam signal for this app and persist a snapshot per
+   * metric. Called from both the initial Steam ingest (`ingestSteamApp`)
+   * and the daily refresh (`refreshGame`) so all tracked games stay fresh
+   * on the same cadence.
+   *
+   * Signals captured:
+   *  - `STEAM_REVIEWS`: total review count (PC Boxleiter input).
+   *  - `STEAM_CONCURRENT`: current concurrent player count at poll time
+   *    (raw time series, useful for decay analysis).
+   *  - `STEAM_PEAK_CCU`: running all-time max of `STEAM_CONCURRENT`. A new
+   *    row is written only when the latest reading strictly exceeds the
+   *    prior peak. Query the current peak with `order: { value: 'DESC' }`
+   *    (NOT capturedAt) because the historical-import path persists peaks
+   *    with the SteamCharts month as `capturedAt`.
+   *
+   * Best-effort: any individual signal that fails to fetch is silently
+   * skipped — the value already on record stays in place.
+   */
+  private async pollSteamSignals(gameId: string, appId: number): Promise<void> {
+    const reviews = await this.steam.getTotalReviews(appId);
+    if (reviews !== null) {
+      await this.signals.save(
+        this.signals.create({
+          gameId,
+          source: SourceType.STEAM,
+          metric: SignalMetric.STEAM_REVIEWS,
+          value: reviews,
+        }),
+      );
+    }
+
+    const current = await this.steam.getCurrentPlayerCount(appId);
+    if (current === null) return;
+
+    await this.signals.save(
+      this.signals.create({
+        gameId,
+        source: SourceType.STEAM,
+        metric: SignalMetric.STEAM_CONCURRENT,
+        value: current,
+      }),
+    );
+
+    // Order by value DESC (not capturedAt): the historical-import path
+    // writes peak rows with an *old* capturedAt (the SteamCharts month of
+    // the peak), so the row with the largest value — not the most recent
+    // one — represents the true current all-time peak.
+    const priorPeak = await this.signals.findOne({
+      where: { gameId, metric: SignalMetric.STEAM_PEAK_CCU },
+      order: { value: 'DESC' },
+    });
+
+    if (!priorPeak || current > priorPeak.value) {
+      await this.signals.save(
+        this.signals.create({
+          gameId,
+          source: SourceType.STEAM,
+          metric: SignalMetric.STEAM_PEAK_CCU,
+          value: current,
+        }),
+      );
+      this.logger.log(
+        `[ccu] gameId=${gameId} appId=${appId} new peak ${current.toLocaleString()} ` +
+          `(prior ${priorPeak?.value.toLocaleString() ?? 'n/a'})`,
+      );
+    }
+  }
+
+  /**
+   * Seed the `STEAM_PEAK_CCU` signal from SteamCharts' historical "All-
+   * time peak" stat. Daily polling via `pollSteamSignals` only captures
+   * peaks reached after we started tracking the game — for hits that
+   * already spiked (Palworld in Jan 2024, Helldivers 2 in early 2024, …),
+   * the live current-players value vastly understates the true peak.
+   * This admin-triggered import closes that gap by pulling the all-time
+   * peak from SteamCharts and persisting it as a `STEAM_PEAK_CCU` snapshot
+   * if higher than what we already have.
+   *
+   * Returns the imported value (or `null` if no Steam source is linked or
+   * SteamCharts had nothing to scrape) and whether a new snapshot was
+   * written. The existing peak is never overwritten downwards.
+   */
+  async importSteamPeakCcuHistory(gameId: string): Promise<{
+    appId: number | null;
+    importedPeak: number | null;
+    peakAt: string | null;
+    priorPeak: number | null;
+    persisted: boolean;
+  }> {
+    const game = await this.games.findOne({ where: { id: gameId } });
+    if (!game) {
+      throw new NotFoundException(`Game ${gameId} not found.`);
+    }
+    const steamSource = await this.gameSources.findOne({
+      where: { gameId, source: SourceType.STEAM },
+    });
+    const appId = steamSource ? Number(steamSource.externalId) : NaN;
+    if (!Number.isFinite(appId)) {
+      this.logger.warn(
+        `[ccu-history] "${game.name}" (${gameId}) — no Steam appId linked, skipping`,
+      );
+      return {
+        appId: null,
+        importedPeak: null,
+        peakAt: null,
+        priorPeak: null,
+        persisted: false,
+      };
+    }
+
+    const scraped = await this.steam.getAllTimePeakCcu(appId);
+    const priorPeakRow = await this.signals.findOne({
+      where: { gameId, metric: SignalMetric.STEAM_PEAK_CCU },
+      order: { value: 'DESC' },
+    });
+    const priorPeak = priorPeakRow?.value ?? null;
+
+    if (scraped === null) {
+      this.logger.warn(
+        `[ccu-history] "${game.name}" (appId=${appId}) — SteamCharts returned no peak`,
+      );
+      return {
+        appId,
+        importedPeak: null,
+        peakAt: null,
+        priorPeak,
+        persisted: false,
+      };
+    }
+
+    const { peak: imported, peakAt } = scraped;
+
+    if (priorPeak !== null && imported <= priorPeak) {
+      this.logger.log(
+        `[ccu-history] "${game.name}" (appId=${appId}) — SteamCharts peak ` +
+          `${imported.toLocaleString()} <= existing ${priorPeak.toLocaleString()}, no-op`,
+      );
+      return {
+        appId,
+        importedPeak: imported,
+        peakAt: peakAt?.toISOString() ?? null,
+        priorPeak,
+        persisted: false,
+      };
+    }
+
+    // Setting capturedAt to the historical peak month (when available)
+    // means the imported snapshot reflects WHEN the peak actually
+    // happened, so the historical rebuild path (`computeAndStoreAt`)
+    // correctly applies the CCU intersection only from that date onward.
+    // Without a known month, we fall back to "now" via the entity's
+    // default @CreateDateColumn.
+    await this.signals.save(
+      this.signals.create({
+        gameId,
+        source: SourceType.STEAM,
+        metric: SignalMetric.STEAM_PEAK_CCU,
+        value: imported,
+        ...(peakAt ? { capturedAt: peakAt } : {}),
+      }),
+    );
+    this.logger.log(
+      `[ccu-history] "${game.name}" (appId=${appId}) — imported peak ` +
+        `${imported.toLocaleString()} at ${peakAt?.toISOString() ?? 'unknown date'} ` +
+        `(prior ${priorPeak?.toLocaleString() ?? 'n/a'})`,
+    );
+    return {
+      appId,
+      importedPeak: imported,
+      peakAt: peakAt?.toISOString() ?? null,
+      priorPeak,
+      persisted: true,
+    };
+  }
+
   async scrapeAchievements(
     gameId: string,
     name: string,
@@ -724,117 +1028,6 @@ export class IngestionService {
     }
   }
 
-  /**
-   * Fetch all external URLs cited in this game's Wikipedia article and ingest
-   * any that are hosted on a trusted source. Wikipedia references are the
-   * primary backlog solution: they contain exactly the press/IR articles that
-   * originally reported the sales figures cited on Wikipedia, including old
-   * announcements no longer in any RSS window. Best-effort.
-   */
-  async mineBibliographyByGameId(
-    gameId: string,
-  ): Promise<{ found: boolean; checked?: number; ingested?: number; records?: number }> {
-    const game = await this.games.findOne({ where: { id: gameId } });
-    if (!game) return { found: false };
-    const result = await this.mineBibliography(gameId, game.name);
-    return { found: true, ...result };
-  }
-
-  async mineBibliography(
-    gameId: string,
-    name: string,
-  ): Promise<{ checked: number; ingested: number; records: number }> {
-    let checked = 0;
-    let ingested = 0;
-    let records = 0;
-    try {
-      const urls = await this.wikipedia.getReferencedUrls(name);
-      this.logger.log(
-        `[bibliography] "${name}" — Wikipedia references: ${urls.length} URL(s)`,
-      );
-      const trustedUrls: string[] = [];
-      for (const url of urls) {
-        const source = await this.sources.findByUrl(url);
-        if (!source) continue;
-        trustedUrls.push(url);
-      }
-      this.logger.log(
-        `[bibliography] "${name}" — ${trustedUrls.length} URL(s) on trusted hosts`,
-      );
-
-      for (const url of trustedUrls) {
-        checked += 1;
-        // Skip already-processed URLs to avoid redundant LLM calls.
-        if (await this.processedArticles.findOne({ where: { url } })) {
-          this.logger.debug(`[bibliography] "${name}" — skip (already processed): ${url}`);
-          continue;
-        }
-        this.logger.log(`[bibliography] "${name}" — extracting: ${url}`);
-        const result = await this.ingestArticle(url, gameId);
-        const stored = result?.recordsStored ?? 0;
-        await this.processedArticles.save(
-          this.processedArticles.create({
-            url,
-            matchedGameId: gameId,
-            hadFigure: stored > 0,
-          }),
-        );
-        if (stored > 0) {
-          ingested += 1;
-          records += stored;
-          this.logger.log(`[bibliography] "${name}" — ${stored} record(s) from ${url}`);
-        } else {
-          this.logger.log(`[bibliography] "${name}" — no figure extracted from ${url}`);
-        }
-        await new Promise((r) => setTimeout(r, 300));
-      }
-    } catch (error) {
-      this.logger.warn(`Bibliography mining failed for "${name}": ${error}`);
-    }
-    return { checked, ingested, records };
-  }
-
-  /**
-   * Search the web for press articles about this game restricted to the
-   * trusted-source registry's hosts, then run the grounded LLM extraction on
-   * each discovered URL. Best-effort: each step logs and continues.
-   */
-  async discoverArticles(
-    gameId: string,
-    name: string,
-  ): Promise<{ ingested: number; records: number }> {
-    let ingested = 0;
-    let records = 0;
-    try {
-      const sources = await this.sources.searchableSources();
-      if (sources.length === 0) {
-        this.logger.log(`[trusted-search] "${name}" — no searchable sources configured`);
-        return { ingested, records };
-      }
-
-      const urls = await this.discovery.findArticles(name, sources);
-      this.logger.log(
-        `[trusted-search] "${name}" — searched ${sources.length} source(s), found ${urls.length} candidate URL(s)`,
-      );
-      for (const url of urls) {
-        this.logger.log(`[trusted-search] "${name}" — extracting: ${url}`);
-        const result = await this.ingestArticle(url, gameId);
-        if (result && result.recordsStored > 0) {
-          ingested += 1;
-          records += result.recordsStored;
-          this.logger.log(
-            `[trusted-search] "${name}" — ${result.recordsStored} record(s) from ${url}`,
-          );
-        } else {
-          this.logger.log(`[trusted-search] "${name}" — no figure extracted from ${url}`);
-        }
-      }
-    } catch (error) {
-      this.logger.warn(`Article discovery failed for "${name}": ${error}`);
-    }
-    return { ingested, records };
-  }
-
   async discoverBacklogByGameId(gameId: string): Promise<{
     found: boolean;
     checked?: number;
@@ -848,9 +1041,10 @@ export class IngestionService {
   }
 
   /**
-   * Backlog discovery via Tavily web search: find sales articles (typically
-   * older coverage that predates our RSS polling), then run the same grounded
-   * LLM extraction on each result's page text. The host is matched against the
+   * Backlog discovery via web search (Tavily and/or Perplexity, controlled by
+   * the `BACKLOG_SEARCH_ENGINE` env var): find sales articles (typically older
+   * coverage that predates our RSS polling), then run the same grounded LLM
+   * extraction on each result's page text. The host is matched against the
    * trusted-source registry to pick the sales tier/confidence; unknown hosts
    * fall back to a low-confidence MEDIA figure. Already-processed URLs are
    * skipped. Best-effort: each step logs and continues.
@@ -862,21 +1056,32 @@ export class IngestionService {
     let checked = 0;
     let ingested = 0;
     let records = 0;
-    if (!this.tavily.enabled) {
-      this.logger.log(`[backlog] "${name}" — Tavily disabled (TAVILY_API_KEY missing)`);
+
+    const engine = this.resolveBacklogEngine();
+    if (engine === null) {
+      this.logger.log(
+        `[backlog] "${name}" — no backlog search engine configured (set TAVILY_API_KEY and/or PERPLEXITY_API_KEY)`,
+      );
       return { checked, ingested, records };
     }
 
     try {
-      const query = `${name} total copies sold sales figures`;
-      this.logger.log(`[backlog] "${name}" — Tavily query: "${query}"`);
-      const results = await this.tavily.search(query, {
-        maxResults: 8,
-        excludeDomains: TAVILY_EXCLUDED_DOMAINS,
-      });
-      this.logger.log(
-        `[backlog] "${name}" — Tavily returned ${results.length} result(s)`,
-      );
+      // Multiple query phrasings catch different headline patterns:
+      //   - "X copies sold / units shipped" → traditional sales coverage
+      //   - "X million players reached" → engagement milestones (often the only
+      //     public number for subscription-led launches like Ubisoft+/Game Pass)
+      //   - "sales milestone / announcement" → PR-style coverage with vague titles
+      const queries = [
+        `${name} total copies sold lifetime`,
+        `${name} million players reached milestone`,
+        `${name} units shipped sold to date`,
+        `${name} sales figures announcement`,
+      ];
+
+      const results = await this.runBacklogSearch(engine, name, queries);
+      if (results.length === 0) {
+        return { checked, ingested, records };
+      }
 
       for (const result of results) {
         if (await this.processedArticles.findOne({ where: { url: result.url } })) {
@@ -921,6 +1126,103 @@ export class IngestionService {
   }
 
   /**
+   * Resolve which backlog search engine(s) to use based on the
+   * `BACKLOG_SEARCH_ENGINE` env var and whichever API keys are configured.
+   * Returns `null` when no engine is usable.
+   */
+  private resolveBacklogEngine(): 'tavily' | 'perplexity' | 'both' | null {
+    const raw = (
+      this.config.get<string>('BACKLOG_SEARCH_ENGINE') ?? 'tavily'
+    ).toLowerCase();
+    const requested: 'tavily' | 'perplexity' | 'both' =
+      raw === 'perplexity' || raw === 'both' ? raw : 'tavily';
+
+    const tavily = this.tavily.enabled;
+    const perplexity = this.perplexity.enabled;
+
+    if (requested === 'both') {
+      if (tavily && perplexity) return 'both';
+      if (tavily) return 'tavily';
+      if (perplexity) return 'perplexity';
+      return null;
+    }
+    if (requested === 'perplexity') return perplexity ? 'perplexity' : null;
+    return tavily ? 'tavily' : null;
+  }
+
+  /**
+   * Run the multi-query backlog search against the chosen engine(s) and return
+   * a deduplicated list of results (URL-keyed) capped to a safe LLM budget.
+   */
+  private async runBacklogSearch(
+    engine: 'tavily' | 'perplexity' | 'both',
+    name: string,
+    queries: string[],
+  ): Promise<TavilyResult[]> {
+    const merged = new Map<string, TavilyResult>();
+    const addAll = (list: TavilyResult[]) => {
+      for (const r of list) {
+        const prev = merged.get(r.url);
+        if (!prev || prev.score < r.score) merged.set(r.url, r);
+      }
+    };
+
+    const tavilyJob = async (): Promise<number> => {
+      // Tavily takes a single query per call, so we fan out one HTTP request
+      // per variant and merge.
+      const perQuery = await Promise.all(
+        queries.map((q) =>
+          this.tavily.search(q, {
+            maxResults: 12,
+            excludeDomains: TAVILY_EXCLUDED_DOMAINS,
+          }),
+        ),
+      );
+      let count = 0;
+      for (const list of perQuery) {
+        addAll(list);
+        count += list.length;
+      }
+      return count;
+    };
+
+    const perplexityJob = async (): Promise<number> => {
+      // Perplexity's Search API accepts multi-query natively (up to 5 queries
+      // per HTTP call); our 4 variants fit in a single billed request.
+      const list = await this.perplexity.search(queries, {
+        maxResults: 12,
+        excludeDomains: TAVILY_EXCLUDED_DOMAINS,
+      });
+      addAll(list);
+      return list.length;
+    };
+
+    if (engine === 'tavily') {
+      const total = await tavilyJob();
+      this.logger.log(
+        `[backlog] "${name}" — Tavily returned ${total} raw / ${merged.size} unique result(s) across ${queries.length} queries`,
+      );
+    } else if (engine === 'perplexity') {
+      const total = await perplexityJob();
+      this.logger.log(
+        `[backlog] "${name}" — Perplexity returned ${total} raw / ${merged.size} unique result(s) across ${queries.length} queries`,
+      );
+    } else {
+      const [tavilyCount, perplexityCount] = await Promise.all([
+        tavilyJob(),
+        perplexityJob(),
+      ]);
+      this.logger.log(
+        `[backlog] "${name}" — Tavily=${tavilyCount} + Perplexity=${perplexityCount} raw → ${merged.size} unique URL(s) after cross-engine dedupe`,
+      );
+    }
+
+    return [...merged.values()]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 24);
+  }
+
+  /**
    * Extract and store sales figures from page text already in hand (e.g. a
    * Tavily result's raw content), falling back to fetching the URL when the
    * provided text is too short. Tier/confidence come from the trusted-source
@@ -933,6 +1235,11 @@ export class IngestionService {
     text: string,
     fallbackDate: Date | null = null,
   ): Promise<number> {
+    // Read-only lookup here: a fresh host has no entry yet, so we use the
+    // MEDIA / weight=40 fallback. The actual TrustedSource row is created
+    // only once we know the URL produced a usable record (in
+    // `storeArticleSales`), so unknown hosts that yield nothing never pollute
+    // the registry.
     const trusted = await this.sources.findByUrl(url);
     const tier = trusted?.salesSource ?? SalesSource.MEDIA;
     const confidence = this.confidenceFromWeight(trusted?.weight ?? 40);
@@ -1006,19 +1313,15 @@ export class IngestionService {
       Number.isFinite(steamAppId)
         ? this.scrapeSteamOfficialAchievements(game.id, game.name, steamAppId)
         : Promise.resolve(),
+      Number.isFinite(steamAppId)
+        ? this.pollSteamSignals(game.id, steamAppId)
+        : Promise.resolve(),
     ]);
 
+    this.logger.log(`[refresh] "${game.name}" — running backlog discovery…`);
+    const backlog = await this.discoverBacklog(game.id, game.name);
     this.logger.log(
-      `[refresh] "${game.name}" — running 3 discovery channels in parallel (trusted-search, Wikipedia bibliography, Tavily backlog)…`,
-    );
-    const [discovery, bib, backlog] = await Promise.all([
-      this.discoverArticles(game.id, game.name),
-      this.mineBibliography(game.id, game.name),
-      this.discoverBacklog(game.id, game.name),
-    ]);
-
-    this.logger.log(
-      `[refresh] "${game.name}" — channel results: trusted-search ingested=${discovery.ingested} records=${discovery.records}; bibliography checked=${bib.checked} ingested=${bib.ingested} records=${bib.records}; backlog checked=${backlog.checked} ingested=${backlog.ingested} records=${backlog.records}`,
+      `[refresh] "${game.name}" — backlog checked=${backlog.checked} ingested=${backlog.ingested} records=${backlog.records}`,
     );
 
     // Recompute the PC estimate so a freshly scraped declared figure
@@ -1030,7 +1333,7 @@ export class IngestionService {
 
     await this.games.update(game.id, { lastRefreshedAt: new Date() });
 
-    const totalIngested = discovery.ingested + bib.ingested + backlog.ingested;
+    const totalIngested = backlog.ingested;
     this.logger.log(
       `[refresh] "${game.name}" — done in ${Date.now() - startedAt}ms, ${totalIngested} article(s) ingested with figures`,
     );
@@ -1052,6 +1355,8 @@ export class IngestionService {
     const game = await this.games.findOne({ where: { id: gameId } });
     if (!game) return null;
 
+    // See `ingestArticleFromText`: registry insertion is deferred until we
+    // know the article produced at least one accepted sales record.
     const trusted = await this.sources.findByUrl(url);
     const tier = trusted?.salesSource ?? SalesSource.MEDIA;
     const confidence = this.confidenceFromWeight(trusted?.weight ?? 40);
@@ -1165,7 +1470,13 @@ export class IngestionService {
     confidence: ConfidenceLevel,
     sales: ArticleSales,
   ): Promise<number> {
-    await this.salesRecords.delete({ gameId, sourceUrl: url });
+    // Preserve admin-rejected fingerprints: a rejected record stays in place
+    // so the fingerprint guard below can skip the matching re-extract.
+    await this.salesRecords.delete({
+      gameId,
+      sourceUrl: url,
+      rejectedAt: IsNull(),
+    });
 
     const releaseDate = await this.getReleaseDate(gameId);
 
@@ -1203,9 +1514,90 @@ export class IngestionService {
         }),
       );
     }
+    if (
+      sales.engagement &&
+      this.isReportedAfterRelease(sales.engagement.reportedAt, releaseDate)
+    ) {
+      rows.push(
+        this.salesRecords.create({
+          gameId,
+          platform: Platform.GLOBAL,
+          source: tier,
+          units: sales.engagement.units,
+          // Engagement is always low-confidence regardless of the source tier:
+          // even publisher-reported "X million players" mixes subscription
+          // users (Ubisoft+, Game Pass) with purchased copies.
+          confidence: ConfidenceLevel.LOW,
+          publisher: sales.attribution,
+          sourceUrl: url,
+          note: sales.engagement.quote,
+          reportedAt: sales.engagement.reportedAt,
+          region: 'GLOBAL',
+          isEngagement: true,
+        }),
+      );
+    }
 
-    if (rows.length > 0) await this.salesRecords.save(rows);
-    return rows.length;
+    const accepted = await this.filterOutRejected(rows);
+    if (accepted.length > 0) {
+      await this.salesRecords.save(accepted);
+      // The article actually produced usable record(s) — register the
+      // hostname in the trusted-source registry if it isn't already. This is
+      // the *only* path through which the registry auto-grows: hosts that
+      // never yield an accepted figure never make it in.
+      await this.sources.ensureForUrl(url);
+    }
+    const skipped = rows.length - accepted.length;
+    if (skipped > 0) {
+      this.logger.log(
+        `[article] ${url} — ${skipped} record(s) match an admin-rejected fingerprint, skipping reinsert`,
+      );
+    }
+    return accepted.length;
+  }
+
+  /**
+   * Drop the candidate rows whose strict fingerprint matches an existing
+   * admin-rejected sales record (so a refresh can never resurrect a record
+   * the admin manually deleted). Fingerprint:
+   *   (gameId, platform, source, sourceUrl, units, reportedAt).
+   * `null` values are compared as equal (both null = same fingerprint).
+   */
+  private async filterOutRejected(
+    rows: SalesRecord[],
+  ): Promise<SalesRecord[]> {
+    if (rows.length === 0) return rows;
+    const gameIds = [...new Set(rows.map((r) => r.gameId))];
+    const rejected = await this.salesRecords.find({
+      where: { gameId: In(gameIds), rejectedAt: Not(IsNull()) },
+      select: {
+        gameId: true,
+        platform: true,
+        source: true,
+        sourceUrl: true,
+        units: true,
+        reportedAt: true,
+      },
+    });
+    if (rejected.length === 0) return rows;
+    const fingerprint = (r: {
+      gameId: string;
+      platform: Platform;
+      source: SalesSource;
+      sourceUrl: string | null;
+      units: number;
+      reportedAt: Date | null;
+    }): string =>
+      [
+        r.gameId,
+        r.platform,
+        r.source,
+        r.sourceUrl ?? '',
+        r.units,
+        r.reportedAt ? r.reportedAt.getTime() : '',
+      ].join('|');
+    const blocked = new Set(rejected.map((r) => fingerprint(r)));
+    return rows.filter((r) => !blocked.has(fingerprint(r)));
   }
 
   private async getReleaseDate(gameId: string): Promise<Date | null> {
@@ -1254,9 +1646,10 @@ export class IngestionService {
         if (g.developer) existing.developer = g.developer;
         if (g.publisher) existing.publisher = g.publisher;
         if (g.genres.length > 0) existing.genres = g.genres;
-        await this.games.save(existing);
+        const saved = await this.games.save(existing);
+        await this.publishers.resolveAndLink(saved.id, saved.publisher);
       } else {
-        await this.games.save(
+        const saved = await this.games.save(
           this.games.create({
             igdbId: g.igdbId,
             name: g.name,
@@ -1270,6 +1663,7 @@ export class IngestionService {
             genres: g.genres.length > 0 ? g.genres : null,
           }),
         );
+        await this.publishers.resolveAndLink(saved.id, saved.publisher);
       }
 
       if (g.steamAppId) {
@@ -1345,7 +1739,9 @@ export class IngestionService {
         if (game.igdbId == null) game.igdbId = igdb.igdbId;
         if (igdb.platforms.length > 0) game.platforms = igdb.platforms;
       }
-      return this.games.save(game);
+      const saved = await this.games.save(game);
+      await this.publishers.resolveAndLink(saved.id, saved.publisher);
+      return saved;
     }
 
     // When IGDB resolves a game id we already track (via the IGDB-first
@@ -1384,7 +1780,9 @@ export class IngestionService {
         ) {
           existingByIgdb.genres = details.genres;
         }
-        return this.games.save(existingByIgdb);
+        const saved = await this.games.save(existingByIgdb);
+        await this.publishers.resolveAndLink(saved.id, saved.publisher);
+        return saved;
       }
     }
 
@@ -1421,6 +1819,7 @@ export class IngestionService {
       }),
     );
 
+    await this.publishers.resolveAndLink(game.id, game.publisher);
     return game;
   }
 

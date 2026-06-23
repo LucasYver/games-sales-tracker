@@ -1,18 +1,41 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
+import {
+  Area,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
 } from '@/components/ui/chart';
+import type { Platform } from '@/lib/api';
 import type { AdminEstimateSnapshot } from '@/lib/admin';
 
 interface Props {
   snapshots: AdminEstimateSnapshot[];
 }
+
+const PLATFORM_LABELS: Partial<Record<Platform, string>> = {
+  PC: 'PC',
+  PLAYSTATION: 'PlayStation',
+  XBOX: 'Xbox',
+  SWITCH: 'Switch',
+  GLOBAL: 'Global',
+};
+
+const PLATFORM_COLORS: Partial<Record<Platform, string>> = {
+  PC: 'var(--chart-2)',
+  PLAYSTATION: 'var(--chart-3)',
+  XBOX: 'var(--chart-4)',
+  SWITCH: 'var(--chart-5)',
+};
 
 const chartConfig: ChartConfig = {
   range: {
@@ -23,6 +46,20 @@ const chartConfig: ChartConfig = {
     label: 'Midpoint',
     color: 'var(--chart-1)',
   },
+  pcMid: { label: 'PC', color: PLATFORM_COLORS.PC! },
+  playstationMid: {
+    label: 'PlayStation',
+    color: PLATFORM_COLORS.PLAYSTATION!,
+  },
+  xboxMid: { label: 'Xbox', color: PLATFORM_COLORS.XBOX! },
+  switchMid: { label: 'Switch', color: PLATFORM_COLORS.SWITCH! },
+};
+
+const PLATFORM_DATA_KEY: Partial<Record<Platform, string>> = {
+  PC: 'pcMid',
+  PLAYSTATION: 'playstationMid',
+  XBOX: 'xboxMid',
+  SWITCH: 'switchMid',
 };
 
 function formatUnits(value: number): string {
@@ -39,20 +76,40 @@ function formatDay(t: number): string {
   });
 }
 
+interface ChartPoint {
+  t: number;
+  low: number;
+  high: number;
+  mid: number;
+  range: [number, number];
+  pcMid?: number;
+  playstationMid?: number;
+  xboxMid?: number;
+  switchMid?: number;
+}
+
 export function EstimateHistoryChart({ snapshots }: Props) {
-  const data = useMemo(
-    () =>
-      snapshots.map((s) => ({
+  const { data, presentPlatforms } = useMemo(() => {
+    const platforms = new Set<Platform>();
+    const points: ChartPoint[] = snapshots.map((s) => {
+      const point: ChartPoint = {
         t: new Date(s.computedAt).getTime(),
         low: s.estimatedTodayLow,
         high: s.estimatedTodayHigh,
-        mid: Math.round(
-          (s.estimatedTodayLow + s.estimatedTodayHigh) / 2,
-        ),
-        range: [s.estimatedTodayLow, s.estimatedTodayHigh] as [number, number],
-      })),
-    [snapshots],
-  );
+        mid: Math.round((s.estimatedTodayLow + s.estimatedTodayHigh) / 2),
+        range: [s.estimatedTodayLow, s.estimatedTodayHigh],
+      };
+      for (const r of s.reconciliation) {
+        const key = PLATFORM_DATA_KEY[r.platform];
+        if (!key) continue;
+        platforms.add(r.platform);
+        (point as unknown as Record<string, number | undefined>)[key] =
+          Math.round((r.estimateLow + r.estimateHigh) / 2);
+      }
+      return point;
+    });
+    return { data: points, presentPlatforms: platforms };
+  }, [snapshots]);
 
   if (data.length < 2) {
     return (
@@ -67,7 +124,7 @@ export function EstimateHistoryChart({ snapshots }: Props) {
 
   return (
     <ChartContainer config={chartConfig} className="h-[280px] w-full px-6 pb-4">
-      <AreaChart data={data} margin={{ left: 8, right: 8, top: 8 }}>
+      <ComposedChart data={data} margin={{ left: 8, right: 8, top: 8 }}>
         <CartesianGrid vertical={false} strokeDasharray="3 3" />
         <XAxis
           dataKey="t"
@@ -107,7 +164,17 @@ export function EstimateHistoryChart({ snapshots }: Props) {
                   ];
                 }
                 if (name === 'mid') {
-                  return [formatUnits(value as number), 'Midpoint'];
+                  return [formatUnits(value as number), 'Headline midpoint'];
+                }
+                for (const [platform, key] of Object.entries(
+                  PLATFORM_DATA_KEY,
+                )) {
+                  if (name === key) {
+                    return [
+                      formatUnits(value as number),
+                      PLATFORM_LABELS[platform as Platform] ?? platform,
+                    ];
+                  }
                 }
                 return null;
               }}
@@ -119,19 +186,33 @@ export function EstimateHistoryChart({ snapshots }: Props) {
           type="monotone"
           stroke="none"
           fill="var(--color-range)"
-          fillOpacity={0.25}
+          fillOpacity={0.18}
           isAnimationActive={false}
         />
-        <Area
+        <Line
           dataKey="mid"
           type="monotone"
           stroke="var(--color-mid)"
           strokeWidth={2}
-          fill="transparent"
           dot={false}
           isAnimationActive={false}
         />
-      </AreaChart>
+        {(Object.keys(PLATFORM_DATA_KEY) as Platform[])
+          .filter((p) => presentPlatforms.has(p))
+          .map((p) => (
+            <Line
+              key={p}
+              dataKey={PLATFORM_DATA_KEY[p]!}
+              type="monotone"
+              stroke={PLATFORM_COLORS[p]!}
+              strokeWidth={1.5}
+              strokeDasharray="4 3"
+              dot={false}
+              connectNulls
+              isAnimationActive={false}
+            />
+          ))}
+      </ComposedChart>
     </ChartContainer>
   );
 }

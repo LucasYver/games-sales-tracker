@@ -3,6 +3,8 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
+  ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
@@ -12,8 +14,15 @@ import { GameSource } from './game-source.entity';
 import { SignalSnapshot } from './signal-snapshot.entity';
 import { SalesEstimate } from './sales-estimate.entity';
 import { SalesRecord } from './sales-record.entity';
+import { Publisher } from './publisher.entity';
 
 @Entity('game')
+// GIN trigram index for fuzzy game-name search. Created (and refreshed)
+// imperatively by `DatabaseInitService` because TypeORM decorators can't
+// express the `gin_trgm_ops` operator class. Declared here purely so the
+// schema-diff engine knows it exists and doesn't try to drop it on every
+// `migration:generate` / sync cycle.
+@Index('game_name_trgm_idx', { synchronize: false })
 export class Game {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -49,8 +58,22 @@ export class Game {
   @Column({ type: 'varchar', nullable: true })
   developer: string | null;
 
+  // Raw publisher name as reported by IGDB (or Steam fallback). Kept as a
+  // plain string so a game still has *some* publisher info even when not
+  // linked to a curated `Publisher` row. The FK `publisherId` is set only
+  // for the curated big-publisher list — see `PublishersService`.
   @Column({ type: 'varchar', nullable: true })
   publisher: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  publisherId: string | null;
+
+  @ManyToOne(() => Publisher, (p) => p.games, {
+    onDelete: 'SET NULL',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'publisherId' })
+  publisherRecord: Publisher | null;
 
   @Column({ type: 'simple-array', nullable: true })
   genres: string[] | null;

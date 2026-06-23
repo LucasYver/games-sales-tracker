@@ -124,6 +124,7 @@ export interface AdminSalesRecord {
   note: string | null;
   reportedAt: string | null;
   capturedAt: string;
+  isEngagement: boolean;
 }
 
 export interface AdminSalesRecordWithGame extends AdminSalesRecord {
@@ -181,11 +182,43 @@ export interface AdminEstimateSnapshot {
   reconciliation: AdminReconciliationEntry[];
 }
 
+export type LauncherProfile =
+  | 'STEAM_DOMINANT'
+  | 'MULTI_STORE'
+  | 'LAUNCHER_PRIMARY';
+
+export interface AdminPublisherSummary {
+  id: string;
+  name: string;
+  launcherProfile: LauncherProfile;
+  gameCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminPublisherDetail extends AdminPublisherSummary {
+  games: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    releaseDate: string | null;
+    coverUrl: string | null;
+  }>;
+}
+
 export interface AdminGameDetail extends AdminGameSummary {
   igdbId: number | null;
   coverUrl: string | null;
   summary: string | null;
   lastRefreshedAt: string | null;
+  allTimePeakCcu: number | null;
+  allTimePeakCcuAt: string | null;
+  publisher: string | null;
+  publisherRecord: {
+    id: string;
+    name: string;
+    launcherProfile: LauncherProfile;
+  } | null;
   sources: AdminGameSource[];
   salesRecords: AdminSalesRecord[];
   estimates: AdminEstimate[];
@@ -208,7 +241,12 @@ export interface AdminTrustedSource {
   language: string;
   weight: number;
   active: boolean;
+  autoCreated: boolean;
   createdAt: string;
+  // Number of non-rejected sales records linked to this source via the URL
+  // hostname (exact host or subdomain match). Populated by the admin listing
+  // endpoint; absent from the issue payload (inactive sources don't carry it).
+  recordCount?: number;
 }
 
 export interface PaginatedAdmin<T> {

@@ -64,6 +64,13 @@ export class TrustedSource {
   @Column({ type: 'boolean', default: true })
   active: boolean;
 
+  // True when the row was inserted automatically by the ingestion pipeline
+  // (a sales record arrived from a hostname that wasn't yet in the registry).
+  // Auto-created rows default to tier=MEDIA / weight=40 so they get a usable
+  // classification immediately; the admin can promote/demote them after review.
+  @Column({ type: 'boolean', default: false })
+  autoCreated: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 }

@@ -16,6 +16,7 @@ import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { IngestionModule } from '../ingestion/ingestion.module';
 import { GamesModule } from '../games/games.module';
+import { PublishersModule } from '../publishers/publishers.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { GamesModule } from '../games/games.module';
     ]),
     IngestionModule,
     GamesModule,
+    PublishersModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

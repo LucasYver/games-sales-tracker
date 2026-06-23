@@ -18,7 +18,12 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "bootstrap:games": "ts-node src/scripts/bootstrap-games.ts"
+    "bootstrap:games": "ts-node src/scripts/bootstrap-games.ts",
+    "typeorm": "typeorm-ts-node-commonjs",
+    "migration:generate": "npm run typeorm -- migration:generate -d src/db/data-source.ts",
+    "migration:run": "npm run typeorm -- migration:run -d src/db/data-source.ts",
+    "migration:revert": "npm run typeorm -- migration:revert -d src/db/data-source.ts",
+    "migration:show": "npm run typeorm -- migration:show -d src/db/data-source.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

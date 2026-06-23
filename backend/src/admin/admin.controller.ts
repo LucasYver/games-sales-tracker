@@ -15,7 +15,10 @@ import { AdminService } from './admin.service';
 import { AdminTokenGuard } from './admin-token.guard';
 import { Platform, SalesSource } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
+import { PublishersService } from '../publishers/publishers.service';
+import { AddGameDto } from './dto/add-game.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
+import { UpdatePublisherDto } from './dto/update-publisher.dto';
 
 @Controller('admin')
 @UseGuards(AdminTokenGuard)
@@ -23,6 +26,7 @@ export class AdminController {
   constructor(
     private readonly admin: AdminService,
     private readonly ingestion: IngestionService,
+    private readonly publishers: PublishersService,
   ) {}
 
   @Get('stats')
@@ -46,6 +50,12 @@ export class AdminController {
       offset: offset ? Number(offset) : undefined,
       limit: limit ? Number(limit) : undefined,
     });
+  }
+
+  @Post('games')
+  @HttpCode(200)
+  addGame(@Body() body: AddGameDto) {
+    return this.ingestion.addGameFromIgdbUrl(body.url);
   }
 
   @Get('games/:id')
@@ -78,6 +88,12 @@ export class AdminController {
   @HttpCode(200)
   rebuildEstimateHistory(@Param('id', ParseUUIDPipe) id: string) {
     return this.admin.rebuildEstimateHistory(id);
+  }
+
+  @Post('games/:id/import-ccu-history')
+  @HttpCode(200)
+  importCcuHistory(@Param('id', ParseUUIDPipe) id: string) {
+    return this.ingestion.importSteamPeakCcuHistory(id);
   }
 
   @Get('sales-records')
@@ -131,5 +147,30 @@ export class AdminController {
   @Get('backfill/igdb')
   igdbBackfillStatus() {
     return this.ingestion.getIgdbBackfillStatus();
+  }
+
+  @Get('publishers')
+  listPublishers() {
+    return this.publishers.list();
+  }
+
+  @Get('publishers/:id')
+  getPublisher(@Param('id', ParseUUIDPipe) id: string) {
+    return this.publishers.getDetail(id);
+  }
+
+  @Patch('publishers/:id')
+  @HttpCode(200)
+  updatePublisher(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdatePublisherDto,
+  ) {
+    return this.publishers.update(id, body);
+  }
+
+  @Post('publishers/backfill')
+  @HttpCode(200)
+  backfillPublisherLinks() {
+    return this.publishers.backfillGameLinks();
   }
 }

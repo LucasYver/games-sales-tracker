@@ -81,7 +81,7 @@ with the record's source** on `Game.calibrationSource*`, so the next
 estimate read can pick the spread that matches the source's
 trustworthiness. We only keep the multiplier if:
 
-- the snapshot is within `CALIBRATION_WINDOW_DAYS = 180` days of the
+- the snapshot is within `CALIBRATION_WINDOW_DAYS = 365` days of the
   declared date (otherwise we'd mix points from different times), and
 - `multiplier` is inside the platform's plausible range (otherwise we
   treat it as a data error and fall back to defaults).
@@ -117,7 +117,7 @@ weights — otherwise calibration would feed back on itself.
 
 Guards (same spirit as the per-platform pass):
 
-- Platform's signal must exist within `CALIBRATION_WINDOW_DAYS = 180`
+- Platform's signal must exist within `CALIBRATION_WINDOW_DAYS = 365`
   days of the declared date.
 - Platform's share must be at least
   `GLOBAL_SPLIT_MIN_PLATFORM_SHARE = 5 %`. Splitting a worldwide figure
@@ -334,7 +334,7 @@ All numbers live in `backend/src/games/sales-modeling.constants.ts`.
 | `ACHIEVEMENT_MIN_PLAYERS_TRACKED` | `500`      | achievement sanity (sample size)       |
 | `ACHIEVEMENT_ESTIMATE_MIN/MAX_UNITS` | `1_000 / 500_000_000` | achievement sanity (range)  |
 | `RECENT_RELEASE_DAYS`             | `14`       | confidence (recent → LOW)              |
-| `CALIBRATION_WINDOW_DAYS`         | `180`      | recalibration (max age delta)          |
+| `CALIBRATION_WINDOW_DAYS`         | `365`      | recalibration (max age delta)          |
 | `GLOBAL_SPLIT_MIN_PLATFORM_SHARE` | `0.05`     | min share to calibrate from a GLOBAL record |
 | `DISCREPANCY_RATIO_HIGH`          | `2.0`      | discrepancy detector (under-estimate)  |
 | `DISCREPANCY_RATIO_LOW`           | `0.5`      | discrepancy detector (over-estimate)   |

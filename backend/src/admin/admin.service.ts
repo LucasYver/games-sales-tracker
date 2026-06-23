@@ -11,6 +11,7 @@ import {
   EstimationDiscrepancy,
   Game,
   GameSource,
+  LauncherProfile,
   Platform,
   ProcessedArticle,
   SalesEstimate,
@@ -30,6 +31,12 @@ export interface UpdateGameInput {
   name?: string;
   releaseDate?: string | null;
   igdbId?: number | null;
+  calibratedMultiplier?: number | null;
+  calibratedPsMultiplier?: number | null;
+  calibratedXboxMultiplier?: number | null;
+  calibrationSourcePc?: SalesSource | null;
+  calibrationSourcePs?: SalesSource | null;
+  calibrationSourceXbox?: SalesSource | null;
 }
 
 export interface AdminStats {
@@ -113,6 +120,14 @@ export interface AdminGameDetail extends AdminGameSummary {
   coverUrl: string | null;
   summary: string | null;
   lastRefreshedAt: Date | null;
+  allTimePeakCcu: number | null;
+  allTimePeakCcuAt: Date | null;
+  publisher: string | null;
+  publisherRecord: {
+    id: string;
+    name: string;
+    launcherProfile: LauncherProfile;
+  } | null;
   sources: GameSource[];
   salesRecords: SalesRecord[];
   estimates: SalesEstimate[];
@@ -211,7 +226,7 @@ export class AdminService {
       this.games.count(),
       this.games
         .createQueryBuilder('g')
-        .innerJoin('g.salesRecords', 'sr')
+        .innerJoin('g.salesRecords', 'sr', 'sr.rejectedAt IS NULL')
         .select('COUNT(DISTINCT g.id)', 'c')
         .getRawOne<{ c: string }>(),
       this.games
@@ -220,16 +235,20 @@ export class AdminService {
         .select('COUNT(DISTINCT g.id)', 'c')
         .getRawOne<{ c: string }>(),
       this.games.count({ where: { calibratedMultiplier: undefined } as never }),
-      this.salesRecords.count(),
-      this.salesRecords.count({ where: { reportedAt: IsNull() } }),
+      this.salesRecords.count({ where: { rejectedAt: IsNull() } }),
+      this.salesRecords.count({
+        where: { reportedAt: IsNull(), rejectedAt: IsNull() },
+      }),
       this.salesRecords
         .createQueryBuilder('sr')
+        .where('sr.rejectedAt IS NULL')
         .select('sr.source', 'source')
         .addSelect('COUNT(*)', 'c')
         .groupBy('sr.source')
         .getRawMany<{ source: SalesSource; c: string }>(),
       this.salesRecords
         .createQueryBuilder('sr')
+        .where('sr.rejectedAt IS NULL')
         .select('sr.platform', 'platform')
         .addSelect('COUNT(*)', 'c')
         .groupBy('sr.platform')
@@ -321,7 +340,7 @@ export class AdminService {
       .leftJoin('g.signals', 's', 's.metric = :metric', {
         metric: SignalMetric.STEAM_REVIEWS,
       })
-      .leftJoin('g.salesRecords', 'sr')
+      .leftJoin('g.salesRecords', 'sr', 'sr.rejectedAt IS NULL')
       .leftJoin('g.estimates', 'e')
       .select([
         'g.id AS id',
@@ -438,9 +457,13 @@ export class AdminService {
         sources: true,
         salesRecords: true,
         estimates: true,
+        publisherRecord: true,
       },
     });
     if (!game) throw new NotFoundException(`Game ${id} not found`);
+    const visibleSalesRecords = game.salesRecords.filter(
+      (sr) => sr.rejectedAt == null,
+    );
 
     const signals = await this.signals.find({
       where: { gameId: id },
@@ -451,6 +474,16 @@ export class AdminService {
     const latestReviews = signals.find(
       (s) => s.metric === SignalMetric.STEAM_REVIEWS,
     );
+
+    // Sort by `value DESC` (not `capturedAt`): the historical-import path
+    // writes a STEAM_PEAK_CCU row with the SteamCharts month as
+    // capturedAt, so the most recent row by date is *not* necessarily the
+    // largest. We query it explicitly (and not via `signals`) so the
+    // 200-row cap can't exclude it on games with dense CCU/reviews history.
+    const allTimePeak = await this.signals.findOne({
+      where: { gameId: id, metric: SignalMetric.STEAM_PEAK_CCU },
+      order: { value: 'DESC' },
+    });
 
     const achievementSnapshots = await this.aggregateAchievementSnapshots(id);
 
@@ -481,18 +514,28 @@ export class AdminService {
       calibrationSourcePc: game.calibrationSourcePc,
       calibrationSourcePs: game.calibrationSourcePs,
       calibrationSourceXbox: game.calibrationSourceXbox,
-      salesRecordsCount: game.salesRecords.length,
+      salesRecordsCount: visibleSalesRecords.length,
       estimatesCount: game.estimates.length,
       latestReviews: latestReviews?.value ?? null,
       latestReviewsAt: latestReviews?.capturedAt ?? null,
+      allTimePeakCcu: allTimePeak?.value ?? null,
+      allTimePeakCcuAt: allTimePeak?.capturedAt ?? null,
       createdAt: game.createdAt,
       updatedAt: game.updatedAt,
       igdbId: game.igdbId,
       coverUrl: game.coverUrl,
       summary: game.summary,
       lastRefreshedAt: game.lastRefreshedAt,
+      publisher: game.publisher,
+      publisherRecord: game.publisherRecord
+        ? {
+            id: game.publisherRecord.id,
+            name: game.publisherRecord.name,
+            launcherProfile: game.publisherRecord.launcherProfile,
+          }
+        : null,
       sources: game.sources,
-      salesRecords: game.salesRecords.sort(
+      salesRecords: visibleSalesRecords.sort(
         (a, b) =>
           (b.reportedAt?.getTime() ?? 0) - (a.reportedAt?.getTime() ?? 0),
       ),
@@ -630,7 +673,77 @@ export class AdminService {
       }
     }
 
+    // Calibrated multipliers must always travel with their source (the entity
+    // contract says "always populated when the corresponding multiplier is").
+    // Setting one without the other would break downstream confidence logic
+    // (CALIBRATED_MULTIPLIER_SPREAD_BY_SOURCE).
+    this.applyCalibration(
+      game,
+      'calibratedMultiplier',
+      'calibrationSourcePc',
+      'PC',
+      input.calibratedMultiplier,
+      input.calibrationSourcePc,
+    );
+    this.applyCalibration(
+      game,
+      'calibratedPsMultiplier',
+      'calibrationSourcePs',
+      'PlayStation',
+      input.calibratedPsMultiplier,
+      input.calibrationSourcePs,
+    );
+    this.applyCalibration(
+      game,
+      'calibratedXboxMultiplier',
+      'calibrationSourceXbox',
+      'Xbox',
+      input.calibratedXboxMultiplier,
+      input.calibrationSourceXbox,
+    );
+
     return this.games.save(game);
+  }
+
+  private applyCalibration(
+    game: Game,
+    multiplierField:
+      | 'calibratedMultiplier'
+      | 'calibratedPsMultiplier'
+      | 'calibratedXboxMultiplier',
+    sourceField:
+      | 'calibrationSourcePc'
+      | 'calibrationSourcePs'
+      | 'calibrationSourceXbox',
+    label: string,
+    multiplier: number | null | undefined,
+    source: SalesSource | null | undefined,
+  ): void {
+    if (multiplier === undefined && source === undefined) return;
+
+    const nextMultiplier =
+      multiplier === undefined ? game[multiplierField] : multiplier;
+    const nextSource = source === undefined ? game[sourceField] : source;
+
+    if (nextMultiplier === null) {
+      game[multiplierField] = null;
+      game[sourceField] = null;
+      return;
+    }
+
+    if (!Number.isFinite(nextMultiplier) || nextMultiplier <= 0) {
+      throw new BadRequestException(
+        `${label} calibrated multiplier must be a positive number`,
+      );
+    }
+    if (!nextSource) {
+      throw new BadRequestException(
+        `${label} calibrated multiplier requires a calibration source`,
+      );
+    }
+
+    game[multiplierField] = nextMultiplier;
+    game[sourceField] = nextSource;
   }
 
   private async buildUniqueSlug(
@@ -667,6 +780,7 @@ export class AdminService {
       .createQueryBuilder('sr')
       .innerJoin('sr.game', 'g')
       .addSelect('g.name', 'gameName')
+      .where('sr.rejectedAt IS NULL')
       .orderBy('sr.capturedAt', 'DESC');
 
     if (opts.gameId) qb.andWhere('sr.gameId = :gid', { gid: opts.gameId });
@@ -692,14 +806,56 @@ export class AdminService {
     return { items, total };
   }
 
+  /**
+   * Soft-delete: mark the record as rejected instead of hard-deleting it.
+   * The row is then hidden from every read (admin + public) AND used as an
+   * ingestion fingerprint guard so the next refresh can't re-create it.
+   */
   async deleteSalesRecord(id: string): Promise<{ deleted: boolean }> {
-    const result = await this.salesRecords.delete(id);
+    const result = await this.salesRecords.update(
+      { id, rejectedAt: IsNull() },
+      { rejectedAt: new Date() },
+    );
     return { deleted: (result.affected ?? 0) > 0 };
   }
 
-  async listTrustedSources(): Promise<TrustedSource[]> {
-    return this.trustedSources.find({
+  async listTrustedSources(): Promise<(TrustedSource & { recordCount: number })[]> {
+    const sources = await this.trustedSources.find({
       order: { active: 'DESC', weight: 'DESC', name: 'ASC' },
+    });
+
+    // Aggregate non-rejected sales records by the hostname of their sourceUrl,
+    // then sum the counts of hostnames matching each source's host (exact or
+    // subdomain — same rule as SourcesService.findByUrl).
+    const rows = await this.salesRecords
+      .createQueryBuilder('sr')
+      .select('sr.sourceUrl', 'sourceUrl')
+      .where('sr.rejectedAt IS NULL')
+      .andWhere('sr.sourceUrl IS NOT NULL')
+      .getRawMany<{ sourceUrl: string }>();
+
+    const countsByHost = new Map<string, number>();
+    for (const r of rows) {
+      try {
+        const host = new URL(r.sourceUrl)
+          .hostname.replace(/^www\./, '')
+          .toLowerCase();
+        countsByHost.set(host, (countsByHost.get(host) ?? 0) + 1);
+      } catch {
+        // skip URLs that don't parse — they can't be matched to a host anyway
+      }
+    }
+
+    return sources.map((s) => {
+      let recordCount = 0;
+      if (s.host) {
+        for (const [host, count] of countsByHost) {
+          if (host === s.host || host.endsWith(`.${s.host}`)) {
+            recordCount += count;
+          }
+        }
+      }
+      return Object.assign(s, { recordCount });
     });
   }
 
@@ -714,6 +870,7 @@ export class AdminService {
       .innerJoin('sr.game', 'g')
       .addSelect('g.name', 'gameName')
       .where('sr.reportedAt IS NULL')
+      .andWhere('sr.rejectedAt IS NULL')
       .orderBy('sr.capturedAt', 'DESC')
       .limit(ISSUE_PREVIEW_LIMIT)
       .getManyAndCount();
@@ -726,6 +883,7 @@ export class AdminService {
       .createQueryBuilder('sr')
       .innerJoin('sr.game', 'g')
       .where('sr.note IS NOT NULL')
+      .andWhere('sr.rejectedAt IS NULL')
       .orderBy('sr.capturedAt', 'DESC')
       .limit(2000)
       .getMany();

@@ -8,6 +8,8 @@
  * stay traceable.
  */
 
+import { ConfidenceLevel, LauncherProfile } from '../entities';
+
 const DAY_MS = 24 * 3600 * 1000;
 const YEAR_MS = 365 * DAY_MS;
 
@@ -113,6 +115,99 @@ export const XBOX_BOXLEITER_DEFAULT_LOW = 35;
 export const XBOX_BOXLEITER_DEFAULT_HIGH = 90;
 export const XBOX_BOXLEITER_PLAUSIBLE_MIN = 6;
 export const XBOX_BOXLEITER_PLAUSIBLE_MAX = 600;
+
+// ─── Peak CCU multiplier (Steam concurrent players → PC units) ──────────────
+//
+// A largely independent second signal for PC sales, used alongside the
+// reviews-based Boxleiter estimate. The all-time peak concurrent player
+// count is polled daily from Steam's `GetNumberOfCurrentPlayers` and
+// persisted as `SignalSnapshot(STEAM_PEAK_CCU)`. At estimation time the
+// CCU-based range `[peak × LOW, peak × HIGH]` is intersected with the
+// reviews-based range to tighten the PC estimate.
+//
+// Empirical anchor points (peak CCU → eventual lifetime Steam units):
+//   PUBG          3.2M peak → ~75M    (~23×)
+//   Cyberpunk     1.0M peak → ~30M    (~30×)
+//   Elden Ring     953K peak → ~25M    (~26×)
+//   Helldivers 2   458K peak → ~12M    (~26×)
+//   BG3            875K peak → ~15M    (~17×)
+//   Hogwarts Leg.  879K peak → ~15M    (~17×)
+//   Palworld       2.1M peak → ~15M+   (~7× short term, climbs with age)
+//   Stardew Valley  95K peak → ~30M+   (~315× long tail)
+//
+// The default range is deliberately wide because the units/peak-CCU ratio
+// grows strongly with age (single-player Y1 hits sit around 10-25×, long-
+// tail catalog titles climb past 100×). It is meant to be tightened by
+// intersecting with the reviews-based range, not used standalone.
+//
+// PLAUSIBLE_MIN/MAX are reserved for a future per-game calibrated CCU
+// multiplier (mirroring the Boxleiter recalibration flow); they are not
+// yet read by EstimationService.
+
+export const PC_CCU_DEFAULT_LOW = 8;
+export const PC_CCU_DEFAULT_HIGH = 40;
+export const PC_CCU_PLAUSIBLE_MIN = 4;
+export const PC_CCU_PLAUSIBLE_MAX = 500;
+
+// ─── Launcher profile scaling (Steam → total PC) ────────────────────────────
+//
+// The Boxleiter reviews multiplier and the peak-CCU multiplier above both
+// implicitly assume Steam captures ~100% of the PC market for a game —
+// true for most indie titles and many AAA, but not for titles whose
+// publisher pushes players to a competing storefront (Epic, GOG) or a
+// proprietary launcher (Ubisoft Connect, EA App, Battle.net, Microsoft
+// Store). Without correction, Boxleiter on Steam under-shoots total PC
+// units by ~2× (multi-store) up to ~5× (launcher-primary) for those games.
+//
+// The `Publisher.launcherProfile` field (set by heuristic on a curated
+// list of big publishers, editable in the admin) drives a per-profile
+// scaling of the *default* reviews and CCU ranges. When a game has a
+// per-game calibrated multiplier (`calibratedMultiplier`, derived from
+// a declared OFFICIAL/MEDIA figure), scaling is intentionally skipped:
+// the empirical calibration has already absorbed the launcher effect.
+//
+// Anchor reasoning:
+//   - STEAM_DOMINANT (default for unmatched publishers): no scaling.
+//   - MULTI_STORE: Steam ~ 40-70% of PC → range × [1.4, 2.0].
+//   - LAUNCHER_PRIMARY: Steam ~ 10-25% of PC → range × [3.5, 7.0].
+//
+// The fourchette widens proportionally because per-game variance grows
+// with launcher fragmentation: confidence is also capped (see
+// `LAUNCHER_CONFIDENCE_CAP`) so callers don't mistake a wide launcher-
+// primary estimate for a HIGH-confidence one.
+
+export const LAUNCHER_REVIEWS_FACTOR: Record<
+  LauncherProfile,
+  { low: number; high: number }
+> = {
+  [LauncherProfile.STEAM_DOMINANT]: { low: 1.0, high: 1.0 },
+  [LauncherProfile.MULTI_STORE]: { low: 1.4, high: 2.0 },
+  [LauncherProfile.LAUNCHER_PRIMARY]: { low: 3.5, high: 7.0 },
+};
+
+export const LAUNCHER_CCU_FACTOR: Record<
+  LauncherProfile,
+  { low: number; high: number }
+> = {
+  [LauncherProfile.STEAM_DOMINANT]: { low: 1.0, high: 1.0 },
+  [LauncherProfile.MULTI_STORE]: { low: 1.4, high: 2.0 },
+  [LauncherProfile.LAUNCHER_PRIMARY]: { low: 3.5, high: 7.0 },
+};
+
+// Maximum confidence the estimation engine is allowed to return for a
+// PC estimate, based on the publisher's launcher profile. STEAM_DOMINANT
+// keeps the natural HIGH/MEDIUM/LOW from signal density; MULTI_STORE caps
+// at MEDIUM (Steam-only signals can never be HIGH-confidence on a multi-
+// store title); LAUNCHER_PRIMARY caps at LOW (Steam signal is a minority
+// proxy by construction).
+export const LAUNCHER_CONFIDENCE_CAP: Record<
+  LauncherProfile,
+  ConfidenceLevel | null
+> = {
+  [LauncherProfile.STEAM_DOMINANT]: null,
+  [LauncherProfile.MULTI_STORE]: ConfidenceLevel.MEDIUM,
+  [LauncherProfile.LAUNCHER_PRIMARY]: ConfidenceLevel.LOW,
+};
 
 // Tightening factor applied around a calibrated multiplier when computing the
 // per-platform Boxleiter range: low = m * (1 - X), high = m * (1 + X).

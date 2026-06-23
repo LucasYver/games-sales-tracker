@@ -4,7 +4,7 @@ import {
   type AdminGameSummary,
   type PaginatedAdmin,
 } from '@/lib/admin';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { AddGameForm } from '../_components/AddGameForm';
 import { DeleteButton } from '../_components/DeleteButton';
 import { deleteGame } from '../actions';
 
@@ -70,6 +71,23 @@ export default async function AdminGamesPage({
           {total.toLocaleString()} tracked games. Most-recently updated first.
         </p>
       </header>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold tracking-wide uppercase">
+            Add game from IGDB
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          <p className="text-muted-foreground text-sm">
+            Paste the canonical IGDB game URL (e.g.{' '}
+            <code className="text-xs">https://www.igdb.com/games/elden-ring</code>
+            ). If a Steam app is linked, the full Steam ingest runs; otherwise
+            we seed console store ratings and an initial estimate.
+          </p>
+          <AddGameForm />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="pt-6">

@@ -13,6 +13,10 @@ export interface WikipediaFigure {
 export interface WikipediaSales {
   global: WikipediaFigure | null;
   perPlatform: { platform: Platform; figure: WikipediaFigure }[];
+  // Engagement milestone (e.g. "X million players", "X downloads"). Stored
+  // separately so it can never feed the sales reconciliation / calibration
+  // math — it conflates copies sold with subscription users and free trials.
+  engagement: WikipediaFigure | null;
   sourceUrl: string;
 }
 
@@ -24,6 +28,7 @@ interface LlmFigure {
 interface LlmResult {
   global: LlmFigure | null;
   perPlatform: (LlmFigure & { platform: string })[];
+  engagement: LlmFigure | null;
 }
 
 const API = 'https://en.wikipedia.org/w/api.php';
@@ -33,22 +38,26 @@ const MAX_TEXT_CHARS = 24000;
 
 const SYSTEM_PROMPT = `You are a precise data extractor. You are given the plain text of a Wikipedia article about a video game. Extract sales figures ONLY when explicitly stated in the text. NEVER use outside knowledge and NEVER estimate.
 
-CUMULATIVE UNITS ONLY — only extract a figure that represents the TOTAL CUMULATIVE LIFETIME number of UNITS (copies) sold for the game ("has sold X copies", "X copies sold to date", "X copies as of [date]"). NEVER extract:
+CUMULATIVE UNITS ONLY for "global"/"perPlatform" — only put a figure there if it represents the TOTAL CUMULATIVE LIFETIME number of UNITS (copies) sold for the game ("has sold X copies", "X copies sold to date", "X copies as of [date]"). NEVER put in "global"/"perPlatform":
   - "sold X in its first week / first month / launch weekend"
   - "X copies in [year/quarter]" when it is clearly a periodic figure (e.g. "X in Q1", "weekly sales of X")
   - Fiscal-period figures: "in FY2024", "during fiscal year ended…", "fiscal Q3" — PERIODIC, not lifetime
-  - "X players" / "X downloads" / "X concurrent users" / "X subscribers" — these are NOT sales
+  - "X players" / "X downloads" / "X concurrent users" / "X subscribers" — these are engagement metrics; see the "engagement" field below
   - MONETARY figures: any number with $/€/£/¥ or words like "revenue", "earnings", "turnover". In English finance, "sales" often means revenue: "$3.9 million in sales" is REVENUE, NOT 3.9M units. If a currency sign appears, REJECT.
   - DLC, expansions, bundles, remasters, the franchise/series, or other games
 
-EXAMPLES OF FIGURES TO REJECT (return null):
+EXAMPLES OF FIGURES TO REJECT for "global"/"perPlatform" (return null):
   - "the game brought in $3.9 million in sales in FY2024" → revenue + fiscal period
   - "moved 200,000 copies in the first week" → periodic
-  - "5 million Game Pass players" → engagement, not sales
 
-- "global": the most RECENT cumulative worldwide sales total for the base game (copies/units sold or shipped). Convert to an integer (e.g. "30 million" -> 30000000). If several dated cumulative figures exist, choose the most recent one. Put that figure's date in "date" as "YYYY-MM-DD", "YYYY-MM" or "YYYY" (null if none is stated). Put the verbatim sentence the figure comes from in "quote".
+- "global": the most RECENT cumulative worldwide sales total for the base game in UNITS (copies/units sold or shipped). Convert to an integer (e.g. "30 million" -> 30000000). If several dated cumulative figures exist, choose the most recent one. Put that figure's date in "date" as "YYYY-MM-DD", "YYYY-MM" or "YYYY" (null if none is stated). Put the verbatim sentence the figure comes from in "quote".
 - "perPlatform": include a platform ONLY when the text gives a CUMULATIVE sales number specifically for that one platform (e.g. "sold 5 million on PS5 to date"). NEVER split or distribute a worldwide/combined total across platforms. If the text only states a worldwide/combined total, "perPlatform" MUST be empty. The quote must name the platform AND describe a cumulative figure. Map PS4/PS5 -> PLAYSTATION, Xbox One/Series -> XBOX, Windows/PC -> PC, anything else -> OTHER. We only track PC, PlayStation and Xbox; ignore Switch and mobile figures.
-- If no reliable cumulative figure exists, set "global" to null and "perPlatform" to [].
+- "engagement": the most RECENT cumulative ENGAGEMENT milestone reported for the target base game when no copies-sold number is available (or in addition to it). Examples to capture here (NOT in "global"):
+    - "X million players have played the game"
+    - "X million players reached" (especially when subscription users like Ubisoft+ / Xbox Game Pass / PS Plus are explicitly included)
+    - "X million downloads" / "X million unique players"
+  Must be CUMULATIVE LIFETIME for the TARGET base game. Same date/quote rules as "global". Set null when no such figure exists.
+- If no reliable figure exists at all, set "global" to null, "perPlatform" to [] and "engagement" to null.
 
 Every "quote" MUST be copied verbatim from the provided text.`;
 
@@ -83,8 +92,18 @@ const SCHEMA: Record<string, unknown> = {
         required: ['platform', 'units', 'date', 'quote'],
       },
     },
+    engagement: {
+      type: ['object', 'null'],
+      additionalProperties: false,
+      properties: {
+        units: { type: 'integer' },
+        date: { type: ['string', 'null'] },
+        quote: { type: 'string' },
+      },
+      required: ['units', 'date', 'quote'],
+    },
   },
-  required: ['global', 'perPlatform'],
+  required: ['global', 'perPlatform', 'engagement'],
 };
 
 @Injectable()
@@ -132,6 +151,19 @@ export class WikipediaClient {
       const global =
         globalCandidate && globalCandidate.reportedAt ? globalCandidate : null;
 
+      const engagementCandidate =
+        result.engagement &&
+        isGrounded(result.engagement.quote) &&
+        !isPeriodicQuote(result.engagement.quote)
+          ? this.toFigure(result.engagement)
+          : null;
+      const engagement =
+        engagementCandidate &&
+        engagementCandidate.reportedAt &&
+        engagementCandidate.units > 0
+          ? engagementCandidate
+          : null;
+
       const perPlatform = (result.perPlatform ?? [])
         .filter((p) => isGrounded(p.quote) && !isPeriodicQuote(p.quote))
         .map((p) => ({
@@ -148,8 +180,8 @@ export class WikipediaClient {
             this.quoteMentionsPlatform(p.platform, p.figure.quote),
         );
 
-      if (!global && perPlatform.length === 0) return null;
-      return { global, perPlatform, sourceUrl };
+      if (!global && perPlatform.length === 0 && !engagement) return null;
+      return { global, perPlatform, engagement, sourceUrl };
     } catch (error) {
       // Rate-limit (429) is a transient issue — log at debug only so we don't
       // spam the console; the other sources (RSS, Tavily, stores) will pick up
@@ -212,76 +244,6 @@ export class WikipediaClient {
     }
     const parsed = Date.parse(value);
     return Number.isNaN(parsed) ? null : new Date(parsed);
-  }
-
-  /**
-   * Resolve the Wikipedia article for a game and return every external URL it
-   * cites. These are the `<ref>` links in the article — typically press,
-   * analyst and IR pages that originally reported the sales figures cited on
-   * Wikipedia. Best-effort: returns [] on any failure.
-   */
-  async getReferencedUrls(name: string): Promise<string[]> {
-    try {
-      // Try the direct page title first (saves 1-2 extra API calls compared to
-      // going through resolveArticle). Fall back to the video-game variant.
-      let data: unknown = null;
-      for (const candidate of [name, `${name} (video game)`]) {
-        try {
-          const response = await axios.get(API, {
-            params: {
-              action: 'parse',
-              page: candidate,
-              prop: 'externallinks',
-              format: 'json',
-              redirects: 1,
-            },
-            headers: { 'User-Agent': USER_AGENT },
-            timeout: 15000,
-          });
-          const apiError = response.data?.error?.code;
-          if (!apiError) {
-            data = response.data;
-            break;
-          }
-          // missingtitle → try next variant; any other API error → stop.
-          if (apiError !== 'missingtitle') return [];
-        } catch (err: unknown) {
-          const status = (err as { response?: { status?: number } })?.response
-            ?.status;
-          // Rate-limited: bail out silently — the next refresh will retry.
-          if (status === 429) return [];
-          throw err;
-        }
-        await new Promise((r) => setTimeout(r, 1200));
-      }
-      if (!data) return [];
-
-      const links: string[] =
-        (data as { parse?: { externallinks?: string[] } } | null)?.parse
-          ?.externallinks ?? [];
-      // Deduplicate and strip Wayback Machine wrappers to the original URL.
-      const seen = new Set<string>();
-      const result: string[] = [];
-      for (const raw of links) {
-        const url = this.unwrapWayback(raw);
-        if (!url || seen.has(url)) continue;
-        seen.add(url);
-        result.push(url);
-      }
-      return result;
-    } catch (error) {
-      this.logger.warn(`Wikipedia refs failed for "${name}": ${error}`);
-      return [];
-    }
-  }
-
-  // Strip Wayback Machine URLs to their archived target so we fetch the live
-  // press page rather than an archive snapshot.
-  private unwrapWayback(url: string): string {
-    const m = url.match(
-      /^https?:\/\/web\.archive\.org\/web\/\d+(?:if_)?\/(.+)$/,
-    );
-    return m ? m[1] : url;
   }
 
   private async resolveArticle(

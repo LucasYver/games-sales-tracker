@@ -1,5 +1,25 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
+import * as cheerio from 'cheerio';
+
+const STEAMCHARTS_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
+  '(KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+
+const MONTH_NAMES = [
+  'january',
+  'february',
+  'march',
+  'april',
+  'may',
+  'june',
+  'july',
+  'august',
+  'september',
+  'october',
+  'november',
+  'december',
+];
 
 export interface SteamAppDetails {
   appId: number;
@@ -110,6 +130,95 @@ export class SteamClient {
   }
 
   /**
+   * Current number of concurrent players on Steam, via the public
+   * `ISteamUserStats/GetNumberOfCurrentPlayers` endpoint. No API key
+   * required. Polled daily to maintain a `STEAM_CONCURRENT` time series and
+   * a running `STEAM_PEAK_CCU` peak per game. The peak CCU is a second,
+   * largely independent signal of installed base used to tighten the
+   * Boxleiter-based PC estimate via range intersection.
+   */
+  async getCurrentPlayerCount(appId: number): Promise<number | null> {
+    try {
+      const { data } = await axios.get(
+        'https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/',
+        { params: { appid: appId, format: 'json' }, timeout: 15000 },
+      );
+      const players = data?.response?.player_count;
+      if (typeof players !== 'number' || !Number.isFinite(players) || players < 0) {
+        return null;
+      }
+      return players;
+    } catch (error) {
+      this.logger.warn(`getCurrentPlayerCount failed for ${appId}: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Scrape SteamCharts' "All-time peak" stat for this app, plus the month
+   * in which it was reached. The Steam Web API only exposes the *current*
+   * player count, so historical peaks for hits we started tracking late
+   * (Palworld's 2.1M in Jan 2024, etc.) are otherwise unrecoverable.
+   *
+   * Returns `{ peak, peakAt }`:
+   *  - `peak`: the all-time peak concurrent players reported by SteamCharts.
+   *  - `peakAt`: end-of-month date of the row in the monthly breakdown
+   *    whose peak matches the all-time value (UTC). Null when the match
+   *    cannot be identified — callers should then fall back to "now" for
+   *    the snapshot's capturedAt.
+   *
+   * Returns `null` on HTTP error, empty payload, or when the all-time peak
+   * value can't be located in the page.
+   */
+  async getAllTimePeakCcu(appId: number): Promise<{
+    peak: number;
+    peakAt: Date | null;
+  } | null> {
+    try {
+      const { data: html } = await axios.get<string>(
+        `https://steamcharts.com/app/${appId}`,
+        {
+          headers: { 'User-Agent': STEAMCHARTS_USER_AGENT },
+          timeout: 20000,
+          responseType: 'text',
+          transformResponse: (raw: unknown) => raw,
+        },
+      );
+      if (typeof html !== 'string' || html.length === 0) return null;
+
+      const $ = cheerio.load(html);
+
+      let peak: number | null = null;
+      $('.app-stat').each((_, el) => {
+        const label = $(el).text().toLowerCase();
+        if (!label.includes('all-time peak')) return;
+        const raw = $(el).find('.num').first().text().trim();
+        const n = Number(raw.replace(/[,\s]/g, ''));
+        if (Number.isFinite(n) && n > 0) peak = n;
+      });
+      if (peak === null) return null;
+
+      let peakAt: Date | null = null;
+      $('.common-table tbody tr').each((_, tr) => {
+        const $tr = $(tr);
+        const label = $tr.find('.month-cell').text().trim();
+        if (!label || label.toLowerCase().includes('last 30 days')) return;
+        const peakCell = $tr.find('td.num').last().text().trim();
+        const n = Number(peakCell.replace(/[,\s]/g, ''));
+        if (n === peak) {
+          const parsed = this.parseSteamChartsMonth(label);
+          if (parsed) peakAt = parsed;
+        }
+      });
+
+      return { peak, peakAt };
+    } catch (error) {
+      this.logger.warn(`getAllTimePeakCcu failed for ${appId}: ${error}`);
+      return null;
+    }
+  }
+
+  /**
    * Total number of Steam reviews. This is the core signal for the Boxleiter
    * estimation method.
    */
@@ -140,6 +249,22 @@ export class SteamClient {
     if (!raw) return null;
     const parsed = new Date(raw);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  /**
+   * Convert a SteamCharts month label like `"January 2024"` into the
+   * end-of-month date in UTC (so the snapshot timestamp falls inside the
+   * month it represents). Returns null on any unexpected format.
+   */
+  private parseSteamChartsMonth(label: string): Date | null {
+    const match = label.match(/^([A-Za-z]+)\s+(\d{4})$/);
+    if (!match) return null;
+    const monthIdx = MONTH_NAMES.indexOf(match[1].toLowerCase());
+    if (monthIdx < 0) return null;
+    const year = Number(match[2]);
+    if (!Number.isFinite(year)) return null;
+    // Day 0 of the *next* month = last day of the current month.
+    return new Date(Date.UTC(year, monthIdx + 1, 0));
   }
 
   // Accept when one normalized title is a prefix of the other (Steam store

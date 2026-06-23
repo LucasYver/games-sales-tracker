@@ -6,6 +6,7 @@ import {
   Library,
   Receipt,
   Globe,
+  Building2,
   AlertTriangle,
   LogOut,
 } from 'lucide-react';
@@ -45,6 +46,12 @@ const NAV_ITEMS = [
     href: '/admin/trusted-sources',
     label: 'Trusted sources',
     icon: Globe,
+    exact: false,
+  },
+  {
+    href: '/admin/publishers',
+    label: 'Publishers',
+    icon: Building2,
     exact: false,
   },
   {

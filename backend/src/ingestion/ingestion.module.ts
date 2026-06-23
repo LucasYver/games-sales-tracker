@@ -12,6 +12,7 @@ import { EstimationModule } from '../estimation/estimation.module';
 import { GamesModule } from '../games/games.module';
 import { LlmModule } from '../llm/llm.module';
 import { SourcesModule } from '../sources/sources.module';
+import { PublishersModule } from '../publishers/publishers.module';
 import { IngestionController } from './ingestion.controller';
 import { IngestionService } from './ingestion.service';
 import { SteamClient } from './steam.client';
@@ -19,9 +20,9 @@ import { IgdbClient } from './igdb.client';
 import { StoreRatingsClient } from './store-ratings.client';
 import { WikipediaClient } from './wikipedia.client';
 import { ArticleClient } from './article.client';
-import { DiscoveryClient } from './discovery.client';
 import { RssClient } from './rss.client';
 import { TavilyClient } from './tavily.client';
+import { PerplexityClient } from './perplexity.client';
 import { ExophaseClient } from './exophase.client';
 
 @Module({
@@ -38,6 +39,7 @@ import { ExophaseClient } from './exophase.client';
     GamesModule,
     LlmModule,
     SourcesModule,
+    PublishersModule,
   ],
   controllers: [IngestionController],
   providers: [
@@ -47,9 +49,9 @@ import { ExophaseClient } from './exophase.client';
     StoreRatingsClient,
     WikipediaClient,
     ArticleClient,
-    DiscoveryClient,
     RssClient,
     TavilyClient,
+    PerplexityClient,
     ExophaseClient,
   ],
   exports: [IngestionService],

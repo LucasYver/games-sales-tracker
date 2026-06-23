@@ -1,4 +1,5 @@
 export * from './enums';
+export * from './publisher.entity';
 export * from './game.entity';
 export * from './game-source.entity';
 export * from './signal-snapshot.entity';
