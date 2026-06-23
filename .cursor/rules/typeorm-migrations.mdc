@@ -1,0 +1,84 @@
+---
+description: TypeORM migration workflow — required when changing entities or DB schema
+globs: backend/src/entities/**/*.ts,backend/src/db/migrations/**/*.ts
+alwaysApply: false
+---
+
+# TypeORM Migration Workflow
+
+`synchronize` is **disabled** on this project. Every schema change must ship a
+migration, committed alongside the entity change.
+
+## When this applies
+
+Any modification under `backend/src/entities/` that changes the runtime DB
+schema:
+- adding/removing an `@Column`, `@Index`, `@ManyToOne`, etc.
+- adding a value to an `enum` referenced by `@Column({ type: 'enum', … })`
+- adding/removing an `@Entity` class
+- renaming columns or tables
+- changing column types / nullability / defaults
+
+Pure code-level changes (JSDoc, helper methods, type narrowing) **do not**
+require a migration.
+
+## Procedure
+
+After editing the entity:
+
+```bash
+cd backend
+npm run migration:generate -- src/db/migrations/<MeaningfulName>
+```
+
+Then:
+
+1. **Rename the generated file and class** to drop the leading `Schema` /
+   `Init` placeholder — keep the trailing timestamp.
+   - File: `1782199739719-AddPublisherTable.ts`
+   - Class: `AddPublisherTable1782199739719`
+   - `name` field inside the class: match the class name exactly.
+
+2. **Inspect** the generated `up` / `down` SQL. Watch for:
+   - `DROP INDEX` lines pointing at indexes created imperatively by
+     `DatabaseInitService` → declare them in the entity with
+     `@Index('<name>', { synchronize: false })` and regenerate.
+   - Enum recreations affecting `signal_snapshot_metric_enum` and similar →
+     those need the direct (non-pooled) URL at runtime, which is already
+     handled by `migration-runner.ts`. Leave them as generated.
+
+3. **Register** the class in the explicit migrations list. The list is
+   imported (not glob-loaded) so the Vercel bundler picks the files up.
+
+   ```typescript
+   // backend/src/db/migrations/index.ts
+   import { AddPublisherTable1782199739719 } from './1782199739719-AddPublisherTable';
+
+   export const migrations: MixedList<Function | string> = [
+     // … existing migrations, ordered by timestamp …
+     AddPublisherTable1782199739719,
+   ];
+   ```
+
+4. **Apply locally** to validate the SQL and record the migration in the
+   `migrations` table:
+
+   ```bash
+   npm run migration:run
+   ```
+
+5. **Commit** the entity change + the migration file + the index update in
+   the same commit.
+
+On the next Vercel cold-start, `runPendingMigrations` (in
+`backend/src/database/migration-runner.ts`) applies anything the production
+DB hasn't seen yet, guarded by a `pg_advisory_lock` to serialize concurrent
+serverless invocations.
+
+## Don't
+
+- Don't re-enable `synchronize: true`.
+- Don't bypass the explicit migration list with a glob — the Vercel bundler
+  strips unimported files from the function output.
+- Don't edit a migration that has already been applied on any environment.
+  Generate a new one to fix-forward.
