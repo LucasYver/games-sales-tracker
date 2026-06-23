@@ -96,7 +96,7 @@ export const AGREEMENT_GROWTH_PER_YEAR = FALLBACK_ANNUAL_GROWTH; // shared
 // PC / Steam — classical Boxleiter range (historic anchor).
 // Source: Tyler Glaiel "Boxleiter number", GameDiscoverCo (2023 update).
 export const PC_BOXLEITER_DEFAULT_LOW = 25;
-export const PC_BOXLEITER_DEFAULT_HIGH = 70;
+export const PC_BOXLEITER_DEFAULT_HIGH = 65;
 export const PC_BOXLEITER_PLAUSIBLE_MIN = 5;
 export const PC_BOXLEITER_PLAUSIBLE_MAX = 500;
 
@@ -561,3 +561,12 @@ export function genreProjectionMultiplier(
   if (ageDays < 7) return ageDays / 7;
   return interpolateCurve(buildGenreProjectionCurve(m1, tailY2, tailY5), ageDays);
 }
+
+
+// ─── Media weight ──────────────────────────────────────────────────────────
+//
+// Used by `GamesService.confidenceFromWeight` to determine the confidence
+// level of a media source.
+//
+// 50% = medium confidence
+export const MEDIA_WEIGHT = 50; // 50%

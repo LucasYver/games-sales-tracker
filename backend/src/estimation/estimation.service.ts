@@ -315,13 +315,7 @@ export class EstimationService {
 
   /**
    * Estimate sales for every supported platform. For each platform, returns
-   * up to two parallel estimates:
-   *   - the classical Boxleiter (signal × per-platform multiplier)
-   * Only the Boxleiter estimate is produced today. The achievement-based
-   * path is intentionally **disabled** at the call site (the underlying
-   * computation, snapshots scraping and persistence are left intact so
-   * we can re-enable it once the coverage constants are calibrated
-   * against publisher IR — see `BACKLOG.md`).
+   * the classical Boxleiter (signal × per-platform multiplier)
    *
    * Platforms with no usable signal are skipped silently; the game is
    * also skipped entirely if free-to-play.
@@ -342,19 +336,11 @@ export class EstimationService {
     if (!game || game.isFree) return [];
 
     const results: EstimateResult[] = [];
-    for (const cfg of this.platforms) {
+    for (const platform of game.platforms) {
+      const cfg = this.platforms.find((p) => p.platform === platform);
+      if (!cfg) continue;
       const boxleiter = await this.estimateForPlatform(game, cfg, asOf, opts);
       if (boxleiter) results.push(boxleiter);
-
-      // Achievement-based estimate intentionally disabled. Snapshots
-      // keep flowing into `achievement_snapshot` for future use; flip
-      // this back on once Exophase coverage constants are calibrated.
-      // const achievementBased = await this.estimateFromAchievementsForPlatform(
-      //   game,
-      //   cfg.platform,
-      //   asOf,
-      // );
-      // if (achievementBased) results.push(achievementBased);
     }
 
     // Lifecycle method: project today's PC units from the all-time
@@ -868,6 +854,7 @@ export class EstimationService {
       },
       order: { capturedAt: 'DESC' },
     });
+    console.log('latestSignal', latestSignal);
     if (!latestSignal || latestSignal.value <= 0) return null;
 
     const signalValue = latestSignal.value;
@@ -1228,159 +1215,6 @@ export class EstimationService {
     return best?.value ?? null;
   }
 
-  /**
-   * Achievement-based per-platform estimate from Exophase. The signal we
-   * feed in is the number of Exophase users who actually launched the
-   * game (sample size × unlock rate of the most common achievement), and
-   * we scale it up to the real owner count with a per-platform coverage
-   * range from `sales-modeling.constants.ts`. Returns null if no usable
-   * snapshot exists for this platform.
-   *
-   * On PC, when a Steam-official achievement snapshot exists in parallel,
-   * we measure Exophase's completionist bias (`pExo / pSteam`) on the
-   * most common achievement and divide the Exophase player count by it
-   * before scaling. This typically cuts ~15-30 % of overestimation. We
-   * tag the method `…-steam-corrected` so the source of the correction is
-   * visible in the admin.
-   *
-   * NOTE: currently dormant — not called from `estimateAllPlatforms`.
-   * Kept here so re-enabling it once Exophase coverage constants are
-   * calibrated against publisher IR is a one-line change at the call
-   * site. AchievementSnapshot rows keep flowing in regardless.
-   */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  private async estimateFromAchievementsForPlatform(
-    game: Game,
-    platform: Platform,
-    asOf?: Date,
-  ): Promise<EstimateResult | null> {
-    const coverage =
-      ACHIEVEMENT_COVERAGE[platform as keyof typeof ACHIEVEMENT_COVERAGE];
-    if (!coverage) return null;
-
-    const exophase = await this.latestExophaseCapture(game.id, platform, asOf);
-    if (!exophase) return null;
-
-    const { playersTracked, mostCommon } = exophase;
-    if (
-      playersTracked === null ||
-      playersTracked < ACHIEVEMENT_MIN_PLAYERS_TRACKED ||
-      mostCommon.percentEarned <= 0
-    ) {
-      return null;
-    }
-
-    let exophasePlayers =
-      (playersTracked * mostCommon.percentEarned) / 100;
-    let bias: number | null = null;
-
-    if (platform === Platform.PC) {
-      const steamMostCommon = await this.latestSteamApiMostCommonPercent(
-        game.id,
-        asOf,
-      );
-      if (steamMostCommon && steamMostCommon > 0) {
-        bias = mostCommon.percentEarned / steamMostCommon;
-        if (bias > 0) exophasePlayers /= bias;
-      }
-    }
-
-    const low = Math.round(exophasePlayers * coverage.low);
-    const high = Math.round(exophasePlayers * coverage.high);
-
-    if (
-      low < ACHIEVEMENT_ESTIMATE_MIN_UNITS ||
-      high > ACHIEVEMENT_ESTIMATE_MAX_UNITS ||
-      low > high
-    ) {
-      this.logger.debug(
-        `[estimation:achievements] "${game.name}" (${platform}) — out-of-range estimate [${low}, ${high}], skipping`,
-      );
-      return null;
-    }
-
-    const platformSlug = platform.toLowerCase();
-    const method =
-      bias !== null
-        ? `achievements-exophase-${platformSlug}-steam-corrected`
-        : `achievements-exophase-${platformSlug}`;
-
-    return {
-      platform,
-      estimatedLow: low,
-      estimatedHigh: high,
-      // Coverage constants are uncalibrated defaults; will be promoted once
-      // publisher IR figures land (see BACKLOG.md).
-      confidence: ConfidenceLevel.LOW,
-      method,
-    };
-  }
-
-  /**
-   * Latest Exophase capture for (game, platform), reduced to the two
-   * numbers the estimator needs: the sample size (`playersTracked`) and
-   * the most common achievement (`mostCommon`). All rows of a single
-   * capture share the same `capturedAt`, so we identify the last capture
-   * by its max timestamp and reduce its rows in memory.
-   */
-  private async latestExophaseCapture(
-    gameId: string,
-    platform: Platform,
-    asOf?: Date,
-  ): Promise<{
-    playersTracked: number | null;
-    mostCommon: AchievementSnapshot;
-  } | null> {
-    const rows = await this.achievements.find({
-      where: {
-        gameId,
-        platform,
-        source: SourceType.EXOPHASE,
-        ...(asOf ? { capturedAt: LessThanOrEqual(asOf) } : {}),
-      },
-      order: { capturedAt: 'DESC' },
-    });
-    if (rows.length === 0) return null;
-
-    const latestAt = rows[0].capturedAt.getTime();
-    const latest = rows.filter((r) => r.capturedAt.getTime() === latestAt);
-
-    const mostCommon = latest.reduce((max, a) =>
-      a.percentEarned > max.percentEarned ? a : max,
-    );
-    return { playersTracked: mostCommon.playersTracked, mostCommon };
-  }
-
-  /**
-   * Steam's official API exposes per-achievement unlock percentages over
-   * the entire playerbase. We persist them as SourceType.STEAM rows on
-   * Platform.PC. Here we return the highest one, which corresponds to the
-   * "most common achievement" — used to debias Exophase's completionist
-   * sample on PC.
-   */
-  private async latestSteamApiMostCommonPercent(
-    gameId: string,
-    asOf?: Date,
-  ): Promise<number | null> {
-    const rows = await this.achievements.find({
-      where: {
-        gameId,
-        platform: Platform.PC,
-        source: SourceType.STEAM,
-        ...(asOf ? { capturedAt: LessThanOrEqual(asOf) } : {}),
-      },
-      order: { capturedAt: 'DESC' },
-    });
-    if (rows.length === 0) return null;
-
-    const latestAt = rows[0].capturedAt.getTime();
-    const latest = rows.filter((r) => r.capturedAt.getTime() === latestAt);
-    return latest.reduce(
-      (max, a) => Math.max(max, a.percentEarned),
-      0,
-    );
-  }
-
   private resolveMultiplier(
     game: Game,
     cfg: PlatformConfig,
@@ -1499,6 +1333,14 @@ export class EstimationService {
    * Per-platform calibration always takes precedence: if any platform
    * was already calibrated by a non-GLOBAL record in the same pass,
    * we never overwrite it from the GLOBAL split.
+   * Example 
+   *   - PC: 100,000 units
+   *   - PS: 50,000 units
+   *   - Xbox: 25,000 units
+   *   - Global: 175,000 units
+   *   - Proxy: 100,000 * 0.5 + 50,000 * 0.3 + 25,000 * 0.2 = 75,000
+   *   - Share: 100,000 / 75,000 = 1.33
+   *   - Multiplier: 175,000 / 100,000 = 1.75
    */
   private async recalibrateFromGlobal(gameId: string): Promise<void> {
     const candidates = await this.salesRecords.find({

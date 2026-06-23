@@ -38,10 +38,10 @@ const MAX_TEXT_CHARS = 24000;
 
 const SYSTEM_PROMPT = `You are a precise data extractor. You are given the plain text of a Wikipedia article about a video game. Extract sales figures ONLY when explicitly stated in the text. NEVER use outside knowledge and NEVER estimate.
 
-CUMULATIVE UNITS ONLY for "global"/"perPlatform" — only put a figure there if it represents the TOTAL CUMULATIVE LIFETIME number of UNITS (copies) sold for the game ("has sold X copies", "X copies sold to date", "X copies as of [date]"). NEVER put in "global"/"perPlatform":
+CUMULATIVE UNITS ONLY for "global"/"perPlatform" — only put a figure there if it represents the TOTAL CUMULATIVE LIFETIME number of UNITS (copies) sold for the game ("has sold X copies", "X copies sold to date", "X copies as of [date]"). 
+NEVER put in "global"/"perPlatform":
   - "sold X in its first week / first month / launch weekend"
   - "X copies in [year/quarter]" when it is clearly a periodic figure (e.g. "X in Q1", "weekly sales of X")
-  - Fiscal-period figures: "in FY2024", "during fiscal year ended…", "fiscal Q3" — PERIODIC, not lifetime
   - "X players" / "X downloads" / "X concurrent users" / "X subscribers" — these are engagement metrics; see the "engagement" field below
   - MONETARY figures: any number with $/€/£/¥ or words like "revenue", "earnings", "turnover". In English finance, "sales" often means revenue: "$3.9 million in sales" is REVENUE, NOT 3.9M units. If a currency sign appears, REJECT.
   - DLC, expansions, bundles, remasters, the franchise/series, or other games

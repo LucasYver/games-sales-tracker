@@ -757,28 +757,20 @@ export class GamesService {
   }
 
   /**
-   * Distinct minute-aligned capture timestamps across SignalSnapshot and
-   * AchievementSnapshot for a game, ascending. Dedup at minute granularity
-   * because a single cron run writes several signals within the same
-   * second/minute — we want one rebuild point per refresh, not one per
-   * signal.
+   * Distinct minute-aligned capture timestamps across SignalSnapshot for a
+   * game, ascending. Dedup at minute granularity because a single cron run
+   * writes several signals within the same second/minute — we want one rebuild
+   * point per refresh, not one per signal.
    */
   private async collectCaptureMoments(gameId: string): Promise<Date[]> {
-    const [signals, achievements] = await Promise.all([
-      this.signals.find({
-        where: { gameId },
-        select: { capturedAt: true },
-        order: { capturedAt: 'ASC' },
-      }),
-      this.achievements.find({
-        where: { gameId },
-        select: { capturedAt: true },
-        order: { capturedAt: 'ASC' },
-      }),
-    ]);
+    const signals = await this.signals.find({
+      where: { gameId },
+      select: { capturedAt: true },
+      order: { capturedAt: 'ASC' },
+    });
 
     const byMinute = new Map<number, Date>();
-    for (const row of [...signals, ...achievements]) {
+    for (const row of signals) {
       const t = row.capturedAt;
       const minuteKey = Math.floor(t.getTime() / 60_000);
       if (!byMinute.has(minuteKey)) byMinute.set(minuteKey, t);
