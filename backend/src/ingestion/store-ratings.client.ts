@@ -42,35 +42,127 @@ export class StoreRatingsClient {
       );
       if (!search) return null;
 
-      const link = search.match(/\/product\/[A-Z0-9_-]+/);
-      if (!link) return null;
+      // Resolve the parent concept rather than a single SKU. PSN exposes
+      // a per-SKU `totalRatingsCount` on every product page (PS4 vs PS5,
+      // Standard vs Deluxe vs Ultimate, currency add-ons like "FC Points"),
+      // each with its own — usually tiny — count. The concept page
+      // aggregates the whole catalog and matches the canonical headline
+      // PSN displays (e.g. 159k for EA SPORTS FC 24 vs ~20 for a random
+      // points pack SKU).
+      const conceptId = await this.resolvePsConceptId(search);
+      if (!conceptId) return null;
 
-      const url = `https://store.playstation.com/en-us${link[0]}`;
+      const url = `https://store.playstation.com/en-us/concept/${conceptId}`;
       const page = await this.fetch(url);
       if (!page) return null;
 
       const title = this.extractPsTitle(page);
       if (!title || !this.titleMatches(name, title)) return null;
 
-      const star = page.match(
-        /"starRating":\{"__typename":"StarRating","averageRating":([\d.]+),"totalRatingsCount":(\d+)/,
-      );
-      if (!star) return null;
-
-      const ratingCount = Number(star[2]);
-      if (ratingCount <= 0) return null;
+      const rating = this.extractPsStarRating(page);
+      if (!rating || rating.ratingCount <= 0) return null;
 
       return {
         platform: Platform.PLAYSTATION,
         metric: SignalMetric.PS_RATINGS,
-        ratingCount,
-        averageRating: Number(star[1]),
+        ratingCount: rating.ratingCount,
+        averageRating: rating.averageRating,
         sourceUrl: url,
       };
     } catch (error) {
       this.logger.warn(`PlayStation lookup failed for "${name}": ${error}`);
       return null;
     }
+  }
+
+  /**
+   * Resolve the PSN `conceptId` for a search result page. PSN's search
+   * page is now a SPA shell that no longer inlines `/concept/...` links;
+   * server-rendered tiles only surface `/product/...` URLs. We fetch the
+   * first SKU page and read its parent `conceptId` from the embedded
+   * telemetry payload — every SKU under a game (including currency
+   * add-ons such as "FC Points") references the same parent concept,
+   * so this still lands on the right page even when the search ranks an
+   * add-on ahead of the base game.
+   */
+  private async resolvePsConceptId(
+    searchHtml: string,
+  ): Promise<string | null> {
+    const direct = searchHtml.match(/\/concept\/(\d+)/);
+    if (direct) return direct[1];
+
+    const productLink = searchHtml.match(/\/product\/[A-Z0-9_-]+/);
+    if (!productLink) return null;
+
+    const productUrl = `https://store.playstation.com/en-us${productLink[0]}`;
+    const productPage = await this.fetch(productUrl);
+    if (!productPage) return null;
+
+    return this.extractPsConceptId(productPage);
+  }
+
+  /**
+   * Extract a non-empty `conceptId` from a product page. The id is
+   * embedded inside an HTML-encoded JSX telemetry blob (so it shows up
+   * as `conceptId&quot;:&quot;10007176&quot;` and, double-escaped,
+   * `conceptId\u0026quot;:\u0026quot;10007176\u0026quot;`). We decode
+   * both layers, then pick the first non-empty `conceptId` occurrence —
+   * some entries are blank placeholders for promotional cross-sell
+   * tiles and must be skipped.
+   */
+  private extractPsConceptId(html: string): string | null {
+    const decoded = html
+      .replace(/\\u0026quot;/g, '"')
+      .replace(/&quot;/g, '"');
+    for (const m of decoded.matchAll(/"conceptId":"(\d+)"/g)) {
+      if (m[1]) return m[1];
+    }
+    return null;
+  }
+
+  /**
+   * Extract the canonical star rating block from a concept page. PSN
+   * periodically reorders the JSON fields (today
+   * `averageRatingForDisplay` sits between `averageRating` and
+   * `totalRatingsCount`, and `ratingsDistribution` adds nested objects
+   * in between), so we walk the brace-balanced block as a whole and
+   * pull both numbers independently. The first `"starRating":{...}` on
+   * a concept page is the `defaultProduct`'s rating, which aggregates
+   * the catalog — exactly what we want.
+   */
+  private extractPsStarRating(
+    html: string,
+  ): { averageRating: number; ratingCount: number } | null {
+    // Anchor on the __typename to skip an unrelated `"starRating":{...}`
+    // entry the page also emits as part of its JS bundle manifest
+    // (`"starRating":{"js":[...]}`) — that one has no rating data.
+    const marker = '"starRating":';
+    const dataMarker = `${marker}{"__typename":"StarRating"`;
+    const start = html.indexOf(dataMarker);
+    if (start < 0) return null;
+    const block = this.readBalancedObject(html, start + marker.length);
+    if (!block) return null;
+    const avg = block.match(/"averageRating":([\d.]+)/);
+    const count = block.match(/"totalRatingsCount":(\d+)/);
+    if (!avg || !count) return null;
+    return {
+      averageRating: Number(avg[1]),
+      ratingCount: Number(count[1]),
+    };
+  }
+
+  private readBalancedObject(html: string, openIndex: number): string | null {
+    if (html[openIndex] !== '{') return null;
+    let depth = 0;
+    for (let i = openIndex; i < html.length; i++) {
+      const ch = html[i];
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) return html.slice(openIndex, i + 1);
+      }
+    }
+    return null;
   }
 
   private async getXbox(name: string): Promise<StoreRating | null> {
