@@ -139,6 +139,11 @@ export interface AdminEstimate {
   estimatedHigh: number;
   confidence: ConfidenceLevel;
   method: string;
+  // Reference rows are produced for diagnostic comparison only
+  // (alternative variants on the calibration / ccu-intersect / genre
+  // axes). They are excluded from the `aggregated` consensus and
+  // rendered with a muted style next to the canonical row.
+  isReference: boolean;
   computedAt: string;
 }
 
@@ -179,6 +184,12 @@ export interface AdminEstimateSnapshot {
   computedAt: string;
   estimatedTodayLow: number;
   estimatedTodayHigh: number;
+  // "Pure algo" headline: same range but computed with all
+  // calibrated multipliers disabled AND no declared-figure floor/cap
+  // in the reconciliation step. Nullable: snapshots persisted before
+  // the column was introduced don't have it.
+  pureEstimatedTodayLow: number | null;
+  pureEstimatedTodayHigh: number | null;
   reconciliation: AdminReconciliationEntry[];
 }
 
@@ -317,6 +328,8 @@ export interface AdminGenreProfile {
   firstWeekToYearOneMultiplier: number;
   year2Retention: Year2Retention;
   lifecycleDriver: string | null;
+  peakCcuToWeekOneLow: number;
+  peakCcuToWeekOneHigh: number;
   genreCount: number;
   updatedAt: string;
 }

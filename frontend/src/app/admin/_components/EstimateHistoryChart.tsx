@@ -46,6 +46,10 @@ const chartConfig: ChartConfig = {
     label: 'Midpoint',
     color: 'var(--chart-1)',
   },
+  pureMid: {
+    label: 'Pure algo',
+    color: 'var(--muted-foreground)',
+  },
   pcMid: { label: 'PC', color: PLATFORM_COLORS.PC! },
   playstationMid: {
     label: 'PlayStation',
@@ -82,6 +86,7 @@ interface ChartPoint {
   high: number;
   mid: number;
   range: [number, number];
+  pureMid?: number;
   pcMid?: number;
   playstationMid?: number;
   xboxMid?: number;
@@ -89,8 +94,9 @@ interface ChartPoint {
 }
 
 export function EstimateHistoryChart({ snapshots }: Props) {
-  const { data, presentPlatforms } = useMemo(() => {
+  const { data, presentPlatforms, hasPure } = useMemo(() => {
     const platforms = new Set<Platform>();
+    let pure = false;
     const points: ChartPoint[] = snapshots.map((s) => {
       const point: ChartPoint = {
         t: new Date(s.computedAt).getTime(),
@@ -99,6 +105,15 @@ export function EstimateHistoryChart({ snapshots }: Props) {
         mid: Math.round((s.estimatedTodayLow + s.estimatedTodayHigh) / 2),
         range: [s.estimatedTodayLow, s.estimatedTodayHigh],
       };
+      if (
+        s.pureEstimatedTodayLow !== null &&
+        s.pureEstimatedTodayHigh !== null
+      ) {
+        point.pureMid = Math.round(
+          (s.pureEstimatedTodayLow + s.pureEstimatedTodayHigh) / 2,
+        );
+        pure = true;
+      }
       for (const r of s.reconciliation) {
         const key = PLATFORM_DATA_KEY[r.platform];
         if (!key) continue;
@@ -108,7 +123,7 @@ export function EstimateHistoryChart({ snapshots }: Props) {
       }
       return point;
     });
-    return { data: points, presentPlatforms: platforms };
+    return { data: points, presentPlatforms: platforms, hasPure: pure };
   }, [snapshots]);
 
   if (data.length < 2) {
@@ -164,7 +179,10 @@ export function EstimateHistoryChart({ snapshots }: Props) {
                   ];
                 }
                 if (name === 'mid') {
-                  return [formatUnits(value as number), 'Headline midpoint'];
+                  return [formatUnits(value as number), 'Reconciled mid'];
+                }
+                if (name === 'pureMid') {
+                  return [formatUnits(value as number), 'Pure algo mid'];
                 }
                 for (const [platform, key] of Object.entries(
                   PLATFORM_DATA_KEY,
@@ -197,6 +215,18 @@ export function EstimateHistoryChart({ snapshots }: Props) {
           dot={false}
           isAnimationActive={false}
         />
+        {hasPure && (
+          <Line
+            dataKey="pureMid"
+            type="monotone"
+            stroke="var(--color-pureMid)"
+            strokeWidth={1.5}
+            strokeDasharray="2 3"
+            dot={false}
+            connectNulls
+            isAnimationActive={false}
+          />
+        )}
         {(Object.keys(PLATFORM_DATA_KEY) as Platform[])
           .filter((p) => presentPlatforms.has(p))
           .map((p) => (

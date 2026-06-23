@@ -195,6 +195,8 @@ export interface UpdateGenreProfilePayload {
   firstWeekToYearOneMultiplier?: number;
   year2Retention?: Year2Retention;
   lifecycleDriver?: string | null;
+  peakCcuToWeekOneLow?: number;
+  peakCcuToWeekOneHigh?: number;
 }
 
 export async function updateGenreProfile(

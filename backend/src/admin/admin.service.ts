@@ -112,6 +112,8 @@ export interface AdminEstimateSnapshot {
   computedAt: Date;
   estimatedTodayLow: number;
   estimatedTodayHigh: number;
+  pureEstimatedTodayLow: number | null;
+  pureEstimatedTodayHigh: number | null;
   reconciliation: SerializedReconciliationEntry[];
 }
 
@@ -497,6 +499,8 @@ export class AdminService {
         computedAt: s.computedAt,
         estimatedTodayLow: s.estimatedTodayLow,
         estimatedTodayHigh: s.estimatedTodayHigh,
+        pureEstimatedTodayLow: s.pureEstimatedTodayLow,
+        pureEstimatedTodayHigh: s.pureEstimatedTodayHigh,
         reconciliation: s.reconciliation,
       }),
     );

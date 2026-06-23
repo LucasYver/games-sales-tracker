@@ -20,6 +20,10 @@ import {
   EstimationMethodService,
 } from './estimation-method.service';
 import {
+  GenresService,
+  type ResolvedGenreProfile,
+} from '../genres/genres.service';
+import {
   ACHIEVEMENT_ESTIMATE_MAX_UNITS,
   ACHIEVEMENT_ESTIMATE_MIN_UNITS,
   ACHIEVEMENT_MIN_PLAYERS_TRACKED,
@@ -60,6 +64,7 @@ import {
   XBOX_BOXLEITER_PLAUSIBLE_MIN,
   ageInDays,
   firstWeekProjectionMultiplier,
+  genreProjectionMultiplier,
 } from '../games/sales-modeling.constants';
 
 const CONFIDENCE_ORDER: ConfidenceLevel[] = [
@@ -147,11 +152,57 @@ const CONFIDENCE_RANK: Record<ConfidenceLevel, number> = {
   [ConfidenceLevel.HIGH]: 2,
 };
 
+// Multiplier applied on top of a method's `defaultWeight` in the
+// aggregate, based on the confidence that method produced for THIS
+// game. A method anchored on a reliable declared figure (HIGH, e.g.
+// calibrated Boxleiter) should outweigh a rougher lifecycle proxy
+// (MEDIUM) even when the latter has a higher static `defaultWeight`.
+//
+// Key property: when every contributor shares the same confidence the
+// factor cancels out in the weighted average, so single-confidence
+// platforms (the common case) behave exactly as before — only
+// MIXED-confidence aggregates shift. Tunable; the gap between tiers
+// controls how strongly we defer to the most trustworthy method.
+const AGGREGATION_CONFIDENCE_WEIGHT: Record<ConfidenceLevel, number> = {
+  [ConfidenceLevel.LOW]: 0.3,
+  [ConfidenceLevel.MEDIUM]: 0.55,
+  [ConfidenceLevel.HIGH]: 1.0,
+};
+
 const CONFIDENCE_BY_RANK = [
   ConfidenceLevel.LOW,
   ConfidenceLevel.MEDIUM,
   ConfidenceLevel.HIGH,
 ];
+
+/**
+ * Knobs to switch on alternative estimation paths. Each axis is
+ * independent; combining them lets the variant generator enumerate
+ * the full cartesian product (calibration × ccu-intersect × genre)
+ * for diagnostic display in the admin UI.
+ *
+ *   - `ignoreCalibration`: forces `resolveMultiplier` to skip
+ *     `Game.calibratedMultiplier*` and use the platform default
+ *     range. Used both for the "pure algo" snapshot total and as one
+ *     axis of the reference-variant matrix.
+ *   - `skipCcuIntersection`: PC only. Disables
+ *     `applyCcuIntersection` so the row is the pure
+ *     reviews-multiplier estimate without the CCU cross-check.
+ *   - `ignoreGenreProfile`: forces the first-week extrapolation back
+ *     onto the legacy size-bucket curve even when the game's genres
+ *     resolve to a profile, AND uses the genre-blind global
+ *     peak-CCU → week-1 ratio band.
+ *   - `markAsReference`: when true, tags every produced
+ *     `EstimateResult` with `isReference = true`. The aggregator
+ *     filters those out so reference variants are persisted purely
+ *     for side-by-side display, never blended into the consensus.
+ */
+export interface EstimateOptions {
+  ignoreCalibration?: boolean;
+  skipCcuIntersection?: boolean;
+  ignoreGenreProfile?: boolean;
+  markAsReference?: boolean;
+}
 
 interface PlatformConfig {
   platform: Platform;
@@ -179,6 +230,10 @@ export interface EstimateResult {
   estimatedHigh: number;
   confidence: ConfidenceLevel;
   method: string;
+  // Set to true for rows produced by the variant generator. Kept
+  // optional so the dozens of result-construction sites that don't
+  // care don't need to be touched.
+  isReference?: boolean;
 }
 
 @Injectable()
@@ -198,6 +253,7 @@ export class EstimationService {
     @InjectRepository(AchievementSnapshot)
     private readonly achievements: Repository<AchievementSnapshot>,
     private readonly methods: EstimationMethodService,
+    private readonly genres: GenresService,
   ) {
     this.platforms = [
       {
@@ -277,6 +333,7 @@ export class EstimationService {
   async estimateAllPlatforms(
     gameId: string,
     asOf?: Date,
+    opts: EstimateOptions = {},
   ): Promise<EstimateResult[]> {
     const game = await this.games.findOne({
       where: { id: gameId },
@@ -286,7 +343,7 @@ export class EstimationService {
 
     const results: EstimateResult[] = [];
     for (const cfg of this.platforms) {
-      const boxleiter = await this.estimateForPlatform(game, cfg, asOf);
+      const boxleiter = await this.estimateForPlatform(game, cfg, asOf, opts);
       if (boxleiter) results.push(boxleiter);
 
       // Achievement-based estimate intentionally disabled. Snapshots
@@ -304,21 +361,89 @@ export class EstimationService {
     // Steam peak CCU and (when captured close to launch) review count,
     // bucketed by launch size. Independent of any calibrated multiplier
     // so it adds signal especially for newer titles.
-    const firstWeek = await this.estimateFirstWeekExtrapolationForPc(game, asOf);
+    const firstWeek = await this.estimateFirstWeekExtrapolationForPc(
+      game,
+      asOf,
+      opts,
+    );
     if (firstWeek) results.push(firstWeek);
 
     return results;
   }
 
   /**
+   * Run `estimateAllPlatforms` for every cell of the variant matrix
+   * (calibration × ccu-intersect × genre profile) and tag every cell
+   * other than the canonical one with `isReference = true`.
+   *
+   * The "canonical" cell mirrors today's behaviour — the
+   * most-informed combination available for the game:
+   *   - calibrated multiplier when one exists;
+   *   - CCU intersection when CCU data is available;
+   *   - genre profile when the game's genres resolve.
+   *
+   * Reference cells whose options collapse to the canonical one
+   * (e.g. a game with no calibrated multiplier produces the same
+   * row for `ignoreCalibration: true` and `false`) are deduplicated
+   * by `(platform, method)` so we never persist two physically
+   * identical rows. The aggregator filters out reference rows so
+   * they never bias the `aggregated` consensus.
+   */
+  async estimateAllPlatformsWithVariants(
+    gameId: string,
+    asOf?: Date,
+  ): Promise<EstimateResult[]> {
+    const canonical = await this.estimateAllPlatforms(gameId, asOf);
+    if (canonical.length === 0) return [];
+
+    const dedupKey = (r: EstimateResult): string =>
+      `${r.platform}::${r.method}`;
+    const seen = new Set<string>(canonical.map(dedupKey));
+    const out: EstimateResult[] = [...canonical];
+
+    // Each axis flip we expose to the variant matrix. The empty
+    // flip (no option set) is omitted: that's the canonical run we
+    // already executed above.
+    const referenceOptions: EstimateOptions[] = [
+      { ignoreCalibration: true },
+      { skipCcuIntersection: true },
+      { ignoreCalibration: true, skipCcuIntersection: true },
+      { ignoreGenreProfile: true },
+      { ignoreCalibration: true, ignoreGenreProfile: true },
+      { skipCcuIntersection: true, ignoreGenreProfile: true },
+      {
+        ignoreCalibration: true,
+        skipCcuIntersection: true,
+        ignoreGenreProfile: true,
+      },
+    ];
+
+    for (const variant of referenceOptions) {
+      const refs = await this.estimateAllPlatforms(gameId, asOf, {
+        ...variant,
+        markAsReference: true,
+      });
+      for (const r of refs) {
+        const key = dedupKey(r);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(r);
+      }
+    }
+
+    return out;
+  }
+
+  /**
    * Recalibrate (if possible) all per-platform multipliers, then compute and
    * persist a fresh SalesEstimate row for each platform that has a usable
-   * signal. Returns every persisted estimate.
+   * signal — including reference variant rows for diagnostic display.
+   * Returns every persisted estimate.
    */
   async computeAndStore(gameId: string): Promise<EstimateResult[]> {
     await this.recalibrateAll(gameId);
 
-    const results = await this.estimateAllPlatforms(gameId);
+    const results = await this.estimateAllPlatformsWithVariants(gameId);
     if (results.length === 0) return [];
 
     await this.persistEstimates(gameId, results);
@@ -336,7 +461,7 @@ export class EstimationService {
     gameId: string,
     asOf: Date,
   ): Promise<EstimateResult[]> {
-    const results = await this.estimateAllPlatforms(gameId, asOf);
+    const results = await this.estimateAllPlatformsWithVariants(gameId, asOf);
     if (results.length === 0) return [];
 
     await this.persistEstimates(gameId, results, asOf);
@@ -362,6 +487,53 @@ export class EstimationService {
     const baseRows = results.map((r) => this.toSalesEstimate(gameId, r, asOf));
     await this.estimates.save(baseRows);
 
+    const { aggregates, splits } = await this.aggregateResultsByPlatform(
+      gameId,
+      results,
+    );
+
+    if (splits.length > 0) {
+      const splitRows = splits.map((s) =>
+        this.toSalesEstimate(gameId, s, asOf),
+      );
+      await this.estimates.save(splitRows);
+    }
+
+    const aggregateMethod = this.methods.requireByCode(AGGREGATED_METHOD_CODE);
+    const aggregateRows: SalesEstimate[] = [];
+    for (const [platform, aggregate] of aggregates) {
+      aggregateRows.push(
+        this.buildAggregateRow(
+          gameId,
+          platform,
+          aggregate,
+          aggregateMethod.id,
+          asOf,
+        ),
+      );
+    }
+
+    if (aggregateRows.length > 0) {
+      await this.estimates.save(aggregateRows);
+    }
+  }
+
+  /**
+   * In-memory equivalent of `persistEstimates`' aggregation phase:
+   * given a flat list of per-method results, returns the per-platform
+   * `aggregated` consensus rows and the genre-console-split rows that
+   * the pipeline would normally save. Used by `persistEstimates`
+   * itself (so the live flow and the snapshot flow share the same
+   * aggregation rules) and by `computePureAggregatesByPlatform` which
+   * needs the aggregates without touching the database.
+   */
+  private async aggregateResultsByPlatform(
+    gameId: string,
+    results: EstimateResult[],
+  ): Promise<{
+    aggregates: Map<Platform, EstimateResult>;
+    splits: EstimateResult[];
+  }> {
     const byPlatform = new Map<Platform, EstimateResult[]>();
     for (const r of results) {
       const bucket = byPlatform.get(r.platform) ?? [];
@@ -369,27 +541,175 @@ export class EstimationService {
       byPlatform.set(r.platform, bucket);
     }
 
-    const aggregateMethod = this.methods.requireByCode(AGGREGATED_METHOD_CODE);
-    const aggregateRows: SalesEstimate[] = [];
-    for (const [platform, perPlatform] of byPlatform) {
-      const aggregate = this.aggregateMethodsForPlatform(perPlatform);
-      if (!aggregate) continue;
-      aggregateRows.push(
-        this.estimates.create({
-          gameId,
-          platform,
-          estimatedLow: aggregate.estimatedLow,
-          estimatedHigh: aggregate.estimatedHigh,
-          confidence: aggregate.confidence,
-          method: aggregate.method,
-          methodId: aggregateMethod.id,
-          ...(asOf ? { computedAt: asOf } : {}),
-        }),
+    const aggregates = new Map<Platform, EstimateResult>();
+
+    // Phase 1 — aggregate PC first so the genre-console-split method
+    // (Phase 2) can ventilate from a stable consensus PC band rather
+    // than from a single underlying method (boxleiter vs first-week
+    // can disagree wildly on day-0 releases).
+    const pcResults = byPlatform.get(Platform.PC) ?? [];
+    const pcAggregate =
+      pcResults.length > 0
+        ? this.aggregateMethodsForPlatform(pcResults)
+        : null;
+    if (pcAggregate) aggregates.set(Platform.PC, pcAggregate);
+
+    // Phase 2 — ventilate PC → console via the resolved genre profile.
+    // Skipped silently for games whose genres don't map to any profile,
+    // or when the PC aggregate is missing.
+    const splits: EstimateResult[] = [];
+    if (pcAggregate) {
+      const computedSplits = await this.computeGenreConsoleSplits(
+        gameId,
+        pcAggregate,
       );
+      for (const s of computedSplits) {
+        splits.push(s);
+        const bucket = byPlatform.get(s.platform) ?? [];
+        bucket.push(s);
+        byPlatform.set(s.platform, bucket);
+      }
     }
-    if (aggregateRows.length > 0) {
-      await this.estimates.save(aggregateRows);
+
+    // Phase 3 — aggregate the remaining platforms (PS, XBOX, …). PS
+    // and XBOX now see the genre-split row alongside any Boxleiter
+    // estimate, which is what the aggregate should consume.
+    for (const [platform, perPlatform] of byPlatform) {
+      if (platform === Platform.PC) continue;
+      const aggregate = this.aggregateMethodsForPlatform(perPlatform);
+      if (aggregate) aggregates.set(platform, aggregate);
     }
+
+    return { aggregates, splits };
+  }
+
+  /**
+   * Run the full estimation pipeline in "pure algo" mode (no
+   * calibrated multipliers, no DB writes) and return only the
+   * per-platform `aggregated` consensus rows. The splits and base
+   * rows are computed in-memory then discarded — they would just
+   * shadow the real (calibrated) rows in the admin view, which is
+   * not what we want.
+   *
+   * Used by `GamesService.snapshotReconcile` to populate the
+   * `pureEstimatedTodayLow/High` columns alongside the regular
+   * headline.
+   */
+  async computePureAggregatesByPlatform(
+    gameId: string,
+    asOf?: Date,
+  ): Promise<Map<Platform, EstimateResult>> {
+    const results = await this.estimateAllPlatforms(gameId, asOf, {
+      ignoreCalibration: true,
+    });
+    if (results.length === 0) return new Map();
+
+    const { aggregates } = await this.aggregateResultsByPlatform(gameId, results);
+    return aggregates;
+  }
+
+  private buildAggregateRow(
+    gameId: string,
+    platform: Platform,
+    aggregate: EstimateResult,
+    aggregateMethodId: string,
+    asOf?: Date,
+  ): SalesEstimate {
+    return this.estimates.create({
+      gameId,
+      platform,
+      estimatedLow: aggregate.estimatedLow,
+      estimatedHigh: aggregate.estimatedHigh,
+      confidence: aggregate.confidence,
+      method: aggregate.method,
+      methodId: aggregateMethodId,
+      ...(asOf ? { computedAt: asOf } : {}),
+    });
+  }
+
+  /**
+   * Ventilate a PC aggregate into PlayStation / Xbox estimates using
+   * the game's resolved `GenreProfile`. Skipped when no profile
+   * resolves or the PC share is zero (defensive — the seed always
+   * has it ≥ 0.2).
+   *
+   *   psUnits   = pcUnits × (playstationShare / pcShare)
+   *   xboxUnits = pcUnits × (xboxShare        / pcShare)
+   *
+   * The Switch share is intentionally dropped on the floor: our
+   * `Platform` enum doesn't include Switch (no reliable sales signal
+   * either way), and folding it into PS / Xbox would double-count
+   * non-existent rows.
+   *
+   * Confidence is clamped to MEDIUM (the ventilation is a structural
+   * model, never as trustworthy as a calibrated console rating
+   * signal) and further bounded by the profile's own confidence.
+   */
+  private async computeGenreConsoleSplits(
+    gameId: string,
+    pcAggregate: EstimateResult,
+  ): Promise<EstimateResult[]> {
+    const game = await this.games.findOne({
+      where: { id: gameId },
+      select: { id: true, genres: true, platforms: true },
+    });
+    if (!game) return [];
+
+    const profile = await this.genres.resolveProfileForGame(game);
+    if (!profile || profile.pcShare <= 0) return [];
+
+    // Only ventilate to platforms the game is actually released on.
+    // Inferring console sales for a PC-only title would be nonsense
+    // (e.g. Last Epoch resolves to a generic RPG profile but has no
+    // PSN / Xbox SKU).
+    const releasedPlatforms = new Set(game.platforms ?? []);
+    return this.buildConsoleSplitsFromProfile(
+      pcAggregate,
+      profile,
+      releasedPlatforms,
+    );
+  }
+
+  private buildConsoleSplitsFromProfile(
+    pcAggregate: EstimateResult,
+    profile: ResolvedGenreProfile,
+    releasedPlatforms: Set<Platform>,
+  ): EstimateResult[] {
+    const baseConfidence = capConfidence(
+      capConfidence(pcAggregate.confidence, ConfidenceLevel.MEDIUM),
+      profile.confidence,
+    );
+
+    const targets: Array<{ platform: Platform; share: number; code: string }> = [
+      {
+        platform: Platform.PLAYSTATION,
+        share: profile.playstationShare,
+        code: 'genre-console-split-from-pc-playstation',
+      },
+      {
+        platform: Platform.XBOX,
+        share: profile.xboxShare,
+        code: 'genre-console-split-from-pc-xbox',
+      },
+    ];
+
+    const out: EstimateResult[] = [];
+    for (const t of targets) {
+      if (t.share <= 0) continue;
+      if (!releasedPlatforms.has(t.platform)) continue;
+      const ratio = t.share / profile.pcShare;
+      const low = Math.round(pcAggregate.estimatedLow * ratio);
+      const high = Math.round(pcAggregate.estimatedHigh * ratio);
+      if (high <= 0 || low > high) continue;
+      out.push({
+        platform: t.platform,
+        estimatedLow: low,
+        estimatedHigh: high,
+        confidence: baseConfidence,
+        method: t.code,
+      });
+    }
+    return out;
   }
 
   /**
@@ -411,6 +731,7 @@ export class EstimationService {
       confidence: result.confidence,
       method: result.method,
       methodId: this.resolveMethodId(result.method),
+      isReference: result.isReference ?? false,
       ...(asOf ? { computedAt: asOf } : {}),
     });
   }
@@ -441,6 +762,7 @@ export class EstimationService {
     perPlatform: EstimateResult[],
   ): EstimateResult | null {
     const eligible = perPlatform
+      .filter((r) => !r.isReference)
       .map((r) => {
         const method = this.methods.findByCode(
           r.method.replace(/\+[^+]+/g, ''),
@@ -456,10 +778,17 @@ export class EstimationService {
       );
     if (eligible.length === 0) return null;
 
-    const totalWeight = eligible.reduce(
-      (sum, e) => sum + Number(e.method.defaultWeight),
-      0,
-    );
+    // Effective weight = static method weight × per-game confidence
+    // factor, so a HIGH-confidence calibrated method dominates a
+    // rougher MEDIUM lifecycle proxy regardless of `defaultWeight`.
+    const effectiveWeight = (entry: {
+      result: EstimateResult;
+      method: EstimationMethod;
+    }): number =>
+      Number(entry.method.defaultWeight) *
+      AGGREGATION_CONFIDENCE_WEIGHT[entry.result.confidence];
+
+    const totalWeight = eligible.reduce((sum, e) => sum + effectiveWeight(e), 0);
     if (totalWeight <= 0) return null;
 
     let weightedLow = 0;
@@ -468,8 +797,9 @@ export class EstimationService {
     let maxMid = -Infinity;
     let lowestConfidenceRank = Infinity;
 
-    for (const { result, method } of eligible) {
-      const weight = Number(method.defaultWeight);
+    for (const entry of eligible) {
+      const { result } = entry;
+      const weight = effectiveWeight(entry);
       weightedLow += result.estimatedLow * weight;
       weightedHigh += result.estimatedHigh * weight;
       const mid = (result.estimatedLow + result.estimatedHigh) / 2;
@@ -528,6 +858,7 @@ export class EstimationService {
     game: Game,
     cfg: PlatformConfig,
     asOf?: Date,
+    opts: EstimateOptions = {},
   ): Promise<EstimateResult | null> {
     const latestSignal = await this.signals.findOne({
       where: {
@@ -543,6 +874,7 @@ export class EstimationService {
     const { low, high, method, isCalibrated } = this.resolveMultiplier(
       game,
       cfg,
+      opts,
     );
 
     // Launcher profile only modulates the *PC* estimation today (the
@@ -569,18 +901,20 @@ export class EstimationService {
     let confidenceOverride: ConfidenceLevel | null = null;
 
     if (cfg.platform === Platform.PC) {
-      const ccu = await this.applyCcuIntersection(
-        game.id,
-        estimatedLow,
-        estimatedHigh,
-        launcherProfile,
-        asOf,
-      );
-      if (ccu) {
-        estimatedLow = ccu.low;
-        estimatedHigh = ccu.high;
-        finalMethod = `${method}${ccu.methodSuffix}`;
-        confidenceOverride = ccu.confidenceOverride;
+      if (!opts.skipCcuIntersection) {
+        const ccu = await this.applyCcuIntersection(
+          game.id,
+          estimatedLow,
+          estimatedHigh,
+          launcherProfile,
+          asOf,
+        );
+        if (ccu) {
+          estimatedLow = ccu.low;
+          estimatedHigh = ccu.high;
+          finalMethod = `${method}${ccu.methodSuffix}`;
+          confidenceOverride = ccu.confidenceOverride;
+        }
       }
 
       const profileTag = LAUNCHER_PROFILE_METHOD_TAG[launcherProfile];
@@ -601,6 +935,7 @@ export class EstimationService {
       estimatedHigh: Math.round(estimatedHigh),
       confidence: cappedConfidence,
       method: finalMethod,
+      ...(opts.markAsReference ? { isReference: true } : {}),
     };
   }
 
@@ -703,6 +1038,7 @@ export class EstimationService {
   private async estimateFirstWeekExtrapolationForPc(
     game: Game,
     asOf?: Date,
+    opts: EstimateOptions = {},
   ): Promise<EstimateResult | null> {
     if (!game.releaseDate) return null;
 
@@ -725,10 +1061,26 @@ export class EstimationService {
     });
     if (!peak || peak.value <= 0) return null;
 
-    const weekOneFromCcuLow =
-      peak.value * FIRST_WEEK_PEAK_CCU_LOW * ccuScale.low;
-    const weekOneFromCcuHigh =
-      peak.value * FIRST_WEEK_PEAK_CCU_HIGH * ccuScale.high;
+    // Genre-aware peak-CCU → week-1 ratio. When the game's genres
+    // resolve to a profile we use its empirical range (much lower for
+    // high-engagement genres like grand strategy / MMO whose peak CCU
+    // is large relative to sales); otherwise the genre-blind global
+    // [LOW, HIGH] band is the fallback. `ignoreGenreProfile` forces
+    // the fallback path even when a profile resolves — used by the
+    // reference-variant generator to surface the legacy size-bucket
+    // estimate side by side with the genre-aware one.
+    const genreProfile = opts.ignoreGenreProfile
+      ? null
+      : await this.genres.resolveProfileForGame(game);
+    const ccuRatioLow = genreProfile
+      ? genreProfile.peakCcuToWeekOneLow
+      : FIRST_WEEK_PEAK_CCU_LOW;
+    const ccuRatioHigh = genreProfile
+      ? genreProfile.peakCcuToWeekOneHigh
+      : FIRST_WEEK_PEAK_CCU_HIGH;
+
+    const weekOneFromCcuLow = peak.value * ccuRatioLow * ccuScale.low;
+    const weekOneFromCcuHigh = peak.value * ccuRatioHigh * ccuScale.high;
 
     const reviewsAtLaunch = await this.findReviewsNearLaunch(
       game.id,
@@ -763,15 +1115,34 @@ export class EstimationService {
     }
 
     const weekOneMid = (weekOneLow + weekOneHigh) / 2;
-    const year1Ratio =
-      weekOneMid > FIRST_WEEK_BUCKET_THRESHOLD
-        ? FIRST_WEEK_BUCKET_LARGE_YEAR1_RATIO
-        : FIRST_WEEK_BUCKET_SMALL_YEAR1_RATIO;
 
-    // The projection multiplier hits exactly `year1Ratio` at day 365,
-    // so we don't pre-multiply; the curve carries the ratio for us.
-    void year1Ratio;
-    const projection = firstWeekProjectionMultiplier(weekOneMid, age);
+    // Prefer the genre-derived projection curve when the game's IGDB
+    // genres resolve to at least one `GenreProfile` (resolved above for
+    // the CCU ratio). The curve is built around the profile's empirical
+    // `firstWeekToYearOneMultiplier` and tail factors; this is more
+    // discriminating than the original size-bucket (×2.68 / ×3.77)
+    // heuristic. Games whose genres don't resolve fall back to buckets.
+    let projection: number;
+    let projectionTag = '';
+    if (genreProfile) {
+      projection = genreProjectionMultiplier(
+        genreProfile.firstWeekToYearOneMultiplier,
+        genreProfile.tailFactorY2,
+        genreProfile.tailFactorY5,
+        age,
+      );
+      projectionTag = '+genre';
+    } else {
+      // Legacy size-bucket path. Kept identical to the pre-genre
+      // behaviour so existing estimates don't drift for games we
+      // haven't tagged yet.
+      const year1Ratio =
+        weekOneMid > FIRST_WEEK_BUCKET_THRESHOLD
+          ? FIRST_WEEK_BUCKET_LARGE_YEAR1_RATIO
+          : FIRST_WEEK_BUCKET_SMALL_YEAR1_RATIO;
+      void year1Ratio;
+      projection = firstWeekProjectionMultiplier(weekOneMid, age);
+    }
 
     const projectedLow = Math.round(weekOneLow * projection);
     const projectedHigh = Math.round(weekOneHigh * projection);
@@ -808,7 +1179,7 @@ export class EstimationService {
 
     const launcherTag = LAUNCHER_PROFILE_METHOD_TAG[launcherProfile];
     const reviewsTag = combinedWithReviews ? '+reviews-corrected' : '';
-    const method = `first-week-extrapolation-pc${reviewsTag}${launcherTag}`;
+    const method = `first-week-extrapolation-pc${projectionTag}${reviewsTag}${launcherTag}`;
 
     return {
       platform: Platform.PC,
@@ -816,6 +1187,7 @@ export class EstimationService {
       estimatedHigh: projectedHigh,
       confidence: cappedConfidence,
       method,
+      ...(opts.markAsReference ? { isReference: true } : {}),
     };
   }
 
@@ -1012,8 +1384,9 @@ export class EstimationService {
   private resolveMultiplier(
     game: Game,
     cfg: PlatformConfig,
+    opts: EstimateOptions = {},
   ): { low: number; high: number; method: string; isCalibrated: boolean } {
-    const calibrated = cfg.read(game);
+    const calibrated = opts.ignoreCalibration ? null : cfg.read(game);
     if (calibrated && calibrated > 0) {
       const source = cfg.readSource(game);
       // OFFICIAL by default for rows calibrated before the per-source

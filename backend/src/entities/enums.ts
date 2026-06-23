@@ -139,6 +139,9 @@ export enum GenreSource {
  *  - ACHIEVEMENTS: Exophase / Steam achievement-based, dormant today.
  *  - LIFECYCLE: time-since-release projection (e.g. first-week sales
  *    extrapolated through a degressive curve to today).
+ *  - PLATFORM_SPLIT: derivative method that ventilates one platform's
+ *    estimate to another using a curated split (e.g. genre-aware PC
+ *    → console). Inputs are other estimates, not raw signals.
  *  - AGGREGATE: weighted combination of other methods, written by
  *    `EstimationService.aggregateMethods`. Excluded from its own input.
  *  - MANUAL: reserved for future hand-entered overrides.
@@ -147,6 +150,7 @@ export enum EstimationMethodFamily {
   BOXLEITER = 'BOXLEITER',
   ACHIEVEMENTS = 'ACHIEVEMENTS',
   LIFECYCLE = 'LIFECYCLE',
+  PLATFORM_SPLIT = 'PLATFORM_SPLIT',
   AGGREGATE = 'AGGREGATE',
   MANUAL = 'MANUAL',
 }

@@ -72,4 +72,16 @@ export class UpdateGenreProfileDto {
   @ValidateIf((_, v) => v !== null)
   @IsString()
   lifecycleDriver?: string | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(50)
+  peakCcuToWeekOneLow?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(50)
+  peakCcuToWeekOneHigh?: number;
 }

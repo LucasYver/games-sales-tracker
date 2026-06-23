@@ -4,6 +4,12 @@ import { AddEstimationMethodRegistry1782205443622 } from './1782205443622-AddEst
 import { AddLifecycleFamilyAndFirstWeekMethod1782219035410 } from './1782219035410-AddLifecycleFamilyAndFirstWeekMethod';
 import { AddGenreProfileAndGenre1782220528695 } from './1782220528695-AddGenreProfileAndGenre';
 import { AddGenreLifecycle1782221904142 } from './1782221904142-AddGenreLifecycle';
+import { AddPlatformSplitFamilyAndGenreSplitMethods1782223100959 } from './1782223100959-AddPlatformSplitFamilyAndGenreSplitMethods';
+import { SeedSteamGenreAliases1782223525877 } from './1782223525877-SeedSteamGenreAliases';
+import { AddGenrePeakCcuToWeekOne1782224894116 } from './1782224894116-AddGenrePeakCcuToWeekOne';
+import { AddPureEstimateToSnapshot1782227318714 } from './1782227318714-AddPureEstimateToSnapshot';
+import { AddPureBreakdownToSnapshot1782228030613 } from './1782228030613-AddPureBreakdownToSnapshot';
+import { AddIsReferenceToSalesEstimate1782228710396 } from './1782228710396-AddIsReferenceToSalesEstimate';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -19,4 +25,10 @@ export const migrations: MixedList<Function | string> = [
   AddLifecycleFamilyAndFirstWeekMethod1782219035410,
   AddGenreProfileAndGenre1782220528695,
   AddGenreLifecycle1782221904142,
+  AddPlatformSplitFamilyAndGenreSplitMethods1782223100959,
+  SeedSteamGenreAliases1782223525877,
+  AddGenrePeakCcuToWeekOne1782224894116,
+  AddPureEstimateToSnapshot1782227318714,
+  AddPureBreakdownToSnapshot1782228030613,
+  AddIsReferenceToSalesEstimate1782228710396,
 ];

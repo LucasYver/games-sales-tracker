@@ -20,7 +20,10 @@ import {
   AGGREGATED_METHOD_CODE,
   EstimationMethodService,
 } from '../estimation/estimation-method.service';
-import { EstimationService } from '../estimation/estimation.service';
+import {
+  EstimationService,
+  type EstimateResult,
+} from '../estimation/estimation.service';
 import {
   AGREEMENT_GROWTH_PER_YEAR,
   AGREEMENT_OVERSHOOT_RATIO,
@@ -150,6 +153,29 @@ function serializeReconciliationEntry(
     ...entry,
     declaredAt: entry.declaredAt?.toISOString() ?? null,
   };
+}
+
+/**
+ * Sum per-platform "pure algo" aggregates into a single headline
+ * range. Mirrors what `reconcile` does for the calibrated path but
+ * strips out every declared-figure-aided floor / cap so the result
+ * reflects the model's intrinsic output. GLOBAL is skipped (it has
+ * no estimate row of its own; the snapshot's own row will surface
+ * the headline anyway).
+ */
+function sumPureAggregates(
+  aggregates: Map<Platform, EstimateResult>,
+): { low: number; high: number } | null {
+  let low = 0;
+  let high = 0;
+  let any = false;
+  for (const [platform, agg] of aggregates) {
+    if (platform === Platform.GLOBAL) continue;
+    low += agg.estimatedLow;
+    high += agg.estimatedHigh;
+    any = true;
+  }
+  return any ? { low, high } : null;
 }
 
 @Injectable()
@@ -534,6 +560,16 @@ export class GamesService {
 
     if (!estimatedToday) return;
 
+    // Pure-algo headline: re-run estimation with calibration disabled
+    // and sum the per-platform aggregates without any declared-figure
+    // floor / cap. Lets us measure how strong the model is without
+    // any help from declared sales records.
+    const pureAggregates = await this.estimation.computePureAggregatesByPlatform(
+      gameId,
+      asOf,
+    );
+    const pureToday = sumPureAggregates(pureAggregates);
+
     // aggregateSales returns floats (freshness cap multiplies by a real
     // number); the column is `int`, so round before persisting.
     await this.estimateSnapshots.save(
@@ -541,6 +577,12 @@ export class GamesService {
         gameId,
         estimatedTodayLow: Math.round(estimatedToday.low),
         estimatedTodayHigh: Math.round(estimatedToday.high),
+        pureEstimatedTodayLow: pureToday
+          ? Math.round(pureToday.low)
+          : null,
+        pureEstimatedTodayHigh: pureToday
+          ? Math.round(pureToday.high)
+          : null,
         reconciliation: reconciliation.map(serializeReconciliationEntry),
         computedAt: asOf ?? new Date(),
       }),

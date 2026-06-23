@@ -493,3 +493,71 @@ export function firstWeekProjectionMultiplier(
       : FIRST_WEEK_PROJECTION_CURVE_SMALL;
   return interpolateCurve(curve, ageDays);
 }
+
+// ─── Genre-aware first-week projection ──────────────────────────────────────
+//
+// When a game's IGDB genres resolve to a `GenreProfile`, we replace
+// the size-bucketed projection curve with a dynamic one built around
+// the profile's own `firstWeekToYearOneMultiplier` (m1) and tail
+// factor pair `(tailY2, tailY5)` (derived from `year2Retention`):
+//
+//   day 7   → 1.0   (week-1 baseline)
+//   day 30  → 1 + 0.425 × (m1 − 1)
+//   day 90  → 1 + 0.661 × (m1 − 1)
+//   day 180 → 1 + 0.847 × (m1 − 1)
+//   day 365 → m1
+//   day 730 → m1 × tailY2
+//   day 1825→ m1 × tailY5
+//
+// The intra-year fractions (0.425, 0.661, 0.847) are the average of
+// the LARGE and SMALL bucket curves' intra-year shape — they encode
+// "how front-loaded is year 1" independently of how big year 1 is.
+// Empirically the two bucket shapes are very close, so a single
+// blended shape costs little fidelity and avoids a third tunable.
+//
+// Used by `EstimationService.estimateFirstWeekExtrapolationForPc`
+// when `GenresService.resolveProfileForGame` returns a profile.
+
+const GENRE_INTRA_YEAR_SHAPE: ReadonlyArray<readonly [number, number]> = [
+  [30, 0.425],
+  [90, 0.661],
+  [180, 0.847],
+];
+
+/**
+ * Build the per-game first-week projection curve from a resolved
+ * genre profile. The curve hits exactly `m1` at day 365 and
+ * `m1 × tailY{2,5}` at the corresponding milestones.
+ */
+export function buildGenreProjectionCurve(
+  m1: number,
+  tailY2: number,
+  tailY5: number,
+): ReadonlyArray<readonly [number, number]> {
+  const delta = m1 - 1;
+  return [
+    [7, 1.0],
+    ...GENRE_INTRA_YEAR_SHAPE.map(
+      ([day, frac]) => [day, 1 + frac * delta] as const,
+    ),
+    [365, m1],
+    [730, m1 * tailY2],
+    [1825, m1 * tailY5],
+  ];
+}
+
+/**
+ * Like `firstWeekProjectionMultiplier` but driven by a genre-derived
+ * curve rather than a size bucket. Below day 7 we still linear-ramp
+ * from 0 to 1 to keep the very-fresh-release behaviour consistent.
+ */
+export function genreProjectionMultiplier(
+  m1: number,
+  tailY2: number,
+  tailY5: number,
+  ageDays: number,
+): number {
+  if (ageDays <= 0) return 0;
+  if (ageDays < 7) return ageDays / 7;
+  return interpolateCurve(buildGenreProjectionCurve(m1, tailY2, tailY5), ageDays);
+}

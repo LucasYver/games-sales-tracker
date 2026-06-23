@@ -87,6 +87,8 @@ export function GenreProfileRow({ profile }: Props) {
     firstWeekToYearOneMultiplier: profile.firstWeekToYearOneMultiplier,
     year2Retention: profile.year2Retention,
     lifecycleDriver: profile.lifecycleDriver ?? '',
+    peakCcuToWeekOneLow: profile.peakCcuToWeekOneLow,
+    peakCcuToWeekOneHigh: profile.peakCcuToWeekOneHigh,
   });
 
   const sum =
@@ -95,6 +97,7 @@ export function GenreProfileRow({ profile }: Props) {
     draft.xboxShare +
     draft.switchShare;
   const sumOk = Math.abs(sum - 1) <= 0.01;
+  const ccuOk = draft.peakCcuToWeekOneLow <= draft.peakCcuToWeekOneHigh;
 
   function reset() {
     setDraft({
@@ -108,6 +111,8 @@ export function GenreProfileRow({ profile }: Props) {
       firstWeekToYearOneMultiplier: profile.firstWeekToYearOneMultiplier,
       year2Retention: profile.year2Retention,
       lifecycleDriver: profile.lifecycleDriver ?? '',
+      peakCcuToWeekOneLow: profile.peakCcuToWeekOneLow,
+      peakCcuToWeekOneHigh: profile.peakCcuToWeekOneHigh,
     });
     setEditing(false);
   }
@@ -127,6 +132,8 @@ export function GenreProfileRow({ profile }: Props) {
           year2Retention: draft.year2Retention,
           lifecycleDriver:
             draft.lifecycleDriver.trim() === '' ? null : draft.lifecycleDriver,
+          peakCcuToWeekOneLow: draft.peakCcuToWeekOneLow,
+          peakCcuToWeekOneHigh: draft.peakCcuToWeekOneHigh,
         });
         setEditing(false);
         router.refresh();
@@ -162,6 +169,10 @@ export function GenreProfileRow({ profile }: Props) {
         </TableCell>
         <TableCell className="text-right text-xs tabular-nums">
           ×{profile.firstWeekToYearOneMultiplier.toFixed(2)}
+        </TableCell>
+        <TableCell className="text-right text-xs tabular-nums">
+          {profile.peakCcuToWeekOneLow.toFixed(1)}–
+          {profile.peakCcuToWeekOneHigh.toFixed(1)}
         </TableCell>
         <TableCell>
           <Badge variant={RETENTION_VARIANT[profile.year2Retention]}>
@@ -276,8 +287,43 @@ export function GenreProfileRow({ profile }: Props) {
               firstWeekToYearOneMultiplier: Number.isFinite(parsed) ? parsed : 0,
             }));
           }}
-          className="h-8 w-20 text-right text-xs tabular-nums"
-        />
+            className="h-8 w-20 text-right text-xs tabular-nums"
+          />
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-1">
+          <Input
+            type="number"
+            step="0.1"
+            min={0}
+            max={50}
+            value={draft.peakCcuToWeekOneLow}
+            onChange={(e) => {
+              const parsed = Number(e.target.value);
+              setDraft((d) => ({
+                ...d,
+                peakCcuToWeekOneLow: Number.isFinite(parsed) ? parsed : 0,
+              }));
+            }}
+            className={`h-8 w-16 text-right text-xs tabular-nums ${ccuOk ? '' : 'border-destructive'}`}
+          />
+          <span className="text-muted-foreground text-xs">–</span>
+          <Input
+            type="number"
+            step="0.1"
+            min={0}
+            max={50}
+            value={draft.peakCcuToWeekOneHigh}
+            onChange={(e) => {
+              const parsed = Number(e.target.value);
+              setDraft((d) => ({
+                ...d,
+                peakCcuToWeekOneHigh: Number.isFinite(parsed) ? parsed : 0,
+              }));
+            }}
+            className={`h-8 w-16 text-right text-xs tabular-nums ${ccuOk ? '' : 'border-destructive'}`}
+          />
+        </div>
       </TableCell>
       <TableCell>
         <Select
@@ -321,7 +367,7 @@ export function GenreProfileRow({ profile }: Props) {
             variant="default"
             size="sm"
             onClick={save}
-            disabled={pending || !sumOk}
+            disabled={pending || !sumOk || !ccuOk}
           >
             {pending ? (
               <Loader2 aria-hidden="true" className="size-3 animate-spin" />

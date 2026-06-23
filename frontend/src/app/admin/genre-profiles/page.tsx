@@ -31,10 +31,11 @@ export default async function AdminGenreProfilesPage() {
         <div className="max-w-3xl">
           <h1 className="text-2xl font-bold tracking-tight">Genre profiles</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Empirical platform-split per game type. The shares are used by the
-            future console estimation method to ventilate Steam-side signals
-            (CCU, reviews, publisher mix) into a plausible PS/Xbox/Switch
-            breakdown. Edit the values as new data lands — they will drift.
+            Empirical platform-split <em>and</em> lifecycle per game type. The
+            shares feed the future console estimation method (CCU/reviews →
+            PS/Xbox/Switch ventilation). The lifecycle columns (index, year-1
+            multiplier, year-2 retention) feed the genre-aware refinement of
+            the first-week extrapolation method. Edit values as new data lands.
           </p>
         </div>
         <GenresSyncButton />
@@ -51,6 +52,25 @@ export default async function AdminGenreProfilesPage() {
               <TableHead className="text-right">Switch</TableHead>
               <TableHead>Lean</TableHead>
               <TableHead>Confidence</TableHead>
+              <TableHead className="text-right" title="Empirical normalised lifecycle index">
+                Idx
+              </TableHead>
+              <TableHead
+                className="text-right"
+                title="Year-1 cumulative units / week-1 units"
+              >
+                ×Y1
+              </TableHead>
+              <TableHead
+                className="text-right"
+                title="All-time peak Steam CCU → week-1 units ratio (low–high)"
+              >
+                CCU→W1
+              </TableHead>
+              <TableHead title="Qualitative grade for year-2+ retention">
+                Tenue Y2
+              </TableHead>
+              <TableHead>Driver</TableHead>
               <TableHead className="text-right">Genres</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -62,7 +82,7 @@ export default async function AdminGenreProfilesPage() {
             {profiles.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={9}
+                  colSpan={14}
                   className="text-muted-foreground py-12 text-center"
                 >
                   No genre profiles seeded.

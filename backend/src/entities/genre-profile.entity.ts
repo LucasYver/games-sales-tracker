@@ -93,6 +93,23 @@ export class GenreProfile {
   @Column({ type: 'text', nullable: true })
   lifecycleDriver: string | null;
 
+  // Genre-specific "all-time peak Steam CCU → week-1 units" range.
+  // The relationship is strongly genre-dependent: high-engagement /
+  // high-retention genres (grand strategy, MMO, survival) keep a large
+  // share of owners online simultaneously, so their peak CCU is HIGH
+  // relative to sales → a LOW ratio (~2-3×). One-and-done genres
+  // (narrative, JRPG, cinematic AAA) have a small concurrent footprint
+  // relative to total sales → a HIGH ratio (~5-10×).
+  //
+  // Replaces the genre-blind global FIRST_WEEK_PEAK_CCU_LOW/HIGH
+  // constants inside `estimateFirstWeekExtrapolationForPc` whenever a
+  // profile resolves; the globals stay as the unresolved fallback.
+  @Column({ type: 'numeric', precision: 4, scale: 2 })
+  peakCcuToWeekOneLow: number;
+
+  @Column({ type: 'numeric', precision: 4, scale: 2 })
+  peakCcuToWeekOneHigh: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

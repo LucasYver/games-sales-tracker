@@ -5,9 +5,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import {
   ConfidenceLevel,
+  Game,
   Genre,
   GenreProfile,
   GenreSource,
@@ -30,6 +31,8 @@ export interface GenreProfileSummary {
   firstWeekToYearOneMultiplier: number;
   year2Retention: Year2Retention;
   lifecycleDriver: string | null;
+  peakCcuToWeekOneLow: number;
+  peakCcuToWeekOneHigh: number;
   genreCount: number;
   updatedAt: Date;
 }
@@ -66,11 +69,75 @@ export interface UpdateGenreProfileInput {
   firstWeekToYearOneMultiplier?: number;
   year2Retention?: Year2Retention;
   lifecycleDriver?: string | null;
+  peakCcuToWeekOneLow?: number;
+  peakCcuToWeekOneHigh?: number;
 }
 
 export interface UpdateGenreInput {
   profileId?: string | null;
 }
+
+/**
+ * Outcome of resolving a `Game.genres` array into a single platform
+ * + lifecycle profile. Numeric fields are equal-weighted averages
+ * across the matched profiles; `year2Retention` reports the median
+ * (rounded down on ties) and is exposed alongside the underlying
+ * tail multipliers so the caller doesn't need to re-derive them.
+ *
+ * `matchedSlugs` is meant for logging / `method` tagging.
+ * `confidence` is the *minimum* of the matched profiles — blending
+ * an HIGH profile with a LOW profile can't yield more than LOW.
+ */
+export interface ResolvedGenreProfile {
+  matchedSlugs: string[];
+  pcShare: number;
+  playstationShare: number;
+  xboxShare: number;
+  switchShare: number;
+  firstWeekToYearOneMultiplier: number;
+  year2Retention: Year2Retention;
+  tailFactorY2: number;
+  tailFactorY5: number;
+  lifecycleIndex: number;
+  peakCcuToWeekOneLow: number;
+  peakCcuToWeekOneHigh: number;
+  confidence: ConfidenceLevel;
+}
+
+// Year-2 / year-5 cumulative units expressed as a multiplier of the
+// year-1 cumulative ratio. NEGATIVE (annualised sport) barely grows;
+// VERY_HIGH (Minecraft-tier sandbox) keeps compounding. Used to
+// extend the projection curve past day 365.
+const YEAR2_TAIL_FACTOR: Record<
+  Year2Retention,
+  { y2: number; y5: number }
+> = {
+  NEGATIVE: { y2: 1.05, y5: 1.1 },
+  VERY_LOW: { y2: 1.05, y5: 1.12 },
+  LOW: { y2: 1.15, y5: 1.25 },
+  LOW_MEDIUM: { y2: 1.25, y5: 1.4 },
+  MEDIUM: { y2: 1.4, y5: 1.65 },
+  MEDIUM_HIGH: { y2: 1.55, y5: 1.95 },
+  HIGH: { y2: 1.7, y5: 2.3 },
+  VERY_HIGH: { y2: 1.9, y5: 2.8 },
+};
+
+const RETENTION_ORDER: Year2Retention[] = [
+  Year2Retention.NEGATIVE,
+  Year2Retention.VERY_LOW,
+  Year2Retention.LOW,
+  Year2Retention.LOW_MEDIUM,
+  Year2Retention.MEDIUM,
+  Year2Retention.MEDIUM_HIGH,
+  Year2Retention.HIGH,
+  Year2Retention.VERY_HIGH,
+];
+
+const CONFIDENCE_ORDER: ConfidenceLevel[] = [
+  ConfidenceLevel.LOW,
+  ConfidenceLevel.MEDIUM,
+  ConfidenceLevel.HIGH,
+];
 
 @Injectable()
 export class GenresService {
@@ -117,6 +184,8 @@ export class GenresService {
       firstWeekToYearOneMultiplier: Number(p.firstWeekToYearOneMultiplier),
       year2Retention: p.year2Retention,
       lifecycleDriver: p.lifecycleDriver,
+      peakCcuToWeekOneLow: Number(p.peakCcuToWeekOneLow),
+      peakCcuToWeekOneHigh: Number(p.peakCcuToWeekOneHigh),
       genreCount: countByProfileId.get(p.id) ?? 0,
       updatedAt: p.updatedAt,
     }));
@@ -172,6 +241,28 @@ export class GenresService {
     }
     if (input.lifecycleDriver !== undefined) {
       profile.lifecycleDriver = input.lifecycleDriver;
+    }
+    if (input.peakCcuToWeekOneLow !== undefined) {
+      if (input.peakCcuToWeekOneLow < 0) {
+        throw new BadRequestException('peakCcuToWeekOneLow must be ≥ 0');
+      }
+      profile.peakCcuToWeekOneLow = input.peakCcuToWeekOneLow;
+    }
+    if (input.peakCcuToWeekOneHigh !== undefined) {
+      if (input.peakCcuToWeekOneHigh < 0) {
+        throw new BadRequestException('peakCcuToWeekOneHigh must be ≥ 0');
+      }
+      profile.peakCcuToWeekOneHigh = input.peakCcuToWeekOneHigh;
+    }
+
+    const effLow =
+      input.peakCcuToWeekOneLow ?? Number(profile.peakCcuToWeekOneLow);
+    const effHigh =
+      input.peakCcuToWeekOneHigh ?? Number(profile.peakCcuToWeekOneHigh);
+    if (effLow > effHigh) {
+      throw new BadRequestException(
+        'peakCcuToWeekOneLow must be ≤ peakCcuToWeekOneHigh',
+      );
     }
 
     await this.profiles.save(profile);
@@ -229,6 +320,103 @@ export class GenresService {
     const updated = rows.find((r) => r.id === id);
     if (!updated) throw new NotFoundException(`Genre ${id} not found`);
     return updated;
+  }
+
+  /**
+   * Resolve a game's free-form IGDB genre strings into a single
+   * blended platform + lifecycle profile. Returns `null` when no
+   * genre on the game maps to a profile (the caller should fall
+   * back to whatever default behaviour was in place before).
+   *
+   * Matching is case-insensitive on `Genre.name` (IGDB strings
+   * sometimes show up with stray spaces / capitalisation drift); the
+   * profile assignment is what we manually curate via the admin.
+   *
+   * Blending strategy: equal-weight average of every numeric field
+   * across the matched profiles. `year2Retention` is reported as the
+   * median (rounded down) of the matched levels but the consumer
+   * should prefer `tailFactorY2/Y5` since those are pre-averaged on
+   * the underlying numeric scale.
+   */
+  async resolveProfileForGame(
+    game: Pick<Game, 'genres'>,
+  ): Promise<ResolvedGenreProfile | null> {
+    const names = (game.genres ?? [])
+      .map((g) => g.trim())
+      .filter((g) => g.length > 0);
+    if (names.length === 0) return null;
+
+    const matched = await this.genres
+      .createQueryBuilder('g')
+      .where('LOWER(g.name) IN (:...names)', {
+        names: names.map((n) => n.toLowerCase()),
+      })
+      .andWhere('g."profileId" IS NOT NULL')
+      .getMany();
+
+    if (matched.length === 0) return null;
+
+    const profileIds = Array.from(
+      new Set(matched.map((g) => g.profileId).filter((id): id is string => !!id)),
+    );
+    if (profileIds.length === 0) return null;
+
+    const profiles = await this.profiles.find({
+      where: { id: In(profileIds) },
+    });
+    if (profiles.length === 0) return null;
+
+    const n = profiles.length;
+    const avg = (selector: (p: GenreProfile) => unknown): number => {
+      const sum = profiles.reduce(
+        (acc, p) => acc + Number(selector(p) ?? 0),
+        0,
+      );
+      return sum / n;
+    };
+
+    const tailY2 =
+      profiles.reduce(
+        (acc, p) => acc + YEAR2_TAIL_FACTOR[p.year2Retention].y2,
+        0,
+      ) / n;
+    const tailY5 =
+      profiles.reduce(
+        (acc, p) => acc + YEAR2_TAIL_FACTOR[p.year2Retention].y5,
+        0,
+      ) / n;
+
+    const medianRetention =
+      profiles
+        .map((p) => RETENTION_ORDER.indexOf(p.year2Retention))
+        .sort((a, b) => a - b)[Math.floor((n - 1) / 2)] ?? 0;
+
+    const minConfidence = profiles.reduce<ConfidenceLevel>(
+      (worst, p) =>
+        CONFIDENCE_ORDER.indexOf(p.confidence) <
+        CONFIDENCE_ORDER.indexOf(worst)
+          ? p.confidence
+          : worst,
+      ConfidenceLevel.HIGH,
+    );
+
+    return {
+      matchedSlugs: profiles.map((p) => p.slug).sort(),
+      pcShare: avg((p) => p.pcShare),
+      playstationShare: avg((p) => p.playstationShare),
+      xboxShare: avg((p) => p.xboxShare),
+      switchShare: avg((p) => p.switchShare),
+      firstWeekToYearOneMultiplier: avg(
+        (p) => p.firstWeekToYearOneMultiplier,
+      ),
+      year2Retention: RETENTION_ORDER[medianRetention],
+      tailFactorY2: tailY2,
+      tailFactorY5: tailY5,
+      lifecycleIndex: avg((p) => p.lifecycleIndex),
+      peakCcuToWeekOneLow: avg((p) => p.peakCcuToWeekOneLow),
+      peakCcuToWeekOneHigh: avg((p) => p.peakCcuToWeekOneHigh),
+      confidence: minConfidence,
+    };
   }
 
   /**

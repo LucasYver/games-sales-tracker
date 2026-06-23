@@ -1,6 +1,11 @@
 import Link from 'next/link';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
-import { adminFetch, type AdminGameDetail } from '@/lib/admin';
+import {
+  adminFetch,
+  type AdminEstimate,
+  type AdminEstimateSnapshot,
+  type AdminGameDetail,
+} from '@/lib/admin';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -78,6 +83,122 @@ function hostnameOf(url: string): string {
   } catch {
     return url;
   }
+}
+
+// Estimates produced in a single run share the same `computedAt` (down
+// to a few ms of drift between the base / aggregate / split saves on the
+// live path). Group everything within this window of the most recent
+// estimate as "the latest batch" — the methods that actually fed the
+// current headline snapshot.
+const BATCH_WINDOW_MS = 15_000;
+
+const PLATFORM_ORDER = ['PC', 'PLAYSTATION', 'XBOX', 'SWITCH', 'GLOBAL'];
+
+function platformRank(platform: string): number {
+  const i = PLATFORM_ORDER.indexOf(platform);
+  return i === -1 ? PLATFORM_ORDER.length : i;
+}
+
+interface PlatformGroup {
+  platform: string;
+  aggregate: AdminEstimate | null;
+  methods: AdminEstimate[];
+}
+
+/**
+ * Split the flat estimate list into the most recent batch (what built the
+ * current snapshot) and everything older, then group the latest batch by
+ * platform with the `aggregated` consensus row pulled aside.
+ */
+function buildLatestBatch(estimates: AdminEstimate[]): {
+  computedAt: string | null;
+  groups: PlatformGroup[];
+  olderCount: number;
+} {
+  if (estimates.length === 0) {
+    return { computedAt: null, groups: [], olderCount: 0 };
+  }
+
+  const maxTs = Math.max(
+    ...estimates.map((e) => new Date(e.computedAt).getTime()),
+  );
+  const latest: AdminEstimate[] = [];
+  let olderCount = 0;
+  for (const e of estimates) {
+    if (maxTs - new Date(e.computedAt).getTime() <= BATCH_WINDOW_MS) {
+      latest.push(e);
+    } else {
+      olderCount += 1;
+    }
+  }
+
+  const byPlatform = new Map<string, PlatformGroup>();
+  for (const e of latest) {
+    const group =
+      byPlatform.get(e.platform) ??
+      ({ platform: e.platform, aggregate: null, methods: [] } as PlatformGroup);
+    if (e.method === 'aggregated') {
+      group.aggregate = e;
+    } else {
+      group.methods.push(e);
+    }
+    byPlatform.set(e.platform, group);
+  }
+
+  const groups = [...byPlatform.values()].sort(
+    (a, b) => platformRank(a.platform) - platformRank(b.platform),
+  );
+  for (const g of groups) {
+    g.methods.sort((a, b) => {
+      // Canonical rows first, then references; alphabetical within
+      // each section so the table is stable across renders.
+      if (a.isReference !== b.isReference) return a.isReference ? 1 : -1;
+      return a.method.localeCompare(b.method);
+    });
+  }
+
+  return {
+    computedAt: new Date(maxTs).toISOString(),
+    groups,
+    olderCount,
+  };
+}
+
+const AGREEMENT_STYLE: Record<
+  'strong' | 'weak' | 'conflict',
+  { label: string; className: string }
+> = {
+  strong: {
+    label: 'Strong',
+    className:
+      'border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200',
+  },
+  weak: {
+    label: 'Weak',
+    className:
+      'border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200',
+  },
+  conflict: {
+    label: 'Conflict',
+    className:
+      'border-red-300 bg-red-100 text-red-800 dark:border-red-700 dark:bg-red-900/40 dark:text-red-200',
+  },
+};
+
+function AgreementBadge({
+  agreement,
+}: {
+  agreement: 'strong' | 'weak' | 'conflict';
+}) {
+  const style = AGREEMENT_STYLE[agreement];
+  return (
+    <Badge
+      variant="outline"
+      className={cn('text-[10px] tracking-wide uppercase', style.className)}
+    >
+      {style.label}
+    </Badge>
+  );
 }
 
 export default async function AdminGameDetailPage({
@@ -242,26 +363,14 @@ export default async function AdminGameDetailPage({
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-            Current estimate
+            Latest snapshot
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-2">
+        <CardContent className="flex flex-col gap-5">
           {latestSnapshot ? (
             <>
-              <p className="text-primary text-5xl font-bold tracking-tight tabular-nums">
-                {formatRange(
-                  latestSnapshot.estimatedTodayLow,
-                  latestSnapshot.estimatedTodayHigh,
-                )}
-              </p>
-              <p className="text-muted-foreground text-sm">
-                units · from latest snapshot{' '}
-                {formatDateTime(latestSnapshot.computedAt)}
-              </p>
-              <p className="text-muted-foreground text-xs tabular-nums">
-                {latestSnapshot.estimatedTodayLow.toLocaleString()} –{' '}
-                {latestSnapshot.estimatedTodayHigh.toLocaleString()} units
-              </p>
+              <SnapshotHeadline snapshot={latestSnapshot} />
+              <SnapshotReconciliation snapshot={latestSnapshot} />
             </>
           ) : (
             <p className="text-muted-foreground text-sm">
@@ -295,58 +404,7 @@ export default async function AdminGameDetailPage({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-            Calculation methods ({game.estimates.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 p-0">
-          {game.estimates.length === 0 ? (
-            <p className="text-muted-foreground p-6 text-sm">
-              No estimates yet.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Platform</TableHead>
-                  <TableHead>Method</TableHead>
-                  <TableHead>Confidence</TableHead>
-                  <TableHead className="text-right">Low</TableHead>
-                  <TableHead className="text-right">High</TableHead>
-                  <TableHead>Computed</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {game.estimates.map((e) => (
-                  <TableRow key={e.id}>
-                    <TableCell>
-                      <Badge variant="secondary">{e.platform}</Badge>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {e.method}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{e.confidence}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {e.estimatedLow.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {e.estimatedHigh.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-xs">
-                      {formatDateTime(e.computedAt)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-          <MethodLegend className="px-6 pb-6" />
-        </CardContent>
-      </Card>
+      <MethodsCard estimates={game.estimates} />
 
       <Tabs defaultValue="sales" className="gap-4">
         <TabsList className="h-auto flex-wrap">
@@ -617,6 +675,355 @@ export default async function AdminGameDetailPage({
   );
 }
 
+function SnapshotHeadline({ snapshot }: { snapshot: AdminEstimateSnapshot }) {
+  const reconciledMid =
+    (snapshot.estimatedTodayLow + snapshot.estimatedTodayHigh) / 2;
+  const hasPure =
+    snapshot.pureEstimatedTodayLow !== null &&
+    snapshot.pureEstimatedTodayHigh !== null;
+  const pureMid = hasPure
+    ? ((snapshot.pureEstimatedTodayLow as number) +
+        (snapshot.pureEstimatedTodayHigh as number)) /
+      2
+    : null;
+  const deltaPct =
+    pureMid !== null && reconciledMid > 0
+      ? ((pureMid - reconciledMid) / reconciledMid) * 100
+      : null;
+  const deltaTone =
+    deltaPct === null || Math.abs(deltaPct) <= 10
+      ? 'text-muted-foreground'
+      : deltaPct > 0
+        ? 'text-amber-600 dark:text-amber-400'
+        : 'text-blue-600 dark:text-blue-400';
+
+  return (
+    <div className="grid gap-6 sm:grid-cols-2">
+      <div className="flex flex-col gap-1">
+        <p className="text-primary text-4xl font-bold tracking-tight tabular-nums">
+          {formatRange(
+            snapshot.estimatedTodayLow,
+            snapshot.estimatedTodayHigh,
+          )}
+        </p>
+        <p className="text-muted-foreground text-[11px] tracking-wide uppercase">
+          Reconciled headline · with declared figures
+        </p>
+        <p className="text-muted-foreground text-xs tabular-nums">
+          {snapshot.estimatedTodayLow.toLocaleString()} –{' '}
+          {snapshot.estimatedTodayHigh.toLocaleString()} units
+        </p>
+        <p className="text-muted-foreground text-xs">
+          {formatDateTime(snapshot.computedAt)}
+        </p>
+      </div>
+
+      <div className="border-muted bg-muted/20 flex flex-col gap-1 rounded-md border p-3">
+        {hasPure ? (
+          <>
+            <p className="text-foreground text-3xl font-semibold tracking-tight tabular-nums">
+              {formatRange(
+                snapshot.pureEstimatedTodayLow as number,
+                snapshot.pureEstimatedTodayHigh as number,
+              )}
+            </p>
+            <p className="text-muted-foreground text-[11px] tracking-wide uppercase">
+              Pure algo · no declared figures
+            </p>
+            <p className="text-muted-foreground text-xs tabular-nums">
+              {(
+                snapshot.pureEstimatedTodayLow as number
+              ).toLocaleString()}{' '}
+              –{' '}
+              {(
+                snapshot.pureEstimatedTodayHigh as number
+              ).toLocaleString()}{' '}
+              units
+            </p>
+            {deltaPct !== null && (
+              <p className={cn('text-xs tabular-nums', deltaTone)}>
+                Δ vs reconciled: {deltaPct >= 0 ? '+' : ''}
+                {deltaPct.toFixed(1)}%
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            <p className="text-muted-foreground text-3xl font-semibold tracking-tight">
+              —
+            </p>
+            <p className="text-muted-foreground text-[11px] tracking-wide uppercase">
+              Pure algo · no declared figures
+            </p>
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Not computed for this snapshot. Refresh the game to populate
+              both ranges on the next run.
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SnapshotReconciliation({
+  snapshot,
+}: {
+  snapshot: AdminEstimateSnapshot;
+}) {
+  if (snapshot.reconciliation.length === 0) {
+    return (
+      <div className="border-muted bg-muted/30 rounded-md border p-4 text-sm">
+        <p className="text-muted-foreground">
+          No declared sales figure to cross-check against. The headline is the
+          pure <span className="font-mono text-xs">aggregated</span> estimate —
+          the weighted blend of every enabled method per platform (see{' '}
+          <em>Calculation methods</em> below).
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
+        How the headline reconciles with declared figures
+      </p>
+      <div className="flex flex-col gap-3">
+        {snapshot.reconciliation.map((r) => (
+          <div
+            key={`${r.platform}-${r.declaredSource}-${r.declaredAt}`}
+            className="border-muted rounded-md border p-3"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary">{r.platform}</Badge>
+              <AgreementBadge agreement={r.agreement} />
+              <span className="text-muted-foreground text-xs tabular-nums">
+                ratio ×{r.ratio.toFixed(2)}
+              </span>
+            </div>
+            <div className="mt-2 grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-muted-foreground text-[11px] tracking-wide uppercase">
+                  Declared
+                </span>
+                <span className="tabular-nums">
+                  {r.declaredUnits.toLocaleString()} units
+                </span>
+                <span className="text-muted-foreground text-xs">
+                  {r.declaredSource}
+                  {r.declaredAt ? ` · ${formatDate(r.declaredAt)}` : ''}
+                </span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-muted-foreground text-[11px] tracking-wide uppercase">
+                  Our estimate
+                </span>
+                <span className="tabular-nums">
+                  {r.estimateLow.toLocaleString()} –{' '}
+                  {r.estimateHigh.toLocaleString()} units
+                </span>
+                <span className="text-muted-foreground font-mono text-[11px]">
+                  {r.estimateMethod}
+                </span>
+              </div>
+            </div>
+            {r.detail && (
+              <p className="text-muted-foreground mt-2 text-xs leading-relaxed">
+                {r.detail}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MethodsCard({ estimates }: { estimates: AdminEstimate[] }) {
+  const { computedAt, groups, olderCount } = buildLatestBatch(estimates);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm font-semibold tracking-wide uppercase">
+          Calculation methods
+        </CardTitle>
+        {computedAt && (
+          <p className="text-muted-foreground text-xs">
+            Latest batch · {formatDateTime(computedAt)} · {groups.length}{' '}
+            platform{groups.length > 1 ? 's' : ''}
+          </p>
+        )}
+      </CardHeader>
+      <CardContent className="flex flex-col gap-6 p-0">
+        {groups.length === 0 ? (
+          <p className="text-muted-foreground p-6 text-sm">No estimates yet.</p>
+        ) : (
+          <div className="flex flex-col gap-6 px-6">
+            {groups.map((group) => (
+              <PlatformMethodGroup key={group.platform} group={group} />
+            ))}
+          </div>
+        )}
+
+        {olderCount > 0 && (
+          <details className="px-6">
+            <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-xs">
+              Show full history ({olderCount} older row
+              {olderCount > 1 ? 's' : ''})
+            </summary>
+            <div className="mt-3">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Platform</TableHead>
+                    <TableHead>Method</TableHead>
+                    <TableHead>Confidence</TableHead>
+                    <TableHead className="text-right">Low</TableHead>
+                    <TableHead className="text-right">High</TableHead>
+                    <TableHead>Computed</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {estimates.map((e) => (
+                    <TableRow
+                      key={e.id}
+                      className={cn(
+                        e.isReference && 'text-muted-foreground bg-muted/30',
+                      )}
+                    >
+                      <TableCell>
+                        <Badge variant="secondary">{e.platform}</Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        <div className="flex items-center gap-2">
+                          <span>{e.method}</span>
+                          {e.isReference && (
+                            <Badge
+                              variant="outline"
+                              className="border-dashed text-[10px] font-normal tracking-wide uppercase"
+                            >
+                              ref
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{e.confidence}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {e.estimatedLow.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {e.estimatedHigh.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-xs">
+                        {formatDateTime(e.computedAt)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </details>
+        )}
+
+        <MethodLegend className="px-6 pb-6" />
+      </CardContent>
+    </Card>
+  );
+}
+
+function PlatformMethodGroup({ group }: { group: PlatformGroup }) {
+  return (
+    <section className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b pb-2">
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary">{group.platform}</Badge>
+          {(() => {
+            const main = group.methods.filter((m) => !m.isReference).length;
+            const refs = group.methods.length - main;
+            return (
+              <span className="text-muted-foreground text-xs">
+                {main} method{main > 1 ? 's' : ''} → consensus
+                {refs > 0 && (
+                  <span className="text-muted-foreground/70">
+                    {' '}· {refs} ref variant{refs > 1 ? 's' : ''}
+                  </span>
+                )}
+              </span>
+            );
+          })()}
+        </div>
+        {group.aggregate ? (
+          <div className="flex items-center gap-2 text-sm">
+            <Badge variant="outline">{group.aggregate.confidence}</Badge>
+            <span className="font-semibold tabular-nums">
+              {group.aggregate.estimatedLow.toLocaleString()} –{' '}
+              {group.aggregate.estimatedHigh.toLocaleString()}
+            </span>
+          </div>
+        ) : (
+          <span className="text-muted-foreground text-xs italic">
+            no aggregate row
+          </span>
+        )}
+      </div>
+
+      {group.methods.length === 0 ? (
+        <p className="text-muted-foreground py-2 text-xs">
+          Only an aggregate row — no individual method contributed.
+        </p>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Method</TableHead>
+              <TableHead>Confidence</TableHead>
+              <TableHead className="text-right">Low</TableHead>
+              <TableHead className="text-right">High</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {group.methods.map((e) => (
+              <TableRow
+                key={e.id}
+                className={cn(
+                  e.isReference && 'text-muted-foreground bg-muted/30',
+                )}
+              >
+                <TableCell className="font-mono text-xs">
+                  <div className="flex items-center gap-2">
+                    <span>{e.method}</span>
+                    {e.isReference && (
+                      <Badge
+                        variant="outline"
+                        className="border-dashed text-[10px] font-normal tracking-wide uppercase"
+                      >
+                        ref
+                      </Badge>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline">{e.confidence}</Badge>
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {e.estimatedLow.toLocaleString()}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {e.estimatedHigh.toLocaleString()}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </section>
+  );
+}
+
 function MethodLegend({ className }: { className?: string }) {
   const entries: { tag: string; description: string }[] = [
     {
@@ -632,6 +1039,26 @@ function MethodLegend({ className }: { className?: string }) {
     {
       tag: 'xbox-ratings-boxleiter',
       description: 'Xbox estimate: Xbox ratings × Boxleiter-style multiplier.',
+    },
+    {
+      tag: 'first-week-extrapolation-pc',
+      description:
+        'PC lifecycle method: week-1 units from peak CCU (and launch reviews) projected to today via a degressive curve.',
+    },
+    {
+      tag: 'genre-console-split-from-pc-{platform}',
+      description:
+        'Console estimate ventilated from the PC aggregate using the genre profile platform split (psShare/xboxShare ÷ pcShare).',
+    },
+    {
+      tag: 'aggregated',
+      description:
+        'Consensus per platform: confidence-weighted blend of every enabled method, widened when methods disagree.',
+    },
+    {
+      tag: '…+genre',
+      description:
+        'Suffix added when a resolved genre profile drives the projection curve and peak-CCU→week-1 ratio.',
     },
     {
       tag: '…-calibrated-{source}',

@@ -10,6 +10,7 @@ import {
 } from '../entities';
 import { EstimationMethodService } from './estimation-method.service';
 import { EstimationService } from './estimation.service';
+import { GenresModule } from '../genres/genres.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { EstimationService } from './estimation.service';
       AchievementSnapshot,
       EstimationMethod,
     ]),
+    GenresModule,
   ],
   providers: [EstimationService, EstimationMethodService],
   exports: [EstimationService, EstimationMethodService],
