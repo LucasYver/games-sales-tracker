@@ -19,20 +19,21 @@ export class StoreRatingsClient {
   private readonly logger = new Logger(StoreRatingsClient.name);
 
   /**
-   * Collect the number of user ratings for a game on each console store.
-   * The rating count is later turned into a per-platform sales proxy (a
-   * console Boxleiter). Each store is best-effort: a failure or a no-match
-   * yields nothing rather than throwing.
+   * Collect the number of user ratings for a game on console stores. The
+   * count is later turned into a per-platform sales proxy (a console
+   * Boxleiter). Best-effort: a failure or a no-match yields nothing
+   * rather than throwing.
    *
-   * - PlayStation Store and Xbox Store expose a public rating count.
-   *   skipped here and relies on reported figures (Wikipedia/press) instead.
+   * Today only PlayStation is scraped. The Xbox Store exposes a rating
+   * count strictly limited to the current locale's market (no global
+   * aggregate available on the page), which under-counted AAA titles by
+   * 10×+. The Xbox estimate is instead derived from the PS aggregate
+   * via the `genre-console-split-from-ps-xbox` method (see
+   * `EstimationService.aggregateResultsByPlatform`).
    */
   async getRatings(name: string): Promise<StoreRating[]> {
-    const [ps, xbox] = await Promise.all([
-      this.getPlaystation(name),
-      this.getXbox(name),
-    ]);
-    return [ps, xbox].filter((r): r is StoreRating => r !== null);
+    const ps = await this.getPlaystation(name);
+    return ps ? [ps] : [];
   }
 
   private async getPlaystation(name: string): Promise<StoreRating | null> {
@@ -165,49 +166,6 @@ export class StoreRatingsClient {
     return null;
   }
 
-  private async getXbox(name: string): Promise<StoreRating | null> {
-    try {
-      const search = await this.fetch(
-        `https://www.xbox.com/en-US/Search/Results?q=${encodeURIComponent(name)}`,
-      );
-      if (!search) return null;
-
-      // The "games" bucket lists product ids in relevance order: take the first.
-      const bucket = search.match(
-        /"SEARCH_GAMES_SEARCHQUERY=[^"]*":\{"type":2,"data":\{"products":\[\{"productId":"([A-Z0-9]{12})"/,
-      );
-      if (!bucket) return null;
-
-      const productId = bucket[1];
-      const url = `https://www.xbox.com/en-US/games/store/x/${productId}`;
-      const page = await this.fetch(url);
-      if (!page) return null;
-
-      // The product's real title only lives in the canonical URL slug. Tie it
-      // to the known product id and ignore our placeholder "x" slug.
-      const title = this.extractXboxTitle(page, productId);
-      if (!title || !this.titleMatches(name, title)) return null;
-
-      const rc = page.match(/"ratingCount":(\d+)/);
-      const ar = page.match(/"averageRating":([\d.]+)/);
-      if (!rc) return null;
-
-      const ratingCount = Number(rc[1]);
-      if (ratingCount <= 0) return null;
-
-      return {
-        platform: Platform.XBOX,
-        metric: SignalMetric.XBOX_RATINGS,
-        ratingCount,
-        averageRating: ar ? Number(ar[1]) : null,
-        sourceUrl: `https://www.xbox.com/en-US/games/store/${title.replace(/\s+/g, '-')}/${productId}`,
-      };
-    } catch (error) {
-      this.logger.warn(`Xbox lookup failed for "${name}": ${error}`);
-      return null;
-    }
-  }
-
   private extractPsTitle(page: string): string | null {
     const match = page.match(/<title>([^<]+)<\/title>/);
     if (!match) return null;
@@ -216,18 +174,6 @@ export class StoreRatingsClient {
       .replace(/\b(PS4 & PS5|PS4|PS5)\b/g, '')
       .replace(/[™®]/g, '')
       .trim();
-  }
-
-  private extractXboxTitle(page: string, productId: string): string | null {
-    const re = new RegExp(
-      `store(?:\\\\u002F|/)([a-z0-9-]+)(?:\\\\u002F|/)${productId}`,
-      'g',
-    );
-    let match: RegExpExecArray | null;
-    while ((match = re.exec(page))) {
-      if (match[1] !== 'x') return match[1].replace(/-/g, ' ');
-    }
-    return null;
   }
 
   // Accept when one normalized title is a prefix of the other (store titles
