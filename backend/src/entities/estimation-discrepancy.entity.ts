@@ -8,23 +8,23 @@ import {
 } from 'typeorm';
 import { Platform, SalesSource } from './enums';
 import { Game } from './game.entity';
-import { SalesRecord } from './sales-record.entity';
+import { Milestone } from './milestone.entity';
 
 /**
- * One row each time an incoming `SalesRecord` reveals that our prior
+ * One row each time an incoming `Milestone` reveals that our prior
  * estimate for the same game/platform was significantly off (ratio
  * outside [DISCREPANCY_RATIO_LOW, DISCREPANCY_RATIO_HIGH]). Created at
- * record ingestion time and **never updated** afterwards — even if we
+ * milestone ingestion time and **never updated** afterwards — even if we
  * later recalibrate and the live `agreement` flips to `strong`, the
  * frozen miss stays as evidence of the model's past error.
  *
- * Unique on `recordId`: each record produces at most one discrepancy.
- * Re-evaluation is a no-op for already-evaluated records, so the
+ * Unique on `milestoneId`: each milestone produces at most one discrepancy.
+ * Re-evaluation is a no-op for already-evaluated milestones, so the
  * historical truth is stable.
  */
 @Entity('estimation_discrepancy')
 @Index(['gameId', 'detectedAt'])
-@Index(['recordId'], { unique: true })
+@Index(['milestoneId'], { unique: true })
 export class EstimationDiscrepancy {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -36,7 +36,7 @@ export class EstimationDiscrepancy {
   platform: Platform;
 
   @Column('uuid')
-  recordId: string;
+  milestoneId: string;
 
   @Column('int')
   declaredUnits: number;
@@ -69,7 +69,7 @@ export class EstimationDiscrepancy {
   @JoinColumn({ name: 'gameId' })
   game: Game;
 
-  @ManyToOne(() => SalesRecord, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'recordId' })
-  record: SalesRecord;
+  @ManyToOne(() => Milestone, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'milestoneId' })
+  milestone: Milestone;
 }

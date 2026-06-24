@@ -12,10 +12,10 @@ import {
   Game,
   GameSource,
   LauncherProfile,
+  Milestone,
   Platform,
   ProcessedArticle,
   SalesEstimate,
-  SalesRecord,
   SalesSource,
   SerializedReconciliationEntry,
   SignalMetric,
@@ -46,7 +46,7 @@ export interface AdminStats {
     withEstimate: number;
     withCalibration: number;
   };
-  salesRecords: {
+  milestones: {
     total: number;
     bySource: Record<SalesSource, number>;
     byPlatform: Record<Platform, number>;
@@ -79,7 +79,7 @@ export interface AdminGameSummary {
   calibrationSourcePc: SalesSource | null;
   calibrationSourcePs: SalesSource | null;
   calibrationSourceXbox: SalesSource | null;
-  salesRecordsCount: number;
+  milestonesCount: number;
   estimatesCount: number;
   latestReviews: number | null;
   latestReviewsAt: Date | null;
@@ -121,6 +121,7 @@ export interface AdminGameDetail extends AdminGameSummary {
   igdbId: number | null;
   coverUrl: string | null;
   summary: string | null;
+  genres: string[];
   lastRefreshedAt: Date | null;
   allTimePeakCcu: number | null;
   allTimePeakCcuAt: Date | null;
@@ -131,7 +132,7 @@ export interface AdminGameDetail extends AdminGameSummary {
     launcherProfile: LauncherProfile;
   } | null;
   sources: GameSource[];
-  salesRecords: SalesRecord[];
+  milestones: Milestone[];
   estimates: SalesEstimate[];
   signals: SignalSnapshot[];
   achievementSnapshots: AdminAchievementSummary[];
@@ -149,8 +150,8 @@ export interface IssueGroup<T> {
 }
 
 export interface AdminIssues {
-  undatedSalesRecords: IssueGroup<SalesRecord & { gameName: string }>;
-  suspectQuotes: IssueGroup<SalesRecord & { gameName: string }>;
+  undatedMilestones: IssueGroup<Milestone & { gameName: string }>;
+  suspectQuotes: IssueGroup<Milestone & { gameName: string }>;
   calibrationOutliers: IssueGroup<{
     gameId: string;
     gameName: string;
@@ -193,8 +194,8 @@ export class AdminService {
     private readonly signals: Repository<SignalSnapshot>,
     @InjectRepository(SalesEstimate)
     private readonly estimates: Repository<SalesEstimate>,
-    @InjectRepository(SalesRecord)
-    private readonly salesRecords: Repository<SalesRecord>,
+    @InjectRepository(Milestone)
+    private readonly milestones: Repository<Milestone>,
     @InjectRepository(TrustedSource)
     private readonly trustedSources: Repository<TrustedSource>,
     @InjectRepository(ProcessedArticle)
@@ -228,7 +229,7 @@ export class AdminService {
       this.games.count(),
       this.games
         .createQueryBuilder('g')
-        .innerJoin('g.salesRecords', 'sr', 'sr.rejectedAt IS NULL')
+        .innerJoin('g.milestones', 'm', 'm.rejectedAt IS NULL')
         .select('COUNT(DISTINCT g.id)', 'c')
         .getRawOne<{ c: string }>(),
       this.games
@@ -237,23 +238,23 @@ export class AdminService {
         .select('COUNT(DISTINCT g.id)', 'c')
         .getRawOne<{ c: string }>(),
       this.games.count({ where: { calibratedMultiplier: undefined } as never }),
-      this.salesRecords.count({ where: { rejectedAt: IsNull() } }),
-      this.salesRecords.count({
+      this.milestones.count({ where: { rejectedAt: IsNull() } }),
+      this.milestones.count({
         where: { reportedAt: IsNull(), rejectedAt: IsNull() },
       }),
-      this.salesRecords
-        .createQueryBuilder('sr')
-        .where('sr.rejectedAt IS NULL')
-        .select('sr.source', 'source')
+      this.milestones
+        .createQueryBuilder('m')
+        .where('m.rejectedAt IS NULL')
+        .select('m.source', 'source')
         .addSelect('COUNT(*)', 'c')
-        .groupBy('sr.source')
+        .groupBy('m.source')
         .getRawMany<{ source: SalesSource; c: string }>(),
-      this.salesRecords
-        .createQueryBuilder('sr')
-        .where('sr.rejectedAt IS NULL')
-        .select('sr.platform', 'platform')
+      this.milestones
+        .createQueryBuilder('m')
+        .where('m.rejectedAt IS NULL')
+        .select('m.platform', 'platform')
         .addSelect('COUNT(*)', 'c')
-        .groupBy('sr.platform')
+        .groupBy('m.platform')
         .getRawMany<{ platform: Platform; c: string }>(),
       this.signals
         .createQueryBuilder('s')
@@ -308,7 +309,7 @@ export class AdminService {
         withEstimate: Number(gamesWithEstimate?.c ?? 0),
         withCalibration: calibrated,
       },
-      salesRecords: {
+      milestones: {
         total: salesTotal,
         bySource,
         byPlatform,
@@ -342,7 +343,7 @@ export class AdminService {
       .leftJoin('g.signals', 's', 's.metric = :metric', {
         metric: SignalMetric.STEAM_REVIEWS,
       })
-      .leftJoin('g.salesRecords', 'sr', 'sr.rejectedAt IS NULL')
+      .leftJoin('g.milestones', 'm', 'm.rejectedAt IS NULL')
       .leftJoin('g.estimates', 'e')
       .select([
         'g.id AS id',
@@ -360,7 +361,7 @@ export class AdminService {
         'g.createdAt AS "createdAt"',
         'g.updatedAt AS "updatedAt"',
       ])
-      .addSelect('COUNT(DISTINCT sr.id)', 'salesRecordsCount')
+      .addSelect('COUNT(DISTINCT m.id)', 'milestonesCount')
       .addSelect('COUNT(DISTINCT e.id)', 'estimatesCount')
       .addSelect('MAX(s.value)', 'latestReviews')
       .addSelect('MAX(s.capturedAt)', 'latestReviewsAt')
@@ -376,9 +377,9 @@ export class AdminService {
       );
     }
     if (opts.hasSales === true) {
-      qb.andHaving('COUNT(DISTINCT sr.id) > 0');
+      qb.andHaving('COUNT(DISTINCT m.id) > 0');
     } else if (opts.hasSales === false) {
-      qb.andHaving('COUNT(DISTINCT sr.id) = 0');
+      qb.andHaving('COUNT(DISTINCT m.id) = 0');
     }
 
     const countQb = this.games.createQueryBuilder('g');
@@ -413,7 +414,7 @@ export class AdminService {
         calibrationSourceXbox: SalesSource | null;
         createdAt: Date;
         updatedAt: Date;
-        salesRecordsCount: string;
+        milestonesCount: string;
         estimatesCount: string;
         latestReviews: string | null;
         latestReviewsAt: Date | null;
@@ -441,7 +442,7 @@ export class AdminService {
       calibrationSourcePc: r.calibrationSourcePc,
       calibrationSourcePs: r.calibrationSourcePs,
       calibrationSourceXbox: r.calibrationSourceXbox,
-      salesRecordsCount: Number(r.salesRecordsCount ?? 0),
+      milestonesCount: Number(r.milestonesCount ?? 0),
       estimatesCount: Number(r.estimatesCount ?? 0),
       latestReviews: r.latestReviews == null ? null : Number(r.latestReviews),
       latestReviewsAt: r.latestReviewsAt,
@@ -457,14 +458,14 @@ export class AdminService {
       where: { id },
       relations: {
         sources: true,
-        salesRecords: true,
+        milestones: true,
         estimates: true,
         publisherRecord: true,
       },
     });
     if (!game) throw new NotFoundException(`Game ${id} not found`);
-    const visibleSalesRecords = game.salesRecords.filter(
-      (sr) => sr.rejectedAt == null,
+    const visibleMilestones = game.milestones.filter(
+      (m) => m.rejectedAt == null,
     );
 
     const signals = await this.signals.find({
@@ -518,7 +519,7 @@ export class AdminService {
       calibrationSourcePc: game.calibrationSourcePc,
       calibrationSourcePs: game.calibrationSourcePs,
       calibrationSourceXbox: game.calibrationSourceXbox,
-      salesRecordsCount: visibleSalesRecords.length,
+      milestonesCount: visibleMilestones.length,
       estimatesCount: game.estimates.length,
       latestReviews: latestReviews?.value ?? null,
       latestReviewsAt: latestReviews?.capturedAt ?? null,
@@ -529,6 +530,7 @@ export class AdminService {
       igdbId: game.igdbId,
       coverUrl: game.coverUrl,
       summary: game.summary,
+      genres: game.genres ?? [],
       lastRefreshedAt: game.lastRefreshedAt,
       publisher: game.publisher,
       publisherRecord: game.publisherRecord
@@ -539,7 +541,7 @@ export class AdminService {
           }
         : null,
       sources: game.sources,
-      salesRecords: visibleSalesRecords.sort(
+      milestones: visibleMilestones.sort(
         (a, b) =>
           (b.reportedAt?.getTime() ?? 0) - (a.reportedAt?.getTime() ?? 0),
       ),
@@ -662,10 +664,11 @@ export class AdminService {
       }
     }
 
-    // Calibrated multipliers must always travel with their source (the entity
-    // contract says "always populated when the corresponding multiplier is").
-    // Setting one without the other would break downstream confidence logic
-    // (CALIBRATED_MULTIPLIER_SPREAD_BY_SOURCE).
+    // Calibrated multipliers must always travel with their source (the
+    // entity contract says "always populated when the corresponding
+    // multiplier is"). The source is purely informational now — spread is
+    // uniform — but we keep the pairing for traceability and so the
+    // admin UI can show "calibrated from <source>" next to the value.
     this.applyCalibration(
       game,
       'calibratedMultiplier',
@@ -753,7 +756,7 @@ export class AdminService {
     return candidate;
   }
 
-  async listSalesRecords(opts: {
+  async listMilestones(opts: {
     gameId?: string;
     source?: SalesSource;
     platform?: Platform;
@@ -761,21 +764,21 @@ export class AdminService {
     suspect?: boolean;
     offset?: number;
     limit?: number;
-  }): Promise<PaginatedAdmin<SalesRecord & { gameName: string }>> {
+  }): Promise<PaginatedAdmin<Milestone & { gameName: string }>> {
     const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
     const offset = Math.max(opts.offset ?? 0, 0);
 
-    const qb = this.salesRecords
-      .createQueryBuilder('sr')
-      .innerJoin('sr.game', 'g')
+    const qb = this.milestones
+      .createQueryBuilder('m')
+      .innerJoin('m.game', 'g')
       .addSelect('g.name', 'gameName')
-      .where('sr.rejectedAt IS NULL')
-      .orderBy('sr.capturedAt', 'DESC');
+      .where('m.rejectedAt IS NULL')
+      .orderBy('m.capturedAt', 'DESC');
 
-    if (opts.gameId) qb.andWhere('sr.gameId = :gid', { gid: opts.gameId });
-    if (opts.source) qb.andWhere('sr.source = :src', { src: opts.source });
-    if (opts.platform) qb.andWhere('sr.platform = :pf', { pf: opts.platform });
-    if (opts.undated) qb.andWhere('sr.reportedAt IS NULL');
+    if (opts.gameId) qb.andWhere('m.gameId = :gid', { gid: opts.gameId });
+    if (opts.source) qb.andWhere('m.source = :src', { src: opts.source });
+    if (opts.platform) qb.andWhere('m.platform = :pf', { pf: opts.platform });
+    if (opts.undated) qb.andWhere('m.reportedAt IS NULL');
 
     const [entities, raws, total] = await Promise.all([
       qb.clone().offset(offset).limit(limit).getMany(),
@@ -783,25 +786,26 @@ export class AdminService {
       qb.clone().getCount(),
     ]);
 
-    let items = entities.map((sr, i) => ({
-      ...sr,
+    let items = entities.map((m, i) => ({
+      ...m,
       gameName: raws[i]?.gameName ?? '',
     }));
 
     if (opts.suspect) {
-      items = items.filter((sr) => sr.note && isPeriodicQuote(sr.note));
+      items = items.filter((m) => m.note && isPeriodicQuote(m.note));
     }
 
     return { items, total };
   }
 
   /**
-   * Soft-delete: mark the record as rejected instead of hard-deleting it.
-   * The row is then hidden from every read (admin + public) AND used as an
-   * ingestion fingerprint guard so the next refresh can't re-create it.
+   * Soft-delete: mark the milestone as rejected instead of hard-deleting
+   * it. The row is then hidden from every read (admin + public) AND used
+   * as an ingestion fingerprint guard so the next refresh can't re-create
+   * it.
    */
-  async deleteSalesRecord(id: string): Promise<{ deleted: boolean }> {
-    const result = await this.salesRecords.update(
+  async deleteMilestone(id: string): Promise<{ deleted: boolean }> {
+    const result = await this.milestones.update(
       { id, rejectedAt: IsNull() },
       { rejectedAt: new Date() },
     );
@@ -813,14 +817,14 @@ export class AdminService {
       order: { active: 'DESC', weight: 'DESC', name: 'ASC' },
     });
 
-    // Aggregate non-rejected sales records by the hostname of their sourceUrl,
-    // then sum the counts of hostnames matching each source's host (exact or
-    // subdomain — same rule as SourcesService.findByUrl).
-    const rows = await this.salesRecords
-      .createQueryBuilder('sr')
-      .select('sr.sourceUrl', 'sourceUrl')
-      .where('sr.rejectedAt IS NULL')
-      .andWhere('sr.sourceUrl IS NOT NULL')
+    // Aggregate non-rejected milestones by the hostname of their sourceUrl,
+    // then sum the counts of hostnames matching each source's host (exact
+    // or subdomain — same rule as SourcesService.findByUrl).
+    const rows = await this.milestones
+      .createQueryBuilder('m')
+      .select('m.sourceUrl', 'sourceUrl')
+      .where('m.rejectedAt IS NULL')
+      .andWhere('m.sourceUrl IS NOT NULL')
       .getRawMany<{ sourceUrl: string }>();
 
     const countsByHost = new Map<string, number>();
@@ -854,13 +858,13 @@ export class AdminService {
   }
 
   async issues(): Promise<AdminIssues> {
-    const [undatedRows, undatedCount] = await this.salesRecords
-      .createQueryBuilder('sr')
-      .innerJoin('sr.game', 'g')
+    const [undatedRows, undatedCount] = await this.milestones
+      .createQueryBuilder('m')
+      .innerJoin('m.game', 'g')
       .addSelect('g.name', 'gameName')
-      .where('sr.reportedAt IS NULL')
-      .andWhere('sr.rejectedAt IS NULL')
-      .orderBy('sr.capturedAt', 'DESC')
+      .where('m.reportedAt IS NULL')
+      .andWhere('m.rejectedAt IS NULL')
+      .orderBy('m.capturedAt', 'DESC')
       .limit(ISSUE_PREVIEW_LIMIT)
       .getManyAndCount();
     const undatedNames = await this.gameNameMap(undatedRows.map((r) => r.gameId));
@@ -868,16 +872,16 @@ export class AdminService {
     // Suspect quotes: pull a bounded recent window and apply the regex
     // filter in-memory. We deliberately limit this scan to avoid scanning
     // the full table on every dashboard refresh.
-    const recentForScan = await this.salesRecords
-      .createQueryBuilder('sr')
-      .innerJoin('sr.game', 'g')
-      .where('sr.note IS NOT NULL')
-      .andWhere('sr.rejectedAt IS NULL')
-      .orderBy('sr.capturedAt', 'DESC')
+    const recentForScan = await this.milestones
+      .createQueryBuilder('m')
+      .innerJoin('m.game', 'g')
+      .where('m.note IS NOT NULL')
+      .andWhere('m.rejectedAt IS NULL')
+      .orderBy('m.capturedAt', 'DESC')
       .limit(2000)
       .getMany();
     const suspectAll = recentForScan.filter(
-      (sr) => sr.note && isPeriodicQuote(sr.note),
+      (m) => m.note && isPeriodicQuote(m.note),
     );
     const suspectNames = await this.gameNameMap(suspectAll.map((s) => s.gameId));
 
@@ -960,21 +964,21 @@ export class AdminService {
       .getRawMany<{ c: string }>();
     const staleTotal = staleTotalRow.length;
 
-    // Inactive trusted sources: never produced any record.
+    // Inactive trusted sources: never produced any milestone.
     const inactiveRows = await this.trustedSources
       .createQueryBuilder('ts')
       .leftJoin(
-        SalesRecord,
-        'sr',
-        // Heuristic: match by sourceUrl host or matching tier — we don't have
-        // a direct FK from sales_record to trusted_source. Fall back to
+        Milestone,
+        'm',
+        // Heuristic: match by sourceUrl host or matching tier — we don't
+        // have a direct FK from milestone to trusted_source. Fall back to
         // entries flagged inactive in the registry.
-        'ts.host IS NOT NULL AND sr.sourceUrl ILIKE \'%\' || ts.host || \'%\'',
+        'ts.host IS NOT NULL AND m.sourceUrl ILIKE \'%\' || ts.host || \'%\'',
       )
-      .where('ts.active = false OR sr.id IS NULL')
+      .where('ts.active = false OR m.id IS NULL')
       .andWhere('ts.host IS NOT NULL')
       .groupBy('ts.id')
-      .having('COUNT(sr.id) = 0')
+      .having('COUNT(m.id) = 0')
       .orderBy('ts.name', 'ASC')
       .getMany();
 
@@ -1011,7 +1015,7 @@ export class AdminService {
     const noSignalTotal = noSignalTotalRows.length;
 
     return {
-      undatedSalesRecords: {
+      undatedMilestones: {
         count: undatedCount,
         items: undatedRows.slice(0, ISSUE_PREVIEW_LIMIT).map((r) => ({
           ...r,

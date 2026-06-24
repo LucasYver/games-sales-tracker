@@ -7,9 +7,9 @@ import {
   EstimateSnapshot,
   EstimationDiscrepancy,
   Game,
+  Milestone,
   Platform,
   SalesEstimate,
-  SalesRecord,
   SalesSource,
   SerializedReconciliationEntry,
   SignalMetric,
@@ -131,20 +131,16 @@ export interface PublicEstimateSnapshot {
   estimatedTodayHigh: number;
 }
 
-// Higher value = more reliable. Used to pick the best figure per platform.
-const SOURCE_PRIORITY: Record<SalesSource, number> = {
-  [SalesSource.OFFICIAL]: 3,
-  [SalesSource.ANNOUNCEMENT]: 2,
-  [SalesSource.WIKIPEDIA]: 1,
-  [SalesSource.MEDIA]: 1,
-};
-
-const DEFAULT_CONFIDENCE: Record<SalesSource, ConfidenceLevel> = {
-  [SalesSource.OFFICIAL]: ConfidenceLevel.HIGH,
-  [SalesSource.WIKIPEDIA]: ConfidenceLevel.MEDIUM,
-  [SalesSource.ANNOUNCEMENT]: ConfidenceLevel.MEDIUM,
-  [SalesSource.MEDIA]: ConfidenceLevel.MEDIUM,
-};
+// Map a numeric milestone confidence score (0–100) to the qualitative
+// `ConfidenceLevel` the public API still surfaces on per-platform sales
+// breakdowns. Used only as a display fallback — calibration ignores the
+// score entirely.
+function scoreToLevel(score: number | null): ConfidenceLevel | null {
+  if (score == null) return null;
+  if (score >= 75) return ConfidenceLevel.HIGH;
+  if (score >= 45) return ConfidenceLevel.MEDIUM;
+  return ConfidenceLevel.LOW;
+}
 
 function serializeReconciliationEntry(
   entry: ReconciliationEntry,
@@ -195,8 +191,8 @@ export class GamesService {
     private readonly estimateSnapshots: Repository<EstimateSnapshot>,
     @InjectRepository(EstimationDiscrepancy)
     private readonly discrepancies: Repository<EstimationDiscrepancy>,
-    @InjectRepository(SalesRecord)
-    private readonly salesRecords: Repository<SalesRecord>,
+    @InjectRepository(Milestone)
+    private readonly milestones: Repository<Milestone>,
     private readonly estimation: EstimationService,
     private readonly estimationMethods: EstimationMethodService,
   ) {}
@@ -433,20 +429,20 @@ export class GamesService {
   async getBySlug(slug: string) {
     const game = await this.games.findOne({
       where: { slug },
-      relations: { sources: true, salesRecords: true },
+      relations: { sources: true, milestones: true },
     });
 
     if (!game) throw new NotFoundException(`Game "${slug}" not found`);
 
-    const visibleSalesRecords = game.salesRecords.filter(
-      (sr) => sr.rejectedAt == null,
+    const visibleMilestones = game.milestones.filter(
+      (m) => m.rejectedAt == null,
     );
 
     const latestEstimates = await this.latestEstimatesByPlatform(game.id);
 
     const { breakdown, total, reconciliation, estimatedToday } =
       this.aggregateSales(
-        visibleSalesRecords,
+        visibleMilestones,
         latestEstimates,
         game.releaseDate,
       );
@@ -550,10 +546,10 @@ export class GamesService {
     const game = await this.games.findOne({ where: { id: gameId } });
     if (!game) return;
 
-    const records = await this.recordsAsOf(gameId, asOf);
+    const milestones = await this.milestonesAsOf(gameId, asOf);
     const estimates = await this.latestEstimatesByPlatform(gameId, asOf);
     const { reconciliation, estimatedToday } = this.aggregateSales(
-      records,
+      milestones,
       estimates,
       game.releaseDate,
     );
@@ -612,31 +608,31 @@ export class GamesService {
    * declared figure ever for a brand-new game).
    */
   async evaluateDiscrepanciesForGame(gameId: string): Promise<number> {
-    const records = await this.salesRecords.find({
+    const milestones = await this.milestones.find({
       where: { gameId, rejectedAt: IsNull(), isEngagement: false },
     });
-    if (records.length === 0) return 0;
+    if (milestones.length === 0) return 0;
 
     let created = 0;
-    for (const record of records) {
+    for (const milestone of milestones) {
       const existing = await this.discrepancies.findOne({
-        where: { recordId: record.id },
+        where: { milestoneId: milestone.id },
       });
       if (existing) continue;
 
-      const referenceMoment = record.reportedAt ?? record.capturedAt;
+      const referenceMoment = milestone.reportedAt ?? milestone.capturedAt;
       if (!referenceMoment) continue;
 
       const prior = await this.findPriorEstimateBand(
         gameId,
-        record.platform,
+        milestone.platform,
         referenceMoment,
       );
       if (!prior) continue;
 
       const mid = (prior.low + prior.high) / 2;
       if (mid <= 0) continue;
-      const ratio = record.units / mid;
+      const ratio = milestone.units / mid;
 
       if (ratio >= DISCREPANCY_RATIO_LOW && ratio <= DISCREPANCY_RATIO_HIGH) {
         continue;
@@ -645,11 +641,11 @@ export class GamesService {
       await this.discrepancies.save(
         this.discrepancies.create({
           gameId,
-          platform: record.platform,
-          recordId: record.id,
-          declaredUnits: record.units,
-          declaredSource: record.source,
-          declaredAt: record.reportedAt,
+          platform: milestone.platform,
+          milestoneId: milestone.id,
+          declaredUnits: milestone.units,
+          declaredSource: milestone.source,
+          declaredAt: milestone.reportedAt,
           priorEstimateLow: prior.low,
           priorEstimateHigh: prior.high,
           priorEstimateAt: prior.computedAt,
@@ -781,21 +777,22 @@ export class GamesService {
   }
 
   /**
-   * Sales records visible at `asOf`. When `asOf` is undefined: all
-   * records (live mode). When provided: records whose `reportedAt` is
-   * before `asOf`, plus records with no `reportedAt` (knowledge whose
-   * date we can't pin — we keep them rather than drop them silently).
+   * Milestones visible at `asOf`. When `asOf` is undefined: all
+   * milestones (live mode). When provided: milestones whose `reportedAt`
+   * is before `asOf`, plus the rare legacy row with no `reportedAt`
+   * (ingestion now rejects undated milestones, but pre-existing rows
+   * may still be in the table).
    */
-  private async recordsAsOf(
+  private async milestonesAsOf(
     gameId: string,
     asOf?: Date,
-  ): Promise<SalesRecord[]> {
+  ): Promise<Milestone[]> {
     if (!asOf) {
-      return this.salesRecords.find({
+      return this.milestones.find({
         where: { gameId, rejectedAt: IsNull(), isEngagement: false },
       });
     }
-    return this.salesRecords.find({
+    return this.milestones.find({
       where: {
         gameId,
         rejectedAt: IsNull(),
@@ -806,15 +803,15 @@ export class GamesService {
   }
 
   /**
-   * Build the per-platform breakdown and the headline total. For each platform
-   * we keep the single most reliable figure (official > Wikipedia >
-   * announcement > media), falling back to an estimate when no concrete
-   * figure exists. A GLOBAL worldwide figure (e.g. Wikipedia) is not a
-   * platform line: when present it becomes the authoritative reported total,
-   * overriding the summed breakdown.
+   * Build the per-platform breakdown and the headline total. For each
+   * platform we keep the latest-dated milestone (sales only grow, so the
+   * most recent figure is closest to today's truth), falling back to an
+   * estimate when no concrete figure exists. A GLOBAL worldwide figure
+   * (e.g. Wikipedia) is not a platform line: when present it becomes the
+   * authoritative reported total, overriding the summed breakdown.
    */
   private aggregateSales(
-    records: SalesRecord[],
+    milestones: Milestone[],
     estimates: Map<Platform, SalesEstimate>,
     releaseDate: Date | null,
   ): {
@@ -823,24 +820,24 @@ export class GamesService {
     reconciliation: ReconciliationEntry[];
     estimatedToday: { low: number; high: number } | null;
   } {
-    const globalRecords: SalesRecord[] = [];
-    const bestByPlatform = new Map<Platform, SalesRecord>();
+    const globalMilestones: Milestone[] = [];
+    const bestByPlatform = new Map<Platform, Milestone>();
 
-    for (const record of records) {
-      if (record.platform === Platform.GLOBAL) {
-        globalRecords.push(record);
+    for (const milestone of milestones) {
+      if (milestone.platform === Platform.GLOBAL) {
+        globalMilestones.push(milestone);
         continue;
       }
-      const current = bestByPlatform.get(record.platform);
-      if (!current || this.isMoreReliable(record, current)) {
-        bestByPlatform.set(record.platform, record);
+      const current = bestByPlatform.get(milestone.platform);
+      if (!current || this.isLater(milestone, current)) {
+        bestByPlatform.set(milestone.platform, milestone);
       }
     }
 
-    // Pick the single most reliable global declared figure (if any) — used as
-    // a floor + freshness-aware cap on the platform-summed estimate below.
-    const bestGlobal = globalRecords.reduce<SalesRecord | null>(
-      (best, r) => (!best || this.isMoreReliable(r, best) ? r : best),
+    // Latest-dated worldwide milestone (if any) — used as a floor +
+    // freshness-aware cap on the platform-summed estimate below.
+    const bestGlobal = globalMilestones.reduce<Milestone | null>(
+      (best, m) => (!best || this.isLater(m, best) ? m : best),
       null,
     );
 
@@ -862,14 +859,14 @@ export class GamesService {
       null;
 
     const breakdown: PlatformSales[] = [...bestByPlatform.values()].map(
-      (r) => ({
-        platform: r.platform,
-        low: r.units,
-        high: r.units,
-        source: r.source,
-        confidence: r.confidence ?? DEFAULT_CONFIDENCE[r.source],
-        sourceUrl: r.sourceUrl,
-        agreement: agreementByPlatform.get(r.platform) ?? null,
+      (m) => ({
+        platform: m.platform,
+        low: m.units,
+        high: m.units,
+        source: m.source,
+        confidence: scoreToLevel(m.confidenceScore),
+        sourceUrl: m.sourceUrl,
+        agreement: agreementByPlatform.get(m.platform) ?? null,
       }),
     );
 
@@ -891,7 +888,7 @@ export class GamesService {
 
     return {
       breakdown,
-      total: this.buildTotal(breakdown, globalRecords, globalAgreement),
+      total: this.buildTotal(breakdown, globalMilestones, globalAgreement),
       reconciliation,
       estimatedToday,
     };
@@ -904,9 +901,9 @@ export class GamesService {
    * declared figure as a floor sales can only have grown past (Level 2).
    */
   private reconcile(
-    bestByPlatform: Map<Platform, SalesRecord>,
+    bestByPlatform: Map<Platform, Milestone>,
     estimates: Map<Platform, SalesEstimate>,
-    globalDeclared: SalesRecord | null,
+    globalDeclared: Milestone | null,
     releaseDate: Date | null,
   ): {
     reconciliation: ReconciliationEntry[];
@@ -929,9 +926,9 @@ export class GamesService {
     // dwarfs the PC estimate we drop the PC estimate's contribution to
     // `estimatedToday` rather than let it set the headline number.
     let consoleEvidence = 0;
-    for (const [platform, record] of bestByPlatform) {
+    for (const [platform, milestone] of bestByPlatform) {
       if (platform === Platform.PLAYSTATION || platform === Platform.XBOX) {
-        consoleEvidence += record.units;
+        consoleEvidence += milestone.units;
       }
     }
     if (globalDeclared) {
@@ -1059,7 +1056,7 @@ export class GamesService {
   }
 
   private freshnessCap(
-    declared: SalesRecord,
+    declared: Milestone,
     releaseDate: Date | null,
   ): number {
     if (!declared.reportedAt) return Number.POSITIVE_INFINITY;
@@ -1158,17 +1155,16 @@ export class GamesService {
 
   private buildTotal(
     breakdown: PlatformSales[],
-    globalRecords: SalesRecord[],
+    globalMilestones: Milestone[],
     globalAgreement: Agreement | null,
   ): TotalSales | null {
-    const reported = globalRecords.reduce<SalesRecord | null>(
-      (best, r) => (!best || this.isMoreReliable(r, best) ? r : best),
+    const reported = globalMilestones.reduce<Milestone | null>(
+      (best, m) => (!best || this.isLater(m, best) ? m : best),
       null,
     );
 
     if (reported) {
-      const baseConfidence =
-        reported.confidence ?? DEFAULT_CONFIDENCE[reported.source];
+      const baseConfidence = scoreToLevel(reported.confidenceScore);
       return {
         low: reported.units,
         high: reported.units,
@@ -1198,18 +1194,20 @@ export class GamesService {
   }
 
   /**
-   * Adjust the headline confidence based on how the Boxleiter-derived estimate
-   * agrees with the declared figure:
-   *   - strong: model brackets the declared figure → trust HIGH (the figure
-   *     is independently corroborated).
-   *   - weak: plausible but off → keep the source-tier default.
-   *   - conflict: model strongly disagrees → drop one notch (figure or model
-   *     is suspect, even if the source is OFFICIAL).
+   * Adjust the headline confidence based on how the Boxleiter-derived
+   * estimate agrees with the declared figure:
+   *   - strong: model brackets the declared figure → trust HIGH (the
+   *     figure is independently corroborated).
+   *   - weak: plausible but off → keep the milestone-derived default.
+   *   - conflict: model strongly disagrees → drop one notch (figure or
+   *     model is suspect).
+   * `null` base means we have no milestone confidence to bootstrap from
+   * — only `strong` agreement can promote it (to HIGH).
    */
   private adjustConfidence(
-    base: ConfidenceLevel,
+    base: ConfidenceLevel | null,
     agreement: Agreement | null,
-  ): ConfidenceLevel {
+  ): ConfidenceLevel | null {
     if (!agreement) return base;
     if (agreement === 'strong') return ConfidenceLevel.HIGH;
     if (agreement === 'conflict') {
@@ -1219,33 +1217,23 @@ export class GamesService {
     return base;
   }
 
-  private isMoreReliable(
-    candidate: SalesRecord,
-    current: SalesRecord,
-  ): boolean {
-    const candidatePriority = SOURCE_PRIORITY[candidate.source];
-    const currentPriority = SOURCE_PRIORITY[current.source];
-    if (candidatePriority !== currentPriority) {
-      return candidatePriority > currentPriority;
-    }
-
-    // Same source tier: prefer the figure we know the most about chronologically.
-    // 1. A dated figure always beats an undated one — dates are essential for
-    //    building an accurate history and for the reconciliation floor logic.
+  /**
+   * Latest-dated wins. Dated milestones always beat undated ones (dates
+   * are essential for reconciliation); between two dated milestones, the
+   * more recent reportedAt wins (sales only grow); between two undated
+   * ones the larger units count is the proxy for "more recent".
+   */
+  private isLater(candidate: Milestone, current: Milestone): boolean {
     const cDated = candidate.reportedAt !== null;
     const xDated = current.reportedAt !== null;
     if (cDated !== xDated) return cDated;
 
-    // 2. Between two dated figures, the more recent one wins (sales only grow,
-    //    so the latest figure is the closest to the current truth).
     if (cDated && xDated) {
       const ct = candidate.reportedAt!.getTime();
       const xt = current.reportedAt!.getTime();
       if (ct !== xt) return ct > xt;
     }
 
-    // 3. Between two undated figures of the same tier, keep the higher number
-    //    — for the same reason (sales trajectory is monotonically increasing).
     return candidate.units > current.units;
   }
 

@@ -11,6 +11,9 @@ import { AddPureEstimateToSnapshot1782227318714 } from './1782227318714-AddPureE
 import { AddPureBreakdownToSnapshot1782228030613 } from './1782228030613-AddPureBreakdownToSnapshot';
 import { AddIsReferenceToSalesEstimate1782228710396 } from './1782228710396-AddIsReferenceToSalesEstimate';
 import { RemoveIsReferenceFromSalesEstimate1782243179245 } from './1782243179245-RemoveIsReferenceFromSalesEstimate';
+import { AddPsToXboxGenreSplitMethod1782253500000 } from './1782253500000-AddPsToXboxGenreSplitMethod';
+import { CleanupXboxRatingsData1782253600000 } from './1782253600000-CleanupXboxRatingsData';
+import { RenameSalesRecordToMilestone1782260000000 } from './1782260000000-RenameSalesRecordToMilestone';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -33,4 +36,7 @@ export const migrations: MixedList<Function | string> = [
   AddPureBreakdownToSnapshot1782228030613,
   AddIsReferenceToSalesEstimate1782228710396,
   RemoveIsReferenceFromSalesEstimate1782243179245,
+  AddPsToXboxGenreSplitMethod1782253500000,
+  CleanupXboxRatingsData1782253600000,
+  RenameSalesRecordToMilestone1782260000000,
 ];

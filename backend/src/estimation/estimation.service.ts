@@ -1,19 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, LessThanOrEqual, Repository } from 'typeorm';
+import { IsNull, LessThanOrEqual, Repository } from 'typeorm';
 import {
   AchievementSnapshot,
   ConfidenceLevel,
   EstimationMethod,
   Game,
   LauncherProfile,
+  Milestone,
   Platform,
   SalesEstimate,
-  SalesRecord,
   SalesSource,
   SignalMetric,
   SignalSnapshot,
-  SourceType,
 } from '../entities';
 import {
   AGGREGATED_METHOD_CODE,
@@ -28,7 +27,6 @@ import {
   ACHIEVEMENT_ESTIMATE_MIN_UNITS,
   ACHIEVEMENT_MIN_PLAYERS_TRACKED,
   CALIBRATED_MULTIPLIER_SPREAD,
-  CALIBRATED_MULTIPLIER_SPREAD_BY_SOURCE,
   EXOPHASE_COVERAGE_PC_HIGH,
   EXOPHASE_COVERAGE_PC_LOW,
   EXOPHASE_COVERAGE_PS_HIGH,
@@ -113,23 +111,11 @@ const ACHIEVEMENT_COVERAGE: Record<
 
 const RECENT_RELEASE_DAYS = 14;
 
-// Calibration only trusts a declared figure when a signal snapshot exists
-// within this window of the figure's reported date — otherwise units/signals
-// would mix points from very different times and produce a bogus multiplier.
+// Calibration only trusts a milestone when a signal snapshot exists
+// within this window of the milestone's reported date — otherwise
+// units/signals would mix points from very different times and produce
+// a bogus multiplier.
 const CALIBRATION_WINDOW_DAYS = 365;
-
-// Declared sources reliable enough to calibrate against, most reliable
-// first. The order matters: when a game has both an OFFICIAL figure and
-// a MEDIA one, OFFICIAL wins. MEDIA/ANNOUNCEMENT bring more games into
-// the calibrated tier (OFFICIAL alone is rare), but the produced
-// multiplier inherits a wider per-source spread (see
-// `CALIBRATED_MULTIPLIER_SPREAD_BY_SOURCE`) to keep the model honest
-// about its lower confidence.
-const CALIBRATION_SOURCES = [
-  SalesSource.OFFICIAL,
-  SalesSource.ANNOUNCEMENT,
-  SalesSource.MEDIA,
-];
 
 // Minimum estimated share of a platform in the worldwide breakdown
 // required to calibrate it from a GLOBAL record (see
@@ -196,10 +182,10 @@ interface PlatformConfig {
   plausibleMin: number;
   plausibleMax: number;
   // How a stored Game row exposes the calibrated multiplier for this
-  // platform — and the source of the record that produced it (so the
-  // per-source spread can be applied at read time).
+  // platform. The originating source is stored alongside the value via
+  // `write` for traceability but is not read back at estimate time —
+  // the spread is uniform across sources.
   read: (game: Game) => number | null;
-  readSource: (game: Game) => SalesSource | null;
   write: (
     gameId: string,
     value: number,
@@ -226,8 +212,8 @@ export class EstimationService {
     private readonly games: Repository<Game>,
     @InjectRepository(SignalSnapshot)
     private readonly signals: Repository<SignalSnapshot>,
-    @InjectRepository(SalesRecord)
-    private readonly salesRecords: Repository<SalesRecord>,
+    @InjectRepository(Milestone)
+    private readonly milestones: Repository<Milestone>,
     @InjectRepository(SalesEstimate)
     private readonly estimates: Repository<SalesEstimate>,
     @InjectRepository(AchievementSnapshot)
@@ -244,7 +230,6 @@ export class EstimationService {
         plausibleMin: PC_BOXLEITER_PLAUSIBLE_MIN,
         plausibleMax: PC_BOXLEITER_PLAUSIBLE_MAX,
         read: (g) => g.calibratedMultiplier,
-        readSource: (g) => g.calibrationSourcePc,
         write: (id, value, source) =>
           this.games
             .update(id, {
@@ -262,7 +247,6 @@ export class EstimationService {
         plausibleMin: PS_BOXLEITER_PLAUSIBLE_MIN,
         plausibleMax: PS_BOXLEITER_PLAUSIBLE_MAX,
         read: (g) => g.calibratedPsMultiplier,
-        readSource: (g) => g.calibrationSourcePs,
         write: (id, value, source) =>
           this.games
             .update(id, {
@@ -280,7 +264,6 @@ export class EstimationService {
         plausibleMin: XBOX_BOXLEITER_PLAUSIBLE_MIN,
         plausibleMax: XBOX_BOXLEITER_PLAUSIBLE_MAX,
         read: (g) => g.calibratedXboxMultiplier,
-        readSource: (g) => g.calibrationSourceXbox,
         write: (id, value, source) =>
           this.games
             .update(id, {
@@ -424,6 +407,15 @@ export class EstimationService {
    * itself (so the live flow and the snapshot flow share the same
    * aggregation rules) and by `computePureAggregatesByPlatform` which
    * needs the aggregates without touching the database.
+   *
+   * Phase ordering (matters — Xbox depends on PS, PS depends on PC):
+   *  1. Aggregate PC.
+   *  2. Ventilate PC → PlayStation (genre-split).
+   *  3. Aggregate PlayStation (boxleiter PS + PC→PS split).
+   *  4. Ventilate to Xbox: prefer PS → Xbox when a PS aggregate exists
+   *     (PS is the closest console proxy), fall back to PC → Xbox
+   *     otherwise.
+   *  5. Aggregate Xbox and any remaining platforms.
    */
   private async aggregateResultsByPlatform(
     gameId: string,
@@ -440,6 +432,15 @@ export class EstimationService {
     }
 
     const aggregates = new Map<Platform, EstimateResult>();
+    const splits: EstimateResult[] = [];
+
+    const addSplit = (split: EstimateResult | null): void => {
+      if (!split) return;
+      splits.push(split);
+      const bucket = byPlatform.get(split.platform) ?? [];
+      bucket.push(split);
+      byPlatform.set(split.platform, bucket);
+    };
 
     // Phase 1 — aggregate PC first so the genre-console-split method
     // (Phase 2) can ventilate from a stable consensus PC band rather
@@ -452,28 +453,64 @@ export class EstimationService {
         : null;
     if (pcAggregate) aggregates.set(Platform.PC, pcAggregate);
 
-    // Phase 2 — ventilate PC → console via the resolved genre profile.
-    // Skipped silently for games whose genres don't map to any profile,
-    // or when the PC aggregate is missing.
-    const splits: EstimateResult[] = [];
+    // Phase 2 — ventilate PC → PlayStation. Skipped silently when the
+    // game's genres don't resolve a profile, when PC isn't aggregated,
+    // or when the game isn't released on PS.
     if (pcAggregate) {
-      const computedSplits = await this.computeGenreConsoleSplits(
+      const pcToPs = await this.computeGenreSplit(
         gameId,
         pcAggregate,
+        Platform.PC,
+        Platform.PLAYSTATION,
+        'genre-console-split-from-pc-playstation',
       );
-      for (const s of computedSplits) {
-        splits.push(s);
-        const bucket = byPlatform.get(s.platform) ?? [];
-        bucket.push(s);
-        byPlatform.set(s.platform, bucket);
-      }
+      addSplit(pcToPs);
     }
 
-    // Phase 3 — aggregate the remaining platforms (PS, XBOX, …). PS
-    // and XBOX now see the genre-split row alongside any Boxleiter
-    // estimate, which is what the aggregate should consume.
+    // Phase 3 — aggregate PlayStation now that any PC→PS split is in
+    // its bucket alongside the boxleiter PS estimate.
+    const psResults = byPlatform.get(Platform.PLAYSTATION) ?? [];
+    const psAggregate =
+      psResults.length > 0
+        ? this.aggregateMethodsForPlatform(psResults)
+        : null;
+    if (psAggregate) aggregates.set(Platform.PLAYSTATION, psAggregate);
+
+    // Phase 4 — ventilate to Xbox. Prefer PS → Xbox (PS is the
+    // closest console proxy and the Xbox Store rating signal has been
+    // retired due to per-locale fragmentation); fall back to PC → Xbox
+    // when no PS aggregate is available (PC-and-Xbox-only titles).
+    let xboxSplit: EstimateResult | null = null;
+    if (psAggregate) {
+      xboxSplit = await this.computeGenreSplit(
+        gameId,
+        psAggregate,
+        Platform.PLAYSTATION,
+        Platform.XBOX,
+        'genre-console-split-from-ps-xbox',
+      );
+    }
+    if (!xboxSplit && pcAggregate) {
+      xboxSplit = await this.computeGenreSplit(
+        gameId,
+        pcAggregate,
+        Platform.PC,
+        Platform.XBOX,
+        'genre-console-split-from-pc-xbox',
+      );
+    }
+    addSplit(xboxSplit);
+
+    // Phase 5 — aggregate the remaining platforms (XBOX, …). XBOX now
+    // sees the genre-split row; any disabled boxleiter Xbox row from
+    // a stale signal is filtered out by `aggregateMethodsForPlatform`.
     for (const [platform, perPlatform] of byPlatform) {
-      if (platform === Platform.PC) continue;
+      if (
+        platform === Platform.PC ||
+        platform === Platform.PLAYSTATION
+      ) {
+        continue;
+      }
       const aggregate = this.aggregateMethodsForPlatform(perPlatform);
       if (aggregate) aggregates.set(platform, aggregate);
     }
@@ -526,88 +563,79 @@ export class EstimationService {
   }
 
   /**
-   * Ventilate a PC aggregate into PlayStation / Xbox estimates using
-   * the game's resolved `GenreProfile`. Skipped when no profile
-   * resolves or the PC share is zero (defensive — the seed always
-   * has it ≥ 0.2).
+   * Ventilate an aggregate from `sourcePlatform` into `targetPlatform`
+   * using the game's resolved `GenreProfile`. Returns null when the
+   * profile is missing, either share is zero, the source share would
+   * divide by zero, or the game isn't released on the target platform
+   * (inferring console sales for a PC-only indie would be nonsense).
    *
-   *   psUnits   = pcUnits × (playstationShare / pcShare)
-   *   xboxUnits = pcUnits × (xboxShare        / pcShare)
+   *   targetUnits = sourceUnits × (targetShare / sourceShare)
    *
-   * The Switch share is intentionally dropped on the floor: our
+   * The Switch share is intentionally never used as a target: our
    * `Platform` enum doesn't include Switch (no reliable sales signal
-   * either way), and folding it into PS / Xbox would double-count
-   * non-existent rows.
+   * either way), and folding it elsewhere would double-count nothing.
    *
    * Confidence is clamped to MEDIUM (the ventilation is a structural
-   * model, never as trustworthy as a calibrated console rating
-   * signal) and further bounded by the profile's own confidence.
+   * model, never as trustworthy as a calibrated rating signal on the
+   * platform itself) and further bounded by the profile's own
+   * confidence.
    */
-  private async computeGenreConsoleSplits(
+  private async computeGenreSplit(
     gameId: string,
-    pcAggregate: EstimateResult,
-  ): Promise<EstimateResult[]> {
+    sourceAggregate: EstimateResult,
+    sourcePlatform: Platform,
+    targetPlatform: Platform,
+    methodCode: string,
+  ): Promise<EstimateResult | null> {
     const game = await this.games.findOne({
       where: { id: gameId },
       select: { id: true, genres: true, platforms: true },
     });
-    if (!game) return [];
+    if (!game) return null;
+
+    const releasedPlatforms = new Set(game.platforms ?? []);
+    if (!releasedPlatforms.has(targetPlatform)) return null;
 
     const profile = await this.genres.resolveProfileForGame(game);
-    if (!profile || profile.pcShare <= 0) return [];
+    if (!profile) return null;
 
-    // Only ventilate to platforms the game is actually released on.
-    // Inferring console sales for a PC-only title would be nonsense
-    // (e.g. Last Epoch resolves to a generic RPG profile but has no
-    // PSN / Xbox SKU).
-    const releasedPlatforms = new Set(game.platforms ?? []);
-    return this.buildConsoleSplitsFromProfile(
-      pcAggregate,
-      profile,
-      releasedPlatforms,
-    );
-  }
+    const sourceShare = this.profileShare(profile, sourcePlatform);
+    const targetShare = this.profileShare(profile, targetPlatform);
+    if (sourceShare <= 0 || targetShare <= 0) return null;
 
-  private buildConsoleSplitsFromProfile(
-    pcAggregate: EstimateResult,
-    profile: ResolvedGenreProfile,
-    releasedPlatforms: Set<Platform>,
-  ): EstimateResult[] {
-    const baseConfidence = capConfidence(
-      capConfidence(pcAggregate.confidence, ConfidenceLevel.MEDIUM),
+    const ratio = targetShare / sourceShare;
+    const low = Math.round(sourceAggregate.estimatedLow * ratio);
+    const high = Math.round(sourceAggregate.estimatedHigh * ratio);
+    if (high <= 0 || low > high) return null;
+
+    const confidence = capConfidence(
+      capConfidence(sourceAggregate.confidence, ConfidenceLevel.MEDIUM),
       profile.confidence,
     );
 
-    const targets: Array<{ platform: Platform; share: number; code: string }> = [
-      {
-        platform: Platform.PLAYSTATION,
-        share: profile.playstationShare,
-        code: 'genre-console-split-from-pc-playstation',
-      },
-      {
-        platform: Platform.XBOX,
-        share: profile.xboxShare,
-        code: 'genre-console-split-from-pc-xbox',
-      },
-    ];
+    return {
+      platform: targetPlatform,
+      estimatedLow: low,
+      estimatedHigh: high,
+      confidence,
+      method: methodCode,
+    };
+  }
 
-    const out: EstimateResult[] = [];
-    for (const t of targets) {
-      if (t.share <= 0) continue;
-      if (!releasedPlatforms.has(t.platform)) continue;
-      const ratio = t.share / profile.pcShare;
-      const low = Math.round(pcAggregate.estimatedLow * ratio);
-      const high = Math.round(pcAggregate.estimatedHigh * ratio);
-      if (high <= 0 || low > high) continue;
-      out.push({
-        platform: t.platform,
-        estimatedLow: low,
-        estimatedHigh: high,
-        confidence: baseConfidence,
-        method: t.code,
-      });
+  private profileShare(
+    profile: ResolvedGenreProfile,
+    platform: Platform,
+  ): number {
+    switch (platform) {
+      case Platform.PC:
+        return profile.pcShare;
+      case Platform.PLAYSTATION:
+        return profile.playstationShare;
+      case Platform.XBOX:
+        return profile.xboxShare;
+      default:
+        return 0;
     }
-    return out;
   }
 
   /**
@@ -1122,19 +1150,10 @@ export class EstimationService {
   ): { low: number; high: number; method: string; isCalibrated: boolean } {
     const calibrated = opts.ignoreCalibration ? null : cfg.read(game);
     if (calibrated && calibrated > 0) {
-      const source = cfg.readSource(game);
-      // OFFICIAL by default for rows calibrated before the per-source
-      // spread feature landed (legacy `calibratedMultiplier` without a
-      // stored source).
-      const spread =
-        CALIBRATED_MULTIPLIER_SPREAD_BY_SOURCE[
-          source ?? SalesSource.OFFICIAL
-        ] ?? CALIBRATED_MULTIPLIER_SPREAD;
-      const sourceSlug = (source ?? SalesSource.OFFICIAL).toLowerCase();
       return {
-        low: calibrated * (1 - spread),
-        high: calibrated * (1 + spread),
-        method: `${cfg.methodPrefix}-calibrated-${sourceSlug}`,
+        low: calibrated * (1 - CALIBRATED_MULTIPLIER_SPREAD),
+        high: calibrated * (1 + CALIBRATED_MULTIPLIER_SPREAD),
+        method: `${cfg.methodPrefix}-calibrated`,
         isCalibrated: true,
       };
     }
@@ -1150,21 +1169,20 @@ export class EstimationService {
     gameId: string,
     cfg: PlatformConfig,
   ): Promise<number | null> {
-    const candidates = await this.salesRecords.find({
+    const candidates = await this.milestones.find({
       where: {
         gameId,
         platform: cfg.platform,
-        source: In(CALIBRATION_SOURCES),
         rejectedAt: IsNull(),
         isEngagement: false,
       },
     });
     if (candidates.length === 0) return null;
 
+    // Latest-dated-wins, regardless of source. Undated milestones are
+    // rejected at ingestion (see ingestion.service), so an absent
+    // `reportedAt` here is a defensive check only.
     candidates.sort((a, b) => {
-      const pa = CALIBRATION_SOURCES.indexOf(a.source);
-      const pb = CALIBRATION_SOURCES.indexOf(b.source);
-      if (pa !== pb) return pa - pb;
       const ta = a.reportedAt?.getTime() ?? 0;
       const tb = b.reportedAt?.getTime() ?? 0;
       return tb - ta;
@@ -1243,11 +1261,10 @@ export class EstimationService {
    *   - Multiplier: 175,000 / 100,000 = 1.75
    */
   private async recalibrateFromGlobal(gameId: string): Promise<void> {
-    const candidates = await this.salesRecords.find({
+    const candidates = await this.milestones.find({
       where: {
         gameId,
         platform: Platform.GLOBAL,
-        source: In(CALIBRATION_SOURCES),
         rejectedAt: IsNull(),
         isEngagement: false,
       },
@@ -1255,9 +1272,6 @@ export class EstimationService {
     if (candidates.length === 0) return;
 
     candidates.sort((a, b) => {
-      const pa = CALIBRATION_SOURCES.indexOf(a.source);
-      const pb = CALIBRATION_SOURCES.indexOf(b.source);
-      if (pa !== pb) return pa - pb;
       const ta = a.reportedAt?.getTime() ?? 0;
       const tb = b.reportedAt?.getTime() ?? 0;
       return tb - ta;

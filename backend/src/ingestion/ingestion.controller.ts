@@ -68,8 +68,8 @@ export class IngestionController {
 
   @Post('sales')
   async addSales(@Body() body: AddSalesDto) {
-    const record = await this.ingestion.addSalesRecord(body);
-    return { id: record.id };
+    const milestone = await this.ingestion.addMilestone(body);
+    return { id: milestone.id };
   }
 
   @Post('article')

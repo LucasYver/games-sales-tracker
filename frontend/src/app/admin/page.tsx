@@ -63,10 +63,10 @@ export default async function AdminDashboard() {
       })
     : '—';
 
-  const bySource = Object.entries(stats.salesRecords.bySource).sort(
+  const bySource = Object.entries(stats.milestones.bySource).sort(
     (a, b) => b[1] - a[1],
   );
-  const byPlatform = Object.entries(stats.salesRecords.byPlatform).sort(
+  const byPlatform = Object.entries(stats.milestones.byPlatform).sort(
     (a, b) => b[1] - a[1],
   );
 
@@ -86,9 +86,9 @@ export default async function AdminDashboard() {
           sublabel={`${stats.games.withSales} with declared sales · ${stats.games.withCalibration} calibrated`}
         />
         <StatCard
-          label="Sales records"
-          value={compactNumber(stats.salesRecords.total)}
-          sublabel={`${stats.salesRecords.undated} undated`}
+          label="Milestones"
+          value={compactNumber(stats.milestones.total)}
+          sublabel={`${stats.milestones.undated} undated`}
         />
         <StatCard
           label="Estimates"
@@ -106,7 +106,7 @@ export default async function AdminDashboard() {
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-              Sales records by source
+              Milestones by source
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -136,7 +136,7 @@ export default async function AdminDashboard() {
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-              Sales records by platform
+              Milestones by platform
             </CardTitle>
           </CardHeader>
           <CardContent>

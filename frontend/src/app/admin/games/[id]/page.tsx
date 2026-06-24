@@ -31,7 +31,7 @@ import { EditGameForm } from '../../_components/EditGameForm';
 import { EstimateHistoryChart } from '../../_components/EstimateHistoryChart';
 import { CcuHistoryChart } from '../../_components/CcuHistoryChart';
 import { LauncherProfileBadge } from '../../_components/LauncherProfileBadge';
-import { deleteGame, deleteSalesRecord } from '../../actions';
+import { deleteGame, deleteMilestone } from '../../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -310,6 +310,24 @@ export default async function AdminGameDetailPage({
             />
             <div className="flex flex-col gap-1 text-sm">
               <dt className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                Genres
+              </dt>
+              <dd>
+                {game.genres.length === 0 ? (
+                  '—'
+                ) : (
+                  <div className="flex flex-wrap gap-1">
+                    {game.genres.map((g) => (
+                      <Badge key={g} variant="outline">
+                        {g}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </dd>
+            </div>
+            <div className="flex flex-col gap-1 text-sm">
+              <dt className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
                 Publisher
               </dt>
               <dd>
@@ -404,7 +422,7 @@ export default async function AdminGameDetailPage({
       <Tabs defaultValue="sales" className="gap-4">
         <TabsList className="h-auto flex-wrap">
           <TabsTrigger value="sales">
-            Sales records ({game.salesRecords.length})
+            Milestones ({game.milestones.length})
           </TabsTrigger>
           <TabsTrigger value="achievements">
             Achievements ({game.achievementSnapshots.length})
@@ -420,9 +438,9 @@ export default async function AdminGameDetailPage({
         <TabsContent value="sales">
           <Card>
             <CardContent className="p-0">
-              {game.salesRecords.length === 0 ? (
+              {game.milestones.length === 0 ? (
                 <p className="text-muted-foreground p-6 text-sm">
-                  No sales records yet.
+                  No milestones yet.
                 </p>
               ) : (
                 <Table>
@@ -433,26 +451,19 @@ export default async function AdminGameDetailPage({
                       <TableHead>Attribution</TableHead>
                       <TableHead>Platform</TableHead>
                       <TableHead className="text-right">Units</TableHead>
+                      <TableHead className="text-right">Confidence</TableHead>
                       <TableHead>Reported</TableHead>
                       <TableHead>Note</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {game.salesRecords.map((sr) => (
-                      <TableRow key={sr.id}>
+                    {game.milestones.map((m) => (
+                      <TableRow key={m.id}>
                         <TableCell>
                           <div className="flex flex-wrap items-center gap-1">
-                            <Badge variant="outline">{sr.source}</Badge>
-                            {sr.confidence && (
-                              <Badge
-                                variant="outline"
-                                className="text-[10px] tracking-wide uppercase opacity-70"
-                              >
-                                {sr.confidence}
-                              </Badge>
-                            )}
-                            {sr.isEngagement && (
+                            <Badge variant="outline">{m.source}</Badge>
+                            {m.isEngagement && (
                               <Badge
                                 variant="secondary"
                                 className="border-amber-300 bg-amber-100 text-[10px] tracking-wide text-amber-800 uppercase dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
@@ -464,15 +475,15 @@ export default async function AdminGameDetailPage({
                           </div>
                         </TableCell>
                         <TableCell>
-                          {sr.sourceUrl ? (
+                          {m.sourceUrl ? (
                             <a
-                              href={sr.sourceUrl}
+                              href={m.sourceUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              title={sr.sourceUrl}
+                              title={m.sourceUrl}
                               className="text-primary inline-flex max-w-[200px] items-center gap-1 truncate text-xs hover:underline"
                             >
-                              {hostnameOf(sr.sourceUrl)}
+                              {hostnameOf(m.sourceUrl)}
                               <ExternalLink
                                 aria-hidden="true"
                                 className="size-3 shrink-0"
@@ -486,31 +497,36 @@ export default async function AdminGameDetailPage({
                         </TableCell>
                         <TableCell
                           className="text-muted-foreground max-w-[160px] truncate text-sm"
-                          title={sr.publisher ?? undefined}
+                          title={m.publisher ?? undefined}
                         >
-                          {sr.publisher ?? '—'}
+                          {m.publisher ?? '—'}
                         </TableCell>
                         <TableCell>
-                          <Badge variant="secondary">{sr.platform}</Badge>
+                          <Badge variant="secondary">{m.platform}</Badge>
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
-                          {sr.units.toLocaleString()}
+                          {m.units.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-right text-sm tabular-nums">
+                          {m.confidenceScore == null
+                            ? '—'
+                            : Math.round(m.confidenceScore)}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">
-                          {formatDate(sr.reportedAt)}
+                          {formatDate(m.reportedAt)}
                         </TableCell>
                         <TableCell
                           className="text-muted-foreground max-w-xs truncate text-xs"
-                          title={sr.note ?? undefined}
+                          title={m.note ?? undefined}
                         >
-                          {sr.note ?? '—'}
+                          {m.note ?? '—'}
                         </TableCell>
                         <TableCell className="text-right">
                           <DeleteButton
-                            action={deleteSalesRecord.bind(null, sr.id)}
-                            confirmMessage="Delete this sales record?"
+                            action={deleteMilestone.bind(null, m.id)}
+                            confirmMessage="Delete this milestone?"
                             iconOnly
-                            label="Delete record"
+                            label="Delete milestone"
                           />
                         </TableCell>
                       </TableRow>

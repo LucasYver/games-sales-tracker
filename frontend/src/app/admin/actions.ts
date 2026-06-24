@@ -132,9 +132,9 @@ export async function importCcuHistory(
   return result;
 }
 
-export async function deleteSalesRecord(id: string): Promise<void> {
-  await adminFetch(`/sales-records/${id}`, { method: 'DELETE' });
-  revalidatePath('/admin/sales-records');
+export async function deleteMilestone(id: string): Promise<void> {
+  await adminFetch(`/milestones/${id}`, { method: 'DELETE' });
+  revalidatePath('/admin/milestones');
   revalidatePath('/admin/issues');
 }
 

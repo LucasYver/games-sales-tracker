@@ -4,8 +4,8 @@ import {
   AchievementSnapshot,
   Game,
   GameSource,
+  Milestone,
   ProcessedArticle,
-  SalesRecord,
   SignalSnapshot,
 } from '../entities';
 import { EstimationModule } from '../estimation/estimation.module';
@@ -31,7 +31,7 @@ import { ExophaseClient } from './exophase.client';
       Game,
       GameSource,
       SignalSnapshot,
-      SalesRecord,
+      Milestone,
       ProcessedArticle,
       AchievementSnapshot,
     ]),

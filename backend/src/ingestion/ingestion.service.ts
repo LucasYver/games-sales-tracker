@@ -9,12 +9,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Not, Repository } from 'typeorm';
 import {
   AchievementSnapshot,
-  ConfidenceLevel,
   Game,
   GameSource,
+  Milestone,
   Platform,
   ProcessedArticle,
-  SalesRecord,
   SalesSource,
   SignalMetric,
   SignalSnapshot,
@@ -44,6 +43,18 @@ import {
 const STORE_SOURCE_BY_PLATFORM: Partial<Record<Platform, SourceType>> = {
   [Platform.PLAYSTATION]: SourceType.PS_STORE,
   [Platform.XBOX]: SourceType.XBOX_STORE,
+};
+
+// Default `confidenceScore` (0–100) assigned to milestones when no
+// TrustedSource weight is available (manual inputs, Wikipedia, or unknown
+// hosts falling back to the MEDIA tier). For sources matched in the
+// trusted-source registry, the source's `weight` is written directly to
+// `confidenceScore`.
+const DEFAULT_CONFIDENCE_SCORE: Record<SalesSource, number> = {
+  [SalesSource.OFFICIAL]: 100,
+  [SalesSource.ANNOUNCEMENT]: 70,
+  [SalesSource.WIKIPEDIA]: 45,
+  [SalesSource.MEDIA]: 40,
 };
 
 // Domains we never want Tavily backlog discovery to surface:
@@ -94,7 +105,7 @@ export interface ManualSalesInput {
 export interface ArticleIngestResult {
   matchedSource: string | null;
   tier: SalesSource;
-  recordsStored: number;
+  milestonesStored: number;
 }
 
 /**
@@ -127,8 +138,8 @@ export class IngestionService {
     private readonly gameSources: Repository<GameSource>,
     @InjectRepository(SignalSnapshot)
     private readonly signals: Repository<SignalSnapshot>,
-    @InjectRepository(SalesRecord)
-    private readonly salesRecords: Repository<SalesRecord>,
+    @InjectRepository(Milestone)
+    private readonly milestones: Repository<Milestone>,
     @InjectRepository(ProcessedArticle)
     private readonly processedArticles: Repository<ProcessedArticle>,
     @InjectRepository(AchievementSnapshot)
@@ -614,9 +625,10 @@ export class IngestionService {
 
   /**
    * Have the LLM extract grounded sales figures from the game's Wikipedia
-   * article: a dated worldwide total (stored as a GLOBAL record) plus any
+   * article: a dated worldwide total (stored as a GLOBAL milestone) plus any
    * per-platform figures the article states. Each carries the verbatim source
-   * quote. Best-effort: failures are logged.
+   * quote. Best-effort: failures are logged. Milestones without `reportedAt`
+   * are rejected at extraction time — calibration needs a date.
    */
   async scrapeWikipedia(gameId: string, name: string): Promise<void> {
     try {
@@ -627,40 +639,50 @@ export class IngestionService {
       }
 
       const releaseDate = await this.getReleaseDate(gameId);
+      const wikipediaScore = DEFAULT_CONFIDENCE_SCORE[SalesSource.WIKIPEDIA];
 
-      // Only sweep the records we previously inserted from Wikipedia — never
-      // the ones an admin has soft-deleted, which we keep as fingerprints.
-      await this.salesRecords.delete({
+      await this.milestones.delete({
         gameId,
         source: SalesSource.WIKIPEDIA,
         rejectedAt: IsNull(),
       });
 
-      const rows = [];
-      if (sales.global && this.isReportedAfterRelease(sales.global.reportedAt, releaseDate)) {
-        rows.push(
-          this.salesRecords.create({
-            gameId,
-            platform: Platform.GLOBAL,
-            source: SalesSource.WIKIPEDIA,
-            units: sales.global.units,
-            confidence: ConfidenceLevel.MEDIUM,
-            sourceUrl: sales.sourceUrl,
-            note: sales.global.quote,
-            reportedAt: sales.global.reportedAt,
-            region: 'GLOBAL',
-          }),
-        );
+      const rows: Milestone[] = [];
+      let undatedSkipped = 0;
+      if (sales.global) {
+        if (!sales.global.reportedAt) {
+          undatedSkipped += 1;
+        } else if (
+          this.isReportedAfterRelease(sales.global.reportedAt, releaseDate)
+        ) {
+          rows.push(
+            this.milestones.create({
+              gameId,
+              platform: Platform.GLOBAL,
+              source: SalesSource.WIKIPEDIA,
+              units: sales.global.units,
+              confidenceScore: wikipediaScore,
+              sourceUrl: sales.sourceUrl,
+              note: sales.global.quote,
+              reportedAt: sales.global.reportedAt,
+              region: 'GLOBAL',
+            }),
+          );
+        }
       }
       for (const { platform, figure } of sales.perPlatform) {
+        if (!figure.reportedAt) {
+          undatedSkipped += 1;
+          continue;
+        }
         if (!this.isReportedAfterRelease(figure.reportedAt, releaseDate)) continue;
         rows.push(
-          this.salesRecords.create({
+          this.milestones.create({
             gameId,
             platform,
             source: SalesSource.WIKIPEDIA,
             units: figure.units,
-            confidence: ConfidenceLevel.MEDIUM,
+            confidenceScore: wikipediaScore,
             sourceUrl: sales.sourceUrl,
             note: figure.quote,
             reportedAt: figure.reportedAt,
@@ -668,29 +690,32 @@ export class IngestionService {
           }),
         );
       }
-      if (
-        sales.engagement &&
-        this.isReportedAfterRelease(sales.engagement.reportedAt, releaseDate)
-      ) {
-        rows.push(
-          this.salesRecords.create({
-            gameId,
-            platform: Platform.GLOBAL,
-            source: SalesSource.WIKIPEDIA,
-            units: sales.engagement.units,
-            confidence: ConfidenceLevel.LOW,
-            sourceUrl: sales.sourceUrl,
-            note: sales.engagement.quote,
-            reportedAt: sales.engagement.reportedAt,
-            region: 'GLOBAL',
-            isEngagement: true,
-          }),
-        );
+      if (sales.engagement) {
+        if (!sales.engagement.reportedAt) {
+          undatedSkipped += 1;
+        } else if (
+          this.isReportedAfterRelease(sales.engagement.reportedAt, releaseDate)
+        ) {
+          rows.push(
+            this.milestones.create({
+              gameId,
+              platform: Platform.GLOBAL,
+              source: SalesSource.WIKIPEDIA,
+              units: sales.engagement.units,
+              confidenceScore: wikipediaScore,
+              sourceUrl: sales.sourceUrl,
+              note: sales.engagement.quote,
+              reportedAt: sales.engagement.reportedAt,
+              region: 'GLOBAL',
+              isEngagement: true,
+            }),
+          );
+        }
       }
 
       const accepted = await this.filterOutRejected(rows);
       if (accepted.length > 0) {
-        await this.salesRecords.save(accepted);
+        await this.milestones.save(accepted);
         const globalLog = sales.global
           ? `global=${sales.global.units} (${sales.global.reportedAt?.toISOString().slice(0, 10) ?? 'no-date'})`
           : 'no global';
@@ -698,14 +723,16 @@ export class IngestionService {
           ? `, engagement=${sales.engagement.units} (${sales.engagement.reportedAt?.toISOString().slice(0, 10) ?? 'no-date'})`
           : '';
         this.logger.log(
-          `[wikipedia] "${name}" — stored ${accepted.length} record(s) (${rows.length - accepted.length} rejected-fingerprint skip): ${globalLog}, ${sales.perPlatform.length} per-platform${engagementLog}`,
+          `[wikipedia] "${name}" — stored ${accepted.length} milestone(s) (${rows.length - accepted.length} rejected-fingerprint skip, ${undatedSkipped} undated skip): ${globalLog}, ${sales.perPlatform.length} per-platform${engagementLog}`,
         );
       } else if (rows.length > 0) {
         this.logger.log(
-          `[wikipedia] "${name}" — extracted ${rows.length} record(s) but all match an admin-rejected fingerprint, skipping`,
+          `[wikipedia] "${name}" — extracted ${rows.length} milestone(s) but all match an admin-rejected fingerprint, skipping`,
         );
       } else {
-        this.logger.log(`[wikipedia] "${name}" — extraction returned but no record met date/grounding requirements`);
+        this.logger.log(
+          `[wikipedia] "${name}" — extraction returned but no milestone met date/grounding requirements (${undatedSkipped} undated)`,
+        );
       }
     } catch (error) {
       this.logger.warn(`Wikipedia scrape failed for "${name}": ${error}`);
@@ -1246,7 +1273,8 @@ export class IngestionService {
     // the registry.
     const trusted = await this.sources.findByUrl(url); 
     const tier = trusted?.salesSource ?? SalesSource.MEDIA;
-    const confidence = this.confidenceFromWeight(trusted?.weight ?? 40);
+    const confidenceScore =
+      trusted?.weight ?? DEFAULT_CONFIDENCE_SCORE[tier];
 
     let sales =
       text && text.length >= 200
@@ -1255,24 +1283,31 @@ export class IngestionService {
     if (!sales) sales = await this.article.extract(url, gameName);
     if (!sales) return 0;
 
-    return this.storeArticleSales(gameId, url, tier, confidence, sales);
+    return this.storeArticleSales(gameId, url, tier, confidenceScore, sales);
   }
 
   /**
-   * Manually record a sales figure (e.g. from an official report or a press
-   * announcement) until automated discovery covers those sources.
+   * Manually record a milestone (e.g. from an official report or a press
+   * announcement) until automated discovery covers those sources. A
+   * `reportedAt` is required: undated milestones cannot calibrate.
    */
-  async addSalesRecord(input: ManualSalesInput): Promise<SalesRecord> {
-    return this.salesRecords.save(
-      this.salesRecords.create({
+  async addMilestone(input: ManualSalesInput): Promise<Milestone> {
+    if (!input.reportedAt) {
+      throw new BadRequestException(
+        'reportedAt is required: a milestone without a date cannot be ingested.',
+      );
+    }
+    return this.milestones.save(
+      this.milestones.create({
         gameId: input.gameId,
         platform: input.platform,
         source: input.source,
         units: input.units,
+        confidenceScore: DEFAULT_CONFIDENCE_SCORE[input.source],
         publisher: input.publisher ?? null,
         sourceUrl: input.sourceUrl ?? null,
         region: input.region ?? 'GLOBAL',
-        reportedAt: input.reportedAt ? new Date(input.reportedAt) : null,
+        reportedAt: new Date(input.reportedAt),
       }),
     );
   }
@@ -1359,24 +1394,25 @@ export class IngestionService {
     if (!game) return null;
 
     // See `ingestArticleFromText`: registry insertion is deferred until we
-    // know the article produced at least one accepted sales record.
+    // know the article produced at least one accepted milestone.
     const trusted = await this.sources.findByUrl(url);
     const tier = trusted?.salesSource ?? SalesSource.MEDIA;
-    const confidence = this.confidenceFromWeight(trusted?.weight ?? 40);
+    const confidenceScore =
+      trusted?.weight ?? DEFAULT_CONFIDENCE_SCORE[tier];
 
     const sales = await this.article.extract(url, game.name);
     if (!sales) {
-      return { matchedSource: trusted?.name ?? null, tier, recordsStored: 0 };
+      return { matchedSource: trusted?.name ?? null, tier, milestonesStored: 0 };
     }
 
-    const recordsStored = await this.storeArticleSales(
+    const milestonesStored = await this.storeArticleSales(
       gameId,
       url,
       tier,
-      confidence,
+      confidenceScore,
       sales,
     );
-    return { matchedSource: trusted?.name ?? null, tier, recordsStored };
+    return { matchedSource: trusted?.name ?? null, tier, milestonesStored };
   }
 
   /**
@@ -1456,26 +1492,28 @@ export class IngestionService {
       game.id,
       item.url,
       source.salesSource,
-      this.confidenceFromWeight(source.weight),
+      source.weight,
       sales,
     );
     return { gameId: game.id, records };
   }
 
-  // Replace a game's records for one source URL with the freshly extracted
+  // Replace a game's milestones for one source URL with the freshly extracted
   // figures (a worldwide total as GLOBAL plus any per-platform figures).
-  // Records dated before the game's release date are dropped (they are
-  // almost always referring to an earlier title in the same series).
+  // Milestones dated before the game's release date are dropped (they
+  // are almost always referring to an earlier title in the same series).
+  // Milestones without `reportedAt` are also dropped — calibration needs
+  // a date.
   private async storeArticleSales(
     gameId: string,
     url: string,
     tier: SalesSource,
-    confidence: ConfidenceLevel,
+    confidenceScore: number,
     sales: ArticleSales,
   ): Promise<number> {
-    // Preserve admin-rejected fingerprints: a rejected record stays in place
-    // so the fingerprint guard below can skip the matching re-extract.
-    await this.salesRecords.delete({
+    // Preserve admin-rejected fingerprints: a rejected milestone stays in
+    // place so the fingerprint guard below can skip the matching re-extract.
+    await this.milestones.delete({
       gameId,
       sourceUrl: url,
       rejectedAt: IsNull(),
@@ -1483,32 +1521,43 @@ export class IngestionService {
 
     const releaseDate = await this.getReleaseDate(gameId);
 
-    const rows: SalesRecord[] = [];
-    if (sales.global && this.isReportedAfterRelease(sales.global.reportedAt, releaseDate)) {
-      rows.push(
-        this.salesRecords.create({
-          gameId,
-          platform: Platform.GLOBAL,
-          source: tier,
-          units: sales.global.units,
-          confidence,
-          publisher: sales.attribution,
-          sourceUrl: url,
-          note: sales.global.quote,
-          reportedAt: sales.global.reportedAt,
-          region: 'GLOBAL',
-        }),
-      );
+    const rows: Milestone[] = [];
+    let undatedSkipped = 0;
+    if (sales.global) {
+      if (!sales.global.reportedAt) {
+        undatedSkipped += 1;
+      } else if (
+        this.isReportedAfterRelease(sales.global.reportedAt, releaseDate)
+      ) {
+        rows.push(
+          this.milestones.create({
+            gameId,
+            platform: Platform.GLOBAL,
+            source: tier,
+            units: sales.global.units,
+            confidenceScore,
+            publisher: sales.attribution,
+            sourceUrl: url,
+            note: sales.global.quote,
+            reportedAt: sales.global.reportedAt,
+            region: 'GLOBAL',
+          }),
+        );
+      }
     }
     for (const { platform, figure } of sales.perPlatform) {
+      if (!figure.reportedAt) {
+        undatedSkipped += 1;
+        continue;
+      }
       if (!this.isReportedAfterRelease(figure.reportedAt, releaseDate)) continue;
       rows.push(
-        this.salesRecords.create({
+        this.milestones.create({
           gameId,
           platform,
           source: tier,
           units: figure.units,
-          confidence,
+          confidenceScore,
           publisher: sales.attribution,
           sourceUrl: url,
           note: figure.quote,
@@ -1517,34 +1566,34 @@ export class IngestionService {
         }),
       );
     }
-    if (
-      sales.engagement &&
-      this.isReportedAfterRelease(sales.engagement.reportedAt, releaseDate)
-    ) {
-      rows.push(
-        this.salesRecords.create({
-          gameId,
-          platform: Platform.GLOBAL,
-          source: tier,
-          units: sales.engagement.units,
-          // Engagement is always low-confidence regardless of the source tier:
-          // even publisher-reported "X million players" mixes subscription
-          // users (Ubisoft+, Game Pass) with purchased copies.
-          confidence: ConfidenceLevel.LOW,
-          publisher: sales.attribution,
-          sourceUrl: url,
-          note: sales.engagement.quote,
-          reportedAt: sales.engagement.reportedAt,
-          region: 'GLOBAL',
-          isEngagement: true,
-        }),
-      );
+    if (sales.engagement) {
+      if (!sales.engagement.reportedAt) {
+        undatedSkipped += 1;
+      } else if (
+        this.isReportedAfterRelease(sales.engagement.reportedAt, releaseDate)
+      ) {
+        rows.push(
+          this.milestones.create({
+            gameId,
+            platform: Platform.GLOBAL,
+            source: tier,
+            units: sales.engagement.units,
+            confidenceScore,
+            publisher: sales.attribution,
+            sourceUrl: url,
+            note: sales.engagement.quote,
+            reportedAt: sales.engagement.reportedAt,
+            region: 'GLOBAL',
+            isEngagement: true,
+          }),
+        );
+      }
     }
 
     const accepted = await this.filterOutRejected(rows);
     if (accepted.length > 0) {
-      await this.salesRecords.save(accepted);
-      // The article actually produced usable record(s) — register the
+      await this.milestones.save(accepted);
+      // The article actually produced usable milestone(s) — register the
       // hostname in the trusted-source registry if it isn't already. This is
       // the *only* path through which the registry auto-grows: hosts that
       // never yield an accepted figure never make it in.
@@ -1553,7 +1602,12 @@ export class IngestionService {
     const skipped = rows.length - accepted.length;
     if (skipped > 0) {
       this.logger.log(
-        `[article] ${url} — ${skipped} record(s) match an admin-rejected fingerprint, skipping reinsert`,
+        `[article] ${url} — ${skipped} milestone(s) match an admin-rejected fingerprint, skipping reinsert`,
+      );
+    }
+    if (undatedSkipped > 0) {
+      this.logger.log(
+        `[article] ${url} — ${undatedSkipped} undated milestone(s) skipped (date required)`,
       );
     }
     return accepted.length;
@@ -1561,17 +1615,17 @@ export class IngestionService {
 
   /**
    * Drop the candidate rows whose strict fingerprint matches an existing
-   * admin-rejected sales record (so a refresh can never resurrect a record
+   * admin-rejected milestone (so a refresh can never resurrect a milestone
    * the admin manually deleted). Fingerprint:
    *   (gameId, platform, source, sourceUrl, units, reportedAt).
    * `null` values are compared as equal (both null = same fingerprint).
    */
   private async filterOutRejected(
-    rows: SalesRecord[],
-  ): Promise<SalesRecord[]> {
+    rows: Milestone[],
+  ): Promise<Milestone[]> {
     if (rows.length === 0) return rows;
     const gameIds = [...new Set(rows.map((r) => r.gameId))];
-    const rejected = await this.salesRecords.find({
+    const rejected = await this.milestones.find({
       where: { gameId: In(gameIds), rejectedAt: Not(IsNull()) },
       select: {
         gameId: true,
@@ -1620,12 +1674,6 @@ export class IngestionService {
   ): boolean {
     if (!reportedAt || !releaseDate) return true;
     return new Date(reportedAt) >= releaseDate;
-  }
-
-  private confidenceFromWeight(weight: number): ConfidenceLevel {
-    if (weight >= 85) return ConfidenceLevel.HIGH;
-    if (weight >= 60) return ConfidenceLevel.MEDIUM;
-    return ConfidenceLevel.LOW;
   }
 
   /**

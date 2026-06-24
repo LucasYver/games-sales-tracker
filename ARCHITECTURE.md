@@ -30,7 +30,7 @@ game-sales-tracker/
 | `GameSource` | Maps a game to an external ID on a given source system (Steam appId, IGDB id…). |
 | `SignalSnapshot` | Time-series of raw public signals: Steam reviews, PS Store rating count, Xbox Store rating count. |
 | `SalesEstimate` | Computed Boxleiter estimate (low / high / confidence / method) per platform, stored on each computation cycle. |
-| `SalesRecord` | A declared or extracted sales figure with full provenance: platform, tier, units, reported date, source URL, verbatim quote. |
+| `Milestone` | A dated declared or extracted sales-related figure with full provenance: platform, source tier, units, `reportedAt`, source URL, verbatim quote, numeric `confidenceScore` (0–100, informational). Flag `isEngagement` marks players-reached figures (excluded from calibration). Replaces the legacy `SalesRecord` entity; the database table was renamed from `sales_record` to `milestone`. |
 | `TrustedSource` | Curated whitelist of media outlets / analysts / X accounts that feed the LLM extraction pipeline. |
 | `ProcessedArticle` | Deduplication table of already-processed article URLs. |
 
@@ -69,11 +69,15 @@ Each supported platform has its own signal → units model:
 | PlayStation | PS Store rating count | 40–100× | 8–600× |
 | Xbox | Xbox Store rating count | 35–90× | 6–600× |
 
-**Calibration**: when a reliable declared figure (`OFFICIAL`) exists for a
-platform alongside a contemporaneous signal snapshot (within 180 days), the
-per-game multiplier is derived and persisted on `Game`
-(`calibratedMultiplier`, `calibratedPsMultiplier`, `calibratedXboxMultiplier`).
-Calibrated estimates use a ±20% spread around the derived multiplier.
+**Calibration**: when at least one **dated milestone** exists for a
+platform (any source — OFFICIAL, ANNOUNCEMENT, MEDIA, WIKIPEDIA), we
+pick the latest `reportedAt` and pair it with the closest signal
+snapshot within 365 days to derive the per-game multiplier. The result
+is persisted on `Game` (`calibratedMultiplier`, `calibratedPsMultiplier`,
+`calibratedXboxMultiplier`). All calibrated estimates use the single
+uniform ±30 % spread (`CALIBRATED_MULTIPLIER_SPREAD = 0.3`); the
+milestone's `confidenceScore` is surfaced to operators but does not
+affect calibration. See `ESTIMATION.md` §1 for the full algorithm.
 
 **PC second opinion (peak CCU intersection)**: on PC, the reviews-based
 Boxleiter range is intersected with a parallel range derived from the all-
@@ -143,7 +147,7 @@ ratings. Free-to-play titles are blocked.
 
 #### Trusted media sources (RSS + on-site search)
 - Curated registry in `sources.seed.ts` (seeded idempotently at boot).
-- Continuous RSS polling every 30 min → LLM extraction → `SalesRecord(MEDIA)`.
+- Continuous RSS polling every 30 min → LLM extraction → `Milestone(MEDIA)`.
 - On-site search templates used by the manual discovery flow.
 
 #### Tavily (backlog discovery)
@@ -173,10 +177,10 @@ ratings. Free-to-play titles are blocked.
 |---|---|
 | `GET /admin/stats` | Dashboard totals |
 | `GET /admin/games` | Filterable paginated list |
-| `GET /admin/games/:id` | Full detail (sources, records, estimates, signals) |
+| `GET /admin/games/:id` | Full detail (sources, milestones, estimates, signals) |
 | `DELETE /admin/games/:id` | Cascade delete |
-| `GET /admin/sales-records` | Filterable (source, platform, undated, suspect) |
-| `DELETE /admin/sales-records/:id` | Single delete |
+| `GET /admin/milestones` | Filterable (source, platform, undated, suspect) |
+| `DELETE /admin/milestones/:id` | Single delete |
 | `GET /admin/trusted-sources` | Registry list |
 | `DELETE /admin/trusted-sources/:id` | Remove source |
 | `GET /admin/issues` | 6 issue buckets (undated, suspect quotes, calibration outliers, stale, no signal, inactive sources) |
@@ -216,10 +220,10 @@ approach.
 | `/admin/login` | Token input → HttpOnly session cookie (7 days) |
 | `/admin` | Stats dashboard + IGDB backfill card with progress bar |
 | `/admin/games` | Searchable / filterable table, all 3 calibrated multipliers, delete |
-| `/admin/games/[id]` | Full detail: metadata, sales records, estimates, signals, external sources |
-| `/admin/sales-records` | Filter by source / platform / undated / suspect quote, delete |
+| `/admin/games/[id]` | Full detail: metadata, milestones, estimates, signals, external sources |
+| `/admin/milestones` | Filter by source / platform / undated / suspect quote, delete |
 | `/admin/trusted-sources` | Registry with RSS / search capabilities, delete |
-| `/admin/issues` | 6 actionable groups: undated records, suspect quotes, calibration outliers, stale (30 days without Steam signal), zero-signal games, inactive trusted sources |
+| `/admin/issues` | 6 actionable groups: undated milestones, suspect quotes, calibration outliers, stale (30 days without Steam signal), zero-signal games, inactive trusted sources |
 
 ---
 
@@ -243,7 +247,7 @@ approach.
 - **LLM as reader, not inventor**: OpenAI is used only to extract figures
   already present verbatim in a fetched page. `temperature: 0`, strict JSON
   schema, grounding check enforced at prompt level and backed by regex filters.
-- **Whitelist trust model**: a `SalesRecord` from media/press is only accepted
+- **Whitelist trust model**: a `Milestone` from media/press is only accepted
   when the source URL matches a host registered in `TrustedSource`. This
   prevents arbitrary web content from polluting the dataset.
 - **No VGChartz**: removed for unreliability. Domain is blocked from Tavily
@@ -253,8 +257,10 @@ approach.
 - **No free-to-play**: Steam F2P titles are skipped at ingestion and blocked
   from future discovery. Reviews ≠ sales for F2P.
 - **Calibration is conservative**: a per-game multiplier is only stored when
-  the snapshot is within 180 days of the declared date and the resulting
-  multiplier is within plausible bounds (5–500× for PC, etc.).
+  the signal snapshot is within `CALIBRATION_WINDOW_DAYS = 365` days of the
+  milestone's `reportedAt` and the resulting multiplier is within plausible
+  bounds (5–500× for PC, etc.). Latest-dated milestone wins, regardless of
+  source — the milestone's `confidenceScore` is purely informational.
 - **Honest confidence**: the confidence badge is downgraded when Boxleiter PC
   conflicts with console declared figures, or when the PC estimate represents
   < 20% of the total.
