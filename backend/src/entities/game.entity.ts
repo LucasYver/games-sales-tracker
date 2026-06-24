@@ -13,7 +13,7 @@ import { Platform, SalesSource } from './enums';
 import { GameSource } from './game-source.entity';
 import { SignalSnapshot } from './signal-snapshot.entity';
 import { SalesEstimate } from './sales-estimate.entity';
-import { SalesRecord } from './sales-record.entity';
+import { Milestone } from './milestone.entity';
 import { Publisher } from './publisher.entity';
 
 @Entity('game')
@@ -95,11 +95,11 @@ export class Game {
   @Column({ type: 'float', nullable: true })
   calibratedXboxMultiplier: number | null;
 
-  // SalesSource of the record that produced each calibrated multiplier
-  // above. Drives the per-source spread in
-  // `CALIBRATED_MULTIPLIER_SPREAD_BY_SOURCE`: an OFFICIAL-derived
-  // multiplier gets a tight ±20 %, a MEDIA-derived one a looser ±45 %.
-  // Always populated when the corresponding `calibrated*Multiplier` is.
+  // SalesSource of the milestone that produced each calibrated multiplier
+  // above. Kept for traceability only — the spread around a calibrated
+  // multiplier is now a single uniform `CALIBRATED_MULTIPLIER_SPREAD` and
+  // no longer varies by source. Always populated when the corresponding
+  // `calibrated*Multiplier` is.
   @Column({ type: 'enum', enum: SalesSource, nullable: true })
   calibrationSourcePc: SalesSource | null;
 
@@ -130,6 +130,6 @@ export class Game {
   @OneToMany(() => SalesEstimate, (estimate) => estimate.game)
   estimates: SalesEstimate[];
 
-  @OneToMany(() => SalesRecord, (record) => record.game)
-  salesRecords: SalesRecord[];
+  @OneToMany(() => Milestone, (milestone) => milestone.game)
+  milestones: Milestone[];
 }

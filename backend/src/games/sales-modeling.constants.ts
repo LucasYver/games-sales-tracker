@@ -212,32 +212,12 @@ export const LAUNCHER_CONFIDENCE_CAP: Record<
 // Tightening factor applied around a calibrated multiplier when computing the
 // per-platform Boxleiter range: low = m * (1 - X), high = m * (1 + X).
 //
-// The spread depends on how trustworthy the declared figure that produced
-// the calibration was. An IR press release nails the number to the unit;
-// a journalist might round to the nearest million or cite an estimate.
-//
-// Mapped per `SalesSource` in `CALIBRATED_MULTIPLIER_SPREAD_BY_SOURCE`
-// below. The legacy `CALIBRATED_MULTIPLIER_SPREAD` constant is kept as
-// the OFFICIAL value (= the original ±20 %), so any code still importing
-// it gets the strict spread.
+// A single uniform spread is applied regardless of the milestone's source:
+// the source no longer drives the model's confidence, only the latest
+// dated milestone wins per platform. Picked at the middle of the previous
+// per-source spread band (±30 %) as a conservative default.
 
-import { SalesSource } from '../entities/enums';
-
-export const CALIBRATED_MULTIPLIER_SPREAD = 0.2;
-
-export const CALIBRATED_MULTIPLIER_SPREAD_BY_SOURCE: Record<
-  SalesSource,
-  number
-> = {
-  // IR / earnings press release — figure is audited, to the unit, dated.
-  [SalesSource.OFFICIAL]: 0.2,
-  // Publisher tweet, dev blog post — primary source but often rounded.
-  [SalesSource.ANNOUNCEMENT]: 0.3,
-  // Journalist reporting — secondhand, sometimes their own estimate.
-  [SalesSource.MEDIA]: 0.45,
-  // Compilation page citing multiple sources — quality varies wildly.
-  [SalesSource.WIKIPEDIA]: 0.45,
-};
+export const CALIBRATED_MULTIPLIER_SPREAD = 0.3;
 
 // ─── Achievement-based estimation (Exophase coverage) ───────────────────────
 //
@@ -293,11 +273,11 @@ export const ACHIEVEMENT_MIN_PLAYERS_TRACKED = 500;
 
 // ─── Estimation discrepancy detector ────────────────────────────────────────
 //
-// When a new SalesRecord arrives, we compare its `units` against the
-// midpoint of our most recent estimate that pre-dates the record. If the
-// ratio `declaredUnits / midPriorEstimate` falls outside the band below,
-// we persist an `EstimationDiscrepancy` row so the miss is surfaced in
-// /admin/issues even after the model recalibrates.
+// When a new Milestone arrives, we compare its `units` against the
+// midpoint of our most recent estimate that pre-dates the milestone. If
+// the ratio `declaredUnits / midPriorEstimate` falls outside the band
+// below, we persist an `EstimationDiscrepancy` row so the miss is
+// surfaced in /admin/issues even after the model recalibrates.
 //
 // 2.0 / 0.5 = "the model was off by 2× in either direction" — clear
 // signal without flooding on every minor wobble. Tighten to catch more,
@@ -561,12 +541,3 @@ export function genreProjectionMultiplier(
   if (ageDays < 7) return ageDays / 7;
   return interpolateCurve(buildGenreProjectionCurve(m1, tailY2, tailY5), ageDays);
 }
-
-
-// ─── Media weight ──────────────────────────────────────────────────────────
-//
-// Used by `GamesService.confidenceFromWeight` to determine the confidence
-// level of a media source.
-//
-// 50% = medium confidence
-export const MEDIA_WEIGHT = 50; // 50%

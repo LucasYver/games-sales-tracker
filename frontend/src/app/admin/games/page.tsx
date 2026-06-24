@@ -113,7 +113,7 @@ export default async function AdminGamesPage({
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="hasSales">Sales records</Label>
+              <Label htmlFor="hasSales">Milestones</Label>
               <select
                 id="hasSales"
                 name="hasSales"
@@ -141,7 +141,7 @@ export default async function AdminGamesPage({
               <TableHead>Platforms</TableHead>
               <TableHead>Released</TableHead>
               <TableHead className="text-right">Reviews</TableHead>
-              <TableHead className="text-right">Sales records</TableHead>
+              <TableHead className="text-right">Milestones</TableHead>
               <TableHead className="text-right">Estimates</TableHead>
               <TableHead className="text-right">Calibrated</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -179,7 +179,7 @@ export default async function AdminGamesPage({
                   {g.latestReviews?.toLocaleString() ?? '—'}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {g.salesRecordsCount}
+                  {g.milestonesCount}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {g.estimatesCount}

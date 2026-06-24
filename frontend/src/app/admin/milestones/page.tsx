@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { ExternalLink } from 'lucide-react';
 import {
   adminFetch,
-  type AdminSalesRecordWithGame,
+  type AdminMilestoneWithGame,
   type PaginatedAdmin,
 } from '@/lib/admin';
 import { Card, CardContent } from '@/components/ui/card';
@@ -18,7 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { DeleteButton } from '../_components/DeleteButton';
-import { deleteSalesRecord } from '../actions';
+import { deleteMilestone } from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,7 +35,12 @@ function formatDate(iso: string | null): string {
   });
 }
 
-export default async function AdminSalesRecordsPage({
+function formatScore(score: number | null): string {
+  if (score == null) return '—';
+  return `${Math.round(score)}`;
+}
+
+export default async function AdminMilestonesPage({
   searchParams,
 }: {
   searchParams: Promise<{
@@ -66,17 +71,17 @@ export default async function AdminSalesRecordsPage({
   if (suspect === 'true') params.set('suspect', 'true');
 
   const { items, total } = await adminFetch<
-    PaginatedAdmin<AdminSalesRecordWithGame>
-  >(`/sales-records?${params}`);
+    PaginatedAdmin<AdminMilestoneWithGame>
+  >(`/milestones?${params}`);
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-8">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight">Sales records</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Milestones</h1>
         <p className="text-muted-foreground text-sm">
-          {total.toLocaleString()} records. Most recently captured first.
+          {total.toLocaleString()} milestones. Most recently captured first.
         </p>
       </header>
 
@@ -137,7 +142,7 @@ export default async function AdminSalesRecordsPage({
             </div>
             <Button type="submit">Apply</Button>
             <Button asChild variant="ghost">
-              <Link href="/admin/sales-records">Reset</Link>
+              <Link href="/admin/milestones">Reset</Link>
             </Button>
           </form>
         </CardContent>
@@ -151,6 +156,7 @@ export default async function AdminSalesRecordsPage({
               <TableHead>Source</TableHead>
               <TableHead>Platform</TableHead>
               <TableHead className="text-right">Units</TableHead>
+              <TableHead className="text-right">Confidence</TableHead>
               <TableHead>Reported</TableHead>
               <TableHead>URL</TableHead>
               <TableHead>Quote</TableHead>
@@ -158,32 +164,35 @@ export default async function AdminSalesRecordsPage({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((sr) => (
-              <TableRow key={sr.id}>
+            {items.map((m) => (
+              <TableRow key={m.id}>
                 <TableCell>
                   <Link
-                    href={`/admin/games/${sr.gameId}`}
+                    href={`/admin/games/${m.gameId}`}
                     className="hover:text-primary hover:underline"
                   >
-                    {sr.gameName}
+                    {m.gameName}
                   </Link>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline">{sr.source}</Badge>
+                  <Badge variant="outline">{m.source}</Badge>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="secondary">{sr.platform}</Badge>
+                  <Badge variant="secondary">{m.platform}</Badge>
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {sr.units.toLocaleString()}
+                  {m.units.toLocaleString()}
+                </TableCell>
+                <TableCell className="text-muted-foreground text-right text-sm tabular-nums">
+                  {formatScore(m.confidenceScore)}
                 </TableCell>
                 <TableCell className="text-muted-foreground text-sm">
-                  {formatDate(sr.reportedAt)}
+                  {formatDate(m.reportedAt)}
                 </TableCell>
                 <TableCell>
-                  {sr.sourceUrl ? (
+                  {m.sourceUrl ? (
                     <a
-                      href={sr.sourceUrl}
+                      href={m.sourceUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-primary inline-flex items-center gap-1 text-xs hover:underline"
@@ -196,14 +205,14 @@ export default async function AdminSalesRecordsPage({
                   )}
                 </TableCell>
                 <TableCell className="text-muted-foreground max-w-md truncate text-xs">
-                  {sr.note ?? '—'}
+                  {m.note ?? '—'}
                 </TableCell>
                 <TableCell className="text-right">
                   <DeleteButton
-                    action={deleteSalesRecord.bind(null, sr.id)}
-                    confirmMessage={`Delete this ${sr.source} record for ${sr.gameName}?`}
+                    action={deleteMilestone.bind(null, m.id)}
+                    confirmMessage={`Delete this ${m.source} milestone for ${m.gameName}?`}
                     iconOnly
-                    label="Delete record"
+                    label="Delete milestone"
                   />
                 </TableCell>
               </TableRow>
@@ -211,10 +220,10 @@ export default async function AdminSalesRecordsPage({
             {items.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={8}
+                  colSpan={9}
                   className="text-muted-foreground py-12 text-center"
                 >
-                  No records match these filters.
+                  No milestones match these filters.
                 </TableCell>
               </TableRow>
             )}

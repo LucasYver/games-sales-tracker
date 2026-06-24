@@ -6,14 +6,24 @@
 
 We never know the real number of copies a game has sold. We **guess** from
 public signals (reviews, ratings, achievements) and **cross-check** with
-declared figures (publisher IR, Wikipedia). Each guess comes with a range
-and a confidence level.
+**milestones** (dated declared figures from publisher IR, Wikipedia, press
+coverage). Each guess comes with a range and a confidence level.
 
 ```
 public signal ──► per-platform estimate ─┐
                                          ├─► reconcile ─► "today" range
-declared figure (with date) ─────────────┘
+milestone (dated declared figure) ───────┘
 ```
+
+A **milestone** is a single dated sales-related figure for one platform,
+attached to a `note` (verbatim source quote) and a `sourceUrl` for
+provenance. Stored in `milestone` (entity `Milestone`). Each milestone
+carries a `confidenceScore` (0–100, derived from the trusted source's
+`weight`) which is **purely informational**: it surfaces to the operator
+in the admin but is never used by calibration, spread or aggregation.
+Milestones flagged `isEngagement = true` ("players reached", typically
+including Game Pass / Ubisoft+ subscribers) are kept for context but
+excluded from calibration and the headline breakdown.
 
 ---
 
@@ -43,15 +53,13 @@ units_high = signal × multiplier_high
 
 - If the game has a **calibrated multiplier** stored on `Game`
   (`calibratedMultiplier`, `calibratedPsMultiplier`,
-  `calibratedXboxMultiplier`), use it with a per-source spread:
-  - OFFICIAL-derived → ±20 %
-  - ANNOUNCEMENT-derived → ±30 %
-  - MEDIA-derived → ±45 %
-  - WIKIPEDIA-derived → ±45 %
-  The source of the record that produced the multiplier is stored on
-  `Game.calibrationSource{Pc,Ps,Xbox}` and the spread is looked up in
-  `CALIBRATED_MULTIPLIER_SPREAD_BY_SOURCE`. Method tag:
-  `…-calibrated-{source}` (e.g. `boxleiter-calibrated-media`).
+  `calibratedXboxMultiplier`), use it with the **single uniform spread**
+  `CALIBRATED_MULTIPLIER_SPREAD = 0.3` (±30 %). The source of the
+  milestone that produced the multiplier is still stored on
+  `Game.calibrationSource{Pc,Ps,Xbox}` for traceability but does not
+  influence the spread. Method tag: `…-calibrated` (e.g.
+  `boxleiter-calibrated`, `ps-ratings-boxleiter-calibrated`,
+  `xbox-ratings-boxleiter-calibrated`).
 - Otherwise, use the platform's default range. Method tag: `…-default`.
 
 | Platform | Default low | Default high | Plausible min | Plausible max |
@@ -61,34 +69,35 @@ units_high = signal × multiplier_high
 | Xbox     | `35`        | `90`         | `6`           | `600`         |
 
 Source: `sales-modeling.constants.ts` (`*_BOXLEITER_*`).
-`CALIBRATED_MULTIPLIER_SPREAD = 0.2` (±20 %).
+`CALIBRATED_MULTIPLIER_SPREAD = 0.3` (±30 %, uniform).
 
 ### How calibration learns the multiplier
 
 > `EstimationService.recalibratePlatform`.
 
-If we have at least one **declared figure with a date** for that platform
-from a source in `CALIBRATION_SOURCES = [OFFICIAL, ANNOUNCEMENT, MEDIA]`
-(in that priority order — OFFICIAL wins when both exist), we look for
-the signal snapshot **closest in time** to that declared date. Then:
+If we have at least one **dated milestone** for that platform
+(excluding engagement milestones), we pick the milestone with the
+**most recent `reportedAt`** — regardless of source. All sources are
+eligible (OFFICIAL, ANNOUNCEMENT, MEDIA, WIKIPEDIA): the simplifying
+assumption is that the latest dated figure is the closest to the
+current truth, and source reliability is already captured (and surfaced
+to the operator) by the milestone's `confidenceScore` without driving
+calibration. We then look for the signal snapshot **closest in time** to
+that milestone's date and compute:
 
 ```
-multiplier = declared.units / signal.value
+multiplier = milestone.units / signal.value
 ```
 
-We persist this multiplier on `Game.calibrated*Multiplier` **together
-with the record's source** on `Game.calibrationSource*`, so the next
-estimate read can pick the spread that matches the source's
-trustworthiness. We only keep the multiplier if:
+We persist this multiplier on `Game.calibrated*Multiplier` together
+with the milestone's source on `Game.calibrationSource*` (kept for
+traceability only — no spread or weight is derived from it). We only
+keep the multiplier if:
 
 - the snapshot is within `CALIBRATION_WINDOW_DAYS = 365` days of the
-  declared date (otherwise we'd mix points from different times), and
+  milestone's date (otherwise we'd mix points from different times), and
 - `multiplier` is inside the platform's plausible range (otherwise we
   treat it as a data error and fall back to defaults).
-
-WIKIPEDIA is deliberately **not** in `CALIBRATION_SOURCES`: it is
-secondhand by nature (it cites other sources) so we'd be calibrating on
-re-reported numbers without the original context.
 
 ### Fallback: calibration from a worldwide figure
 
@@ -96,19 +105,20 @@ re-reported numbers without the original context.
 
 In practice, the press almost always quotes a worldwide total ("X
 million copies sold across all platforms") rather than per-platform
-breakdowns. Without a fallback, those `platform = GLOBAL` records can't
-calibrate anything and we stay on defaults forever.
+breakdowns. Without a fallback, those `platform = GLOBAL` milestones
+can't calibrate anything and we stay on defaults forever.
 
-The fallback splits the GLOBAL figure proportionally to each platform's
-**proxy estimate** (signal × default-multiplier midpoint), then
-calibrates each platform with its allocated share. Per-platform
-calibration always takes precedence — GLOBAL split only fills the
-platforms that pass 1 left untouched.
+The fallback picks the **most recent dated GLOBAL milestone** (any
+source) and splits it proportionally to each platform's **proxy
+estimate** (signal × default-multiplier midpoint), then calibrates each
+platform with its allocated share. Per-platform calibration always
+takes precedence — GLOBAL split only fills the platforms that pass 1
+left untouched.
 
 ```
 proxy_p          = signal_p × midpoint(default_mult_p)
 share_p          = proxy_p / Σ proxy
-allocated_p      = declared.global × share_p
+allocated_p      = milestone.global × share_p
 multiplier_p     = allocated_p / signal_p           // = global × midpoint(default_p) / Σ proxy
 ```
 
@@ -118,7 +128,7 @@ weights — otherwise calibration would feed back on itself.
 Guards (same spirit as the per-platform pass):
 
 - Platform's signal must exist within `CALIBRATION_WINDOW_DAYS = 365`
-  days of the declared date.
+  days of the milestone's date.
 - Platform's share must be at least
   `GLOBAL_SPLIT_MIN_PLATFORM_SHARE = 5 %`. Splitting a worldwide figure
   over a marginal platform (e.g. Xbox at 1 %) yields volatile
@@ -126,9 +136,10 @@ Guards (same spirit as the per-platform pass):
 - Resulting multiplier still has to land inside
   `[plausibleMin, plausibleMax]`.
 
-The persisted `calibrationSource*` is the GLOBAL record's source, so
-the per-source spread (OFFICIAL ±20 %, ANNOUNCEMENT ±30 %, MEDIA
-±45 %) applies normally at read time.
+The persisted `calibrationSource*` is the GLOBAL milestone's source,
+recorded for traceability. The same uniform spread
+(`CALIBRATED_MULTIPLIER_SPREAD = 0.3`) applies at read time regardless
+of which source produced the multiplier.
 
 ---
 
@@ -339,26 +350,25 @@ it.
 | Code                                            | Family       | Default weight | Enabled |
 | ----------------------------------------------- | ------------ | -------------- | ------- |
 | `boxleiter-default`                             | BOXLEITER    | `0.5`          | ✅      |
-| `boxleiter-calibrated-official`                 | BOXLEITER    | `1.0`          | ✅      |
-| `boxleiter-calibrated-announcement`             | BOXLEITER    | `0.7`          | ✅      |
-| `boxleiter-calibrated-media`                    | BOXLEITER    | `0.5`          | ✅      |
-| `boxleiter-calibrated-wikipedia`                | BOXLEITER    | `0.4`          | ✅      |
+| `boxleiter-calibrated`                          | BOXLEITER    | `1.0`          | ✅      |
 | `ps-ratings-boxleiter-default`                  | BOXLEITER    | `0.5`          | ✅      |
-| `ps-ratings-boxleiter-calibrated-official`      | BOXLEITER    | `1.0`          | ✅      |
-| `ps-ratings-boxleiter-calibrated-announcement`  | BOXLEITER    | `0.7`          | ✅      |
-| `ps-ratings-boxleiter-calibrated-media`         | BOXLEITER    | `0.5`          | ✅      |
-| `ps-ratings-boxleiter-calibrated-wikipedia`     | BOXLEITER    | `0.4`          | ✅      |
+| `ps-ratings-boxleiter-calibrated`               | BOXLEITER    | `1.0`          | ✅      |
 | `xbox-ratings-boxleiter-default`                | BOXLEITER    | `0.5`          | ✅      |
-| `xbox-ratings-boxleiter-calibrated-official`    | BOXLEITER    | `1.0`          | ✅      |
-| `xbox-ratings-boxleiter-calibrated-announcement`| BOXLEITER    | `0.7`          | ✅      |
-| `xbox-ratings-boxleiter-calibrated-media`       | BOXLEITER    | `0.5`          | ✅      |
-| `xbox-ratings-boxleiter-calibrated-wikipedia`   | BOXLEITER    | `0.4`          | ✅      |
+| `xbox-ratings-boxleiter-calibrated`             | BOXLEITER    | `1.0`          | ✅      |
+| `boxleiter-calibrated-{official,announcement,media,wikipedia}`     | BOXLEITER | `0`         | ⛔ legacy |
+| `ps-ratings-boxleiter-calibrated-{official,announcement,media,wikipedia}` | BOXLEITER | `0`  | ⛔ legacy |
+| `xbox-ratings-boxleiter-calibrated-{official,announcement,media,wikipedia}` | BOXLEITER | `0` | ⛔ legacy |
 | `achievements-exophase-pc`                      | ACHIEVEMENTS | `0.3`          | ⛔ dormant |
 | `achievements-exophase-pc-steam-corrected`      | ACHIEVEMENTS | `0.3`          | ⛔ dormant |
 | `achievements-exophase-playstation`             | ACHIEVEMENTS | `0.3`          | ⛔ dormant |
 | `achievements-exophase-xbox`                    | ACHIEVEMENTS | `0.3`          | ⛔ dormant |
 | `first-week-extrapolation-pc`                   | LIFECYCLE    | `0.6`          | ✅      |
 | `aggregated`                                    | AGGREGATE    | `1.0`          | ✅ (output) |
+
+The per-source `*-calibrated-{official,…}` rows are kept (disabled)
+because historical `SalesEstimate` rows reference them; the new
+calibrated rows are uniform-weight regardless of which milestone source
+produced the calibration.
 
 Adding a new method = inserting a row in `estimation_method` (via a
 migration) and producing `SalesEstimate` rows that reference it. The
@@ -411,9 +421,12 @@ every capture point.
 
 > `GamesService.reconcile`.
 
-For each platform we have at most one declared figure (`bestByPlatform`)
-and one estimate (the Boxleiter one — achievement estimates are stored
-side-by-side but not used here yet). We pick a `[low, high]` per platform:
+For each platform we have at most one milestone (`bestByPlatform`,
+selected as the **latest-dated wins** across every source — dated
+milestones beat undated ones, the most recent `reportedAt` wins among
+dated ones, larger units wins among undated) and one estimate (the
+Boxleiter one — achievement estimates are stored side-by-side but not
+used here yet). We pick a `[low, high]` per platform:
 
 - **Both declared + estimate** →
   `low = max(declared, min(estimate.low, freshnessCap))`,
@@ -515,8 +528,7 @@ All numbers live in `backend/src/games/sales-modeling.constants.ts`.
 | `PS_BOXLEITER_PLAUSIBLE_MIN/MAX`  | `8 / 600`  | Boxleiter PS calibration sanity        |
 | `XBOX_BOXLEITER_DEFAULT_LOW/HIGH` | `35 / 90`  | Boxleiter Xbox default range           |
 | `XBOX_BOXLEITER_PLAUSIBLE_MIN/MAX`| `6 / 600`  | Boxleiter Xbox calibration sanity      |
-| `CALIBRATED_MULTIPLIER_SPREAD`    | `0.2`      | legacy default (OFFICIAL spread)       |
-| `CALIBRATED_MULTIPLIER_SPREAD_BY_SOURCE` | `OFFICIAL 0.2 / ANNOUNCEMENT 0.3 / MEDIA 0.45 / WIKIPEDIA 0.45` | spread around calibrated value, by source |
+| `CALIBRATED_MULTIPLIER_SPREAD`    | `0.3`      | uniform ±30 % spread around any calibrated multiplier |
 | `PC_DOMINANCE_RATIO_THRESHOLD`    | `0.2`      | reconcile PC marginality guardrail     |
 | `EXOPHASE_COVERAGE_PC_LOW/HIGH`   | `12 / 30`  | achievement-based PC range             |
 | `EXOPHASE_COVERAGE_PS_LOW/HIGH`   | `10 / 28`  | achievement-based PS range             |
@@ -542,7 +554,7 @@ Three layers, each with a different timestamp:
 | `SalesEstimate` | `computedAt` | `EstimationService.computeAndStore` | per-platform per-method ranges, FK to `estimation_method` via `methodId`. Includes the synthetic `aggregated` row (one per platform per `computedAt`). |
 | `EstimationMethod` | `createdAt` / `updatedAt` | seeded by migration | registry of canonical method codes, default weights, enabled flag |
 | `EstimateSnapshot` | `computedAt` | `GamesService.snapshotReconcile` (called after every `computeAndStore`) | the reconciled headline `[estimatedTodayLow, estimatedTodayHigh]` + serialized `ReconciliationEntry[]` |
-| `SalesRecord` | `reportedAt` + `capturedAt` | scrapers (Wikipedia, articles, official IR) | dated declared figures, never overwritten |
+| `Milestone` | `reportedAt` + `capturedAt` | scrapers (Wikipedia, articles, official IR) | dated declared figures (sales or engagement), never overwritten; rejected if `reportedAt` is missing |
 
 `SalesEstimate` and `EstimateSnapshot` are **append-only** time series: every
 refresh inserts a new row, none are updated in place. That's what makes a
@@ -590,8 +602,9 @@ signals" is the cleanest mental model for the chart. Re-deriving the
 multiplier per point would chase its own tail (each rebuild moment
 would shift the multiplier, which would shift the next moment…).
 
-Declared figures with no `reportedAt` are always kept in the
-reconciliation regardless of `T` (it's knowledge we have, just undated).
+Milestones without `reportedAt` are now rejected at ingestion time
+(calibration needs a date). Any legacy undated rows still present are
+kept in the reconciliation regardless of `T`.
 
 ## 10. Estimation discrepancy detector — model error tracking
 
@@ -600,23 +613,23 @@ reconciliation regardless of `T` (it's knowledge we have, just undated).
 > `rebuildEstimateHistory`. Persisted in the `EstimationDiscrepancy`
 > table, surfaced in `/admin/issues` under "Estimation misses".
 
-When a new `SalesRecord` lands, we compare its `units` to the **prior**
-estimate band that pre-dated the record:
+When a new `Milestone` lands, we compare its `units` to the **prior**
+estimate band that pre-dated the milestone:
 
 ```
-referenceMoment = record.reportedAt ?? record.capturedAt
-priorBand       = latest estimate for (gameId, record.platform) with
+referenceMoment = milestone.reportedAt ?? milestone.capturedAt
+priorBand       = latest estimate for (gameId, milestone.platform) with
                   computedAt < referenceMoment
                   ├── GLOBAL platform → EstimateSnapshot (aggregated headline)
                   └── per-platform   → SalesEstimate row
-ratio           = record.units / midpoint(priorBand)
+ratio           = milestone.units / midpoint(priorBand)
 ```
 
 If `ratio` falls outside `[DISCREPANCY_RATIO_LOW, DISCREPANCY_RATIO_HIGH]
 = [0.5, 2.0]`, we insert one `EstimationDiscrepancy` row. The detector
-is **idempotent** thanks to a unique index on `recordId`: each record
-produces at most one miss, and re-running the evaluation is a no-op for
-records already evaluated.
+is **idempotent** thanks to a unique index on `milestoneId`: each
+milestone produces at most one miss, and re-running the evaluation is a
+no-op for milestones already evaluated.
 
 Crucially the row is **frozen** at insertion:
 

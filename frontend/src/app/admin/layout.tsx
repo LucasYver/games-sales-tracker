@@ -38,8 +38,8 @@ const NAV_ITEMS = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { href: '/admin/games', label: 'Games', icon: Library, exact: false },
   {
-    href: '/admin/sales-records',
-    label: 'Sales records',
+    href: '/admin/milestones',
+    label: 'Milestones',
     icon: Receipt,
     exact: false,
   },

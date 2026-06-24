@@ -94,8 +94,8 @@ export class AdminController {
     return this.ingestion.importSteamPeakCcuHistory(id);
   }
 
-  @Get('sales-records')
-  listSalesRecords(
+  @Get('milestones')
+  listMilestones(
     @Query('gameId') gameId?: string,
     @Query('source') source?: string,
     @Query('platform') platform?: string,
@@ -104,7 +104,7 @@ export class AdminController {
     @Query('offset') offset?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.admin.listSalesRecords({
+    return this.admin.listMilestones({
       gameId,
       source: source as SalesSource | undefined,
       platform: platform as Platform | undefined,
@@ -115,10 +115,10 @@ export class AdminController {
     });
   }
 
-  @Delete('sales-records/:id')
+  @Delete('milestones/:id')
   @HttpCode(200)
-  deleteSalesRecord(@Param('id', ParseUUIDPipe) id: string) {
-    return this.admin.deleteSalesRecord(id);
+  deleteMilestone(@Param('id', ParseUUIDPipe) id: string) {
+    return this.admin.deleteMilestone(id);
   }
 
   @Get('trusted-sources')

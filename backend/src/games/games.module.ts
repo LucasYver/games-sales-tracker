@@ -5,8 +5,8 @@ import {
   EstimateSnapshot,
   EstimationDiscrepancy,
   Game,
+  Milestone,
   SalesEstimate,
-  SalesRecord,
   SignalSnapshot,
 } from '../entities';
 import { EstimationModule } from '../estimation/estimation.module';
@@ -22,7 +22,7 @@ import { GamesService } from './games.service';
       SalesEstimate,
       EstimateSnapshot,
       EstimationDiscrepancy,
-      SalesRecord,
+      Milestone,
     ]),
     EstimationModule,
   ],

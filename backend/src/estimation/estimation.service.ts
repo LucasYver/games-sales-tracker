@@ -1,19 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, LessThanOrEqual, Repository } from 'typeorm';
+import { IsNull, LessThanOrEqual, Repository } from 'typeorm';
 import {
   AchievementSnapshot,
   ConfidenceLevel,
   EstimationMethod,
   Game,
   LauncherProfile,
+  Milestone,
   Platform,
   SalesEstimate,
-  SalesRecord,
   SalesSource,
   SignalMetric,
   SignalSnapshot,
-  SourceType,
 } from '../entities';
 import {
   AGGREGATED_METHOD_CODE,
@@ -28,7 +27,6 @@ import {
   ACHIEVEMENT_ESTIMATE_MIN_UNITS,
   ACHIEVEMENT_MIN_PLAYERS_TRACKED,
   CALIBRATED_MULTIPLIER_SPREAD,
-  CALIBRATED_MULTIPLIER_SPREAD_BY_SOURCE,
   EXOPHASE_COVERAGE_PC_HIGH,
   EXOPHASE_COVERAGE_PC_LOW,
   EXOPHASE_COVERAGE_PS_HIGH,
@@ -113,23 +111,11 @@ const ACHIEVEMENT_COVERAGE: Record<
 
 const RECENT_RELEASE_DAYS = 14;
 
-// Calibration only trusts a declared figure when a signal snapshot exists
-// within this window of the figure's reported date — otherwise units/signals
-// would mix points from very different times and produce a bogus multiplier.
+// Calibration only trusts a milestone when a signal snapshot exists
+// within this window of the milestone's reported date — otherwise
+// units/signals would mix points from very different times and produce
+// a bogus multiplier.
 const CALIBRATION_WINDOW_DAYS = 365;
-
-// Declared sources reliable enough to calibrate against, most reliable
-// first. The order matters: when a game has both an OFFICIAL figure and
-// a MEDIA one, OFFICIAL wins. MEDIA/ANNOUNCEMENT bring more games into
-// the calibrated tier (OFFICIAL alone is rare), but the produced
-// multiplier inherits a wider per-source spread (see
-// `CALIBRATED_MULTIPLIER_SPREAD_BY_SOURCE`) to keep the model honest
-// about its lower confidence.
-const CALIBRATION_SOURCES = [
-  SalesSource.OFFICIAL,
-  SalesSource.ANNOUNCEMENT,
-  SalesSource.MEDIA,
-];
 
 // Minimum estimated share of a platform in the worldwide breakdown
 // required to calibrate it from a GLOBAL record (see
@@ -196,10 +182,10 @@ interface PlatformConfig {
   plausibleMin: number;
   plausibleMax: number;
   // How a stored Game row exposes the calibrated multiplier for this
-  // platform — and the source of the record that produced it (so the
-  // per-source spread can be applied at read time).
+  // platform. The originating source is stored alongside the value via
+  // `write` for traceability but is not read back at estimate time —
+  // the spread is uniform across sources.
   read: (game: Game) => number | null;
-  readSource: (game: Game) => SalesSource | null;
   write: (
     gameId: string,
     value: number,
@@ -226,8 +212,8 @@ export class EstimationService {
     private readonly games: Repository<Game>,
     @InjectRepository(SignalSnapshot)
     private readonly signals: Repository<SignalSnapshot>,
-    @InjectRepository(SalesRecord)
-    private readonly salesRecords: Repository<SalesRecord>,
+    @InjectRepository(Milestone)
+    private readonly milestones: Repository<Milestone>,
     @InjectRepository(SalesEstimate)
     private readonly estimates: Repository<SalesEstimate>,
     @InjectRepository(AchievementSnapshot)
@@ -244,7 +230,6 @@ export class EstimationService {
         plausibleMin: PC_BOXLEITER_PLAUSIBLE_MIN,
         plausibleMax: PC_BOXLEITER_PLAUSIBLE_MAX,
         read: (g) => g.calibratedMultiplier,
-        readSource: (g) => g.calibrationSourcePc,
         write: (id, value, source) =>
           this.games
             .update(id, {
@@ -262,7 +247,6 @@ export class EstimationService {
         plausibleMin: PS_BOXLEITER_PLAUSIBLE_MIN,
         plausibleMax: PS_BOXLEITER_PLAUSIBLE_MAX,
         read: (g) => g.calibratedPsMultiplier,
-        readSource: (g) => g.calibrationSourcePs,
         write: (id, value, source) =>
           this.games
             .update(id, {
@@ -280,7 +264,6 @@ export class EstimationService {
         plausibleMin: XBOX_BOXLEITER_PLAUSIBLE_MIN,
         plausibleMax: XBOX_BOXLEITER_PLAUSIBLE_MAX,
         read: (g) => g.calibratedXboxMultiplier,
-        readSource: (g) => g.calibrationSourceXbox,
         write: (id, value, source) =>
           this.games
             .update(id, {
@@ -1167,19 +1150,10 @@ export class EstimationService {
   ): { low: number; high: number; method: string; isCalibrated: boolean } {
     const calibrated = opts.ignoreCalibration ? null : cfg.read(game);
     if (calibrated && calibrated > 0) {
-      const source = cfg.readSource(game);
-      // OFFICIAL by default for rows calibrated before the per-source
-      // spread feature landed (legacy `calibratedMultiplier` without a
-      // stored source).
-      const spread =
-        CALIBRATED_MULTIPLIER_SPREAD_BY_SOURCE[
-          source ?? SalesSource.OFFICIAL
-        ] ?? CALIBRATED_MULTIPLIER_SPREAD;
-      const sourceSlug = (source ?? SalesSource.OFFICIAL).toLowerCase();
       return {
-        low: calibrated * (1 - spread),
-        high: calibrated * (1 + spread),
-        method: `${cfg.methodPrefix}-calibrated-${sourceSlug}`,
+        low: calibrated * (1 - CALIBRATED_MULTIPLIER_SPREAD),
+        high: calibrated * (1 + CALIBRATED_MULTIPLIER_SPREAD),
+        method: `${cfg.methodPrefix}-calibrated`,
         isCalibrated: true,
       };
     }
@@ -1195,21 +1169,20 @@ export class EstimationService {
     gameId: string,
     cfg: PlatformConfig,
   ): Promise<number | null> {
-    const candidates = await this.salesRecords.find({
+    const candidates = await this.milestones.find({
       where: {
         gameId,
         platform: cfg.platform,
-        source: In(CALIBRATION_SOURCES),
         rejectedAt: IsNull(),
         isEngagement: false,
       },
     });
     if (candidates.length === 0) return null;
 
+    // Latest-dated-wins, regardless of source. Undated milestones are
+    // rejected at ingestion (see ingestion.service), so an absent
+    // `reportedAt` here is a defensive check only.
     candidates.sort((a, b) => {
-      const pa = CALIBRATION_SOURCES.indexOf(a.source);
-      const pb = CALIBRATION_SOURCES.indexOf(b.source);
-      if (pa !== pb) return pa - pb;
       const ta = a.reportedAt?.getTime() ?? 0;
       const tb = b.reportedAt?.getTime() ?? 0;
       return tb - ta;
@@ -1288,11 +1261,10 @@ export class EstimationService {
    *   - Multiplier: 175,000 / 100,000 = 1.75
    */
   private async recalibrateFromGlobal(gameId: string): Promise<void> {
-    const candidates = await this.salesRecords.find({
+    const candidates = await this.milestones.find({
       where: {
         gameId,
         platform: Platform.GLOBAL,
-        source: In(CALIBRATION_SOURCES),
         rejectedAt: IsNull(),
         isEngagement: false,
       },
@@ -1300,9 +1272,6 @@ export class EstimationService {
     if (candidates.length === 0) return;
 
     candidates.sort((a, b) => {
-      const pa = CALIBRATION_SOURCES.indexOf(a.source);
-      const pb = CALIBRATION_SOURCES.indexOf(b.source);
-      if (pa !== pb) return pa - pb;
       const ta = a.reportedAt?.getTime() ?? 0;
       const tb = b.reportedAt?.getTime() ?? 0;
       return tb - ta;

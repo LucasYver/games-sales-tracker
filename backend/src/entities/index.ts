@@ -10,6 +10,6 @@ export * from './estimation-method.entity';
 export * from './sales-estimate.entity';
 export * from './estimate-snapshot.entity';
 export * from './estimation-discrepancy.entity';
-export * from './sales-record.entity';
+export * from './milestone.entity';
 export * from './trusted-source.entity';
 export * from './processed-article.entity';

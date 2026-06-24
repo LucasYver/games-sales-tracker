@@ -72,7 +72,7 @@ export interface AdminStats {
     withEstimate: number;
     withCalibration: number;
   };
-  salesRecords: {
+  milestones: {
     total: number;
     bySource: Record<SalesSource, number>;
     byPlatform: Record<Platform, number>;
@@ -96,7 +96,7 @@ export interface AdminGameSummary {
   calibrationSourcePc: SalesSource | null;
   calibrationSourcePs: SalesSource | null;
   calibrationSourceXbox: SalesSource | null;
-  salesRecordsCount: number;
+  milestonesCount: number;
   estimatesCount: number;
   latestReviews: number | null;
   latestReviewsAt: string | null;
@@ -111,14 +111,14 @@ export interface AdminGameSource {
   data: unknown;
 }
 
-export interface AdminSalesRecord {
+export interface AdminMilestone {
   id: string;
   gameId: string;
   platform: Platform;
   source: SalesSource;
   units: number;
   region: string;
-  confidence: ConfidenceLevel | null;
+  confidenceScore: number | null;
   publisher: string | null;
   sourceUrl: string | null;
   note: string | null;
@@ -127,7 +127,7 @@ export interface AdminSalesRecord {
   isEngagement: boolean;
 }
 
-export interface AdminSalesRecordWithGame extends AdminSalesRecord {
+export interface AdminMilestoneWithGame extends AdminMilestone {
   gameName: string;
 }
 
@@ -216,6 +216,7 @@ export interface AdminGameDetail extends AdminGameSummary {
   igdbId: number | null;
   coverUrl: string | null;
   summary: string | null;
+  genres: string[];
   lastRefreshedAt: string | null;
   allTimePeakCcu: number | null;
   allTimePeakCcuAt: string | null;
@@ -226,7 +227,7 @@ export interface AdminGameDetail extends AdminGameSummary {
     launcherProfile: LauncherProfile;
   } | null;
   sources: AdminGameSource[];
-  salesRecords: AdminSalesRecord[];
+  milestones: AdminMilestone[];
   estimates: AdminEstimate[];
   signals: AdminSignal[];
   achievementSnapshots: AdminAchievementSummary[];
@@ -249,9 +250,10 @@ export interface AdminTrustedSource {
   active: boolean;
   autoCreated: boolean;
   createdAt: string;
-  // Number of non-rejected sales records linked to this source via the URL
-  // hostname (exact host or subdomain match). Populated by the admin listing
-  // endpoint; absent from the issue payload (inactive sources don't carry it).
+  // Number of non-rejected milestones linked to this source via the URL
+  // hostname (exact host or subdomain match). Populated by the admin
+  // listing endpoint; absent from the issue payload (inactive sources
+  // don't carry it).
   recordCount?: number;
 }
 
@@ -277,8 +279,8 @@ export interface IssueGroup<T> {
 }
 
 export interface AdminIssues {
-  undatedSalesRecords: IssueGroup<AdminSalesRecordWithGame>;
-  suspectQuotes: IssueGroup<AdminSalesRecordWithGame>;
+  undatedMilestones: IssueGroup<AdminMilestoneWithGame>;
+  suspectQuotes: IssueGroup<AdminMilestoneWithGame>;
   calibrationOutliers: IssueGroup<{
     gameId: string;
     gameName: string;

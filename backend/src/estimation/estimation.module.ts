@@ -4,8 +4,8 @@ import {
   AchievementSnapshot,
   EstimationMethod,
   Game,
+  Milestone,
   SalesEstimate,
-  SalesRecord,
   SignalSnapshot,
 } from '../entities';
 import { EstimationMethodService } from './estimation-method.service';
@@ -17,7 +17,7 @@ import { GenresModule } from '../genres/genres.module';
     TypeOrmModule.forFeature([
       Game,
       SignalSnapshot,
-      SalesRecord,
+      Milestone,
       SalesEstimate,
       AchievementSnapshot,
       EstimationMethod,
