@@ -534,7 +534,7 @@ export class IngestionService {
    */
   private async ingestIgdbGame(candidate: IgdbGame): Promise<void> {
     const game = await this.upsertGameFromIgdb(candidate);
-    await this.scrapeStoreRatings(game.id, game.name);
+    await this.scrapeStoreRatings(game.id, game.name, game.platforms);
     await this.gamesService.rebuildEstimateHistory(game.id);
   }
 
@@ -594,7 +594,7 @@ export class IngestionService {
 
     await this.pollSteamSignals(game.id, appId);
 
-    await this.scrapeStoreRatings(game.id, game.name);
+    await this.scrapeStoreRatings(game.id, game.name, game.platforms);
 
     await Promise.all([
       this.scrapeAchievements(game.id, game.name, Platform.PC),
@@ -716,7 +716,12 @@ export class IngestionService {
    * Look up console store rating counts, store them as signals, and turn each
    * into a per-platform sales estimate. Best-effort: failures are logged.
    */
-  async scrapeStoreRatings(gameId: string, name: string): Promise<void> {
+  async scrapeStoreRatings(gameId: string, name: string, platforms: Platform[]): Promise<void> {
+    if (!this.hasConsolePlatform(platforms)) {
+      this.logger.log(`[stores] "${name}" — skipping store ratings (PC-only)`);
+      return;
+    }
+
     try {
       const ratings = await this.storeRatings.getRatings(name);
       if (ratings.length === 0) {
@@ -1076,6 +1081,7 @@ export class IngestionService {
         `${name} million players reached milestone`,
         `${name} units shipped sold to date`,
         `${name} sales figures announcement`,
+        `${name} total copies sold reached milestone`,
       ];
 
       const results = await this.runBacklogSearch(engine, name, queries);
@@ -1091,9 +1097,7 @@ export class IngestionService {
         checked += 1;
 
         const pubDate = result.publishedDate ? new Date(result.publishedDate) : null;
-        this.logger.log(
-          `[backlog] "${name}" — extracting (pubDate=${result.publishedDate ?? 'unknown'}): ${result.url}`,
-        );
+   
         const stored = await this.ingestArticleFromText(
           gameId,
           name,
@@ -1240,7 +1244,7 @@ export class IngestionService {
     // only once we know the URL produced a usable record (in
     // `storeArticleSales`), so unknown hosts that yield nothing never pollute
     // the registry.
-    const trusted = await this.sources.findByUrl(url);
+    const trusted = await this.sources.findByUrl(url); 
     const tier = trusted?.salesSource ?? SalesSource.MEDIA;
     const confidence = this.confidenceFromWeight(trusted?.weight ?? 40);
 
@@ -1296,8 +1300,8 @@ export class IngestionService {
     this.logger.log(`[refresh] "${game.name}" — Wikipedia LLM extraction…`);
     await this.scrapeWikipedia(game.id, game.name);
 
-    this.logger.log(`[refresh] "${game.name}" — store ratings (PS/Xbox/Switch)…`);
-    await this.scrapeStoreRatings(game.id, game.name);
+    this.logger.log(`[refresh] "${game.name}" — store ratings (PS/Xbox)…`);
+    await this.scrapeStoreRatings(game.id, game.name, game.platforms);
 
     this.logger.log(
       `[refresh] "${game.name}" — achievements (Exophase Steam / PSN / Xbox + Steam official %)…`,
@@ -1324,12 +1328,6 @@ export class IngestionService {
       `[refresh] "${game.name}" — backlog checked=${backlog.checked} ingested=${backlog.ingested} records=${backlog.records}`,
     );
 
-    // Single canonical recompute path: rebuild the full estimate
-    // history with the (possibly just-updated) multipliers. This
-    // automatically includes the capture moment we wrote a few lines
-    // above (deduplicated by minute) and re-evaluates discrepancies at
-    // the end, so a declared figure that lands 4 weeks after release
-    // propagates back through the entire chart.
     this.logger.log(`[refresh] "${game.name}" — rebuilding estimate history…`);
     const rebuild = await this.gamesService.rebuildEstimateHistory(game.id);
     this.logger.log(
@@ -1343,7 +1341,7 @@ export class IngestionService {
       `[refresh] "${game.name}" — done in ${Date.now() - startedAt}ms, ${totalIngested} article(s) ingested with figures`,
     );
 
-    return { found: true, articlesIngested: totalIngested };
+    return { found: true, articlesIngested: 0 };
   }
 
   /**
@@ -1836,5 +1834,12 @@ export class IngestionService {
       candidate = `${base}-${suffix++}`;
     }
     return candidate;
+  }
+  private hasConsolePlatform(platforms: Platform[] | null | undefined): boolean {
+    return (
+      platforms?.some(
+        (p) => p === Platform.PLAYSTATION || p === Platform.XBOX,
+      ) ?? false
+    );
   }
 }
