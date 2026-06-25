@@ -765,6 +765,12 @@ export class GamesService {
    * post-launch daily reading never changes the result. Without this, a
    * SteamDB CSV import (years of daily rows) would generate thousands of
    * identical rebuild moments and make the rebuild crawl.
+   *
+   * Milestone `reportedAt` dates are added too: the reconciled headline
+   * also shifts when a declared figure becomes visible, independently of
+   * any signal. Skipping the daily CCU moments removes the implicit
+   * sampling clock those signals used to provide, so the milestone dates
+   * are needed to still capture every headline change.
    */
   private async collectCaptureMoments(
     gameId: string,
@@ -776,12 +782,22 @@ export class GamesService {
       order: { capturedAt: 'ASC' },
     });
 
+    const milestones = await this.milestones.find({
+      where: { gameId, rejectedAt: IsNull(), isEngagement: false },
+      select: { reportedAt: true },
+    });
+
     const weekOneEnd = releaseDate
       ? releaseDate.getTime() +
         FIRST_WEEK_PEAK_CCU_WINDOW_DAYS * 24 * 3600 * 1000
       : null;
 
     const byMinute = new Map<number, Date>();
+    const addMoment = (t: Date) => {
+      const minuteKey = Math.floor(t.getTime() / 60_000);
+      if (!byMinute.has(minuteKey)) byMinute.set(minuteKey, t);
+    };
+
     for (const row of signals) {
       if (
         row.metric === SignalMetric.STEAM_CONCURRENT &&
@@ -789,10 +805,13 @@ export class GamesService {
       ) {
         continue;
       }
-      const t = row.capturedAt;
-      const minuteKey = Math.floor(t.getTime() / 60_000);
-      if (!byMinute.has(minuteKey)) byMinute.set(minuteKey, t);
+      addMoment(row.capturedAt);
     }
+
+    for (const milestone of milestones) {
+      if (milestone.reportedAt) addMoment(milestone.reportedAt);
+    }
+
     return Array.from(byMinute.values()).sort(
       (a, b) => a.getTime() - b.getTime(),
     );
@@ -826,11 +845,12 @@ export class GamesService {
 
   /**
    * Build the per-platform breakdown and the headline total. For each
-   * platform we keep the latest-dated milestone (sales only grow, so the
-   * most recent figure is closest to today's truth), falling back to an
-   * estimate when no concrete figure exists. A GLOBAL worldwide figure
-   * (e.g. Wikipedia) is not a platform line: when present it becomes the
-   * authoritative reported total, overriding the summed breakdown.
+   * platform we keep the highest declared milestone (sales only grow, so a
+   * later report below an earlier one is noise — enforcing monotonicity
+   * prevents the headline from dropping when sources disagree), falling
+   * back to an estimate when no concrete figure exists. A GLOBAL worldwide
+   * figure (e.g. Wikipedia) is not a platform line: when present it becomes
+   * the authoritative reported total, overriding the summed breakdown.
    */
   private aggregateSales(
     milestones: Milestone[],
@@ -851,15 +871,17 @@ export class GamesService {
         continue;
       }
       const current = bestByPlatform.get(milestone.platform);
-      if (!current || this.isLater(milestone, current)) {
+      if (!current || this.isMoreAuthoritative(milestone, current)) {
         bestByPlatform.set(milestone.platform, milestone);
       }
     }
 
-    // Latest-dated worldwide milestone (if any) — used as a floor +
-    // freshness-aware cap on the platform-summed estimate below.
+    // Highest declared worldwide figure (if any) — used as a floor +
+    // freshness-aware cap on the platform-summed estimate below. We pick the
+    // largest declared value (not the most recent) so contradictory sources
+    // can't drag the headline DOWN over time: declared sales are monotonic.
     const bestGlobal = globalMilestones.reduce<Milestone | null>(
-      (best, m) => (!best || this.isLater(m, best) ? m : best),
+      (best, m) => (!best || this.isMoreAuthoritative(m, best) ? m : best),
       null,
     );
 
@@ -941,20 +963,23 @@ export class GamesService {
       ...estimates.keys(),
     ]);
 
-    // Console-weight evidence: sum of every declared console (and worldwide)
+    // Console-weight evidence: sum of every declared console (PS/XBOX)
     // figure we have for this game. Used to detect when a Boxleiter PC
     // estimate alone would dramatically under-represent the title (PS
     // exclusive, console-heavy AAA with a tiny PC port…). When this evidence
     // dwarfs the PC estimate we drop the PC estimate's contribution to
     // `estimatedToday` rather than let it set the headline number.
+    //
+    // A GLOBAL worldwide figure is deliberately NOT counted here: it carries
+    // no PC/console split, so on a PC-only title it would wrongly flag PC as
+    // marginal and, since PC is the only contributor, leave the headline
+    // empty. The worldwide figure still anchors the headline as a floor/cap
+    // in the GLOBAL block below.
     let consoleEvidence = 0;
     for (const [platform, milestone] of bestByPlatform) {
       if (platform === Platform.PLAYSTATION || platform === Platform.XBOX) {
         consoleEvidence += milestone.units;
       }
-    }
-    if (globalDeclared) {
-      consoleEvidence = Math.max(consoleEvidence, globalDeclared.units);
     }
 
     for (const platform of platforms) {
@@ -1245,6 +1270,23 @@ export class GamesService {
    * more recent reportedAt wins (sales only grow); between two undated
    * ones the larger units count is the proxy for "more recent".
    */
+  /**
+   * Pick the more authoritative of two declared milestones for the same
+   * platform (or GLOBAL). Declared sales are monotonic non-decreasing, so a
+   * later report announcing FEWER units than an earlier one is treated as
+   * noise: the higher figure wins as the floor. Equal units fall back to the
+   * most recent report (freshest date for the freshness cap).
+   */
+  private isMoreAuthoritative(
+    candidate: Milestone,
+    current: Milestone,
+  ): boolean {
+    if (candidate.units !== current.units) {
+      return candidate.units > current.units;
+    }
+    return this.isLater(candidate, current);
+  }
+
   private isLater(candidate: Milestone, current: Milestone): boolean {
     const cDated = candidate.reportedAt !== null;
     const xDated = current.reportedAt !== null;

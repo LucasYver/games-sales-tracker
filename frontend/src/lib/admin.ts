@@ -234,6 +234,7 @@ export interface AdminGameDetail extends AdminGameSummary {
   coverUrl: string | null;
   summary: string | null;
   genres: string[];
+  genreProfileId: string | null;
   lastRefreshedAt: string | null;
   allTimePeakCcu: number | null;
   allTimePeakCcuAt: string | null;

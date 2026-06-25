@@ -11,6 +11,7 @@ import {
   EstimationDiscrepancy,
   Game,
   GameSource,
+  GenreProfile,
   LauncherProfile,
   Milestone,
   Platform,
@@ -38,6 +39,7 @@ export interface UpdateGameInput {
   calibrationSourcePc?: SalesSource | null;
   calibrationSourcePs?: SalesSource | null;
   calibrationSourceXbox?: SalesSource | null;
+  genreProfileId?: string | null;
 }
 
 export interface AdminStats {
@@ -123,6 +125,7 @@ export interface AdminGameDetail extends AdminGameSummary {
   coverUrl: string | null;
   summary: string | null;
   genres: string[];
+  genreProfileId: string | null;
   lastRefreshedAt: Date | null;
   allTimePeakCcu: number | null;
   allTimePeakCcuAt: Date | null;
@@ -214,6 +217,8 @@ export class AdminService {
     private readonly estimateSnapshots: Repository<EstimateSnapshot>,
     @InjectRepository(EstimationDiscrepancy)
     private readonly discrepancies: Repository<EstimationDiscrepancy>,
+    @InjectRepository(GenreProfile)
+    private readonly genreProfiles: Repository<GenreProfile>,
     private readonly gamesService: GamesService,
   ) {}
 
@@ -555,6 +560,7 @@ export class AdminService {
       coverUrl: game.coverUrl,
       summary: game.summary,
       genres: game.genres ?? [],
+      genreProfileId: game.genreProfileId,
       lastRefreshedAt: game.lastRefreshedAt,
       publisher: game.publisher,
       publisherRecord: game.publisherRecord
@@ -687,6 +693,22 @@ export class AdminService {
           }
           game.igdbId = input.igdbId;
         }
+      }
+    }
+
+    if (input.genreProfileId !== undefined) {
+      if (input.genreProfileId === null || input.genreProfileId === '') {
+        game.genreProfileId = null;
+      } else {
+        const profile = await this.genreProfiles.findOne({
+          where: { id: input.genreProfileId },
+        });
+        if (!profile) {
+          throw new BadRequestException(
+            `genre profile ${input.genreProfileId} not found`,
+          );
+        }
+        game.genreProfileId = input.genreProfileId;
       }
     }
 

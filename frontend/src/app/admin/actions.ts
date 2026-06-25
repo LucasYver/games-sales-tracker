@@ -86,6 +86,7 @@ export interface UpdateGamePayload {
   calibrationSourcePc?: SalesSource | null;
   calibrationSourcePs?: SalesSource | null;
   calibrationSourceXbox?: SalesSource | null;
+  genreProfileId?: string | null;
 }
 
 export async function updateGame(
@@ -98,6 +99,17 @@ export async function updateGame(
   });
   revalidatePath(`/admin/games/${id}`);
   revalidatePath('/admin/games');
+}
+
+export async function setGameGenreProfile(
+  gameId: string,
+  genreProfileId: string | null,
+): Promise<void> {
+  await adminFetch(`/games/${gameId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ genreProfileId }),
+  });
+  revalidatePath(`/admin/games/${gameId}`);
 }
 
 export async function refreshGame(

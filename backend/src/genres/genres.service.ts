@@ -339,8 +339,19 @@ export class GenresService {
    * the underlying numeric scale.
    */
   async resolveProfileForGame(
-    game: Pick<Game, 'genres'>,
+    game: Pick<Game, 'genres' | 'genreProfileId'>,
   ): Promise<ResolvedGenreProfile | null> {
+    // Manual per-game override wins over genre-name resolution: outlier
+    // titles (e.g. a streamer-driven viral hit) get pinned to a chosen
+    // profile regardless of their IGDB genres. A dangling id falls back
+    // to the genre-based path below.
+    if (game.genreProfileId) {
+      const override = await this.profiles.findOne({
+        where: { id: game.genreProfileId },
+      });
+      if (override) return this.buildResolvedProfile([override]);
+    }
+
     const names = (game.genres ?? [])
       .map((g) => g.trim())
       .filter((g) => g.length > 0);
@@ -366,6 +377,18 @@ export class GenresService {
     });
     if (profiles.length === 0) return null;
 
+    return this.buildResolvedProfile(profiles);
+  }
+
+  /**
+   * Blend one or more `GenreProfile` rows into a single resolved profile
+   * (numeric fields averaged, retention taken as the median, confidence
+   * as the worst of the set). A single-element array (the per-game
+   * override path) passes straight through with its own values.
+   */
+  private buildResolvedProfile(
+    profiles: GenreProfile[],
+  ): ResolvedGenreProfile {
     const n = profiles.length;
     const avg = (selector: (p: GenreProfile) => unknown): number => {
       const sum = profiles.reduce(

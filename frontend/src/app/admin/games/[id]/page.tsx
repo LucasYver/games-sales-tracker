@@ -5,6 +5,7 @@ import {
   type AdminEstimate,
   type AdminEstimateSnapshot,
   type AdminGameDetail,
+  type AdminGenreProfile,
   type AdminPriceSnapshot,
 } from '@/lib/admin';
 import { cn } from '@/lib/utils';
@@ -39,6 +40,7 @@ import { EditGameForm } from '../../_components/EditGameForm';
 import { EstimateHistoryChart } from '../../_components/EstimateHistoryChart';
 import { CcuHistoryChart } from '../../_components/CcuHistoryChart';
 import { LauncherProfileBadge } from '../../_components/LauncherProfileBadge';
+import { GameGenreProfileSelect } from '../../_components/GameGenreProfileSelect';
 import { deleteGame, deleteMilestone, deleteSignal } from '../../actions';
 
 export const dynamic = 'force-dynamic';
@@ -217,7 +219,10 @@ export default async function AdminGameDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const game = await adminFetch<AdminGameDetail>(`/games/${id}`);
+  const [game, genreProfiles] = await Promise.all([
+    adminFetch<AdminGameDetail>(`/games/${id}`),
+    adminFetch<AdminGenreProfile[]>('/genre-profiles'),
+  ]);
 
   const latestSnapshot =
     game.estimateSnapshots.length > 0
@@ -346,6 +351,18 @@ export default async function AdminGameDetailPage({
                     ))}
                   </div>
                 )}
+              </dd>
+            </div>
+            <div className="flex flex-col gap-1 text-sm">
+              <dt className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                Genre profile (estimation)
+              </dt>
+              <dd>
+                <GameGenreProfileSelect
+                  gameId={game.id}
+                  currentProfileId={game.genreProfileId}
+                  profiles={genreProfiles}
+                />
               </dd>
             </div>
             <div className="flex flex-col gap-1 text-sm">

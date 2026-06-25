@@ -15,6 +15,9 @@ import { AddPsToXboxGenreSplitMethod1782253500000 } from './1782253500000-AddPsT
 import { CleanupXboxRatingsData1782253600000 } from './1782253600000-CleanupXboxRatingsData';
 import { RenameSalesRecordToMilestone1782260000000 } from './1782260000000-RenameSalesRecordToMilestone';
 import { AddSteamCategoriesDlcAndPriceSnapshot1782395875937 } from './1782395875937-AddSteamCategoriesDlcAndPriceSnapshot';
+import { AddGameGenreProfileOverride1782396500000 } from './1782396500000-AddGameGenreProfileOverride';
+import { RecalibrateActionRpgProjection1782397000000 } from './1782397000000-RecalibrateActionRpgProjection';
+import { RecalibrateSimulationPeakCcuRatio1782397500000 } from './1782397500000-RecalibrateSimulationPeakCcuRatio';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -41,4 +44,7 @@ export const migrations: MixedList<Function | string> = [
   CleanupXboxRatingsData1782253600000,
   RenameSalesRecordToMilestone1782260000000,
   AddSteamCategoriesDlcAndPriceSnapshot1782395875937,
+  AddGameGenreProfileOverride1782396500000,
+  RecalibrateActionRpgProjection1782397000000,
+  RecalibrateSimulationPeakCcuRatio1782397500000,
 ];

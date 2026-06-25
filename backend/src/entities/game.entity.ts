@@ -15,6 +15,7 @@ import { SignalSnapshot } from './signal-snapshot.entity';
 import { SalesEstimate } from './sales-estimate.entity';
 import { Milestone } from './milestone.entity';
 import { Publisher } from './publisher.entity';
+import { GenreProfile } from './genre-profile.entity';
 
 @Entity('game')
 // GIN trigram index for fuzzy game-name search. Created (and refreshed)
@@ -77,6 +78,21 @@ export class Game {
 
   @Column({ type: 'simple-array', nullable: true })
   genres: string[] | null;
+
+  // Manual override of the genre profile used by the estimation model.
+  // When set, it takes precedence over the IGDB-genre-based resolution
+  // in `GenresService.resolveProfileForGame` — for outlier titles whose
+  // real sales dynamics no genre captures (e.g. a streamer-driven viral
+  // hit). Null = resolve from `genres` as usual.
+  @Column({ type: 'uuid', nullable: true })
+  genreProfileId: string | null;
+
+  @ManyToOne(() => GenreProfile, {
+    onDelete: 'SET NULL',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'genreProfileId' })
+  genreProfileOverride: GenreProfile | null;
 
   // Steam store "categories" (e.g. "Single-player", "Multi-player", "Co-op").
   // Distinct from `genres`: categories describe play modes / features.

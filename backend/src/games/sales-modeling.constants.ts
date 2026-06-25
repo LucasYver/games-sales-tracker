@@ -341,11 +341,13 @@ export const FIRST_WEEK_PEAK_CCU_LOW = 3;
 export const FIRST_WEEK_PEAK_CCU_HIGH = 7;
 
 // Only peak-CCU snapshots captured within this many days *after* the
-// release date count as the "week-1 peak" feeding the first-week
+// release date count as the launch peak feeding the first-week
 // extrapolation. A peak reached later in the game's life (sale, DLC,
 // going free-to-play) is not representative of the launch and must not
-// drive the week-1 baseline.
-export const FIRST_WEEK_PEAK_CCU_WINDOW_DAYS = 7;
+// drive the baseline. Widened to two weeks so slow-burn / streamer-buzz
+// titles whose CCU keeps climbing past day 7 are captured at their real
+// launch peak (the method name/tag is unchanged).
+export const FIRST_WEEK_PEAK_CCU_WINDOW_DAYS = 14;
 
 // Reviews captured within ± this many days of release-date + 7 are
 // treated as a "week-1 review snapshot" and combined with the peak-CCU
