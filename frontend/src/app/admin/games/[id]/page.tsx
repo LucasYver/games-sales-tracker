@@ -5,6 +5,7 @@ import {
   type AdminEstimate,
   type AdminEstimateSnapshot,
   type AdminGameDetail,
+  type AdminPriceSnapshot,
 } from '@/lib/admin';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -60,6 +61,13 @@ function formatCalibration(
   return source
     ? `${multiplier.toFixed(2)}x (${source})`
     : `${multiplier.toFixed(2)}x`;
+}
+
+function formatMoney(cents: number, currency: string): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+  }).format(cents / 100);
 }
 
 function formatUnitsCompact(n: number): string {
@@ -208,6 +216,12 @@ export default async function AdminGameDetailPage({
     game.estimateSnapshots.length > 0
       ? game.estimateSnapshots[game.estimateSnapshots.length - 1]
       : null;
+
+  const pricesDesc = [...game.prices].sort(
+    (a, b) =>
+      new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime(),
+  );
+  const currentPrice = pricesDesc[0] ?? null;
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-8">
@@ -414,6 +428,64 @@ export default async function AdminGameDetailPage({
         </CardHeader>
         <CardContent className="p-0">
           <CcuHistoryChart signals={game.signals} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <CardTitle className="text-sm font-semibold tracking-wide uppercase">
+            Steam price history ({pricesDesc.length})
+          </CardTitle>
+          {currentPrice && <CurrentPrice price={currentPrice} />}
+        </CardHeader>
+        <CardContent className="p-0">
+          {pricesDesc.length === 0 ? (
+            <p className="text-muted-foreground p-6 text-sm">
+              No price snapshots yet. They will be captured on the next daily
+              run (the cron polls the Steam store price for every tracked
+              Steam app).
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Captured</TableHead>
+                  <TableHead className="text-right">Price</TableHead>
+                  <TableHead className="text-right">Regular</TableHead>
+                  <TableHead className="text-right">Discount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pricesDesc.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="text-muted-foreground text-xs">
+                      {formatDateTime(p.capturedAt)}
+                    </TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">
+                      {formatMoney(p.final, p.currency)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-right tabular-nums">
+                      {p.discountPercent > 0
+                        ? formatMoney(p.initial, p.currency)
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {p.discountPercent > 0 ? (
+                        <Badge
+                          variant="secondary"
+                          className="border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200"
+                        >
+                          -{p.discountPercent}%
+                        </Badge>
+                      ) : (
+                        '—'
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -682,6 +754,35 @@ export default async function AdminGameDetailPage({
           </Card>
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function CurrentPrice({ price }: { price: AdminPriceSnapshot }) {
+  const onSale = price.discountPercent > 0;
+  return (
+    <div className="flex items-center gap-2 text-right">
+      <div className="flex flex-col items-end">
+        <span className="text-xl font-bold tabular-nums">
+          {formatMoney(price.final, price.currency)}
+        </span>
+        {onSale && (
+          <span className="text-muted-foreground text-xs tabular-nums line-through">
+            {formatMoney(price.initial, price.currency)}
+          </span>
+        )}
+        <span className="text-muted-foreground text-[11px]">
+          {formatDate(price.capturedAt)}
+        </span>
+      </div>
+      {onSale && (
+        <Badge
+          variant="secondary"
+          className="border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200"
+        >
+          -{price.discountPercent}%
+        </Badge>
+      )}
     </div>
   );
 }

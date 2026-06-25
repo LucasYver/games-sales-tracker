@@ -58,9 +58,9 @@ export class SteamClient {
 
   async getAppDetails(appId: number): Promise<SteamAppDetails | null> {
     try {
-      const { data } = await axios.get(
+      const data = await this.getStoreJson(
         'https://store.steampowered.com/api/appdetails',
-        { params: { appids: appId, l: 'english', cc: 'us' }, timeout: 15000 },
+        { appids: appId, l: 'english', cc: 'us' },
       );
 
       const entry = data?.[String(appId)];
@@ -273,6 +273,39 @@ export class SteamClient {
       this.logger.warn(`getTotalReviews failed for ${appId}: ${error}`);
       return null;
     }
+  }
+
+  /**
+   * GET a Steam store endpoint with a small retry on HTTP 429. The store
+   * `appdetails` / `appreviews` APIs are aggressively rate-limited (~200
+   * requests / 5 min per IP); on 429 we back off and retry a couple of times
+   * before letting the error propagate to the caller's try/catch.
+   */
+  private async getStoreJson(
+    url: string,
+    params: Record<string, unknown>,
+  ): Promise<any> {
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const { data } = await axios.get(url, { params, timeout: 15000 });
+        return data;
+      } catch (error) {
+        const status = axios.isAxiosError(error)
+          ? error.response?.status
+          : undefined;
+        if (status === 429 && attempt < maxAttempts) {
+          const backoffMs = attempt * 5000;
+          this.logger.warn(
+            `Steam 429 on ${url} (attempt ${attempt}/${maxAttempts}); retrying in ${backoffMs}ms`,
+          );
+          await new Promise((r) => setTimeout(r, backoffMs));
+          continue;
+        }
+        throw error;
+      }
+    }
+    return null;
   }
 
   private parseReleaseDate(raw?: string): Date | null {

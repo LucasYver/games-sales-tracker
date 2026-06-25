@@ -14,6 +14,7 @@ import {
   LauncherProfile,
   Milestone,
   Platform,
+  PriceSnapshot,
   ProcessedArticle,
   SalesEstimate,
   SalesSource,
@@ -135,6 +136,7 @@ export interface AdminGameDetail extends AdminGameSummary {
   milestones: Milestone[];
   estimates: SalesEstimate[];
   signals: SignalSnapshot[];
+  prices: PriceSnapshot[];
   achievementSnapshots: AdminAchievementSummary[];
   estimateSnapshots: AdminEstimateSnapshot[];
 }
@@ -192,6 +194,8 @@ export class AdminService {
     private readonly gameSources: Repository<GameSource>,
     @InjectRepository(SignalSnapshot)
     private readonly signals: Repository<SignalSnapshot>,
+    @InjectRepository(PriceSnapshot)
+    private readonly prices: Repository<PriceSnapshot>,
     @InjectRepository(SalesEstimate)
     private readonly estimates: Repository<SalesEstimate>,
     @InjectRepository(Milestone)
@@ -488,6 +492,12 @@ export class AdminService {
       order: { value: 'DESC' },
     });
 
+    const prices = await this.prices.find({
+      where: { gameId: id },
+      order: { capturedAt: 'ASC' },
+      take: 500,
+    });
+
     const achievementSnapshots = await this.aggregateAchievementSnapshots(id);
 
     const estimateSnapshotsRaw = await this.estimateSnapshots.find({
@@ -547,6 +557,7 @@ export class AdminService {
       ),
       estimates: game.estimates,
       signals,
+      prices,
       achievementSnapshots,
       estimateSnapshots,
     };

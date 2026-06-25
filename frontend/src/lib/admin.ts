@@ -151,6 +151,18 @@ export interface AdminSignal {
   capturedAt: string;
 }
 
+export interface AdminPriceSnapshot {
+  id: string;
+  gameId: string;
+  // ISO 4217 currency code (e.g. "USD").
+  currency: string;
+  // Regular and current prices in the currency's minor units (cents).
+  initial: number;
+  final: number;
+  discountPercent: number;
+  capturedAt: string;
+}
+
 export interface AdminAchievementSummary {
   platform: Platform;
   source: string;
@@ -230,6 +242,7 @@ export interface AdminGameDetail extends AdminGameSummary {
   milestones: AdminMilestone[];
   estimates: AdminEstimate[];
   signals: AdminSignal[];
+  prices: AdminPriceSnapshot[];
   achievementSnapshots: AdminAchievementSummary[];
   estimateSnapshots: AdminEstimateSnapshot[];
 }

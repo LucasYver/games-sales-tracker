@@ -991,15 +991,24 @@ export class IngestionService {
     });
     const gamesById = new Map(trackedGames.map((game) => [game.id, game]));
 
+    // Steam's store appdetails endpoint is rate-limited to ~200 requests /
+    // 5 min per IP. Space calls out to stay under that ceiling and avoid the
+    // 429 bursts a tight loop produces.
+    const THROTTLE_MS = 1500;
+
     let captured = 0;
     let skipped = 0;
     let failed = 0;
+    let first = true;
     for (const source of steamSources) {
       const game = gamesById.get(source.gameId);
       if (!game) continue;
 
       const appId = Number(source.externalId);
       if (!Number.isFinite(appId)) continue;
+
+      if (!first) await new Promise((r) => setTimeout(r, THROTTLE_MS));
+      first = false;
 
       try {
         const details = await this.steam.getAppDetails(appId);
