@@ -871,8 +871,10 @@ export class IngestionService {
    * the nightly full refresh.
    *
    * Signals captured:
-   *  - `STEAM_CONCURRENT`: current concurrent player count at poll time
-   *    (raw time series, useful for decay analysis).
+   *  - `STEAM_CONCURRENT`: one row per UTC day holding that day's highest
+   *    reading. The hourly cron upserts: a higher value replaces the day's
+   *    row, a lower one is ignored — so we keep the daily peak, not every
+   *    hourly sample (matches the SteamDB CSV import granularity).
    *  - `STEAM_PEAK_CCU`: running all-time max of `STEAM_CONCURRENT`. A new
    *    row is written only when the latest reading strictly exceeds the
    *    prior peak. Query the current peak with `order: { value: 'DESC' }`
@@ -885,14 +887,38 @@ export class IngestionService {
     const current = await this.steam.getCurrentPlayerCount(appId);
     if (current === null) return;
 
-    await this.signals.save(
-      this.signals.create({
-        gameId,
-        source: SourceType.STEAM,
-        metric: SignalMetric.STEAM_CONCURRENT,
-        value: current,
-      }),
+    // Keep a single STEAM_CONCURRENT row per UTC day = that day's peak.
+    // Upsert: replace the day's row when the new reading is higher, do
+    // nothing otherwise.
+    const now = new Date();
+    const dayStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
     );
+    const dayEnd = new Date(dayStart.getTime() + 24 * 3600 * 1000 - 1);
+    const todayRow = await this.signals.findOne({
+      where: {
+        gameId,
+        metric: SignalMetric.STEAM_CONCURRENT,
+        capturedAt: Between(dayStart, dayEnd),
+      },
+      order: { value: 'DESC' },
+    });
+
+    if (!todayRow) {
+      await this.signals.save(
+        this.signals.create({
+          gameId,
+          source: SourceType.STEAM,
+          metric: SignalMetric.STEAM_CONCURRENT,
+          value: current,
+          capturedAt: dayStart,
+        }),
+      );
+    } else if (current > todayRow.value) {
+      todayRow.value = current;
+      todayRow.capturedAt = dayStart;
+      await this.signals.save(todayRow);
+    }
 
     // Order by value DESC (not capturedAt): the historical-import path
     // writes peak rows with an *old* capturedAt (the SteamCharts month of
@@ -1087,8 +1113,15 @@ export class IngestionService {
       throw new NotFoundException(`Game ${gameId} not found.`);
     }
 
+    // Drop rows before release: SteamDB sometimes reports 0 (or noise) on
+    // the pre-launch days, which would otherwise pollute the week-1 window.
+    const releaseDayKey = game.releaseDate
+      ? game.releaseDate.toISOString().slice(0, 10)
+      : null;
+
     const dailyMax = new Map<string, number>();
     let rowsParsed = 0;
+    let skippedPreRelease = 0;
     for (const line of csv.split(/\r?\n/)) {
       const trimmed = line.trim();
       if (!trimmed) continue;
@@ -1098,6 +1131,10 @@ export class IngestionService {
       const rawDate = cols[0].replace(/"/g, '').trim();
       const dayKey = rawDate.slice(0, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) continue;
+      if (releaseDayKey && dayKey < releaseDayKey) {
+        skippedPreRelease += 1;
+        continue;
+      }
       const value = Number(cols[1].replace(/"/g, '').trim());
       if (!Number.isFinite(value) || value < 0) continue;
       rowsParsed += 1;
@@ -1163,7 +1200,10 @@ export class IngestionService {
     this.logger.log(
       `[ccu-csv] "${game.name}" — ${dailyMax.size} days ` +
         `(${dayKeys[0]} → ${dayKeys[dayKeys.length - 1]}), ` +
-        `peak ${peakValue.toLocaleString()} at ${peakDay}`,
+        `peak ${peakValue.toLocaleString()} at ${peakDay}` +
+        (skippedPreRelease > 0
+          ? ` (skipped ${skippedPreRelease} pre-release rows)`
+          : ''),
     );
 
     return {
