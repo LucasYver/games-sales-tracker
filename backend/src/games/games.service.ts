@@ -31,6 +31,7 @@ import {
   DISCREPANCY_RATIO_LOW,
   FALLBACK_ANNUAL_GROWTH,
   FALLBACK_GROWTH_CAP_YEARS,
+  FIRST_WEEK_PEAK_CCU_WINDOW_DAYS,
   FRESHNESS_MIN_HEADROOM,
   FRESHNESS_VARIANCE_BUFFER,
   PC_DOMINANCE_RATIO_THRESHOLD,
@@ -723,7 +724,7 @@ export class GamesService {
 
     await this.estimation.recalibrateAll(gameId);
 
-    const moments = await this.collectCaptureMoments(gameId);
+    const moments = await this.collectCaptureMoments(gameId, game.releaseDate);
     this.logger.log(
       `[rebuild] "${game.name}" — ${moments.length} historical capture moments`,
     );
@@ -757,16 +758,37 @@ export class GamesService {
    * game, ascending. Dedup at minute granularity because a single cron run
    * writes several signals within the same second/minute — we want one rebuild
    * point per refresh, not one per signal.
+   *
+   * Daily `STEAM_CONCURRENT` points past the launch week are skipped: the
+   * estimate only reads CCU as the all-time `STEAM_PEAK_CCU` (intersection)
+   * and the week-1 `STEAM_CONCURRENT` max (first-week extrapolation), so a
+   * post-launch daily reading never changes the result. Without this, a
+   * SteamDB CSV import (years of daily rows) would generate thousands of
+   * identical rebuild moments and make the rebuild crawl.
    */
-  private async collectCaptureMoments(gameId: string): Promise<Date[]> {
+  private async collectCaptureMoments(
+    gameId: string,
+    releaseDate: Date | null,
+  ): Promise<Date[]> {
     const signals = await this.signals.find({
       where: { gameId },
-      select: { capturedAt: true },
+      select: { capturedAt: true, metric: true },
       order: { capturedAt: 'ASC' },
     });
 
+    const weekOneEnd = releaseDate
+      ? releaseDate.getTime() +
+        FIRST_WEEK_PEAK_CCU_WINDOW_DAYS * 24 * 3600 * 1000
+      : null;
+
     const byMinute = new Map<number, Date>();
     for (const row of signals) {
+      if (
+        row.metric === SignalMetric.STEAM_CONCURRENT &&
+        (weekOneEnd === null || row.capturedAt.getTime() > weekOneEnd)
+      ) {
+        continue;
+      }
       const t = row.capturedAt;
       const minuteKey = Math.floor(t.getTime() / 60_000);
       if (!byMinute.has(minuteKey)) byMinute.set(minuteKey, t);

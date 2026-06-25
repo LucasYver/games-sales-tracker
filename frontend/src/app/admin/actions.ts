@@ -113,20 +113,34 @@ export async function refreshGame(
   return result;
 }
 
-export interface ImportCcuHistoryResult {
-  appId: number | null;
-  importedPeak: number | null;
-  peakAt: string | null;
-  priorPeak: number | null;
-  persisted: boolean;
+export async function rebuildEstimates(
+  id: string,
+): Promise<{ points: number; estimates: number; snapshots: number }> {
+  const result = await adminFetch<{
+    points: number;
+    estimates: number;
+    snapshots: number;
+  }>(`/games/${id}/rebuild`, { method: 'POST' });
+  revalidatePath(`/admin/games/${id}`);
+  return result;
 }
 
-export async function importCcuHistory(
+export interface ImportCcuCsvResult {
+  daysImported: number;
+  rowsParsed: number;
+  rangeStart: string | null;
+  rangeEnd: string | null;
+  peakValue: number;
+  peakAt: string | null;
+}
+
+export async function importCcuCsv(
   id: string,
-): Promise<ImportCcuHistoryResult> {
-  const result = await adminFetch<ImportCcuHistoryResult>(
-    `/games/${id}/import-ccu-history`,
-    { method: 'POST' },
+  csv: string,
+): Promise<ImportCcuCsvResult> {
+  const result = await adminFetch<ImportCcuCsvResult>(
+    `/games/${id}/import-ccu-csv`,
+    { method: 'POST', body: JSON.stringify({ csv }) },
   );
   revalidatePath(`/admin/games/${id}`);
   return result;
@@ -136,6 +150,11 @@ export async function deleteMilestone(id: string): Promise<void> {
   await adminFetch(`/milestones/${id}`, { method: 'DELETE' });
   revalidatePath('/admin/milestones');
   revalidatePath('/admin/issues');
+}
+
+export async function deleteSignal(id: string, gameId: string): Promise<void> {
+  await adminFetch(`/signals/${id}`, { method: 'DELETE' });
+  revalidatePath(`/admin/games/${gameId}`);
 }
 
 export async function deleteTrustedSource(id: string): Promise<void> {

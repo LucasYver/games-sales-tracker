@@ -136,6 +136,10 @@ export interface AdminGameDetail extends AdminGameSummary {
   milestones: Milestone[];
   estimates: SalesEstimate[];
   signals: SignalSnapshot[];
+  // Full STEAM_CONCURRENT series (the `signals` array is capped at the 200
+  // most recent rows for the table view; the CCU chart needs every point,
+  // which can be years of daily history after a SteamDB CSV import).
+  ccuHistory: { capturedAt: Date; value: number }[];
   prices: PriceSnapshot[];
   achievementSnapshots: AdminAchievementSummary[];
   estimateSnapshots: AdminEstimateSnapshot[];
@@ -492,6 +496,16 @@ export class AdminService {
       order: { value: 'DESC' },
     });
 
+    const ccuRows = await this.signals.find({
+      where: { gameId: id, metric: SignalMetric.STEAM_CONCURRENT },
+      order: { capturedAt: 'ASC' },
+      select: { capturedAt: true, value: true },
+    });
+    const ccuHistory = ccuRows.map((s) => ({
+      capturedAt: s.capturedAt,
+      value: s.value,
+    }));
+
     const prices = await this.prices.find({
       where: { gameId: id },
       order: { capturedAt: 'ASC' },
@@ -557,6 +571,7 @@ export class AdminService {
       ),
       estimates: game.estimates,
       signals,
+      ccuHistory,
       prices,
       achievementSnapshots,
       estimateSnapshots,
@@ -821,6 +836,26 @@ export class AdminService {
       { rejectedAt: new Date() },
     );
     return { deleted: (result.affected ?? 0) > 0 };
+  }
+
+  /**
+   * Hard-delete a single signal snapshot (Steam reviews / concurrent / peak
+   * CCU). Used by the admin detail page to prune erroneous or test readings.
+   */
+  async deleteSignal(id: string): Promise<{ deleted: boolean }> {
+    const result = await this.signals.delete(id);
+    return { deleted: (result.affected ?? 0) > 0 };
+  }
+
+  /**
+   * Replay the estimate history from the signals / milestones already on
+   * record, WITHOUT re-scraping any external source. Mirrors the rebuild
+   * step of the full refresh but skips all ingestion.
+   */
+  async rebuildEstimates(
+    id: string,
+  ): Promise<{ points: number; estimates: number; snapshots: number }> {
+    return this.gamesService.rebuildEstimateHistory(id);
   }
 
   async listTrustedSources(): Promise<(TrustedSource & { recordCount: number })[]> {

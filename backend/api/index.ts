@@ -1,6 +1,9 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
-import { ExpressAdapter } from '@nestjs/platform-express';
+import {
+  ExpressAdapter,
+  NestExpressApplication,
+} from '@nestjs/platform-express';
 import { AppModule } from '../src/app.module';
 import express from 'express';
 import type { Request, Response } from 'express';
@@ -10,7 +13,13 @@ let isInitialized = false;
 
 async function initApp() {
   if (!isInitialized) {
-    const app = await NestFactory.create(AppModule, new ExpressAdapter(server));
+    const app = await NestFactory.create<NestExpressApplication>(
+      AppModule,
+      new ExpressAdapter(server),
+    );
+    // Raised from the 100kb default: SteamDB CCU CSV uploads (years of
+    // daily rows) routinely exceed it.
+    app.useBodyParser('json', { limit: '10mb' });
     app.setGlobalPrefix('api');
     app.useGlobalPipes(new ValidationPipe({ transform: true }));
     const origins = (process.env.CORS_ORIGINS ?? 'http://localhost:3000').split(',');

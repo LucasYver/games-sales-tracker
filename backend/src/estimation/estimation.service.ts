@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, LessThanOrEqual, Repository } from 'typeorm';
+import { Between, IsNull, LessThanOrEqual, Repository } from 'typeorm';
 import {
   AchievementSnapshot,
   ConfidenceLevel,
@@ -40,6 +40,7 @@ import {
   FIRST_WEEK_ESTIMATE_MIN_UNITS,
   FIRST_WEEK_PEAK_CCU_HIGH,
   FIRST_WEEK_PEAK_CCU_LOW,
+  FIRST_WEEK_PEAK_CCU_WINDOW_DAYS,
   FIRST_WEEK_REVIEWS_HIGH,
   FIRST_WEEK_REVIEWS_LOW,
   FIRST_WEEK_REVIEWS_WINDOW_DAYS,
@@ -792,7 +793,6 @@ export class EstimationService {
       },
       order: { capturedAt: 'DESC' },
     });
-    console.log('latestSignal', latestSignal);
     if (!latestSignal || latestSignal.value <= 0) return null;
 
     const signalValue = latestSignal.value;
@@ -972,11 +972,24 @@ export class EstimationService {
     const ccuScale = LAUNCHER_CCU_FACTOR[launcherProfile];
     const reviewsScale = LAUNCHER_REVIEWS_FACTOR[launcherProfile];
 
+    // Week-1 peak only: the largest daily CCU captured in the 7 days
+    // following release. A later all-time peak (sale, DLC, F2P switch)
+    // does not represent the launch and must not drive the week-1
+    // baseline. The window is further capped at `asOf` so historical
+    // rebuilds never see a future peak. We read the daily STEAM_CONCURRENT
+    // series (the SteamDB CSV import lands one peak value per day there),
+    // not the all-time STEAM_PEAK_CCU.
+    const weekOneEnd = new Date(
+      game.releaseDate.getTime() +
+        FIRST_WEEK_PEAK_CCU_WINDOW_DAYS * 24 * 3600 * 1000,
+    );
+    const windowEnd = asOf && asOf < weekOneEnd ? asOf : weekOneEnd;
+    if (windowEnd < game.releaseDate) return null;
     const peak = await this.signals.findOne({
       where: {
         gameId: game.id,
-        metric: SignalMetric.STEAM_PEAK_CCU,
-        ...(asOf ? { capturedAt: LessThanOrEqual(asOf) } : {}),
+        metric: SignalMetric.STEAM_CONCURRENT,
+        capturedAt: Between(game.releaseDate, windowEnd),
       },
       order: { value: 'DESC' },
     });

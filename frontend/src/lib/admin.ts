@@ -142,6 +142,11 @@ export interface AdminEstimate {
   computedAt: string;
 }
 
+export interface AdminCcuPoint {
+  capturedAt: string;
+  value: number;
+}
+
 export interface AdminSignal {
   id: string;
   gameId: string;
@@ -242,6 +247,7 @@ export interface AdminGameDetail extends AdminGameSummary {
   milestones: AdminMilestone[];
   estimates: AdminEstimate[];
   signals: AdminSignal[];
+  ccuHistory: AdminCcuPoint[];
   prices: AdminPriceSnapshot[];
   achievementSnapshots: AdminAchievementSummary[];
   estimateSnapshots: AdminEstimateSnapshot[];

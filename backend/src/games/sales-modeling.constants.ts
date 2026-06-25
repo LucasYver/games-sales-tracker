@@ -340,6 +340,13 @@ export const PC_DOMINANCE_RATIO_THRESHOLD = 0.2;
 export const FIRST_WEEK_PEAK_CCU_LOW = 3;
 export const FIRST_WEEK_PEAK_CCU_HIGH = 7;
 
+// Only peak-CCU snapshots captured within this many days *after* the
+// release date count as the "week-1 peak" feeding the first-week
+// extrapolation. A peak reached later in the game's life (sale, DLC,
+// going free-to-play) is not representative of the launch and must not
+// drive the week-1 baseline.
+export const FIRST_WEEK_PEAK_CCU_WINDOW_DAYS = 7;
+
 // Reviews captured within ± this many days of release-date + 7 are
 // treated as a "week-1 review snapshot" and combined with the peak-CCU
 // estimate. Wider window than refresh cadence so we can still match a

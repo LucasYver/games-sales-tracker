@@ -11,6 +11,8 @@ import {
 } from 'recharts';
 import {
   ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
@@ -30,33 +32,38 @@ const PLATFORM_LABELS: Partial<Record<Platform, string>> = {
   GLOBAL: 'Global',
 };
 
+// Explicit, distinct hues instead of the theme's monochrome --chart-*
+// palette (all grey, chroma 0), which made every line hard to tell apart.
+const RECONCILED_COLOR = 'oklch(0.55 0.2 255)'; // blue
+const PURE_ALGO_COLOR = 'oklch(0.72 0.17 60)'; // amber
+
 const PLATFORM_COLORS: Partial<Record<Platform, string>> = {
-  PC: 'var(--chart-2)',
-  PLAYSTATION: 'var(--chart-3)',
-  XBOX: 'var(--chart-4)',
-  SWITCH: 'var(--chart-5)',
+  PC: 'oklch(0.6 0.16 150)', // green
+  PLAYSTATION: 'oklch(0.55 0.2 290)', // violet
+  XBOX: 'oklch(0.62 0.13 195)', // teal
+  SWITCH: 'oklch(0.58 0.21 18)', // red
 };
 
 const chartConfig: ChartConfig = {
   range: {
-    label: 'Estimated range',
-    color: 'var(--chart-1)',
+    label: 'Estimated range (low–high)',
+    color: RECONCILED_COLOR,
   },
   mid: {
-    label: 'Midpoint',
-    color: 'var(--chart-1)',
+    label: 'Reconciled estimate',
+    color: RECONCILED_COLOR,
   },
   pureMid: {
-    label: 'Pure algo',
-    color: 'var(--muted-foreground)',
+    label: 'Pure algo (no declared figures)',
+    color: PURE_ALGO_COLOR,
   },
-  pcMid: { label: 'PC', color: PLATFORM_COLORS.PC! },
+  pcMid: { label: 'PC (per-platform)', color: PLATFORM_COLORS.PC! },
   playstationMid: {
-    label: 'PlayStation',
+    label: 'PlayStation (per-platform)',
     color: PLATFORM_COLORS.PLAYSTATION!,
   },
-  xboxMid: { label: 'Xbox', color: PLATFORM_COLORS.XBOX! },
-  switchMid: { label: 'Switch', color: PLATFORM_COLORS.SWITCH! },
+  xboxMid: { label: 'Xbox (per-platform)', color: PLATFORM_COLORS.XBOX! },
+  switchMid: { label: 'Switch (per-platform)', color: PLATFORM_COLORS.SWITCH! },
 };
 
 const PLATFORM_DATA_KEY: Partial<Record<Platform, string>> = {
@@ -214,6 +221,9 @@ export function EstimateHistoryChart({ snapshots }: Props) {
               }}
             />
           }
+        />
+        <ChartLegend
+          content={<ChartLegendContent className="flex-wrap" />}
         />
         <Area
           dataKey="range"

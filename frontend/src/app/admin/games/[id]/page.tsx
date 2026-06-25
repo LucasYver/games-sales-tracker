@@ -8,7 +8,13 @@ import {
   type AdminPriceSnapshot,
 } from '@/lib/admin';
 import { cn } from '@/lib/utils';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -27,12 +33,13 @@ import {
 } from '@/components/ui/tabs';
 import { DeleteButton } from '../../_components/DeleteButton';
 import { RefreshGameButton } from '../../_components/RefreshGameButton';
-import { ImportCcuHistoryButton } from '../../_components/ImportCcuHistoryButton';
+import { RebuildEstimatesButton } from '../../_components/RebuildEstimatesButton';
+import { ImportCcuCsvButton } from '../../_components/ImportCcuCsvButton';
 import { EditGameForm } from '../../_components/EditGameForm';
 import { EstimateHistoryChart } from '../../_components/EstimateHistoryChart';
 import { CcuHistoryChart } from '../../_components/CcuHistoryChart';
 import { LauncherProfileBadge } from '../../_components/LauncherProfileBadge';
-import { deleteGame, deleteMilestone } from '../../actions';
+import { deleteGame, deleteMilestone, deleteSignal } from '../../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -251,7 +258,8 @@ export default async function AdminGameDetailPage({
         </div>
         <div className="flex items-center gap-2">
           <RefreshGameButton gameId={game.id} />
-          <ImportCcuHistoryButton gameId={game.id} />
+          <RebuildEstimatesButton gameId={game.id} />
+          <ImportCcuCsvButton gameId={game.id} />
           <DeleteButton
             action={deleteGame.bind(null, game.id)}
             confirmMessage={`Permanently delete "${game.name}"?`}
@@ -427,7 +435,11 @@ export default async function AdminGameDetailPage({
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <CcuHistoryChart signals={game.signals} />
+          <CcuHistoryChart
+            ccuHistory={game.ccuHistory}
+            peak={game.allTimePeakCcu}
+            peakAt={game.allTimePeakCcuAt}
+          />
         </CardContent>
       </Card>
 
@@ -695,6 +707,7 @@ export default async function AdminGameDetailPage({
                       <TableHead>Source</TableHead>
                       <TableHead className="text-right">Value</TableHead>
                       <TableHead>Captured</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -711,6 +724,14 @@ export default async function AdminGameDetailPage({
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">
                           {formatDateTime(s.capturedAt)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DeleteButton
+                            action={deleteSignal.bind(null, s.id, game.id)}
+                            confirmMessage="Delete this signal snapshot?"
+                            iconOnly
+                            label="Delete signal"
+                          />
                         </TableCell>
                       </TableRow>
                     ))}

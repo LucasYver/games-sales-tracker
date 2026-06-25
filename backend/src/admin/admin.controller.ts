@@ -18,6 +18,7 @@ import { IngestionService } from '../ingestion/ingestion.service';
 import { PublishersService } from '../publishers/publishers.service';
 import { GenresService } from '../genres/genres.service';
 import { AddGameDto } from './dto/add-game.dto';
+import { ImportCcuCsvDto } from './dto/import-ccu-csv.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
 import { UpdatePublisherDto } from './dto/update-publisher.dto';
 import { UpdateGenreProfileDto } from './dto/update-genre-profile.dto';
@@ -88,10 +89,19 @@ export class AdminController {
     return this.ingestion.refreshGame(id);
   }
 
-  @Post('games/:id/import-ccu-history')
+  @Post('games/:id/import-ccu-csv')
   @HttpCode(200)
-  importCcuHistory(@Param('id', ParseUUIDPipe) id: string) {
-    return this.ingestion.importSteamPeakCcuHistory(id);
+  importCcuCsv(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ImportCcuCsvDto,
+  ) {
+    return this.ingestion.importCcuCsv(id, body.csv);
+  }
+
+  @Post('games/:id/rebuild')
+  @HttpCode(200)
+  rebuildEstimates(@Param('id', ParseUUIDPipe) id: string) {
+    return this.admin.rebuildEstimates(id);
   }
 
   @Get('milestones')
@@ -119,6 +129,12 @@ export class AdminController {
   @HttpCode(200)
   deleteMilestone(@Param('id', ParseUUIDPipe) id: string) {
     return this.admin.deleteMilestone(id);
+  }
+
+  @Delete('signals/:id')
+  @HttpCode(200)
+  deleteSignal(@Param('id', ParseUUIDPipe) id: string) {
+    return this.admin.deleteSignal(id);
   }
 
   @Get('trusted-sources')

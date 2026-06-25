@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   CartesianGrid,
   Line,
@@ -15,11 +15,30 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '@/components/ui/chart';
-import type { AdminSignal } from '@/lib/admin';
+import { Button } from '@/components/ui/button';
+import type { AdminCcuPoint } from '@/lib/admin';
 
 interface Props {
-  signals: AdminSignal[];
+  ccuHistory: AdminCcuPoint[];
+  peak: number | null;
+  peakAt: string | null;
 }
+
+type RangeKey = '1m' | '3m' | '6m' | '1y' | 'max';
+
+const RANGES: { key: RangeKey; label: string; days: number | null }[] = [
+  { key: '1m', label: '1M', days: 30 },
+  { key: '3m', label: '3M', days: 90 },
+  { key: '6m', label: '6M', days: 180 },
+  { key: '1y', label: '1Y', days: 365 },
+  { key: 'max', label: 'Max', days: null },
+];
+
+// Above this visible span the daily series is collapsed to one point per
+// month (the month's peak), mirroring SteamDB's zoomed-out view: years of
+// daily points are unreadable and slow to render.
+const MONTHLY_AGGREGATION_THRESHOLD_DAYS = 270;
+const DAY_MS = 24 * 3600 * 1000;
 
 const chartConfig: ChartConfig = {
   current: {
@@ -46,33 +65,56 @@ function formatDay(t: number): string {
   });
 }
 
-export function CcuHistoryChart({ signals }: Props) {
-  const { data, peak, peakAt } = useMemo(() => {
-    const concurrent = signals
-      .filter((s) => s.metric === 'STEAM_CONCURRENT')
-      .map((s) => ({
-        t: new Date(s.capturedAt).getTime(),
-        current: s.value,
-      }))
-      .sort((a, b) => a.t - b.t);
+interface ChartPoint {
+  t: number;
+  current: number;
+}
 
-    // Pick the all-time peak by `value` (not `capturedAt`): the
-    // historical-import path writes a peak row with the SteamCharts
-    // month as capturedAt, so the row with the largest value — not the
-    // most recently captured — represents the true current peak.
-    const peakRows = signals
-      .filter((s) => s.metric === 'STEAM_PEAK_CCU')
-      .sort((a, b) => b.value - a.value);
-    const latestPeak = peakRows[0] ?? null;
+export function CcuHistoryChart({ ccuHistory, peak, peakAt }: Props) {
+  const [range, setRange] = useState<RangeKey>('max');
 
+  const allPoints = useMemo<ChartPoint[]>(
+    () =>
+      ccuHistory
+        .map((s) => ({
+          t: new Date(s.capturedAt).getTime(),
+          current: s.value,
+        }))
+        .sort((a, b) => a.t - b.t),
+    [ccuHistory],
+  );
+
+  const { data, aggregated } = useMemo(() => {
+    if (allPoints.length === 0) return { data: [] as ChartPoint[], aggregated: false };
+
+    const lastT = allPoints[allPoints.length - 1].t;
+    const cfg = RANGES.find((r) => r.key === range) ?? RANGES[RANGES.length - 1];
+    const cutoff = cfg.days === null ? -Infinity : lastT - cfg.days * DAY_MS;
+    const windowed = allPoints.filter((p) => p.t >= cutoff);
+    if (windowed.length === 0) return { data: [] as ChartPoint[], aggregated: false };
+
+    const spanDays =
+      (windowed[windowed.length - 1].t - windowed[0].t) / DAY_MS;
+    if (spanDays <= MONTHLY_AGGREGATION_THRESHOLD_DAYS) {
+      return { data: windowed, aggregated: false };
+    }
+
+    // Collapse to one point per UTC month = that month's peak, keeping the
+    // peak day's own timestamp so the tooltip shows when it happened.
+    const byMonth = new Map<string, ChartPoint>();
+    for (const p of windowed) {
+      const d = new Date(p.t);
+      const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
+      const existing = byMonth.get(key);
+      if (!existing || p.current > existing.current) byMonth.set(key, p);
+    }
     return {
-      data: concurrent,
-      peak: latestPeak?.value ?? null,
-      peakAt: latestPeak?.capturedAt ?? null,
+      data: Array.from(byMonth.values()).sort((a, b) => a.t - b.t),
+      aggregated: true,
     };
-  }, [signals]);
+  }, [allPoints, range]);
 
-  if (data.length === 0) {
+  if (allPoints.length === 0) {
     return (
       <p className="text-muted-foreground p-6 text-sm">
         No concurrent-player snapshots yet. They will be captured on the next
@@ -82,12 +124,12 @@ export function CcuHistoryChart({ signals }: Props) {
     );
   }
 
-  if (data.length === 1) {
+  if (allPoints.length === 1) {
     return (
       <div className="text-muted-foreground p-6 text-sm">
         Only one concurrent-player snapshot so far (
-        {data[0].current.toLocaleString()} on {formatDay(data[0].t)}). The
-        chart will appear after the next refresh.
+        {allPoints[0].current.toLocaleString()} on {formatDay(allPoints[0].t)}).
+        The chart will appear after the next refresh.
       </div>
     );
   }
@@ -97,80 +139,104 @@ export function CcuHistoryChart({ signals }: Props) {
     Math.max(...data.map((d) => d.current), peak ?? 0) * 1.1 || undefined;
 
   return (
-    <ChartContainer config={chartConfig} className="h-[280px] w-full px-6 pb-4">
-      <LineChart data={data} margin={{ left: 8, right: 8, top: 8 }}>
-        <CartesianGrid vertical={false} strokeDasharray="3 3" />
-        <XAxis
-          dataKey="t"
-          type="number"
-          domain={xDomain}
-          scale="time"
-          tickFormatter={formatDay}
-          tickLine={false}
-          axisLine={false}
-          minTickGap={48}
-        />
-        <YAxis
-          tickFormatter={formatPlayers}
-          tickLine={false}
-          axisLine={false}
-          width={48}
-          domain={[0, yMax ?? 'auto']}
-        />
-        <ChartTooltip
-          cursor={{ strokeDasharray: '3 3' }}
-          content={
-            <ChartTooltipContent
-              labelFormatter={(_, payload) => {
-                const t = payload?.[0]?.payload?.t;
-                return typeof t === 'number'
-                  ? new Date(t).toLocaleString('en-US', {
-                      dateStyle: 'medium',
-                      timeStyle: 'short',
-                    })
-                  : '';
-              }}
-              formatter={(value, name) => {
-                if (name === 'current') {
-                  return [
-                    formatPlayers(value as number),
-                    'Concurrent players',
-                  ];
-                }
-                return null;
+    <div className="flex flex-col">
+      <div className="flex items-center justify-end gap-2 px-6 pt-2">
+        {aggregated && (
+          <span className="text-muted-foreground mr-auto text-xs">
+            Monthly peak
+          </span>
+        )}
+        {RANGES.map((r) => (
+          <Button
+            key={r.key}
+            type="button"
+            size="sm"
+            variant={range === r.key ? 'default' : 'ghost'}
+            className="h-7 px-2 text-xs"
+            onClick={() => setRange(r.key)}
+          >
+            {r.label}
+          </Button>
+        ))}
+      </div>
+      <ChartContainer
+        config={chartConfig}
+        className="h-[280px] w-full px-6 pb-4"
+      >
+        <LineChart data={data} margin={{ left: 8, right: 8, top: 8 }}>
+          <CartesianGrid vertical={false} strokeDasharray="3 3" />
+          <XAxis
+            dataKey="t"
+            type="number"
+            domain={xDomain}
+            scale="time"
+            tickFormatter={formatDay}
+            tickLine={false}
+            axisLine={false}
+            minTickGap={48}
+          />
+          <YAxis
+            tickFormatter={formatPlayers}
+            tickLine={false}
+            axisLine={false}
+            width={48}
+            domain={[0, yMax ?? 'auto']}
+          />
+          <ChartTooltip
+            cursor={{ strokeDasharray: '3 3' }}
+            content={
+              <ChartTooltipContent
+                labelFormatter={(_, payload) => {
+                  const t = payload?.[0]?.payload?.t;
+                  return typeof t === 'number'
+                    ? new Date(t).toLocaleString('en-US', {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      })
+                    : '';
+                }}
+                formatter={(value, name) => {
+                  if (name === 'current') {
+                    return [
+                      formatPlayers(value as number),
+                      aggregated ? 'Monthly peak CCU' : 'Concurrent players',
+                    ];
+                  }
+                  return null;
+                }}
+              />
+            }
+          />
+          {peak !== null && (
+            <ReferenceLine
+              y={peak}
+              stroke="var(--color-peak)"
+              strokeDasharray="4 4"
+              label={{
+                value: `All-time peak ${formatPlayers(peak)}${
+                  peakAt
+                    ? ` · ${new Date(peakAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        year: 'numeric',
+                      })}`
+                    : ''
+                }`,
+                position: 'insideTopLeft',
+                fill: 'var(--color-peak)',
+                fontSize: 11,
               }}
             />
-          }
-        />
-        {peak !== null && (
-          <ReferenceLine
-            y={peak}
-            stroke="var(--color-peak)"
-            strokeDasharray="4 4"
-            label={{
-              value: `All-time peak ${formatPlayers(peak)}${
-                peakAt
-                  ? ` · ${new Date(peakAt).toLocaleDateString('en-US', {
-                      month: 'short',
-                      year: 'numeric',
-                    })}`
-                  : ''
-              }`,
-              position: 'insideTopLeft',
-              fill: 'var(--color-peak)',
-              fontSize: 11,
-            }}
+          )}
+          <Line
+            dataKey="current"
+            type="monotone"
+            stroke="var(--color-current)"
+            strokeWidth={2}
+            dot={false}
+            isAnimationActive={false}
           />
-        )}
-        <Line
-          dataKey="current"
-          type="monotone"
-          stroke="var(--color-current)"
-          strokeWidth={2}
-          dot={false}
-          isAnimationActive={false}
-        />
-      </LineChart>
-    </ChartContainer>
+        </LineChart>
+      </ChartContainer>
+    </div>
   );
 }

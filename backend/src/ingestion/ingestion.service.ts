@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, Not, Repository } from 'typeorm';
+import { Between, In, IsNull, Not, Repository } from 'typeorm';
 import {
   AchievementSnapshot,
   Game,
@@ -1057,109 +1057,122 @@ export class IngestionService {
   }
 
   /**
-   * Seed the `STEAM_PEAK_CCU` signal from SteamCharts' historical "All-
-   * time peak" stat. Live polling via `pollSteamCcu` only captures
-   * peaks reached after we started tracking the game — for hits that
-   * already spiked (Palworld in Jan 2024, Helldivers 2 in early 2024, …),
-   * the live current-players value vastly understates the true peak.
-   * This admin-triggered import closes that gap by pulling the all-time
-   * peak from SteamCharts and persisting it as a `STEAM_PEAK_CCU` snapshot
-   * if higher than what we already have.
+   * Import a SteamDB chart CSV (`"DateTime","Players","Average Players"`)
+   * as the game's daily concurrent-player history. SteamDB is the only
+   * source with day-by-day CCU back to launch; we can't scrape it
+   * (Cloudflare), so the admin uploads the CSV manually for the titles
+   * that matter.
    *
-   * Returns the imported value (or `null` if no Steam source is linked or
-   * SteamCharts had nothing to scrape) and whether a new snapshot was
-   * written. The existing peak is never overwritten downwards.
+   * Granularity is normalized to one value per UTC day = that day's peak
+   * concurrent count (the recent window of the export is sub-daily, older
+   * history is already daily). Rows are persisted as `STEAM_CONCURRENT`
+   * snapshots dated at 00:00:00 UTC of their day. Re-importing overwrites
+   * existing rows in the CSV's date range only (upsert at day
+   * granularity). The all-time `STEAM_PEAK_CCU` is refreshed to the CSV's
+   * max when higher, so the Boxleiter CCU intersection uses accurate data.
    */
-  async importSteamPeakCcuHistory(gameId: string): Promise<{
-    appId: number | null;
-    importedPeak: number | null;
+  async importCcuCsv(
+    gameId: string,
+    csv: string,
+  ): Promise<{
+    daysImported: number;
+    rowsParsed: number;
+    rangeStart: string | null;
+    rangeEnd: string | null;
+    peakValue: number;
     peakAt: string | null;
-    priorPeak: number | null;
-    persisted: boolean;
   }> {
     const game = await this.games.findOne({ where: { id: gameId } });
     if (!game) {
       throw new NotFoundException(`Game ${gameId} not found.`);
     }
-    const steamSource = await this.gameSources.findOne({
-      where: { gameId, source: SourceType.STEAM },
-    });
-    const appId = steamSource ? Number(steamSource.externalId) : NaN;
-    if (!Number.isFinite(appId)) {
-      this.logger.warn(
-        `[ccu-history] "${game.name}" (${gameId}) — no Steam appId linked, skipping`,
-      );
-      return {
-        appId: null,
-        importedPeak: null,
-        peakAt: null,
-        priorPeak: null,
-        persisted: false,
-      };
+
+    const dailyMax = new Map<string, number>();
+    let rowsParsed = 0;
+    for (const line of csv.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (trimmed.toLowerCase().startsWith('"datetime"')) continue;
+      const cols = trimmed.split(',');
+      if (cols.length < 2) continue;
+      const rawDate = cols[0].replace(/"/g, '').trim();
+      const dayKey = rawDate.slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) continue;
+      const value = Number(cols[1].replace(/"/g, '').trim());
+      if (!Number.isFinite(value) || value < 0) continue;
+      rowsParsed += 1;
+      const prev = dailyMax.get(dayKey);
+      if (prev === undefined || value > prev) dailyMax.set(dayKey, value);
     }
 
-    const scraped = await this.steam.getAllTimePeakCcu(appId);
+    if (dailyMax.size === 0) {
+      throw new BadRequestException(
+        'No valid data rows found in the CSV (expected SteamDB chart export).',
+      );
+    }
+
+    const dayKeys = Array.from(dailyMax.keys()).sort();
+    const firstDay = new Date(`${dayKeys[0]}T00:00:00.000Z`);
+    const lastDay = new Date(`${dayKeys[dayKeys.length - 1]}T00:00:00.000Z`);
+    const lastDayEnd = new Date(lastDay.getTime() + 24 * 3600 * 1000 - 1);
+
+    // Upsert at day granularity: drop existing STEAM_CONCURRENT rows in the
+    // CSV's range (incl. sub-daily live-poll rows) then insert one per day.
+    await this.signals.delete({
+      gameId,
+      metric: SignalMetric.STEAM_CONCURRENT,
+      capturedAt: Between(firstDay, lastDayEnd),
+    });
+
+    const rows = dayKeys.map((day) =>
+      this.signals.create({
+        gameId,
+        source: SourceType.STEAM,
+        metric: SignalMetric.STEAM_CONCURRENT,
+        value: dailyMax.get(day)!,
+        capturedAt: new Date(`${day}T00:00:00.000Z`),
+      }),
+    );
+    await this.signals.save(rows, { chunk: 500 });
+
+    let peakValue = 0;
+    let peakDay = dayKeys[0];
+    for (const [day, value] of dailyMax) {
+      if (value > peakValue) {
+        peakValue = value;
+        peakDay = day;
+      }
+    }
+    const peakAt = new Date(`${peakDay}T00:00:00.000Z`);
     const priorPeakRow = await this.signals.findOne({
       where: { gameId, metric: SignalMetric.STEAM_PEAK_CCU },
       order: { value: 'DESC' },
     });
-    const priorPeak = priorPeakRow?.value ?? null;
-
-    if (scraped === null) {
-      this.logger.warn(
-        `[ccu-history] "${game.name}" (appId=${appId}) — SteamCharts returned no peak`,
+    if (!priorPeakRow || peakValue > priorPeakRow.value) {
+      await this.signals.save(
+        this.signals.create({
+          gameId,
+          source: SourceType.STEAM,
+          metric: SignalMetric.STEAM_PEAK_CCU,
+          value: peakValue,
+          capturedAt: peakAt,
+        }),
       );
-      return {
-        appId,
-        importedPeak: null,
-        peakAt: null,
-        priorPeak,
-        persisted: false,
-      };
     }
 
-    const { peak: imported, peakAt } = scraped;
-
-    if (priorPeak !== null && imported <= priorPeak) {
-      this.logger.log(
-        `[ccu-history] "${game.name}" (appId=${appId}) — SteamCharts peak ` +
-          `${imported.toLocaleString()} <= existing ${priorPeak.toLocaleString()}, no-op`,
-      );
-      return {
-        appId,
-        importedPeak: imported,
-        peakAt: peakAt?.toISOString() ?? null,
-        priorPeak,
-        persisted: false,
-      };
-    }
-
-    // Setting capturedAt to the historical peak month (when available)
-    // means the imported snapshot reflects WHEN the peak actually
-    // happened, so the historical rebuild path (`computeAndStoreAt`)
-    // correctly applies the CCU intersection only from that date onward.
-    // Without a known month, we fall back to "now" via the entity's
-    // default @CreateDateColumn.
-    await this.signals.save(
-      this.signals.create({
-        gameId,
-        source: SourceType.STEAM,
-        metric: SignalMetric.STEAM_PEAK_CCU,
-        value: imported,
-        ...(peakAt ? { capturedAt: peakAt } : {}),
-      }),
-    );
     this.logger.log(
-      `[ccu-history] "${game.name}" (appId=${appId}) — imported peak ` +
-        `${imported.toLocaleString()} at ${peakAt?.toISOString() ?? 'unknown date'} ` +
-        `(prior ${priorPeak?.toLocaleString() ?? 'n/a'})`,
+      `[ccu-csv] "${game.name}" — ${dailyMax.size} days ` +
+        `(${dayKeys[0]} → ${dayKeys[dayKeys.length - 1]}), ` +
+        `peak ${peakValue.toLocaleString()} at ${peakDay}`,
     );
+
     return {
-      appId,
-      importedPeak: imported,
-      peakAt: peakAt?.toISOString() ?? null,
-      priorPeak,
-      persisted: true,
+      daysImported: dailyMax.size,
+      rowsParsed,
+      rangeStart: dayKeys[0],
+      rangeEnd: dayKeys[dayKeys.length - 1],
+      peakValue,
+      peakAt: peakAt.toISOString(),
     };
   }
 
