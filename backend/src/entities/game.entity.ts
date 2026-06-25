@@ -78,6 +78,15 @@ export class Game {
   @Column({ type: 'simple-array', nullable: true })
   genres: string[] | null;
 
+  // Steam store "categories" (e.g. "Single-player", "Multi-player", "Co-op").
+  // Distinct from `genres`: categories describe play modes / features.
+  @Column({ type: 'simple-array', nullable: true })
+  categories: string[] | null;
+
+  // appIds of this game's Steam DLC.
+  @Column({ type: 'int', array: true, nullable: true })
+  dlc: number[] | null;
+
   // Per-platform Boxleiter multipliers (signal → units) derived from this
   // game's most reliable declared figure for each platform. When set, they
   // replace the generic default ranges so per-platform estimates are

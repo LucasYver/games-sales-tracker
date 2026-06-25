@@ -5,6 +5,7 @@ import {
   Game,
   GameSource,
   Milestone,
+  PriceSnapshot,
   ProcessedArticle,
   SignalSnapshot,
 } from '../entities';
@@ -31,6 +32,7 @@ import { ExophaseClient } from './exophase.client';
       Game,
       GameSource,
       SignalSnapshot,
+      PriceSnapshot,
       Milestone,
       ProcessedArticle,
       AchievementSnapshot,

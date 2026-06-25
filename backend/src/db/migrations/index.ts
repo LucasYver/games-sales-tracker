@@ -14,6 +14,7 @@ import { RemoveIsReferenceFromSalesEstimate1782243179245 } from './1782243179245
 import { AddPsToXboxGenreSplitMethod1782253500000 } from './1782253500000-AddPsToXboxGenreSplitMethod';
 import { CleanupXboxRatingsData1782253600000 } from './1782253600000-CleanupXboxRatingsData';
 import { RenameSalesRecordToMilestone1782260000000 } from './1782260000000-RenameSalesRecordToMilestone';
+import { AddSteamCategoriesDlcAndPriceSnapshot1782395875937 } from './1782395875937-AddSteamCategoriesDlcAndPriceSnapshot';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -39,4 +40,5 @@ export const migrations: MixedList<Function | string> = [
   AddPsToXboxGenreSplitMethod1782253500000,
   CleanupXboxRatingsData1782253600000,
   RenameSalesRecordToMilestone1782260000000,
+  AddSteamCategoriesDlcAndPriceSnapshot1782395875937,
 ];

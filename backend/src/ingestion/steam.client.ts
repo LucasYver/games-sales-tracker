@@ -21,6 +21,17 @@ const MONTH_NAMES = [
   'december',
 ];
 
+export interface SteamPrice {
+  // ISO 4217 currency code reported by Steam for the requested region.
+  currency: string;
+  // Regular ("initial") price in the currency's minor units (cents).
+  initial: number;
+  // Current price after any active discount, in minor units (cents).
+  final: number;
+  // Active discount percentage (0 when not on sale).
+  discountPercent: number;
+}
+
 export interface SteamAppDetails {
   appId: number;
   name: string;
@@ -31,6 +42,14 @@ export interface SteamAppDetails {
   developers: string[];
   publishers: string[];
   genres: string[];
+  // Steam store "categories" (e.g. "Single-player", "Multi-player",
+  // "Co-op", "Steam Achievements"). Display labels, not localized ids.
+  categories: string[];
+  // appIds of this game's DLC, as listed by the Steam store.
+  dlc: number[];
+  // Current pricing for the requested region; null for free titles or when
+  // Steam omits `price_overview` (unreleased, region-locked, etc.).
+  price: SteamPrice | null;
 }
 
 @Injectable()
@@ -41,7 +60,7 @@ export class SteamClient {
     try {
       const { data } = await axios.get(
         'https://store.steampowered.com/api/appdetails',
-        { params: { appids: appId, l: 'english' }, timeout: 15000 },
+        { params: { appids: appId, l: 'english', cc: 'us' }, timeout: 15000 },
       );
 
       const entry = data?.[String(appId)];
@@ -60,6 +79,17 @@ export class SteamClient {
         genres: Array.isArray(d.genres)
           ? (d.genres as { description: string }[]).map((g) => g.description)
           : [],
+        categories: Array.isArray(d.categories)
+          ? (d.categories as { description?: unknown }[])
+              .map((c) => (typeof c.description === 'string' ? c.description : null))
+              .filter((c): c is string => c !== null)
+          : [],
+        dlc: Array.isArray(d.dlc)
+          ? (d.dlc as unknown[])
+              .map((id) => Number(id))
+              .filter((id) => Number.isFinite(id))
+          : [],
+        price: this.parsePrice(d.price_overview),
       };
     } catch (error) {
       this.logger.warn(`getAppDetails failed for ${appId}: ${error}`);
@@ -249,6 +279,34 @@ export class SteamClient {
     if (!raw) return null;
     const parsed = new Date(raw);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  /**
+   * Map Steam's `price_overview` block to `SteamPrice`. `initial`/`final` are
+   * already in minor units (cents). Returns null when the block is absent
+   * (free or unpriced apps) or malformed.
+   */
+  private parsePrice(raw: unknown): SteamPrice | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const p = raw as {
+      currency?: unknown;
+      initial?: unknown;
+      final?: unknown;
+      discount_percent?: unknown;
+    };
+    const currency = typeof p.currency === 'string' ? p.currency : null;
+    const initial = Number(p.initial);
+    const final = Number(p.final);
+    if (!currency || !Number.isFinite(initial) || !Number.isFinite(final)) {
+      return null;
+    }
+    const discountPercent = Number(p.discount_percent);
+    return {
+      currency,
+      initial,
+      final,
+      discountPercent: Number.isFinite(discountPercent) ? discountPercent : 0,
+    };
   }
 
   /**

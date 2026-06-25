@@ -5,6 +5,7 @@ export * from './genre.entity';
 export * from './game.entity';
 export * from './game-source.entity';
 export * from './signal-snapshot.entity';
+export * from './price-snapshot.entity';
 export * from './achievement-snapshot.entity';
 export * from './estimation-method.entity';
 export * from './sales-estimate.entity';

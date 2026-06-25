@@ -51,6 +51,38 @@ export class RefreshService {
   }
 
   /**
+   * Poll live Steam concurrent players for every tracked Steam game on a
+   * short cadence (every 30 minutes) so intra-day peaks are captured. This is
+   * intentionally separate from the nightly full refresh, which no longer
+   * fetches CCU.
+   */
+  async refreshAllCcu() {
+    try {
+      const result = await this.ingestion.pollAllSteamCcu();
+      this.logger.log(
+        `CCU poll done: ${result.polled} polled, ${result.failed} failed.`,
+      );
+    } catch (error) {
+      this.logger.warn(`CCU poll failed: ${error}`);
+    }
+  }
+
+  /**
+   * Capture a daily Steam price point for every tracked Steam game so price
+   * changes (sales, permanent drops) accumulate into a time series.
+   */
+  async captureSteamPrices() {
+    try {
+      const result = await this.ingestion.captureAllSteamPrices();
+      this.logger.log(
+        `Price capture done: ${result.captured} captured, ${result.skipped} skipped, ${result.failed} failed.`,
+      );
+    } catch (error) {
+      this.logger.warn(`Price capture failed: ${error}`);
+    }
+  }
+
+  /**
    * Continuously monitor trusted-source RSS feeds: every 30 minutes, ingest
    * any new article that mentions a tracked game and reports a sales figure.
    */

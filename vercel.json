@@ -19,7 +19,9 @@
     ],
     "crons": [
         { "path": "/api/cron/refresh-games",  "schedule": "0 3 * * *" },
-        { "path": "/api/cron/poll-feeds",      "schedule": "0 12 * * *" },
+        { "path": "/api/cron/poll-ccu",        "schedule": "*/30 * * * *" },
+        { "path": "/api/cron/capture-prices",  "schedule": "0 6 * * *" },
+        { "path": "/api/cron/poll-feeds",      "schedule": "*/30 * * * *" },
         { "path": "/api/cron/discover-games",  "schedule": "0 2 * * *" }
     ]
 }

@@ -13,6 +13,18 @@ export class CronController {
     return this.refresh.refreshAllGames();
   }
 
+  @Get('poll-ccu')
+  @HttpCode(200)
+  pollCcu() {
+    return this.refresh.refreshAllCcu();
+  }
+
+  @Get('capture-prices')
+  @HttpCode(200)
+  capturePrices() {
+    return this.refresh.captureSteamPrices();
+  }
+
   @Get('poll-feeds')
   @HttpCode(200)
   pollFeeds() {

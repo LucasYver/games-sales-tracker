@@ -80,6 +80,14 @@ function formatDay(t: number): string {
   });
 }
 
+function niceCeiling(value: number): number {
+  if (value <= 0) return 1;
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  const normalized = value / magnitude;
+  const step = [1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10].find((s) => s >= normalized);
+  return (step ?? 10) * magnitude;
+}
+
 interface ChartPoint {
   t: number;
   low: number;
@@ -94,9 +102,10 @@ interface ChartPoint {
 }
 
 export function EstimateHistoryChart({ snapshots }: Props) {
-  const { data, presentPlatforms, hasPure } = useMemo(() => {
+  const { data, presentPlatforms, hasPure, yMax } = useMemo(() => {
     const platforms = new Set<Platform>();
     let pure = false;
+    let maxValue = 0;
     const points: ChartPoint[] = snapshots.map((s) => {
       const point: ChartPoint = {
         t: new Date(s.computedAt).getTime(),
@@ -121,9 +130,15 @@ export function EstimateHistoryChart({ snapshots }: Props) {
         (point as unknown as Record<string, number | undefined>)[key] =
           Math.round((r.estimateLow + r.estimateHigh) / 2);
       }
+      maxValue = Math.max(maxValue, point.high);
       return point;
     });
-    return { data: points, presentPlatforms: platforms, hasPure: pure };
+    return {
+      data: points,
+      presentPlatforms: platforms,
+      hasPure: pure,
+      yMax: niceCeiling(maxValue),
+    };
   }, [snapshots]);
 
   if (data.length < 2) {
@@ -156,6 +171,7 @@ export function EstimateHistoryChart({ snapshots }: Props) {
           tickLine={false}
           axisLine={false}
           width={48}
+          domain={[0, yMax]}
         />
         <ChartTooltip
           cursor={{ strokeDasharray: '3 3' }}

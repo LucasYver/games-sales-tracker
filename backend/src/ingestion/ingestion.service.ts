@@ -13,6 +13,7 @@ import {
   GameSource,
   Milestone,
   Platform,
+  PriceSnapshot,
   ProcessedArticle,
   SalesSource,
   SignalMetric,
@@ -138,6 +139,8 @@ export class IngestionService {
     private readonly gameSources: Repository<GameSource>,
     @InjectRepository(SignalSnapshot)
     private readonly signals: Repository<SignalSnapshot>,
+    @InjectRepository(PriceSnapshot)
+    private readonly prices: Repository<PriceSnapshot>,
     @InjectRepository(Milestone)
     private readonly milestones: Repository<Milestone>,
     @InjectRepository(ProcessedArticle)
@@ -603,7 +606,8 @@ export class IngestionService {
 
     const game = await this.upsertGameFromSteam(appId, details);
 
-    await this.pollSteamSignals(game.id, appId);
+    await this.pollSteamReviews(game.id, appId);
+    await this.pollSteamCcu(game.id, appId);
 
     await this.scrapeStoreRatings(game.id, game.name, game.platforms);
 
@@ -839,13 +843,34 @@ export class IngestionService {
   }
 
   /**
-   * Poll every live Steam signal for this app and persist a snapshot per
-   * metric. Called from both the initial Steam ingest (`ingestSteamApp`)
-   * and the daily refresh (`refreshGame`) so all tracked games stay fresh
-   * on the same cadence.
+   * Poll Steam's total review count and persist a `STEAM_REVIEWS` snapshot
+   * (PC Boxleiter input). Called from the initial Steam ingest
+   * (`ingestSteamApp`) and the daily refresh (`refreshGame`).
+   *
+   * Best-effort: a fetch failure leaves the value already on record in place.
+   */
+  private async pollSteamReviews(gameId: string, appId: number): Promise<void> {
+    const reviews = await this.steam.getTotalReviews(appId);
+    if (reviews === null) return;
+
+    await this.signals.save(
+      this.signals.create({
+        gameId,
+        source: SourceType.STEAM,
+        metric: SignalMetric.STEAM_REVIEWS,
+        value: reviews,
+      }),
+    );
+  }
+
+  /**
+   * Poll Steam's live concurrent-player count for this app and persist it.
+   * Captured on a short cadence by the dedicated CCU cron (see
+   * `pollAllSteamCcu`) so intra-day peaks aren't missed; also seeded once on
+   * the initial Steam ingest (`ingestSteamApp`). Deliberately NOT called from
+   * the nightly full refresh.
    *
    * Signals captured:
-   *  - `STEAM_REVIEWS`: total review count (PC Boxleiter input).
    *  - `STEAM_CONCURRENT`: current concurrent player count at poll time
    *    (raw time series, useful for decay analysis).
    *  - `STEAM_PEAK_CCU`: running all-time max of `STEAM_CONCURRENT`. A new
@@ -854,22 +879,9 @@ export class IngestionService {
    *    (NOT capturedAt) because the historical-import path persists peaks
    *    with the SteamCharts month as `capturedAt`.
    *
-   * Best-effort: any individual signal that fails to fetch is silently
-   * skipped — the value already on record stays in place.
+   * Best-effort: a fetch failure leaves the value already on record in place.
    */
-  private async pollSteamSignals(gameId: string, appId: number): Promise<void> {
-    const reviews = await this.steam.getTotalReviews(appId);
-    if (reviews !== null) {
-      await this.signals.save(
-        this.signals.create({
-          gameId,
-          source: SourceType.STEAM,
-          metric: SignalMetric.STEAM_REVIEWS,
-          value: reviews,
-        }),
-      );
-    }
-
+  async pollSteamCcu(gameId: string, appId: number): Promise<void> {
     const current = await this.steam.getCurrentPlayerCount(appId);
     if (current === null) return;
 
@@ -908,8 +920,136 @@ export class IngestionService {
   }
 
   /**
+   * Poll the live Steam concurrent-player count for every tracked Steam game
+   * and persist CCU signals. Runs on a short cadence (dedicated cron) so
+   * intra-day peaks are captured even though the full refresh only runs
+   * nightly. Free-to-play titles are excluded (no sales estimate). Each game
+   * is best-effort: a failure is logged and the loop continues.
+   */
+  async pollAllSteamCcu(): Promise<{ polled: number; failed: number }> {
+    const steamSources = await this.gameSources.find({
+      where: { source: SourceType.STEAM },
+    });
+
+    const gameIds = steamSources.map((source) => source.gameId);
+    if (gameIds.length === 0) {
+      this.logger.log('[ccu] no Steam-linked games to poll.');
+      return { polled: 0, failed: 0 };
+    }
+
+    const trackedGames = await this.games.find({
+      where: { id: In(gameIds), isFree: false },
+    });
+    const trackedIds = new Set(trackedGames.map((game) => game.id));
+
+    let polled = 0;
+    let failed = 0;
+    for (const source of steamSources) {
+      if (!trackedIds.has(source.gameId)) continue;
+
+      const appId = Number(source.externalId);
+      if (!Number.isFinite(appId)) continue;
+
+      try {
+        await this.pollSteamCcu(source.gameId, appId);
+        polled++;
+      } catch (error) {
+        failed++;
+        this.logger.warn(`[ccu] poll failed for game ${source.gameId}: ${error}`);
+      }
+    }
+
+    this.logger.log(`[ccu] poll complete: ${polled} polled, ${failed} failed.`);
+    return { polled, failed };
+  }
+
+  /**
+   * Capture a daily Steam price point for every tracked Steam game, building a
+   * `price_snapshot` time series of regular/discounted prices. Free-to-play
+   * titles are excluded (no price). Steam app details are re-fetched here, so
+   * we also opportunistically refresh `categories` / `dlc` on the game (these
+   * are otherwise only set on initial ingest). Each game is best-effort: a
+   * failure is logged and the loop continues.
+   */
+  async captureAllSteamPrices(): Promise<{
+    captured: number;
+    skipped: number;
+    failed: number;
+  }> {
+    const steamSources = await this.gameSources.find({
+      where: { source: SourceType.STEAM },
+    });
+
+    const gameIds = steamSources.map((source) => source.gameId);
+    if (gameIds.length === 0) {
+      this.logger.log('[price] no Steam-linked games to poll.');
+      return { captured: 0, skipped: 0, failed: 0 };
+    }
+
+    const trackedGames = await this.games.find({
+      where: { id: In(gameIds), isFree: false },
+    });
+    const gamesById = new Map(trackedGames.map((game) => [game.id, game]));
+
+    let captured = 0;
+    let skipped = 0;
+    let failed = 0;
+    for (const source of steamSources) {
+      const game = gamesById.get(source.gameId);
+      if (!game) continue;
+
+      const appId = Number(source.externalId);
+      if (!Number.isFinite(appId)) continue;
+
+      try {
+        const details = await this.steam.getAppDetails(appId);
+        if (!details) {
+          failed++;
+          continue;
+        }
+
+        // Backfill metadata that only initial ingest used to set.
+        let metadataChanged = false;
+        if (details.categories.length > 0) {
+          game.categories = details.categories;
+          metadataChanged = true;
+        }
+        if (details.dlc.length > 0) {
+          game.dlc = details.dlc;
+          metadataChanged = true;
+        }
+        if (metadataChanged) await this.games.save(game);
+
+        if (!details.price) {
+          skipped++;
+          continue;
+        }
+
+        await this.prices.save(
+          this.prices.create({
+            gameId: game.id,
+            currency: details.price.currency,
+            initial: details.price.initial,
+            final: details.price.final,
+            discountPercent: details.price.discountPercent,
+          }),
+        );
+        captured++;
+      } catch (error) {
+        failed++;
+        this.logger.warn(`[price] capture failed for game ${source.gameId}: ${error}`);
+      }
+    }
+
+    this.logger.log(
+      `[price] capture complete: ${captured} captured, ${skipped} skipped, ${failed} failed.`,
+    );
+    return { captured, skipped, failed };
+  }
+
+  /**
    * Seed the `STEAM_PEAK_CCU` signal from SteamCharts' historical "All-
-   * time peak" stat. Daily polling via `pollSteamSignals` only captures
+   * time peak" stat. Live polling via `pollSteamCcu` only captures
    * peaks reached after we started tracking the game — for hits that
    * already spiked (Palworld in Jan 2024, Helldivers 2 in early 2024, …),
    * the live current-players value vastly understates the true peak.
@@ -1352,8 +1492,11 @@ export class IngestionService {
       Number.isFinite(steamAppId)
         ? this.scrapeSteamOfficialAchievements(game.id, game.name, steamAppId)
         : Promise.resolve(),
+      // CCU is intentionally excluded here: live concurrent players are polled
+      // on a short cadence by the dedicated CCU cron (`pollAllSteamCcu`), not
+      // during the nightly full refresh. Reviews remain on the refresh chain.
       Number.isFinite(steamAppId)
-        ? this.pollSteamSignals(game.id, steamAppId)
+        ? this.pollSteamReviews(game.id, steamAppId)
         : Promise.resolve(),
     ]);
 
@@ -1786,6 +1929,8 @@ export class IngestionService {
       }
       if (details.genres.length > 0) game.genres = details.genres;
       else if (igdb?.genres.length) game.genres = igdb.genres;
+      if (details.categories.length > 0) game.categories = details.categories;
+      if (details.dlc.length > 0) game.dlc = details.dlc;
       if (igdb) {
         if (game.igdbId == null) game.igdbId = igdb.igdbId;
         if (igdb.platforms.length > 0) game.platforms = igdb.platforms;
@@ -1831,6 +1976,10 @@ export class IngestionService {
         ) {
           existingByIgdb.genres = details.genres;
         }
+        if (details.categories.length > 0) {
+          existingByIgdb.categories = details.categories;
+        }
+        if (details.dlc.length > 0) existingByIgdb.dlc = details.dlc;
         const saved = await this.games.save(existingByIgdb);
         await this.publishers.resolveAndLink(saved.id, saved.publisher);
         return saved;
@@ -1858,6 +2007,8 @@ export class IngestionService {
             : igdb?.genres.length
               ? igdb.genres
               : null,
+        categories: details.categories.length > 0 ? details.categories : null,
+        dlc: details.dlc.length > 0 ? details.dlc : null,
       }),
     );
 
