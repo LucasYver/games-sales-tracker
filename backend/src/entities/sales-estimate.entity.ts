@@ -35,7 +35,7 @@ export class SalesEstimate {
   // Canonical method this estimate was produced by, looked up by `code`
   // in `estimation_method`. The legacy free-form `method` string below
   // remains for backward compatibility and carries dynamic modifier
-  // suffixes (e.g. `+ccu-intersect`, `+launcher-primary`) that aren't
+  // suffixes (e.g. `+launcher-primary`, `+multi-store`) that aren't
   // yet first-class methods. The string column will be dropped in a
   // follow-up migration once nothing reads it anymore.
   @Column('uuid')

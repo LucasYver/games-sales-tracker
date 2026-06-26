@@ -50,7 +50,7 @@ ESTIMATE   Boxleiter / ratings-based model output
 |---|---|
 | `STEAM_REVIEWS` | Steam storefront review API |
 | `STEAM_CONCURRENT` | Steam `GetNumberOfCurrentPlayers` — raw daily reading |
-| `STEAM_PEAK_CCU` | Running all-time max of `STEAM_CONCURRENT`, written only on a new high. Used as a second independent PC estimate, intersected with the reviews-based Boxleiter range. |
+| `STEAM_PEAK_CCU` | Running all-time max of `STEAM_CONCURRENT`, written only on a new high. Used by the PC first-week lifecycle estimate (`estimateFirstWeekExtrapolationForPc`) to derive a week-1 baseline. |
 | `PS_RATINGS` | PlayStation Store scraping |
 | `XBOX_RATINGS` | Xbox Store scraping |
 
@@ -79,15 +79,12 @@ uniform ±30 % spread (`CALIBRATED_MULTIPLIER_SPREAD = 0.3`); the
 milestone's `confidenceScore` is surfaced to operators but does not
 affect calibration. See `ESTIMATION.md` §1 for the full algorithm.
 
-**PC second opinion (peak CCU intersection)**: on PC, the reviews-based
-Boxleiter range is intersected with a parallel range derived from the all-
-time peak concurrent player count (`STEAM_PEAK_CCU` signal × `PC_CCU_*`
-multiplier). When both ranges overlap, the intersection is a strictly
-tighter joint estimate (method tagged `…+ccu-intersect`). When they
-disagree (typical for Game Pass / live-service titles whose review:player
-ratio diverges from the catalog norm), the reviews-based range is kept
-but confidence is downgraded to `LOW` and the method tagged
-`…+ccu-conflict` to surface the disagreement.
+**PC first-week lifecycle estimate**: peak CCU is no longer mixed into the
+reviews-based Boxleiter range. Instead, `STEAM_PEAK_CCU` (and reviews
+captured close to launch when available) feeds a separate week-1 estimate
+in `estimateFirstWeekExtrapolationForPc`, projected to "today" via a
+genre-aware degressive curve. The Boxleiter range stays a pure
+reviews × multiplier estimate.
 
 **PC guardrail (Option A)**: when console declared figures show that PC is < 20%
 of the total, the Boxleiter PC estimate is excluded from `estimatedToday` to

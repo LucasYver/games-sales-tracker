@@ -118,12 +118,13 @@ export const XBOX_BOXLEITER_PLAUSIBLE_MAX = 600;
 
 // ─── Peak CCU multiplier (Steam concurrent players → PC units) ──────────────
 //
-// A largely independent second signal for PC sales, used alongside the
-// reviews-based Boxleiter estimate. The all-time peak concurrent player
-// count is polled daily from Steam's `GetNumberOfCurrentPlayers` and
-// persisted as `SignalSnapshot(STEAM_PEAK_CCU)`. At estimation time the
-// CCU-based range `[peak × LOW, peak × HIGH]` is intersected with the
-// reviews-based range to tighten the PC estimate.
+// A largely independent second signal for PC sales. The all-time peak
+// concurrent player count is polled daily from Steam's
+// `GetNumberOfCurrentPlayers` and persisted as
+// `SignalSnapshot(STEAM_PEAK_CCU)`. It feeds the PC first-week lifecycle
+// estimate (`estimateFirstWeekExtrapolationForPc`), which derives a week-1
+// baseline from the launch-window peak and projects it forward. It is no
+// longer intersected with the reviews-based Boxleiter range.
 //
 // Empirical anchor points (peak CCU → eventual lifetime Steam units):
 //   PUBG          3.2M peak → ~75M    (~23×)
@@ -135,17 +136,10 @@ export const XBOX_BOXLEITER_PLAUSIBLE_MAX = 600;
 //   Palworld       2.1M peak → ~15M+   (~7× short term, climbs with age)
 //   Stardew Valley  95K peak → ~30M+   (~315× long tail)
 //
-// The default range is deliberately wide because the units/peak-CCU ratio
-// grows strongly with age (single-player Y1 hits sit around 10-25×, long-
-// tail catalog titles climb past 100×). It is meant to be tightened by
-// intersecting with the reviews-based range, not used standalone.
-//
 // PLAUSIBLE_MIN/MAX are reserved for a future per-game calibrated CCU
 // multiplier (mirroring the Boxleiter recalibration flow); they are not
 // yet read by EstimationService.
 
-export const PC_CCU_DEFAULT_LOW = 8;
-export const PC_CCU_DEFAULT_HIGH = 40;
 export const PC_CCU_PLAUSIBLE_MIN = 4;
 export const PC_CCU_PLAUSIBLE_MAX = 500;
 

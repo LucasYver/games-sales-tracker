@@ -25,8 +25,9 @@ Implementation sketch:
 3. Use the cluster prior instead of the static default range when a per-
    game OFFICIAL figure is missing. Per-game calibration still wins when
    available — clusters fill the gap, they do not override.
-4. Same treatment for the peak-CCU multiplier (currently
-   `PC_CCU_DEFAULT_LOW/HIGH` in `sales-modeling.constants.ts`).
+4. Same treatment for the first-week peak-CCU → week-1 ratio (currently the
+   genre-profile `peakCcuToWeekOne{Low,High}`, falling back to
+   `FIRST_WEEK_PEAK_CCU_LOW/HIGH` in `sales-modeling.constants.ts`).
 
 Pre-requisite: enough OFFICIAL data points to fit each cluster prior,
 which mostly depends on the publisher IR pipeline below landing first.

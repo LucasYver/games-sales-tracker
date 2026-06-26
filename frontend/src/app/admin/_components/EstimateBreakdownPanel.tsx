@@ -30,18 +30,8 @@ function fmtMultiplierRange(low: number, high: number): string {
 }
 
 function BoxleiterRow({ entry }: { entry: BoxleiterBreakdownEntry }) {
-  const isConflict = entry.ccuOutcome === 'conflict';
-  const isIntersect = entry.ccuOutcome === 'intersect';
-
   return (
-    <div
-      className={cn(
-        'space-y-1.5 rounded border p-3 text-xs',
-        isConflict
-          ? 'border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-900/10'
-          : 'border-border bg-background',
-      )}
-    >
+    <div className="border-border bg-background space-y-1.5 rounded border p-3 text-xs">
       <div className="flex items-center justify-between gap-2">
         <span className="text-muted-foreground font-mono text-[11px]">
           {entry.method}
@@ -71,42 +61,6 @@ function BoxleiterRow({ entry }: { entry: BoxleiterBreakdownEntry }) {
           {fmtRange(entry.rawLow, entry.rawHigh)}
         </span>
       </div>
-
-      {entry.ccuPeak != null && (
-        <div
-          className={cn(
-            'flex flex-wrap items-center gap-1.5',
-            isConflict
-              ? 'text-amber-700 dark:text-amber-400'
-              : 'text-muted-foreground',
-          )}
-        >
-          <span>CCU peak</span>
-          <span className="font-mono tabular-nums">
-            {entry.ccuPeak.toLocaleString()}
-          </span>
-          <span>→ range</span>
-          <span className="font-mono tabular-nums">
-            {fmtRange(entry.ccuRangeLow!, entry.ccuRangeHigh!)}
-          </span>
-          {isIntersect && (
-            <Badge
-              variant="outline"
-              className="border-emerald-400 py-0 text-[10px] text-emerald-700 dark:text-emerald-400"
-            >
-              ∩ intersect
-            </Badge>
-          )}
-          {isConflict && (
-            <Badge
-              variant="outline"
-              className="border-amber-400 py-0 text-[10px] text-amber-700 dark:text-amber-400"
-            >
-              ⚠ conflict — unconstrained
-            </Badge>
-          )}
-        </div>
-      )}
     </div>
   );
 }

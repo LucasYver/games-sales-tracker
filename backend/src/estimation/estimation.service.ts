@@ -51,8 +51,6 @@ import {
   PC_BOXLEITER_DEFAULT_LOW,
   PC_BOXLEITER_PLAUSIBLE_MAX,
   PC_BOXLEITER_PLAUSIBLE_MIN,
-  PC_CCU_DEFAULT_HIGH,
-  PC_CCU_DEFAULT_LOW,
   PS_BOXLEITER_DEFAULT_HIGH,
   PS_BOXLEITER_DEFAULT_LOW,
   PS_BOXLEITER_PLAUSIBLE_MAX,
@@ -188,10 +186,6 @@ export interface BoxleiterBreakdownEntry {
   multiplierHigh: number;
   rawLow: number;
   rawHigh: number;
-  ccuPeak: number | null;
-  ccuRangeLow: number | null;
-  ccuRangeHigh: number | null;
-  ccuOutcome: 'intersect' | 'conflict' | null;
   finalLow: number;
   finalHigh: number;
 }
@@ -946,42 +940,20 @@ export class EstimationService {
 
     const rawLow = signalValue * low * reviewsScale.low;
     const rawHigh = signalValue * high * reviewsScale.high;
-    let estimatedLow = rawLow;
-    let estimatedHigh = rawHigh;
+    const estimatedLow = rawLow;
+    const estimatedHigh = rawHigh;
     let finalMethod = method;
-    let confidenceOverride: ConfidenceLevel | null = null;
-
-    let ccuPeak: number | null = null;
-    let ccuRangeLow: number | null = null;
-    let ccuRangeHigh: number | null = null;
-    let ccuOutcome: 'intersect' | 'conflict' | null = null;
 
     if (cfg.platform === Platform.PC) {
-      const ccu = await this.applyCcuIntersection(
-        game.id,
-        estimatedLow,
-        estimatedHigh,
-        launcherProfile,
-        asOf,
-      );
-      if (ccu) {
-        estimatedLow = ccu.low;
-        estimatedHigh = ccu.high;
-        finalMethod = `${method}${ccu.methodSuffix}`;
-        confidenceOverride = ccu.confidenceOverride;
-        ccuPeak = ccu.ccuPeak;
-        ccuRangeLow = ccu.ccuLow;
-        ccuRangeHigh = ccu.ccuHigh;
-        ccuOutcome = ccu.methodSuffix === '+ccu-intersect' ? 'intersect' : 'conflict';
-      }
-
       const profileTag = LAUNCHER_PROFILE_METHOD_TAG[launcherProfile];
       if (profileTag) finalMethod = `${finalMethod}${profileTag}`;
     }
 
-    const baseConfidence =
-      confidenceOverride ??
-      this.resolveConfidence(signalValue, game.releaseDate, cfg);
+    const baseConfidence = this.resolveConfidence(
+      signalValue,
+      game.releaseDate,
+      cfg,
+    );
     const cappedConfidence =
       cfg.platform === Platform.PC
         ? capConfidence(baseConfidence, LAUNCHER_CONFIDENCE_CAP[launcherProfile])
@@ -1003,10 +975,6 @@ export class EstimationService {
         multiplierHigh: high,
         rawLow: Math.round(rawLow),
         rawHigh: Math.round(rawHigh),
-        ccuPeak,
-        ccuRangeLow: ccuRangeLow != null ? Math.round(ccuRangeLow) : null,
-        ccuRangeHigh: ccuRangeHigh != null ? Math.round(ccuRangeHigh) : null,
-        ccuOutcome,
         finalLow: Math.round(estimatedLow),
         finalHigh: Math.round(estimatedHigh),
       });
@@ -1018,82 +986,6 @@ export class EstimationService {
       estimatedHigh: Math.round(estimatedHigh),
       confidence: cappedConfidence,
       method: finalMethod,
-    };
-  }
-
-  /**
-   * Cross-check the PC reviews-based range against a second, independent
-   * estimate derived from the all-time peak concurrent player count
-   * (`STEAM_PEAK_CCU` signal). Returns one of three outcomes:
-   *
-   *  - **No peak yet** (CCU polling just started or app is console-only):
-   *    returns null, the reviews-based range is kept untouched.
-   *  - **Ranges overlap**: returns the intersection, which is a strictly
-   *    tighter range than either signal alone. Method tagged `+ccu-intersect`.
-   *  - **Ranges disagree**: returns the reviews-based range unchanged but
-   *    downgrades confidence to LOW and tags the method `+ccu-conflict`.
-   *    Typical for Game Pass titles (reviews undershoot vs CCU) or live-
-   *    service games where review:player ratios diverge from the catalog
-   *    norm. Surfaces the model uncertainty rather than picking a winner.
-   */
-  private async applyCcuIntersection(
-    gameId: string,
-    reviewsLow: number,
-    reviewsHigh: number,
-    launcherProfile: LauncherProfile,
-    asOf?: Date,
-  ): Promise<{
-    low: number;
-    high: number;
-    methodSuffix: string;
-    confidenceOverride: ConfidenceLevel | null;
-    ccuPeak: number;
-    ccuLow: number;
-    ccuHigh: number;
-  } | null> {
-    // Sort by value DESC (not capturedAt): historical-imported peak rows
-    // carry an old `capturedAt` so the *largest* value is the true current
-    // all-time peak, not the most recently captured one.
-    const peak = await this.signals.findOne({
-      where: {
-        gameId,
-        metric: SignalMetric.STEAM_PEAK_CCU,
-        ...(asOf ? { capturedAt: LessThanOrEqual(asOf) } : {}),
-      },
-      order: { value: 'DESC' },
-    });
-    if (!peak || peak.value <= 0) return null;
-
-    // Same logic as the reviews multiplier: the CCU range assumes Steam
-    // captures all of PC. Scale it up for multi-store / launcher-primary
-    // publishers so the two ranges live in the same "total PC" space and
-    // their intersection is meaningful.
-    const ccuFactor = LAUNCHER_CCU_FACTOR[launcherProfile];
-    const ccuLow = peak.value * PC_CCU_DEFAULT_LOW * ccuFactor.low;
-    const ccuHigh = peak.value * PC_CCU_DEFAULT_HIGH * ccuFactor.high;
-
-    const lo = Math.max(reviewsLow, ccuLow);
-    const hi = Math.min(reviewsHigh, ccuHigh);
-    if (lo <= hi) {
-      return {
-        low: lo,
-        high: hi,
-        methodSuffix: '+ccu-intersect',
-        confidenceOverride: null,
-        ccuPeak: peak.value,
-        ccuLow,
-        ccuHigh,
-      };
-    }
-
-    return {
-      low: reviewsLow,
-      high: reviewsHigh,
-      methodSuffix: '+ccu-conflict',
-      confidenceOverride: ConfidenceLevel.LOW,
-      ccuPeak: peak.value,
-      ccuLow,
-      ccuHigh,
     };
   }
 
@@ -1222,7 +1114,6 @@ export class EstimationService {
     // discriminating than the original size-bucket (×2.68 / ×3.77)
     // heuristic. Games whose genres don't resolve fall back to buckets.
     let projection: number;
-    let projectionTag = '';
     if (genreProfile) {
       projection = genreProjectionMultiplier(
         genreProfile.firstWeekToYearOneMultiplier,
@@ -1230,7 +1121,6 @@ export class EstimationService {
         genreProfile.tailFactorY5,
         age,
       );
-      projectionTag = '+genre';
     } else {
       // Legacy size-bucket path. Kept identical to the pre-genre
       // behaviour so existing estimates don't drift for games we
@@ -1278,7 +1168,7 @@ export class EstimationService {
 
     const launcherTag = LAUNCHER_PROFILE_METHOD_TAG[launcherProfile];
     const reviewsTag = combinedWithReviews ? '+reviews-corrected' : '';
-    const method = `first-week-extrapolation-pc${projectionTag}${reviewsTag}${launcherTag}`;
+    const method = `first-week-extrapolation-pc${reviewsTag}${launcherTag}`;
 
     if (trace) {
       trace.firstWeek.push({

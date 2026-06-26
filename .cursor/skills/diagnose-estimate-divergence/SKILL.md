@@ -138,18 +138,13 @@ Constants from `backend/src/games/sales-modeling.constants.ts`:
 PC  Boxleiter default: [PC_BOXLEITER_DEFAULT_LOW, PC_BOXLEITER_DEFAULT_HIGH]   (25 / 65)
 PS  Boxleiter default: [PS_BOXLEITER_DEFAULT_LOW, PS_BOXLEITER_DEFAULT_HIGH]   (40 / 100)
 Xbox Boxleiter default: [XBOX_BOXLEITER_DEFAULT_LOW, XBOX_BOXLEITER_DEFAULT_HIGH] (35 / 90)
-CCU intersection range: [PC_CCU_DEFAULT_LOW, PC_CCU_DEFAULT_HIGH]              (8 / 40)
 ```
 
-PC Boxleiter pure:
+PC Boxleiter pure (no CCU intersection — peak CCU only feeds the first-week
+lifecycle estimate, see Step 3):
 ```
 reviewsLow/High = latest STEAM_REVIEWS × default{Low,High}
-ccuLow/High     = STEAM_PEAK_CCU (max by value) × [PC_CCU_DEFAULT_LOW, PC_CCU_DEFAULT_HIGH]
-
-intersection lo = max(reviewsLow, ccuLow)
-intersection hi = min(reviewsHigh, ccuHigh)
-if lo ≤ hi → boxleiter-default+ccu-intersect (confidence unchanged)
-else       → boxleiter-default+ccu-conflict  (confidence = LOW, reviews range kept)
+finalLow/High   = reviewsLow/High × launcherReviewsFactor{low,high}
 ```
 
 Console:
@@ -221,9 +216,6 @@ top-down. The fault is always in a **default parameter**, never in
       if calibrated games of this genre consistently land at lower multipliers,
       the default range for that genre needs tightening)
 - [ ] PS/Xbox default Boxleiter range too wide? same logic as PC
-- [ ] CCU intersection bounds (PC_CCU_DEFAULT_LOW/HIGH = 8/40) appropriate?
-      (if the CCU range doesn't overlap with the Boxleiter range → conflict →
-      no constraint applied → high overshoots)
 - [ ] Genre platform shares (pcShare/psShare/xboxShare) realistic?
       (wrong shares skew the console splits and cascade into the total)
 - [ ] Disagreement inflation cascade: large gap between Boxleiter default
@@ -275,7 +267,6 @@ peak(window) = … ; ccuBand = … ; reviews = … ; weekOne = … ; projection(
 firstWeek projected = [low, high]
 
 Boxleiter default: reviews × [defaultLow, defaultHigh] = […, …]
-CCU intersection: [ccuLow, ccuHigh] → <intersect | conflict> → [low, high]
 
 PC aggregate (weighted, disagreement=…, inflate=…%): [low, high]
 PS Boxleiter default: ratings × [defaultLow, defaultHigh] = [low, high]

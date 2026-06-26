@@ -1075,7 +1075,7 @@ export class IngestionService {
    * snapshots dated at 00:00:00 UTC of their day. Re-importing overwrites
    * existing rows in the CSV's date range only (upsert at day
    * granularity). The all-time `STEAM_PEAK_CCU` is refreshed to the CSV's
-   * max when higher, so the Boxleiter CCU intersection uses accurate data.
+   * max when higher, so the first-week lifecycle estimate uses accurate data.
    */
   async importCcuCsv(
     gameId: string,

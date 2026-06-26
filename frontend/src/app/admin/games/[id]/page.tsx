@@ -1164,11 +1164,6 @@ function MethodLegend({ className }: { className?: string }) {
         'Consensus per platform: confidence-weighted blend of every enabled method, widened when methods disagree.',
     },
     {
-      tag: '…+genre',
-      description:
-        'Suffix added when a resolved genre profile drives the projection curve and peak-CCU→week-1 ratio.',
-    },
-    {
       tag: '…-calibrated-{source}',
       description:
         'Multiplier is calibrated from a known sales record (OFFICIAL / ANNOUNCEMENT / MEDIA / WIKIPEDIA). Spread varies with source confidence.',
@@ -1177,11 +1172,6 @@ function MethodLegend({ className }: { className?: string }) {
       tag: '…-default',
       description:
         'No calibrated multiplier: uses the platform default range with a wider spread.',
-    },
-    {
-      tag: '…+ccu',
-      description:
-        'Suffix added when peak concurrent users (Steam CCU) raises or constrains the estimate.',
     },
     {
       tag: '…+launcher-{profile}',

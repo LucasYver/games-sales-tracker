@@ -340,10 +340,9 @@ inflation surfaces the uncertainty rather than hiding it.
 Every `SalesEstimate` row is linked to a canonical method through
 `SalesEstimate.methodId` (FK to `estimation_method.id`). The free-form
 `SalesEstimate.method` string survives for backward compatibility and
-carries dynamic modifier suffixes (`+ccu-intersect`, `+ccu-conflict`,
-`+multi-store`, `+launcher-primary`) that aren't yet first-class
-methods. It will be dropped in a follow-up migration once nothing reads
-it.
+carries dynamic modifier suffixes (`+multi-store`, `+launcher-primary`)
+that aren't yet first-class methods. It will be dropped in a follow-up
+migration once nothing reads it.
 
 ### Method codes (seeded by migration `AddEstimationMethodRegistry`)
 

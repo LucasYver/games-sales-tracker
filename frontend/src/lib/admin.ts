@@ -401,10 +401,6 @@ export interface BoxleiterBreakdownEntry {
   multiplierHigh: number;
   rawLow: number;
   rawHigh: number;
-  ccuPeak: number | null;
-  ccuRangeLow: number | null;
-  ccuRangeHigh: number | null;
-  ccuOutcome: 'intersect' | 'conflict' | null;
   finalLow: number;
   finalHigh: number;
 }
