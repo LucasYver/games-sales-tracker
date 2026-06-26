@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Between, IsNull, LessThanOrEqual, Repository } from 'typeorm';
 import {
   AchievementSnapshot,
-  ConfidenceLevel,
   EstimationMethod,
   Game,
   LauncherProfile,
@@ -23,9 +22,6 @@ import {
   type ResolvedGenreProfile,
 } from '../genres/genres.service';
 import {
-  ACHIEVEMENT_ESTIMATE_MAX_UNITS,
-  ACHIEVEMENT_ESTIMATE_MIN_UNITS,
-  ACHIEVEMENT_MIN_PLAYERS_TRACKED,
   CALIBRATED_MULTIPLIER_SPREAD,
   EXOPHASE_COVERAGE_PC_HIGH,
   EXOPHASE_COVERAGE_PC_LOW,
@@ -42,7 +38,6 @@ import {
   FIRST_WEEK_PEAK_CCU_LOW,
   FIRST_WEEK_PEAK_CCU_WINDOW_DAYS,
   LAUNCHER_CCU_FACTOR,
-  LAUNCHER_CONFIDENCE_CAP,
   LAUNCHER_REVIEWS_FACTOR,
   PC_BOXLEITER_DEFAULT_HIGH,
   PC_BOXLEITER_DEFAULT_LOW,
@@ -61,25 +56,6 @@ import {
   genreProjectionMultiplier,
 } from '../games/sales-modeling.constants';
 
-const CONFIDENCE_ORDER: ConfidenceLevel[] = [
-  ConfidenceLevel.LOW,
-  ConfidenceLevel.MEDIUM,
-  ConfidenceLevel.HIGH,
-];
-
-/**
- * Clamp a confidence level to at most `cap`. Returns `level` unchanged
- * when no cap applies or when it's already below the cap.
- */
-function capConfidence(
-  level: ConfidenceLevel,
-  cap: ConfidenceLevel | null,
-): ConfidenceLevel {
-  if (!cap) return level;
-  const li = CONFIDENCE_ORDER.indexOf(level);
-  const ci = CONFIDENCE_ORDER.indexOf(cap);
-  return li > ci ? cap : level;
-}
 
 const LAUNCHER_PROFILE_METHOD_TAG: Record<LauncherProfile, string> = {
   [LauncherProfile.STEAM_DOMINANT]: '',
@@ -128,17 +104,6 @@ const GLOBAL_SPLIT_MIN_PLATFORM_SHARE = 0.05;
 // observe and tune against.
 const AGGREGATION_DISAGREEMENT_ALPHA = 0.5;
 
-const CONFIDENCE_RANK: Record<ConfidenceLevel, number> = {
-  [ConfidenceLevel.LOW]: 0,
-  [ConfidenceLevel.MEDIUM]: 1,
-  [ConfidenceLevel.HIGH]: 2,
-};
-
-const CONFIDENCE_BY_RANK = [
-  ConfidenceLevel.LOW,
-  ConfidenceLevel.MEDIUM,
-  ConfidenceLevel.HIGH,
-];
 
 /**
  * Knobs to flip estimation into "pure algo" mode. When set,
@@ -164,8 +129,6 @@ export interface BoxleiterBreakdownEntry {
   isCalibrated: boolean;
   multiplierLow: number;
   multiplierHigh: number;
-  rawLow: number;
-  rawHigh: number;
   finalLow: number;
   finalHigh: number;
 }
@@ -267,7 +230,6 @@ export interface EstimateResult {
   platform: Platform;
   estimatedLow: number;
   estimatedHigh: number;
-  confidence: ConfidenceLevel;
   method: string;
 }
 
@@ -396,20 +358,6 @@ export class EstimationService {
     return results;
   }
 
-  /**
-   * Recalibrate (if possible) all per-platform multipliers, then compute and
-   * persist a fresh SalesEstimate row for each platform that has a usable
-   * signal. Returns every persisted estimate.
-   */
-  async computeAndStore(gameId: string): Promise<EstimateResult[]> {
-    await this.recalibrateAll(gameId);
-
-    const results = await this.estimateAllPlatforms(gameId);
-    if (results.length === 0) return [];
-
-    await this.persistEstimates(gameId, results);
-    return results;
-  }
 
   /**
    * Persist estimates as if we had run `computeAndStore` at `asOf`. Unlike
@@ -636,7 +584,6 @@ export class EstimationService {
       platform,
       estimatedLow: aggregate.estimatedLow,
       estimatedHigh: aggregate.estimatedHigh,
-      confidence: aggregate.confidence,
       method: aggregate.method,
       methodId: aggregateMethodId,
       ...(asOf ? { computedAt: asOf } : {}),
@@ -696,7 +643,6 @@ export class EstimationService {
       platform: targetPlatform,
       estimatedLow: low,
       estimatedHigh: high,
-      confidence: sourceAggregate.confidence,
       method: methodCode,
     };
   }
@@ -733,7 +679,6 @@ export class EstimationService {
       platform: result.platform,
       estimatedLow: result.estimatedLow,
       estimatedHigh: result.estimatedHigh,
-      confidence: result.confidence,
       method: result.method,
       methodId: this.resolveMethodId(result.method),
       ...(asOf ? { computedAt: asOf } : {}),
@@ -782,10 +727,8 @@ export class EstimationService {
       );
     if (eligible.length === 0) return null;
 
-    // Blend weight is the static method `defaultWeight` only. Per-game
-    // confidence no longer modulates the weighting — the aggregate range
-    // is driven purely by method weights and the genre-profile ratios.
-    // Confidence is still reported (lowest contributor) for display.
+    // Blend weight is the static method `defaultWeight` only.
+    // The aggregate range is driven purely by method weights and the genre-profile ratios.
     const methodWeight = (entry: {
       result: EstimateResult;
       method: EstimationMethod;
@@ -798,7 +741,6 @@ export class EstimationService {
     let weightedHigh = 0;
     let minMid = Infinity;
     let maxMid = -Infinity;
-    let lowestConfidenceRank = Infinity;
 
     for (const entry of eligible) {
       const { result } = entry;
@@ -808,8 +750,6 @@ export class EstimationService {
       const mid = (result.estimatedLow + result.estimatedHigh) / 2;
       if (mid < minMid) minMid = mid;
       if (mid > maxMid) maxMid = mid;
-      const rank = CONFIDENCE_RANK[result.confidence];
-      if (rank < lowestConfidenceRank) lowestConfidenceRank = rank;
     }
     weightedLow /= totalWeight;
     weightedHigh /= totalWeight;
@@ -842,10 +782,6 @@ export class EstimationService {
       platform: eligible[0].result.platform,
       estimatedLow: Math.round(aggLow),
       estimatedHigh: Math.round(aggHigh),
-      confidence:
-        CONFIDENCE_BY_RANK[
-          Number.isFinite(lowestConfidenceRank) ? lowestConfidenceRank : 0
-        ],
       method: AGGREGATED_METHOD_CODE,
     };
   }
@@ -898,6 +834,7 @@ export class EstimationService {
         ? (game.publisherRecord?.launcherProfile ??
           LauncherProfile.STEAM_DOMINANT)
         : LauncherProfile.STEAM_DOMINANT;
+    
 
     // Per-game calibration (from a declared OFFICIAL/MEDIA figure) has
     // already absorbed the launcher effect empirically — applying the
@@ -908,26 +845,14 @@ export class EstimationService {
         ? LAUNCHER_REVIEWS_FACTOR[launcherProfile]
         : { low: 1, high: 1 };
 
-    const rawLow = signalValue * low * reviewsScale.low;
-    const rawHigh = signalValue * high * reviewsScale.high;
-    const estimatedLow = rawLow;
-    const estimatedHigh = rawHigh;
+    const estimatedLow = signalValue * low * reviewsScale.low;
+    const estimatedHigh = signalValue * high * reviewsScale.high;
     let finalMethod = method;
 
     if (cfg.platform === Platform.PC) {
       const profileTag = LAUNCHER_PROFILE_METHOD_TAG[launcherProfile];
       if (profileTag) finalMethod = `${finalMethod}${profileTag}`;
     }
-
-    const baseConfidence = this.resolveConfidence(
-      signalValue,
-      game.releaseDate,
-      cfg,
-    );
-    const cappedConfidence =
-      cfg.platform === Platform.PC
-        ? capConfidence(baseConfidence, LAUNCHER_CONFIDENCE_CAP[launcherProfile])
-        : baseConfidence;
 
     if (trace) {
       trace.boxleiter.push({
@@ -943,8 +868,6 @@ export class EstimationService {
         isCalibrated,
         multiplierLow: low,
         multiplierHigh: high,
-        rawLow: Math.round(rawLow),
-        rawHigh: Math.round(rawHigh),
         finalLow: Math.round(estimatedLow),
         finalHigh: Math.round(estimatedHigh),
       });
@@ -954,16 +877,13 @@ export class EstimationService {
       platform: cfg.platform,
       estimatedLow: Math.round(estimatedLow),
       estimatedHigh: Math.round(estimatedHigh),
-      confidence: cappedConfidence,
       method: finalMethod,
     };
   }
 
   /**
    * Lifecycle estimate (PC): derive week-1 units from the all-time
-   * Steam peak CCU, then project to "today" via a degressive curve that
-   * bumps year-1 to either 2.68× (large launches, > 100k week-1) or
-   * 3.77× (small launches) the week-1 baseline.
+   * Steam peak CCU, then project to "today" via a degressive curve
    *
    * Eligibility:
    *   - Game has a `releaseDate` and is past day 1.
@@ -1071,22 +991,6 @@ export class EstimationService {
       return null;
     }
 
-    // Confidence floor: very recent releases get LOW (peak hasn't
-    // matured yet). The peak-CCU signal alone never reaches HIGH — it is
-    // capped at MEDIUM and further reduced by the launcher profile.
-    let baseConfidence: ConfidenceLevel;
-    if (age < RECENT_RELEASE_DAYS) {
-      baseConfidence = ConfidenceLevel.LOW;
-    } else if (peak.value >= 10_000) {
-      baseConfidence = ConfidenceLevel.MEDIUM;
-    } else {
-      baseConfidence = ConfidenceLevel.LOW;
-    }
-    const cappedConfidence = capConfidence(
-      baseConfidence,
-      LAUNCHER_CONFIDENCE_CAP[launcherProfile],
-    );
-
     const launcherTag = LAUNCHER_PROFILE_METHOD_TAG[launcherProfile];
     const method = `first-week-extrapolation-pc${launcherTag}`;
 
@@ -1112,7 +1016,6 @@ export class EstimationService {
       platform: Platform.PC,
       estimatedLow: projectedLow,
       estimatedHigh: projectedHigh,
-      confidence: cappedConfidence,
       method,
     };
   }
@@ -1286,29 +1189,6 @@ export class EstimationService {
     }
   }
 
-  private resolveConfidence(
-    signalValue: number,
-    releaseDate: Date | null,
-    cfg: PlatformConfig,
-  ): ConfidenceLevel {
-    if (releaseDate) {
-      const daysSinceRelease =
-        (Date.now() - releaseDate.getTime()) / (1000 * 60 * 60 * 24);
-      if (daysSinceRelease >= 0 && daysSinceRelease < RECENT_RELEASE_DAYS) {
-        return ConfidenceLevel.LOW;
-      }
-    }
-
-    // Steam reviews are dense — thresholds 50/500. Console store ratings are
-    // sparser by an order of magnitude, so we relax the bands: 10/100 ratings.
-    const isSteam = cfg.signalMetric === SignalMetric.STEAM_REVIEWS;
-    const lowCutoff = isSteam ? 50 : 10;
-    const highCutoff = isSteam ? 500 : 100;
-
-    if (signalValue < lowCutoff) return ConfidenceLevel.LOW;
-    if (signalValue < highCutoff) return ConfidenceLevel.MEDIUM;
-    return ConfidenceLevel.HIGH;
-  }
 
   // ───── estimate breakdown (diagnostic) ──────────────────────────────────
 

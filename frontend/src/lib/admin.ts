@@ -397,8 +397,6 @@ export interface BoxleiterBreakdownEntry {
   isCalibrated: boolean;
   multiplierLow: number;
   multiplierHigh: number;
-  rawLow: number;
-  rawHigh: number;
   finalLow: number;
   finalHigh: number;
 }

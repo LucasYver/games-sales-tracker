@@ -6,7 +6,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { ConfidenceLevel, Platform } from './enums';
+import { Platform } from './enums';
 import { EstimationMethod } from './estimation-method.entity';
 import { Game } from './game.entity';
 
@@ -28,9 +28,6 @@ export class SalesEstimate {
 
   @Column('int')
   estimatedHigh: number;
-
-  @Column({ type: 'enum', enum: ConfidenceLevel })
-  confidence: ConfidenceLevel;
 
   // Canonical method this estimate was produced by, looked up by `code`
   // in `estimation_method`. The legacy free-form `method` string below

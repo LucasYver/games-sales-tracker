@@ -924,7 +924,7 @@ export class GamesService {
         low: estimate.estimatedLow,
         high: estimate.estimatedHigh,
         source: 'ESTIMATE',
-        confidence: estimate.confidence,
+        confidence: null,
         sourceUrl: null,
         agreement: null,
       });

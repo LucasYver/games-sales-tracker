@@ -58,7 +58,7 @@ function BoxleiterRow({ entry }: { entry: BoxleiterBreakdownEntry }) {
         )}
         <span>=</span>
         <span className="text-foreground font-mono tabular-nums">
-          {fmtRange(entry.rawLow, entry.rawHigh)}
+          {fmtRange(entry.finalLow, entry.finalHigh)}
         </span>
       </div>
     </div>
