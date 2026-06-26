@@ -82,10 +82,8 @@ export interface AdminGameSummary {
   calibrationSourcePc: SalesSource | null;
   calibrationSourcePs: SalesSource | null;
   calibrationSourceXbox: SalesSource | null;
-  milestonesCount: number;
-  estimatesCount: number;
-  latestReviews: number | null;
-  latestReviewsAt: Date | null;
+  hasMilestone: boolean;
+  hasEstimate: boolean;
   lastRefreshedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -122,6 +120,10 @@ export interface AdminEstimateSnapshot {
 }
 
 export interface AdminGameDetail extends AdminGameSummary {
+  milestonesCount: number;
+  estimatesCount: number;
+  latestReviews: number | null;
+  latestReviewsAt: Date | null;
   igdbId: number | null;
   coverUrl: string | null;
   summary: string | null;
@@ -333,7 +335,7 @@ export class AdminService {
     genreProfileId?: string;
     calibrated?: boolean;
     hasEstimates?: boolean;
-    sort?: 'updated' | 'reviews' | 'releaseDate' | 'lastRefreshed';
+    sort?: 'updated' | 'releaseDate' | 'lastRefreshed';
     direction?: 'asc' | 'desc';
     offset?: number;
     limit?: number;
@@ -346,13 +348,56 @@ export class AdminService {
       'OR g.calibratedPsMultiplier IS NOT NULL ' +
       'OR g.calibratedXboxMultiplier IS NOT NULL';
 
+    // Existence is checked via correlated EXISTS subqueries instead of
+    // joining + aggregating the milestone/estimate rows. The previous
+    // multi-join + GROUP BY produced a cartesian fan-out (tens of millions
+    // of intermediate rows for the busiest games), which made this query
+    // take minutes. EXISTS short-circuits on the per-game indexes.
+    const hasMilestoneExpr =
+      'EXISTS (SELECT 1 FROM milestone m ' +
+      'WHERE m."gameId" = g.id AND m."rejectedAt" IS NULL)';
+    const hasEstimateExpr =
+      'EXISTS (SELECT 1 FROM sales_estimate e WHERE e."gameId" = g.id)';
+
+    const applyFilters = (
+      builder: ReturnType<typeof this.games.createQueryBuilder>,
+    ) => {
+      if (opts.q && opts.q.trim()) {
+        builder.andWhere('g.name ILIKE :q', { q: `%${opts.q.trim()}%` });
+      }
+      if (opts.platform) {
+        builder.andWhere(
+          'g.platforms @> ARRAY[:platform]::game_platforms_enum[]',
+          { platform: opts.platform },
+        );
+      }
+      if (opts.genreProfileId === 'none') {
+        builder.andWhere('g.genreProfileId IS NULL');
+      } else if (opts.genreProfileId) {
+        builder.andWhere('g.genreProfileId = :gpid', {
+          gpid: opts.genreProfileId,
+        });
+      }
+      if (opts.calibrated === true) {
+        builder.andWhere(`(${calibratedExpr})`);
+      } else if (opts.calibrated === false) {
+        builder.andWhere(`NOT (${calibratedExpr})`);
+      }
+      if (opts.hasSales === true) {
+        builder.andWhere(hasMilestoneExpr);
+      } else if (opts.hasSales === false) {
+        builder.andWhere(`NOT ${hasMilestoneExpr}`);
+      }
+      if (opts.hasEstimates === true) {
+        builder.andWhere(hasEstimateExpr);
+      } else if (opts.hasEstimates === false) {
+        builder.andWhere(`NOT ${hasEstimateExpr}`);
+      }
+      return builder;
+    };
+
     const qb = this.games
       .createQueryBuilder('g')
-      .leftJoin('g.signals', 's', 's.metric = :metric', {
-        metric: SignalMetric.STEAM_REVIEWS,
-      })
-      .leftJoin('g.milestones', 'm', 'm.rejectedAt IS NULL')
-      .leftJoin('g.estimates', 'e')
       .select([
         'g.id AS id',
         'g.name AS name',
@@ -370,74 +415,17 @@ export class AdminService {
         'g.createdAt AS "createdAt"',
         'g.updatedAt AS "updatedAt"',
       ])
-      .addSelect('COUNT(DISTINCT m.id)', 'milestonesCount')
-      .addSelect('COUNT(DISTINCT e.id)', 'estimatesCount')
-      .addSelect('MAX(s.value)', 'latestReviews')
-      .addSelect('MAX(s.capturedAt)', 'latestReviewsAt')
-      .groupBy('g.id');
+      .addSelect(hasMilestoneExpr, 'hasMilestone')
+      .addSelect(hasEstimateExpr, 'hasEstimate');
+    applyFilters(qb);
 
-    if (opts.q && opts.q.trim()) {
-      qb.andWhere('g.name ILIKE :q', { q: `%${opts.q.trim()}%` });
-    }
-    if (opts.platform) {
-      qb.andWhere(
-        'g.platforms @> ARRAY[:platform]::game_platforms_enum[]',
-        { platform: opts.platform },
-      );
-    }
-    if (opts.genreProfileId === 'none') {
-      qb.andWhere('g.genreProfileId IS NULL');
-    } else if (opts.genreProfileId) {
-      qb.andWhere('g.genreProfileId = :gpid', { gpid: opts.genreProfileId });
-    }
-    if (opts.calibrated === true) {
-      qb.andWhere(`(${calibratedExpr})`);
-    } else if (opts.calibrated === false) {
-      qb.andWhere(`NOT (${calibratedExpr})`);
-    }
-    if (opts.hasSales === true) {
-      qb.andHaving('COUNT(DISTINCT m.id) > 0');
-    } else if (opts.hasSales === false) {
-      qb.andHaving('COUNT(DISTINCT m.id) = 0');
-    }
-    if (opts.hasEstimates === true) {
-      qb.andHaving('COUNT(DISTINCT e.id) > 0');
-    } else if (opts.hasEstimates === false) {
-      qb.andHaving('COUNT(DISTINCT e.id) = 0');
-    }
-
-    const countQb = this.games.createQueryBuilder('g');
-    if (opts.q && opts.q.trim()) {
-      countQb.andWhere('g.name ILIKE :q', { q: `%${opts.q.trim()}%` });
-    }
-    if (opts.platform) {
-      countQb.andWhere(
-        'g.platforms @> ARRAY[:platform]::game_platforms_enum[]',
-        { platform: opts.platform },
-      );
-    }
-    if (opts.genreProfileId === 'none') {
-      countQb.andWhere('g.genreProfileId IS NULL');
-    } else if (opts.genreProfileId) {
-      countQb.andWhere('g.genreProfileId = :gpid', {
-        gpid: opts.genreProfileId,
-      });
-    }
-    if (opts.calibrated === true) {
-      countQb.andWhere(`(${calibratedExpr})`);
-    } else if (opts.calibrated === false) {
-      countQb.andWhere(`NOT (${calibratedExpr})`);
-    }
-    // hasSales / hasEstimates filters don't influence total here since we
-    // don't replicate the HAVING; admin-table totals are approximate when
-    // either of those filters is on.
+    const countQb = applyFilters(this.games.createQueryBuilder('g'));
 
     const direction = opts.direction === 'asc' ? 'ASC' : 'DESC';
-    // NULLS LAST keeps games missing the sorted attribute (no reviews / no
-    // release date / never refreshed) at the bottom regardless of direction.
+    // NULLS LAST keeps games missing the sorted attribute (no release date /
+    // never refreshed) at the bottom regardless of direction.
     const SORT_EXPR: Record<string, string> = {
       updated: 'g.updatedAt',
-      reviews: 'MAX(s.value)',
       releaseDate: 'g.releaseDate',
       lastRefreshed: 'g.lastRefreshedAt',
     };
@@ -463,10 +451,8 @@ export class AdminService {
         lastRefreshedAt: Date | null;
         createdAt: Date;
         updatedAt: Date;
-        milestonesCount: string;
-        estimatesCount: string;
-        latestReviews: string | null;
-        latestReviewsAt: Date | null;
+        hasMilestone: boolean;
+        hasEstimate: boolean;
       }>();
 
     const total = await countQb.getCount();
@@ -491,10 +477,8 @@ export class AdminService {
       calibrationSourcePc: r.calibrationSourcePc,
       calibrationSourcePs: r.calibrationSourcePs,
       calibrationSourceXbox: r.calibrationSourceXbox,
-      milestonesCount: Number(r.milestonesCount ?? 0),
-      estimatesCount: Number(r.estimatesCount ?? 0),
-      latestReviews: r.latestReviews == null ? null : Number(r.latestReviews),
-      latestReviewsAt: r.latestReviewsAt,
+      hasMilestone: Boolean(r.hasMilestone),
+      hasEstimate: Boolean(r.hasEstimate),
       lastRefreshedAt: r.lastRefreshedAt,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
@@ -585,6 +569,8 @@ export class AdminService {
       calibrationSourcePc: game.calibrationSourcePc,
       calibrationSourcePs: game.calibrationSourcePs,
       calibrationSourceXbox: game.calibrationSourceXbox,
+      hasMilestone: visibleMilestones.length > 0,
+      hasEstimate: game.estimates.length > 0,
       milestonesCount: visibleMilestones.length,
       estimatesCount: game.estimates.length,
       latestReviews: latestReviews?.value ?? null,

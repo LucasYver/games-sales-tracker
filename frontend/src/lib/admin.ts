@@ -95,10 +95,8 @@ export interface AdminGameSummary {
   calibrationSourcePc: SalesSource | null;
   calibrationSourcePs: SalesSource | null;
   calibrationSourceXbox: SalesSource | null;
-  milestonesCount: number;
-  estimatesCount: number;
-  latestReviews: number | null;
-  latestReviewsAt: string | null;
+  hasMilestone: boolean;
+  hasEstimate: boolean;
   lastRefreshedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -229,6 +227,10 @@ export interface AdminPublisherDetail extends AdminPublisherSummary {
 }
 
 export interface AdminGameDetail extends AdminGameSummary {
+  milestonesCount: number;
+  estimatesCount: number;
+  latestReviews: number | null;
+  latestReviewsAt: string | null;
   igdbId: number | null;
   coverUrl: string | null;
   summary: string | null;

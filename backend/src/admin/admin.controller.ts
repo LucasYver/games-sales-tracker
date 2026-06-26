@@ -74,11 +74,7 @@ export class AdminController {
             ? false
             : undefined,
       sort:
-        sort === 'reviews' ||
-        sort === 'releaseDate' ||
-        sort === 'lastRefreshed'
-          ? sort
-          : undefined,
+        sort === 'releaseDate' || sort === 'lastRefreshed' ? sort : undefined,
       direction: direction === 'asc' ? 'asc' : undefined,
       offset: offset ? Number(offset) : undefined,
       limit: limit ? Number(limit) : undefined,

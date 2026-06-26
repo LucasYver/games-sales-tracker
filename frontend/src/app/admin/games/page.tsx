@@ -262,16 +262,8 @@ export default async function AdminGamesPage({
                 direction={direction}
                 filters={filters}
               />
-              <SortableHead
-                column="reviews"
-                label="Reviews"
-                align="right"
-                sort={sort}
-                direction={direction}
-                filters={filters}
-              />
-              <TableHead className="text-right">Milestones</TableHead>
-              <TableHead className="text-right">Estimates</TableHead>
+              <TableHead className="text-right">Milestone</TableHead>
+              <TableHead className="text-right">Estimate</TableHead>
               <TableHead className="text-right">Calibrated</TableHead>
               <SortableHead
                 column="lastRefreshed"
@@ -312,14 +304,11 @@ export default async function AdminGamesPage({
                 <TableCell className="text-muted-foreground text-sm">
                   {formatDate(g.releaseDate)}
                 </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {g.latestReviews?.toLocaleString() ?? '—'}
+                <TableCell className="text-right">
+                  {g.hasMilestone ? 'Yes' : '—'}
                 </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {g.milestonesCount}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {g.estimatesCount}
+                <TableCell className="text-right">
+                  {g.hasEstimate ? 'Yes' : '—'}
                 </TableCell>
                 <TableCell className="text-right text-xs tabular-nums">
                   {[
@@ -352,7 +341,7 @@ export default async function AdminGamesPage({
             {items.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={9}
+                  colSpan={8}
                   className="text-muted-foreground py-12 text-center"
                 >
                   No games match these filters.
