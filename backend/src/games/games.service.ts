@@ -554,6 +554,7 @@ export class GamesService {
       milestones,
       estimates,
       game.releaseDate,
+      asOf,
     );
 
     if (!estimatedToday) return;
@@ -876,6 +877,7 @@ export class GamesService {
     milestones: Milestone[],
     estimates: Map<Platform, SalesEstimate>,
     releaseDate: Date | null,
+    asOf?: Date,
   ): {
     breakdown: PlatformSales[];
     total: TotalSales | null;
@@ -903,6 +905,7 @@ export class GamesService {
       estimates,
       bestGlobal,
       releaseDate,
+      asOf,
     );
     // Headline-level cross-check: how the Boxleiter-derived "today" estimate
     // sits relative to the most reliable global declared figure. Used to
@@ -951,6 +954,7 @@ export class GamesService {
     estimates: Map<Platform, SalesEstimate>,
     globalDeclared: Milestone | null,
     releaseDate: Date | null,
+    asOf?: Date,
   ): {
     reconciliation: ReconciliationEntry[];
     estimatedToday: { low: number; high: number } | null;
@@ -993,7 +997,7 @@ export class GamesService {
       let high: number | null = null;
 
       if (declared && estimate) {
-        const cap = this.freshnessCap(declared, releaseDate);
+        const cap = this.freshnessCap(declared, releaseDate, asOf);
         low = Math.max(declared.units, Math.min(estimate.estimatedLow, cap));
         high = Math.max(declared.units, Math.min(estimate.estimatedHigh, cap));
 
@@ -1002,6 +1006,7 @@ export class GamesService {
           declared.reportedAt,
           estimate.estimatedLow,
           estimate.estimatedHigh,
+          asOf,
         );
         reconciliation.push({
           platform,
@@ -1045,7 +1050,7 @@ export class GamesService {
     // a freshness-aware cap (no 3.5x in 3 days). It's also surfaced as an
     // explicit reconciliation entry so the user sees the headline cross-check.
     if (globalDeclared && hasToday) {
-      const cap = this.freshnessCap(globalDeclared, releaseDate);
+      const cap = this.freshnessCap(globalDeclared, releaseDate, asOf);
       todayLow = Math.max(globalDeclared.units, Math.min(todayLow, cap));
       todayHigh = Math.max(globalDeclared.units, Math.min(todayHigh, cap));
 
@@ -1054,6 +1059,7 @@ export class GamesService {
         globalDeclared.reportedAt,
         todayLow,
         todayHigh,
+        asOf,
       );
       reconciliation.push({
         platform: Platform.GLOBAL,
@@ -1107,6 +1113,7 @@ export class GamesService {
   private freshnessCap(
     declared: Milestone,
     releaseDate: Date | null,
+    asOf: Date = new Date(),
   ): number {
     if (!declared.reportedAt) return Number.POSITIVE_INFINITY;
 
@@ -1114,7 +1121,7 @@ export class GamesService {
       const declaredPct = lifetimeSalesPct(
         ageInDays(releaseDate, declared.reportedAt),
       );
-      const todayPct = lifetimeSalesPct(ageInDays(releaseDate));
+      const todayPct = lifetimeSalesPct(ageInDays(releaseDate, asOf));
 
       // Pre-release declared shouldn't happen; fall through to the time-based
       // formula in that case.
@@ -1127,7 +1134,7 @@ export class GamesService {
       }
     }
 
-    const ageYears = Math.max(0, ageInYears(declared.reportedAt));
+    const ageYears = Math.max(0, ageInYears(declared.reportedAt, asOf));
     if (ageYears >= FALLBACK_GROWTH_CAP_YEARS) return Number.POSITIVE_INFINITY;
     return declared.units * (1 + FALLBACK_ANNUAL_GROWTH * ageYears);
   }
@@ -1143,6 +1150,7 @@ export class GamesService {
     declaredAt: Date | null,
     estLow: number,
     estHigh: number,
+    asOf: Date = new Date(),
   ): { agreement: Agreement; ratio: number; detail: string } {
     const mid = (estLow + estHigh) / 2;
     const ratio = declared > 0 ? mid / declared : 0;
@@ -1174,7 +1182,7 @@ export class GamesService {
 
     // declared < estLow: we estimate more than was ever declared. Plausible if
     // the figure is old; relax the threshold with its age.
-    const ageYears = declaredAt ? Math.max(0, ageInYears(declaredAt)) : 0;
+    const ageYears = declaredAt ? Math.max(0, ageInYears(declaredAt, asOf)) : 0;
     const growthBudget = 1 + AGREEMENT_GROWTH_PER_YEAR * ageYears;
     const over = declared > 0 ? estLow / declared : Infinity;
 
