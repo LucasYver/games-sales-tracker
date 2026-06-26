@@ -9,7 +9,6 @@ import {
   type AdminGenreIgdbSyncResult,
   type AdminGenreProfile,
   type AdminGenreRow,
-  type GenreConfidence,
   type LauncherProfile,
   type SalesSource,
   type Year2Retention,
@@ -158,6 +157,27 @@ export async function importCcuCsv(
   return result;
 }
 
+export interface ImportReviewsCsvResult {
+  daysImported: number;
+  rowsParsed: number;
+  rangeStart: string | null;
+  rangeEnd: string | null;
+  latestTotal: number;
+  latestRating: number | null;
+}
+
+export async function importReviewsCsv(
+  id: string,
+  csv: string,
+): Promise<ImportReviewsCsvResult> {
+  const result = await adminFetch<ImportReviewsCsvResult>(
+    `/games/${id}/import-reviews-csv`,
+    { method: 'POST', body: JSON.stringify({ csv }) },
+  );
+  revalidatePath(`/admin/games/${id}`);
+  return result;
+}
+
 export async function deleteMilestone(id: string): Promise<void> {
   await adminFetch(`/milestones/${id}`, { method: 'DELETE' });
   revalidatePath('/admin/milestones');
@@ -221,7 +241,6 @@ export interface UpdateGenreProfilePayload {
   xboxShare?: number;
   switchShare?: number;
   leanLabel?: string | null;
-  confidence?: GenreConfidence;
   lifecycleIndex?: number;
   firstWeekToYearOneMultiplier?: number;
   year2Retention?: Year2Retention;

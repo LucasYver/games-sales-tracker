@@ -41,9 +41,6 @@ import {
   FIRST_WEEK_PEAK_CCU_HIGH,
   FIRST_WEEK_PEAK_CCU_LOW,
   FIRST_WEEK_PEAK_CCU_WINDOW_DAYS,
-  FIRST_WEEK_REVIEWS_HIGH,
-  FIRST_WEEK_REVIEWS_LOW,
-  FIRST_WEEK_REVIEWS_WINDOW_DAYS,
   LAUNCHER_CCU_FACTOR,
   LAUNCHER_CONFIDENCE_CAP,
   LAUNCHER_REVIEWS_FACTOR,
@@ -137,23 +134,6 @@ const CONFIDENCE_RANK: Record<ConfidenceLevel, number> = {
   [ConfidenceLevel.HIGH]: 2,
 };
 
-// Multiplier applied on top of a method's `defaultWeight` in the
-// aggregate, based on the confidence that method produced for THIS
-// game. A method anchored on a reliable declared figure (HIGH, e.g.
-// calibrated Boxleiter) should outweigh a rougher lifecycle proxy
-// (MEDIUM) even when the latter has a higher static `defaultWeight`.
-//
-// Key property: when every contributor shares the same confidence the
-// factor cancels out in the weighted average, so single-confidence
-// platforms (the common case) behave exactly as before — only
-// MIXED-confidence aggregates shift. Tunable; the gap between tiers
-// controls how strongly we defer to the most trustworthy method.
-const AGGREGATION_CONFIDENCE_WEIGHT: Record<ConfidenceLevel, number> = {
-  [ConfidenceLevel.LOW]: 0.3,
-  [ConfidenceLevel.MEDIUM]: 0.55,
-  [ConfidenceLevel.HIGH]: 1.0,
-};
-
 const CONFIDENCE_BY_RANK = [
   ConfidenceLevel.LOW,
   ConfidenceLevel.MEDIUM,
@@ -197,9 +177,6 @@ export interface FirstWeekBreakdownEntry {
   launchPeakCapturedAt: string;
   ccuRatioLow: number;
   ccuRatioHigh: number;
-  weekOneFromCcuLow: number;
-  weekOneFromCcuHigh: number;
-  reviewsAtLaunch: number | null;
   weekOneFinalLow: number;
   weekOneFinalHigh: number;
   ageDays: number;
@@ -212,8 +189,6 @@ export interface FirstWeekBreakdownEntry {
 export interface WeightedEntry {
   method: string;
   weight: number;
-  confWeight: number;
-  effectiveWeight: number;
 }
 
 export interface PlatformBreakdownResult {
@@ -681,10 +656,8 @@ export class EstimationService {
    * `Platform` enum doesn't include Switch (no reliable sales signal
    * either way), and folding it elsewhere would double-count nothing.
    *
-   * Confidence is clamped to MEDIUM (the ventilation is a structural
-   * model, never as trustworthy as a calibrated rating signal on the
-   * platform itself) and further bounded by the profile's own
-   * confidence.
+   * Confidence is inherited as-is from the source aggregate (no extra
+   * capping).
    */
   private async computeGenreSplit(
     gameId: string,
@@ -695,7 +668,12 @@ export class EstimationService {
   ): Promise<EstimateResult | null> {
     const game = await this.games.findOne({
       where: { id: gameId },
-      select: { id: true, genres: true, platforms: true },
+      select: {
+        id: true,
+        genres: true,
+        platforms: true,
+        genreProfileId: true,
+      },
     });
     if (!game) return null;
 
@@ -714,16 +692,11 @@ export class EstimationService {
     const high = Math.round(sourceAggregate.estimatedHigh * ratio);
     if (high <= 0 || low > high) return null;
 
-    const confidence = capConfidence(
-      capConfidence(sourceAggregate.confidence, ConfidenceLevel.MEDIUM),
-      profile.confidence,
-    );
-
     return {
       platform: targetPlatform,
       estimatedLow: low,
       estimatedHigh: high,
-      confidence,
+      confidence: sourceAggregate.confidence,
       method: methodCode,
     };
   }
@@ -809,17 +782,16 @@ export class EstimationService {
       );
     if (eligible.length === 0) return null;
 
-    // Effective weight = static method weight × per-game confidence
-    // factor, so a HIGH-confidence calibrated method dominates a
-    // rougher MEDIUM lifecycle proxy regardless of `defaultWeight`.
-    const effectiveWeight = (entry: {
+    // Blend weight is the static method `defaultWeight` only. Per-game
+    // confidence no longer modulates the weighting — the aggregate range
+    // is driven purely by method weights and the genre-profile ratios.
+    // Confidence is still reported (lowest contributor) for display.
+    const methodWeight = (entry: {
       result: EstimateResult;
       method: EstimationMethod;
-    }): number =>
-      Number(entry.method.defaultWeight) *
-      AGGREGATION_CONFIDENCE_WEIGHT[entry.result.confidence];
+    }): number => Number(entry.method.defaultWeight);
 
-    const totalWeight = eligible.reduce((sum, e) => sum + effectiveWeight(e), 0);
+    const totalWeight = eligible.reduce((sum, e) => sum + methodWeight(e), 0);
     if (totalWeight <= 0) return null;
 
     let weightedLow = 0;
@@ -830,7 +802,7 @@ export class EstimationService {
 
     for (const entry of eligible) {
       const { result } = entry;
-      const weight = effectiveWeight(entry);
+      const weight = methodWeight(entry);
       weightedLow += result.estimatedLow * weight;
       weightedHigh += result.estimatedHigh * weight;
       const mid = (result.estimatedLow + result.estimatedHigh) / 2;
@@ -855,8 +827,6 @@ export class EstimationService {
         weightedEntries: eligible.map((entry) => ({
           method: entry.result.method,
           weight: Number(entry.method.defaultWeight),
-          confWeight: AGGREGATION_CONFIDENCE_WEIGHT[entry.result.confidence],
-          effectiveWeight: effectiveWeight(entry),
         })),
         totalWeight,
         weightedLow: Math.round(weightedLow),
@@ -991,8 +961,7 @@ export class EstimationService {
 
   /**
    * Lifecycle estimate (PC): derive week-1 units from the all-time
-   * Steam peak CCU — and reviews captured close to launch when
-   * available — then project to "today" via a degressive curve that
+   * Steam peak CCU, then project to "today" via a degressive curve that
    * bumps year-1 to either 2.68× (large launches, > 100k week-1) or
    * 3.77× (small launches) the week-1 baseline.
    *
@@ -1002,21 +971,9 @@ export class EstimationService {
    *     `value DESC` because the historical-import path writes peaks
    *     with the SteamCharts month of the peak as `capturedAt`).
    *
-   * When a `STEAM_REVIEWS` snapshot was captured within ±
-   * `FIRST_WEEK_REVIEWS_WINDOW_DAYS` of `releaseDate + 7 days`, we
-   * average its derived week-1 band with the peak-CCU band — using the
-   * midpoint average and the widest spread of the two as a
-   * defensive-uncertainty floor. The method tag flips from
-   * `first-week-extrapolation-pc` to
-   * `first-week-extrapolation-pc+reviews-corrected` so admins can tell
-   * the two combos apart in the time series.
-   *
-   * Launcher profile scaling (multi-store / launcher-primary) is
-   * applied to both the CCU and reviews inputs since both are Steam-
-   * captured — they share the same "Steam → total PC" correction. We
-   * skip the scaling for calibrated-equivalent games (none today, but
-   * mirrors the Boxleiter behaviour so a future LIFECYCLE calibration
-   * would slot in cleanly).
+   * Launcher profile scaling (multi-store / launcher-primary) is applied
+   * to the CCU input since the peak is Steam-captured — it shares the
+   * same "Steam → total PC" correction as the Boxleiter reviews signal.
    */
   private async estimateFirstWeekExtrapolationForPc(
     game: Game,
@@ -1032,7 +989,6 @@ export class EstimationService {
     const launcherProfile =
       game.publisherRecord?.launcherProfile ?? LauncherProfile.STEAM_DOMINANT;
     const ccuScale = LAUNCHER_CCU_FACTOR[launcherProfile];
-    const reviewsScale = LAUNCHER_REVIEWS_FACTOR[launcherProfile];
 
     // Week-1 peak only: the largest daily CCU captured in the 7 days
     // following release. A later all-time peak (sale, DLC, F2P switch)
@@ -1070,40 +1026,8 @@ export class EstimationService {
       ? genreProfile.peakCcuToWeekOneHigh
       : FIRST_WEEK_PEAK_CCU_HIGH;
 
-    const weekOneFromCcuLow = peak.value * ccuRatioLow * ccuScale.low;
-    const weekOneFromCcuHigh = peak.value * ccuRatioHigh * ccuScale.high;
-
-    const reviewsAtLaunch = await this.findReviewsNearLaunch(
-      game.id,
-      game.releaseDate,
-      asOf,
-    );
-    let weekOneLow = weekOneFromCcuLow;
-    let weekOneHigh = weekOneFromCcuHigh;
-    let combinedWithReviews = false;
-    if (reviewsAtLaunch && reviewsAtLaunch > 0) {
-      const weekOneFromReviewsLow =
-        reviewsAtLaunch * FIRST_WEEK_REVIEWS_LOW * reviewsScale.low;
-      const weekOneFromReviewsHigh =
-        reviewsAtLaunch * FIRST_WEEK_REVIEWS_HIGH * reviewsScale.high;
-
-      const ccuMid = (weekOneFromCcuLow + weekOneFromCcuHigh) / 2;
-      const reviewsMid =
-        (weekOneFromReviewsLow + weekOneFromReviewsHigh) / 2;
-      const combinedMid = (ccuMid + reviewsMid) / 2;
-
-      // Keep the widest spread of the two inputs so the combined
-      // uncertainty never narrows past what either signal alone
-      // tolerates.
-      const ccuHalfSpread = (weekOneFromCcuHigh - weekOneFromCcuLow) / 2;
-      const reviewsHalfSpread =
-        (weekOneFromReviewsHigh - weekOneFromReviewsLow) / 2;
-      const halfSpread = Math.max(ccuHalfSpread, reviewsHalfSpread);
-
-      weekOneLow = Math.max(0, combinedMid - halfSpread);
-      weekOneHigh = combinedMid + halfSpread;
-      combinedWithReviews = true;
-    }
+    const weekOneLow = peak.value * ccuRatioLow * ccuScale.low;
+    const weekOneHigh = peak.value * ccuRatioHigh * ccuScale.high;
 
     const weekOneMid = (weekOneLow + weekOneHigh) / 2;
 
@@ -1147,15 +1071,12 @@ export class EstimationService {
       return null;
     }
 
-    // Confidence floor mirrors the Boxleiter logic: very recent
-    // releases get LOW (peak hasn't matured), capped further by the
-    // launcher profile. Mid-size launches with both signals are most
-    // trustworthy.
+    // Confidence floor: very recent releases get LOW (peak hasn't
+    // matured yet). The peak-CCU signal alone never reaches HIGH — it is
+    // capped at MEDIUM and further reduced by the launcher profile.
     let baseConfidence: ConfidenceLevel;
     if (age < RECENT_RELEASE_DAYS) {
       baseConfidence = ConfidenceLevel.LOW;
-    } else if (peak.value >= 50_000 && combinedWithReviews) {
-      baseConfidence = ConfidenceLevel.HIGH;
     } else if (peak.value >= 10_000) {
       baseConfidence = ConfidenceLevel.MEDIUM;
     } else {
@@ -1167,8 +1088,7 @@ export class EstimationService {
     );
 
     const launcherTag = LAUNCHER_PROFILE_METHOD_TAG[launcherProfile];
-    const reviewsTag = combinedWithReviews ? '+reviews-corrected' : '';
-    const method = `first-week-extrapolation-pc${reviewsTag}${launcherTag}`;
+    const method = `first-week-extrapolation-pc${launcherTag}`;
 
     if (trace) {
       trace.firstWeek.push({
@@ -1178,9 +1098,6 @@ export class EstimationService {
         launchPeakCapturedAt: peak.capturedAt.toISOString(),
         ccuRatioLow,
         ccuRatioHigh,
-        weekOneFromCcuLow: Math.round(weekOneFromCcuLow),
-        weekOneFromCcuHigh: Math.round(weekOneFromCcuHigh),
-        reviewsAtLaunch: reviewsAtLaunch ?? null,
         weekOneFinalLow: Math.round(weekOneLow),
         weekOneFinalHigh: Math.round(weekOneHigh),
         ageDays: Math.round(age),
@@ -1198,43 +1115,6 @@ export class EstimationService {
       confidence: cappedConfidence,
       method,
     };
-  }
-
-  /**
-   * Find a `STEAM_REVIEWS` snapshot captured within ±
-   * `FIRST_WEEK_REVIEWS_WINDOW_DAYS` of `releaseDate + 7 days`. Used
-   * by the first-week extrapolation to combine a peak-CCU estimate
-   * with an early-reviews estimate when we tracked the game from
-   * launch. Returns `null` when no snapshot lands in the window.
-   */
-  private async findReviewsNearLaunch(
-    gameId: string,
-    releaseDate: Date,
-    asOf?: Date,
-  ): Promise<number | null> {
-    const snapshots = await this.signals.find({
-      where: {
-        gameId,
-        metric: SignalMetric.STEAM_REVIEWS,
-        ...(asOf ? { capturedAt: LessThanOrEqual(asOf) } : {}),
-      },
-      order: { capturedAt: 'ASC' },
-    });
-    if (snapshots.length === 0) return null;
-
-    const target = releaseDate.getTime() + 7 * 24 * 3600 * 1000;
-    const windowMs = FIRST_WEEK_REVIEWS_WINDOW_DAYS * 24 * 3600 * 1000;
-
-    let best: { value: number; delta: number } | null = null;
-    for (const snap of snapshots) {
-      const delta = Math.abs(snap.capturedAt.getTime() - target);
-      if (delta > windowMs) continue;
-      if (snap.value <= 0) continue;
-      if (!best || delta < best.delta) {
-        best = { value: snap.value, delta };
-      }
-    }
-    return best?.value ?? null;
   }
 
   private resolveProfileDefaults(

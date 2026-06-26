@@ -1196,6 +1196,134 @@ export class IngestionService {
     };
   }
 
+  /**
+   * Import a SteamDB review chart CSV
+   * (`"DateTime","Positive reviews","Negative reviews"`) as the game's daily
+   * total-review history. SteamDB exposes cumulative positive/negative review
+   * counts day-by-day back to launch; we can't scrape it (Cloudflare), so the
+   * admin uploads the CSV manually.
+   *
+   * Each row is cumulative, so granularity is normalized to one value per UTC
+   * day = that day's highest cumulative count. Rows are persisted as
+   * `STEAM_REVIEWS` snapshots dated at 00:00:00 UTC of their day, with
+   * `value` = positive + negative and `averageRating` = positive / total.
+   * Re-importing overwrites existing rows in the CSV's date range only (upsert
+   * at day granularity). The negative column is exported as a negative number
+   * (e.g. `-233`) so its absolute value is used.
+   */
+  async importReviewsCsv(
+    gameId: string,
+    csv: string,
+  ): Promise<{
+    daysImported: number;
+    rowsParsed: number;
+    rangeStart: string | null;
+    rangeEnd: string | null;
+    latestTotal: number;
+    latestRating: number | null;
+  }> {
+    const game = await this.games.findOne({ where: { id: gameId } });
+    if (!game) {
+      throw new NotFoundException(`Game ${gameId} not found.`);
+    }
+
+    const releaseDayKey = game.releaseDate
+      ? game.releaseDate.toISOString().slice(0, 10)
+      : null;
+
+    // Keep the highest cumulative total per UTC day (cumulative series, so the
+    // day's max is its last reading), tracking the matching positive count for
+    // the rating.
+    const dailyTotal = new Map<string, number>();
+    const dailyPositive = new Map<string, number>();
+    let rowsParsed = 0;
+    let skippedPreRelease = 0;
+    for (const line of csv.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (trimmed.toLowerCase().startsWith('"datetime"')) continue;
+      const cols = trimmed.split(',');
+      if (cols.length < 3) continue;
+      const rawDate = cols[0].replace(/"/g, '').trim();
+      const dayKey = rawDate.slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) continue;
+      if (releaseDayKey && dayKey < releaseDayKey) {
+        skippedPreRelease += 1;
+        continue;
+      }
+      const positive = Number(cols[1].replace(/"/g, '').trim());
+      const negative = Math.abs(Number(cols[2].replace(/"/g, '').trim()));
+      if (!Number.isFinite(positive) || !Number.isFinite(negative)) continue;
+      if (positive < 0 || negative < 0) continue;
+      const total = positive + negative;
+      rowsParsed += 1;
+      const prev = dailyTotal.get(dayKey);
+      if (prev === undefined || total > prev) {
+        dailyTotal.set(dayKey, total);
+        dailyPositive.set(dayKey, positive);
+      }
+    }
+
+    if (dailyTotal.size === 0) {
+      throw new BadRequestException(
+        'No valid data rows found in the CSV (expected SteamDB review chart export).',
+      );
+    }
+
+    const dayKeys = Array.from(dailyTotal.keys()).sort();
+    const firstDay = new Date(`${dayKeys[0]}T00:00:00.000Z`);
+    const lastDay = new Date(`${dayKeys[dayKeys.length - 1]}T00:00:00.000Z`);
+    const lastDayEnd = new Date(lastDay.getTime() + 24 * 3600 * 1000 - 1);
+
+    // Upsert at day granularity: drop existing STEAM_REVIEWS rows in the CSV's
+    // range (incl. live-poll rows) then insert one per day.
+    await this.signals.delete({
+      gameId,
+      metric: SignalMetric.STEAM_REVIEWS,
+      capturedAt: Between(firstDay, lastDayEnd),
+    });
+
+    const rows = dayKeys.map((day) => {
+      const total = dailyTotal.get(day)!;
+      const positive = dailyPositive.get(day)!;
+      return this.signals.create({
+        gameId,
+        source: SourceType.STEAM,
+        metric: SignalMetric.STEAM_REVIEWS,
+        value: total,
+        averageRating: total > 0 ? positive / total : null,
+        capturedAt: new Date(`${day}T00:00:00.000Z`),
+      });
+    });
+    await this.signals.save(rows, { chunk: 500 });
+
+    const latestDay = dayKeys[dayKeys.length - 1];
+    const latestTotal = dailyTotal.get(latestDay)!;
+    const latestPositive = dailyPositive.get(latestDay)!;
+    const latestRating = latestTotal > 0 ? latestPositive / latestTotal : null;
+
+    this.logger.log(
+      `[reviews-csv] "${game.name}" — ${dailyTotal.size} days ` +
+        `(${dayKeys[0]} → ${latestDay}), ` +
+        `latest ${latestTotal.toLocaleString()} reviews` +
+        (latestRating !== null
+          ? ` (${(latestRating * 100).toFixed(1)}% positive)`
+          : '') +
+        (skippedPreRelease > 0
+          ? ` (skipped ${skippedPreRelease} pre-release rows)`
+          : ''),
+    );
+
+    return {
+      daysImported: dailyTotal.size,
+      rowsParsed,
+      rangeStart: dayKeys[0],
+      rangeEnd: latestDay,
+      latestTotal,
+      latestRating,
+    };
+  }
+
   async scrapeAchievements(
     gameId: string,
     name: string,

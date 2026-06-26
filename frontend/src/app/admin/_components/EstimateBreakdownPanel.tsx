@@ -91,16 +91,6 @@ function FirstWeekRow({ entry }: { entry: FirstWeekBreakdownEntry }) {
         </span>
       </div>
 
-      {entry.reviewsAtLaunch != null && (
-        <div className="text-muted-foreground flex items-center gap-1">
-          <span>+ reviews at launch</span>
-          <span className="text-foreground font-mono tabular-nums">
-            {entry.reviewsAtLaunch.toLocaleString()}
-          </span>
-          <span>(blended week-1)</span>
-        </div>
-      )}
-
       <div className="text-muted-foreground flex flex-wrap items-center gap-1.5">
         <span>age {entry.ageDays}d</span>
         <span>× projection</span>

@@ -7,7 +7,7 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
-import { ConfidenceLevel, Year2Retention } from '../../entities';
+import { Year2Retention } from '../../entities';
 
 export class UpdateGenreProfileDto {
   @IsOptional()
@@ -47,10 +47,6 @@ export class UpdateGenreProfileDto {
   @ValidateIf((_, v) => v !== null)
   @IsString()
   leanLabel?: string | null;
-
-  @IsOptional()
-  @IsEnum(ConfidenceLevel)
-  confidence?: ConfidenceLevel;
 
   @IsOptional()
   @IsNumber()

@@ -14,22 +14,12 @@ import {
   adminFetch,
   type AdminGenreProfile,
   type AdminGenreRow,
-  type GenreConfidence,
   type Year2Retention,
 } from '@/lib/admin';
 import { GenreAssignmentSelect } from '../_components/GenreAssignmentSelect';
 import { GenresSyncButton } from '../_components/GenresSyncButton';
 
 export const dynamic = 'force-dynamic';
-
-const CONFIDENCE_VARIANT: Record<
-  GenreConfidence,
-  'default' | 'secondary' | 'outline'
-> = {
-  HIGH: 'default',
-  MEDIUM: 'secondary',
-  LOW: 'outline',
-};
 
 const RETENTION_LABEL: Record<Year2Retention, string> = {
   NEGATIVE: 'Negative',
@@ -106,7 +96,6 @@ export default async function AdminGenreProfilesPage() {
                   <TableHead className="text-right">PS</TableHead>
                   <TableHead className="text-right">Xbox</TableHead>
                   <TableHead className="text-right">Switch</TableHead>
-                  <TableHead>Confidence</TableHead>
                   <TableHead
                     className="text-right"
                     title="Empirical normalised lifecycle index"
@@ -154,11 +143,6 @@ export default async function AdminGenreProfilesPage() {
                     <ShareCell value={p.playstationShare} />
                     <ShareCell value={p.xboxShare} />
                     <ShareCell value={p.switchShare} />
-                    <TableCell>
-                      <Badge variant={CONFIDENCE_VARIANT[p.confidence]}>
-                        {p.confidence}
-                      </Badge>
-                    </TableCell>
                     <TableCell className="text-right text-xs tabular-nums">
                       {p.lifecycleIndex.toFixed(2)}
                     </TableCell>

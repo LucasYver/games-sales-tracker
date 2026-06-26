@@ -13,15 +13,6 @@ import { GenreProfileEditor } from '../../_components/GenreProfileEditor';
 
 export const dynamic = 'force-dynamic';
 
-const CONFIDENCE_VARIANT: Record<
-  AdminGenreProfile['confidence'],
-  'default' | 'secondary' | 'outline'
-> = {
-  HIGH: 'default',
-  MEDIUM: 'secondary',
-  LOW: 'outline',
-};
-
 export default async function AdminGenreProfileDetailPage({
   params,
 }: {
@@ -57,9 +48,6 @@ export default async function AdminGenreProfileDetailPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={CONFIDENCE_VARIANT[profile.confidence]}>
-            {profile.confidence}
-          </Badge>
           <Badge variant="outline">{profile.genreCount} genres</Badge>
           <Badge variant="outline">{profile.gameCount} games</Badge>
         </div>

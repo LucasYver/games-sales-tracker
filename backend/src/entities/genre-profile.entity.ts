@@ -6,13 +6,12 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ConfidenceLevel, Year2Retention } from './enums';
+import { Year2Retention } from './enums';
 
 /**
  * Empirical platform-split bucket for a game type. Holds the PC vs
  * console share, broken down per console (PlayStation / Xbox /
- * Switch), with a confidence level matching how strongly the industry
- * agrees on those shares.
+ * Switch).
  *
  * Source: empirical observation across thousands of titles, seeded by
  * the migration `AddGenreProfileAndGenre`. The shares are deliberately
@@ -59,9 +58,6 @@ export class GenreProfile {
   // alongside the numeric shares above.
   @Column({ type: 'varchar', nullable: true })
   leanLabel: string | null;
-
-  @Column({ type: 'enum', enum: ConfidenceLevel })
-  confidence: ConfidenceLevel;
 
   // Lifecycle profile — how the sales curve decays over time. Used by
   // the (future) genre-aware refinement of the first-week extrapolation

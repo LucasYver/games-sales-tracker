@@ -64,8 +64,6 @@ pure recomputation.
 Key rows to fetch:
 - Peak CCU in the launch window: `max(value)` of `STEAM_CONCURRENT` where
   `capturedAt BETWEEN releaseDate AND releaseDate + FIRST_WEEK_PEAK_CCU_WINDOW_DAYS`.
-- Reviews near launch: `STEAM_REVIEWS` closest to `releaseDate + 7d` within
-  `±FIRST_WEEK_REVIEWS_WINDOW_DAYS`.
 - Latest signals: `STEAM_REVIEWS`, `STEAM_PEAK_CCU`, `PS_RATINGS` at `max(capturedAt)`.
 - Declared milestones: `milestone WHERE rejectedAt IS NULL` (the validation truth).
 - Latest `estimate_snapshot`: `pureEstimatedTodayLow/High` at `max(computedAt)`.
@@ -95,24 +93,14 @@ Source: `estimateFirstWeekExtrapolationForPc`
 (`backend/src/estimation/estimation.service.ts`). Constants:
 `backend/src/games/sales-modeling.constants.ts`.
 
-This method uses **only CCU and early reviews** — it never touches
-`calibratedMultiplier`, so it is naturally pure.
+This method uses **only the launch-window peak CCU** — it never touches
+`calibratedMultiplier`, so it is naturally pure. Launch reviews are no
+longer mixed in (they live in the Boxleiter method, Step 4).
 
 ```
 peak        = max STEAM_CONCURRENT in [release, release + FIRST_WEEK_PEAK_CCU_WINDOW_DAYS], capped at asOf
 ccuScale    = LAUNCHER_CCU_FACTOR[launcherProfile]      (STEAM_DOMINANT = ×1.0)
-ccuLow/High = peak × peakCcuToWeekOne{Low,High} × ccuScale{low,high}
-
-reviews     = findReviewsNearLaunch (null if none near launch → reviews branch OFF)
-revScale    = LAUNCHER_REVIEWS_FACTOR[launcherProfile]
-revLow/High = reviews × FIRST_WEEK_REVIEWS_{LOW,HIGH} × revScale{low,high}
-
-if reviews present:
-  combinedMid = (ccuMid + reviewsMid) / 2
-  halfSpread  = max(ccuHalfSpread, reviewsHalfSpread)   # widest of the two
-  weekOne{Low,High} = combinedMid ∓ halfSpread          # CAN push low below either input's low
-else:
-  weekOne{Low,High} = ccu{Low,High}
+weekOne{Low,High} = peak × peakCcuToWeekOne{Low,High} × ccuScale{low,high}
 
 projection  = genreProjectionMultiplier(m1, tailY2, tailY5, ageDays)
 projected{Low,High} = weekOne{Low,High} × projection
@@ -156,11 +144,12 @@ Console:
 
 Aggregation (`aggregateMethodsForPlatform`) is a **weighted average with
 disagreement inflation** (α = `AGGREGATION_DISAGREEMENT_ALPHA = 0.5`).
-Effective weight = `method.defaultWeight × AGGREGATION_CONFIDENCE_WEIGHT[confidence]`
-where `AGGREGATION_CONFIDENCE_WEIGHT = {LOW: 0.3, MEDIUM: 0.55, HIGH: 1.0}`.
+Weight = `method.defaultWeight` only — per-game confidence no longer
+modulates the blend (it is still reported as the lowest contributor for
+display).
 
 ```
-weightedLow/High = Σ(result × effectiveWeight) / Σ(effectiveWeight)
+weightedLow/High = Σ(result × weight) / Σ(weight)
 disagreement     = (maxMid − minMid) / weightedMid
 inflate          = 0.5 × disagreement
 aggHigh          = weightedHigh × (1 + inflate)   ← can be >> any individual method's high

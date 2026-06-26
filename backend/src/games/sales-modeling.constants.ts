@@ -343,18 +343,13 @@ export const FIRST_WEEK_PEAK_CCU_HIGH = 7;
 // launch peak (the method name/tag is unchanged).
 export const FIRST_WEEK_PEAK_CCU_WINDOW_DAYS = 14;
 
-// Reviews captured within ± this many days of release-date + 7 are
-// treated as a "week-1 review snapshot" and combined with the peak-CCU
-// estimate. Wider window than refresh cadence so we can still match a
-// snapshot taken a few days off launch week.
-export const FIRST_WEEK_REVIEWS_WINDOW_DAYS = 10;
-
-// Reviews-at-T+7 → first-week sales range. Reviewers are heavier
-// buyers, so the per-review unit count at launch is higher than the
-// mature Boxleiter ratio (25-70×). Anchors are tentative — refine once
-// we have more week-1 review snapshots tracked.
-export const FIRST_WEEK_REVIEWS_LOW = 20;
-export const FIRST_WEEK_REVIEWS_HIGH = 80;
+// Past the launch window, `STEAM_REVIEWS` rebuild moments are downsampled
+// to one per this many days. A SteamDB review CSV import backfills a daily
+// cumulative review count from launch, which would otherwise spawn one
+// rebuild point per day (hundreds to thousands per game) even though the
+// mature sales curve is perfectly captured at weekly resolution. Daily
+// granularity is kept inside the launch window where the curve is steep.
+export const REVIEWS_REBUILD_BUCKET_DAYS = 7;
 
 // Above this week-1 sales mid-point (units), a game is "large launch"
 // and follows the more front-loaded year-1 ratio (2.68×). Below it,

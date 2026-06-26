@@ -7,7 +7,6 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
-  ConfidenceLevel,
   Game,
   Genre,
   GenreProfile,
@@ -26,7 +25,6 @@ export interface GenreProfileSummary {
   xboxShare: number;
   switchShare: number;
   leanLabel: string | null;
-  confidence: ConfidenceLevel;
   lifecycleIndex: number;
   firstWeekToYearOneMultiplier: number;
   year2Retention: Year2Retention;
@@ -69,7 +67,6 @@ export interface UpdateGenreProfileInput {
   xboxShare?: number;
   switchShare?: number;
   leanLabel?: string | null;
-  confidence?: ConfidenceLevel;
   lifecycleIndex?: number;
   firstWeekToYearOneMultiplier?: number;
   year2Retention?: Year2Retention;
@@ -94,8 +91,6 @@ export interface UpdateGenreInput {
  * tail multipliers so the caller doesn't need to re-derive them.
  *
  * `matchedSlugs` is meant for logging / `method` tagging.
- * `confidence` is the *minimum* of the matched profiles — blending
- * an HIGH profile with a LOW profile can't yield more than LOW.
  */
 export interface ResolvedGenreProfile {
   matchedSlugs: string[];
@@ -110,7 +105,6 @@ export interface ResolvedGenreProfile {
   lifecycleIndex: number;
   peakCcuToWeekOneLow: number;
   peakCcuToWeekOneHigh: number;
-  confidence: ConfidenceLevel;
   pcDefaultBoxleiterLow: number | null;
   pcDefaultBoxleiterHigh: number | null;
   psDefaultBoxleiterLow: number | null;
@@ -144,12 +138,6 @@ const RETENTION_ORDER: Year2Retention[] = [
   Year2Retention.MEDIUM_HIGH,
   Year2Retention.HIGH,
   Year2Retention.VERY_HIGH,
-];
-
-const CONFIDENCE_ORDER: ConfidenceLevel[] = [
-  ConfidenceLevel.LOW,
-  ConfidenceLevel.MEDIUM,
-  ConfidenceLevel.HIGH,
 ];
 
 @Injectable()
@@ -208,7 +196,6 @@ export class GenresService {
       xboxShare: Number(p.xboxShare),
       switchShare: Number(p.switchShare),
       leanLabel: p.leanLabel,
-      confidence: p.confidence,
       lifecycleIndex: Number(p.lifecycleIndex),
       firstWeekToYearOneMultiplier: Number(p.firstWeekToYearOneMultiplier),
       year2Retention: p.year2Retention,
@@ -262,7 +249,6 @@ export class GenresService {
     if (input.xboxShare !== undefined) profile.xboxShare = input.xboxShare;
     if (input.switchShare !== undefined) profile.switchShare = input.switchShare;
     if (input.leanLabel !== undefined) profile.leanLabel = input.leanLabel;
-    if (input.confidence !== undefined) profile.confidence = input.confidence;
 
     if (input.lifecycleIndex !== undefined) {
       if (input.lifecycleIndex < 0) {
@@ -479,9 +465,9 @@ export class GenresService {
 
   /**
    * Blend one or more `GenreProfile` rows into a single resolved profile
-   * (numeric fields averaged, retention taken as the median, confidence
-   * as the worst of the set). A single-element array (the per-game
-   * override path) passes straight through with its own values.
+   * (numeric fields averaged, retention taken as the median). A
+   * single-element array (the per-game override path) passes straight
+   * through with its own values.
    */
   private buildResolvedProfile(
     profiles: GenreProfile[],
@@ -511,15 +497,6 @@ export class GenresService {
         .map((p) => RETENTION_ORDER.indexOf(p.year2Retention))
         .sort((a, b) => a - b)[Math.floor((n - 1) / 2)] ?? 0;
 
-    const minConfidence = profiles.reduce<ConfidenceLevel>(
-      (worst, p) =>
-        CONFIDENCE_ORDER.indexOf(p.confidence) <
-        CONFIDENCE_ORDER.indexOf(worst)
-          ? p.confidence
-          : worst,
-      ConfidenceLevel.HIGH,
-    );
-
     return {
       matchedSlugs: profiles.map((p) => p.slug).sort(),
       pcShare: avg((p) => p.pcShare),
@@ -535,7 +512,6 @@ export class GenresService {
       lifecycleIndex: avg((p) => p.lifecycleIndex),
       peakCcuToWeekOneLow: avg((p) => p.peakCcuToWeekOneLow),
       peakCcuToWeekOneHigh: avg((p) => p.peakCcuToWeekOneHigh),
-      confidence: minConfidence,
       // Nullable overrides: only propagate when every blended profile has a
       // non-null value; otherwise fall back to global constants at call site.
       pcDefaultBoxleiterLow: profiles.every((p) => p.pcDefaultBoxleiterLow != null)

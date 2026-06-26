@@ -13,14 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type {
-  AdminGenreProfile,
-  GenreConfidence,
-  Year2Retention,
-} from '@/lib/admin';
+import type { AdminGenreProfile, Year2Retention } from '@/lib/admin';
 import { updateGenreProfile } from '../actions';
-
-const CONFIDENCE_VALUES: GenreConfidence[] = ['LOW', 'MEDIUM', 'HIGH'];
 
 const RETENTION_VALUES: Year2Retention[] = [
   'NEGATIVE',
@@ -56,7 +50,6 @@ interface Draft {
   xboxShare: number;
   switchShare: number;
   leanLabel: string;
-  confidence: GenreConfidence;
   lifecycleIndex: number;
   firstWeekToYearOneMultiplier: number;
   year2Retention: Year2Retention;
@@ -78,7 +71,6 @@ function toDraft(profile: AdminGenreProfile): Draft {
     xboxShare: profile.xboxShare,
     switchShare: profile.switchShare,
     leanLabel: profile.leanLabel ?? '',
-    confidence: profile.confidence,
     lifecycleIndex: profile.lifecycleIndex,
     firstWeekToYearOneMultiplier: profile.firstWeekToYearOneMultiplier,
     year2Retention: profile.year2Retention,
@@ -137,7 +129,6 @@ export function GenreProfileEditor({ profile }: Props) {
           xboxShare: draft.xboxShare,
           switchShare: draft.switchShare,
           leanLabel: draft.leanLabel.trim() === '' ? null : draft.leanLabel,
-          confidence: draft.confidence,
           lifecycleIndex: draft.lifecycleIndex,
           firstWeekToYearOneMultiplier: draft.firstWeekToYearOneMultiplier,
           year2Retention: draft.year2Retention,
@@ -225,23 +216,6 @@ export function GenreProfileEditor({ profile }: Props) {
             onChange={(e) => set('leanLabel', e.target.value)}
             placeholder="e.g. équilibré"
           />
-        </Field>
-        <Field label="Confidence" hint="How strongly the split is trusted.">
-          <Select
-            value={draft.confidence}
-            onValueChange={(v) => set('confidence', v as GenreConfidence)}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CONFIDENCE_VALUES.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {c}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </Field>
       </Section>
 

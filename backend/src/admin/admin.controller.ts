@@ -20,6 +20,7 @@ import { GenresService } from '../genres/genres.service';
 import { EstimationService } from '../estimation/estimation.service';
 import { AddGameDto } from './dto/add-game.dto';
 import { ImportCcuCsvDto } from './dto/import-ccu-csv.dto';
+import { ImportReviewsCsvDto } from './dto/import-reviews-csv.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
 import { UpdatePublisherDto } from './dto/update-publisher.dto';
 import { UpdateGenreProfileDto } from './dto/update-genre-profile.dto';
@@ -123,6 +124,15 @@ export class AdminController {
     @Body() body: ImportCcuCsvDto,
   ) {
     return this.ingestion.importCcuCsv(id, body.csv);
+  }
+
+  @Post('games/:id/import-reviews-csv')
+  @HttpCode(200)
+  importReviewsCsv(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ImportReviewsCsvDto,
+  ) {
+    return this.ingestion.importReviewsCsv(id, body.csv);
   }
 
   @Post('games/:id/rebuild')

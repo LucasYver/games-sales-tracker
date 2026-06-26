@@ -251,26 +251,13 @@ historical-import path stores peaks with the SteamCharts month as
 `capturedAt`):
 
 ```
-weekOneFromCcuLow  = peak × FIRST_WEEK_PEAK_CCU_LOW  × launcherCcuFactor.low
-weekOneFromCcuHigh = peak × FIRST_WEEK_PEAK_CCU_HIGH × launcherCcuFactor.high
+weekOneLow  = peak × FIRST_WEEK_PEAK_CCU_LOW  × launcherCcuFactor.low
+weekOneHigh = peak × FIRST_WEEK_PEAK_CCU_HIGH × launcherCcuFactor.high
 ```
 
-When a `STEAM_REVIEWS` snapshot was captured within ±
-`FIRST_WEEK_REVIEWS_WINDOW_DAYS = 10` days of `releaseDate + 7 days`,
-we combine it with the CCU estimate:
-
-```
-weekOneFromReviewsLow  = reviewsT7 × FIRST_WEEK_REVIEWS_LOW  × launcherReviewsFactor.low
-weekOneFromReviewsHigh = reviewsT7 × FIRST_WEEK_REVIEWS_HIGH × launcherReviewsFactor.high
-
-weekOneMid    = (mid_ccu + mid_reviews) / 2
-weekOneSpread = max(spread_ccu, spread_reviews)        // floor uncertainty
-weekOneLow    = weekOneMid − weekOneSpread / 2
-weekOneHigh   = weekOneMid + weekOneSpread / 2
-```
-
-Method tag flips to `first-week-extrapolation-pc+reviews-corrected` so
-admins can tell the two combos apart in the time series.
+The week-1 baseline is derived from the peak CCU alone. Launch-window
+reviews are **not** mixed in here — the reviews signal lives in the
+Boxleiter method and is combined at the aggregation step instead.
 
 ### Step 2 — bucket on launch size + degressive projection to today
 
@@ -311,9 +298,8 @@ date-of-release glitches.
 
 - `LOW` if released less than `RECENT_RELEASE_DAYS = 14` days ago, OR
   if peak CCU < 10k (sample too small to project from).
-- `HIGH` only when peak CCU ≥ 50k **and** we have a launch-week reviews
-  snapshot (both signals agree).
-- `MEDIUM` otherwise.
+- `MEDIUM` otherwise. The peak-CCU signal alone never reaches `HIGH`
+  (capped at MEDIUM, then further reduced by the launcher profile).
 
 All capped by `LAUNCHER_CONFIDENCE_CAP[publisher.launcherProfile]`
 identically to the Boxleiter path.
@@ -390,8 +376,10 @@ aggLow  = max(0, weightedLow  × (1 − α × disagreement))
 aggHigh = weightedHigh × (1 + α × disagreement)
 ```
 
-with `α = AGGREGATION_DISAGREEMENT_ALPHA = 0.5`. Aggregate confidence
-is the **lowest** confidence among contributing methods.
+with `α = AGGREGATION_DISAGREEMENT_ALPHA = 0.5` and `w_i =
+method.defaultWeight` (per-game confidence does **not** modulate the
+weight). Aggregate confidence is the **lowest** confidence among
+contributing methods, reported for display only.
 
 Properties:
 - **One method active** (today's reality) → `disagreement = 0`, the

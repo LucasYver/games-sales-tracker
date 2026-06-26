@@ -317,7 +317,6 @@ export interface AdminIssues {
   estimationDiscrepancies: IssueGroup<AdminEstimationDiscrepancy>;
 }
 
-export type GenreConfidence = 'LOW' | 'MEDIUM' | 'HIGH';
 export type GenreSourceLabel = 'IGDB' | 'STEAM' | 'MANUAL';
 
 export type Year2Retention =
@@ -340,7 +339,6 @@ export interface AdminGenreProfile {
   xboxShare: number;
   switchShare: number;
   leanLabel: string | null;
-  confidence: GenreConfidence;
   lifecycleIndex: number;
   firstWeekToYearOneMultiplier: number;
   year2Retention: Year2Retention;
@@ -412,9 +410,6 @@ export interface FirstWeekBreakdownEntry {
   launchPeakCapturedAt: string;
   ccuRatioLow: number;
   ccuRatioHigh: number;
-  weekOneFromCcuLow: number;
-  weekOneFromCcuHigh: number;
-  reviewsAtLaunch: number | null;
   weekOneFinalLow: number;
   weekOneFinalHigh: number;
   ageDays: number;
@@ -427,8 +422,6 @@ export interface FirstWeekBreakdownEntry {
 export interface WeightedBreakdownEntry {
   method: string;
   weight: number;
-  confWeight: number;
-  effectiveWeight: number;
 }
 
 export interface PlatformBreakdownResult {
