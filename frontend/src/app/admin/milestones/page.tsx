@@ -23,7 +23,6 @@ import { deleteMilestone } from '../actions';
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 50;
-const PLATFORMS = ['PC', 'PLAYSTATION', 'XBOX', 'SWITCH', 'GLOBAL', 'MOBILE'];
 const SOURCES = ['OFFICIAL', 'WIKIPEDIA', 'ANNOUNCEMENT', 'MEDIA'];
 
 function formatDate(iso: string | null): string {
@@ -44,20 +43,13 @@ export default async function AdminMilestonesPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    platform?: string;
     source?: string;
     undated?: string;
     suspect?: string;
     page?: string;
   }>;
 }) {
-  const {
-    platform,
-    source,
-    undated,
-    suspect,
-    page: pageParam,
-  } = await searchParams;
+  const { source, undated, suspect, page: pageParam } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
   const offset = (page - 1) * PAGE_SIZE;
 
@@ -65,7 +57,6 @@ export default async function AdminMilestonesPage({
     limit: String(PAGE_SIZE),
     offset: String(offset),
   });
-  if (platform) params.set('platform', platform);
   if (source) params.set('source', source);
   if (undated === 'true') params.set('undated', 'true');
   if (suspect === 'true') params.set('suspect', 'true');
@@ -88,22 +79,6 @@ export default async function AdminMilestonesPage({
       <Card>
         <CardContent className="pt-6">
           <form className="flex flex-wrap items-end gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="platform">Platform</Label>
-              <select
-                id="platform"
-                name="platform"
-                defaultValue={platform ?? ''}
-                className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs"
-              >
-                <option value="">All</option>
-                {PLATFORMS.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="source">Source</Label>
               <select
@@ -154,7 +129,6 @@ export default async function AdminMilestonesPage({
             <TableRow>
               <TableHead>Game</TableHead>
               <TableHead>Source</TableHead>
-              <TableHead>Platform</TableHead>
               <TableHead className="text-right">Units</TableHead>
               <TableHead className="text-right">Confidence</TableHead>
               <TableHead>Reported</TableHead>
@@ -176,9 +150,6 @@ export default async function AdminMilestonesPage({
                 </TableCell>
                 <TableCell>
                   <Badge variant="outline">{m.source}</Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="secondary">{m.platform}</Badge>
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {m.units.toLocaleString()}
@@ -220,7 +191,7 @@ export default async function AdminMilestonesPage({
             {items.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={9}
+                  colSpan={8}
                   className="text-muted-foreground py-12 text-center"
                 >
                   No milestones match these filters.
@@ -237,7 +208,6 @@ export default async function AdminMilestonesPage({
             <Button asChild variant="outline" size="sm">
               <Link
                 href={`?${new URLSearchParams({
-                  ...(platform ? { platform } : {}),
                   ...(source ? { source } : {}),
                   ...(undated ? { undated } : {}),
                   ...(suspect ? { suspect } : {}),
@@ -255,7 +225,6 @@ export default async function AdminMilestonesPage({
             <Button asChild variant="outline" size="sm">
               <Link
                 href={`?${new URLSearchParams({
-                  ...(platform ? { platform } : {}),
                   ...(source ? { source } : {}),
                   ...(undated ? { undated } : {}),
                   ...(suspect ? { suspect } : {}),

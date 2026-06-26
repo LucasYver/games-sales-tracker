@@ -75,7 +75,6 @@ export interface AdminStats {
   milestones: {
     total: number;
     bySource: Record<SalesSource, number>;
-    byPlatform: Record<Platform, number>;
     undated: number;
   };
   signals: { steamReviewsTotal: number; lastCapturedAt: string | null };
@@ -100,6 +99,7 @@ export interface AdminGameSummary {
   estimatesCount: number;
   latestReviews: number | null;
   latestReviewsAt: string | null;
+  lastRefreshedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -114,7 +114,6 @@ export interface AdminGameSource {
 export interface AdminMilestone {
   id: string;
   gameId: string;
-  platform: Platform;
   source: SalesSource;
   units: number;
   region: string;
@@ -235,6 +234,7 @@ export interface AdminGameDetail extends AdminGameSummary {
   summary: string | null;
   genres: string[];
   genreProfileId: string | null;
+  genreProfileManual: boolean;
   lastRefreshedAt: string | null;
   allTimePeakCcu: number | null;
   allTimePeakCcuAt: string | null;
@@ -347,7 +347,12 @@ export interface AdminGenreProfile {
   lifecycleDriver: string | null;
   peakCcuToWeekOneLow: number;
   peakCcuToWeekOneHigh: number;
+  pcDefaultBoxleiterLow: number | null;
+  pcDefaultBoxleiterHigh: number | null;
+  psDefaultBoxleiterLow: number | null;
+  psDefaultBoxleiterHigh: number | null;
   genreCount: number;
+  gameCount: number;
   updatedAt: string;
 }
 
@@ -381,4 +386,75 @@ export interface AdminEstimationDiscrepancy {
   priorEstimateHigh: number;
   ratio: number;
   detectedAt: string;
+}
+
+// ─── Estimate breakdown (diagnostic) ────────────────────────────────────────
+
+export interface BoxleiterBreakdownEntry {
+  type: 'boxleiter';
+  platform: Platform;
+  method: string;
+  signal: { metric: string; value: number; capturedAt: string };
+  calibratedValue: number | null;
+  isCalibrated: boolean;
+  multiplierLow: number;
+  multiplierHigh: number;
+  rawLow: number;
+  rawHigh: number;
+  ccuPeak: number | null;
+  ccuRangeLow: number | null;
+  ccuRangeHigh: number | null;
+  ccuOutcome: 'intersect' | 'conflict' | null;
+  finalLow: number;
+  finalHigh: number;
+}
+
+export interface FirstWeekBreakdownEntry {
+  type: 'first-week';
+  method: string;
+  launchPeakValue: number;
+  launchPeakCapturedAt: string;
+  ccuRatioLow: number;
+  ccuRatioHigh: number;
+  weekOneFromCcuLow: number;
+  weekOneFromCcuHigh: number;
+  reviewsAtLaunch: number | null;
+  weekOneFinalLow: number;
+  weekOneFinalHigh: number;
+  ageDays: number;
+  projectionMultiplier: number;
+  m1: number | null;
+  finalLow: number;
+  finalHigh: number;
+}
+
+export interface WeightedBreakdownEntry {
+  method: string;
+  weight: number;
+  confWeight: number;
+  effectiveWeight: number;
+}
+
+export interface PlatformBreakdownResult {
+  platform: Platform;
+  entries: (BoxleiterBreakdownEntry | FirstWeekBreakdownEntry)[];
+  weightedEntries: WeightedBreakdownEntry[];
+  totalWeight: number;
+  weightedLow: number;
+  weightedHigh: number;
+  disagreement: number;
+  inflate: number;
+  aggregateLow: number;
+  aggregateHigh: number;
+}
+
+export interface AdminEstimateBreakdown {
+  computedAt: string;
+  platforms: PlatformBreakdownResult[];
+  pureTotal: { low: number; high: number } | null;
+  declared: {
+    units: number;
+    source: string;
+    reportedAt: string | null;
+  } | null;
 }

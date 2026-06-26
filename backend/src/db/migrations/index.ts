@@ -18,6 +18,10 @@ import { AddSteamCategoriesDlcAndPriceSnapshot1782395875937 } from './1782395875
 import { AddGameGenreProfileOverride1782396500000 } from './1782396500000-AddGameGenreProfileOverride';
 import { RecalibrateActionRpgProjection1782397000000 } from './1782397000000-RecalibrateActionRpgProjection';
 import { RecalibrateSimulationPeakCcuRatio1782397500000 } from './1782397500000-RecalibrateSimulationPeakCcuRatio';
+import { AddGameGenreProfileAuto1782398000000 } from './1782398000000-AddGameGenreProfileAuto';
+import { AddRtsGenreProfile1782398500000 } from './1782398500000-AddRtsGenreProfile';
+import { AddBoxleiterDefaultsToGenreProfile1782463321472 } from './1782463321472-AddBoxleiterDefaultsToGenreProfile';
+import { DropMilestonePlatform1782467589649 } from './1782467589649-DropMilestonePlatform';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -47,4 +51,8 @@ export const migrations: MixedList<Function | string> = [
   AddGameGenreProfileOverride1782396500000,
   RecalibrateActionRpgProjection1782397000000,
   RecalibrateSimulationPeakCcuRatio1782397500000,
+  AddGameGenreProfileAuto1782398000000,
+  AddRtsGenreProfile1782398500000,
+  AddBoxleiterDefaultsToGenreProfile1782463321472,
+  DropMilestonePlatform1782467589649,
 ];

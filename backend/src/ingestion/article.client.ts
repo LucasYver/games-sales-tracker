@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { Platform } from '../entities';
 import { LlmExtractorService } from '../llm/llm-extractor.service';
 import { isPeriodicQuote } from './sales-figure.utils';
 
@@ -13,7 +12,6 @@ export interface ArticleFigure {
 
 export interface ArticleSales {
   global: ArticleFigure | null;
-  perPlatform: { platform: Platform; figure: ArticleFigure }[];
   // Engagement milestone (e.g. "X million players reached", "X downloads").
   // Reported separately from `global` because it conflates copies sold with
   // subscription users (Ubisoft+/Game Pass) and free-trial play, so it cannot
@@ -32,7 +30,6 @@ interface LlmResult {
   matchesGame: boolean;
   attribution: string | null;
   global: LlmFigure | null;
-  perPlatform: (LlmFigure & { platform: string })[];
   engagement: LlmFigure | null;
 }
 interface LlmDateResult {
@@ -56,10 +53,10 @@ const DATE_SCHEMA: Record<string, unknown> = {
 
 const SYSTEM_PROMPT = `You are a precise data extractor. You are given the plain text of a press/news article and the name of a target video game. Extract sales figures for the TARGET GAME ONLY, and ONLY when explicitly stated in the text. NEVER use outside knowledge and NEVER estimate.
 
-- "matchesGame": true only if the article actually reports a sales figure for the target game. If the article is about a different game or gives no sales number for the target, set it to false and everything else to null/[].
+- "matchesGame": true only if the article actually reports a sales figure for the target game. If the article is about a different game or gives no sales number for the target, set it to false and everything else to null.
 - "attribution": who the figure is credited to in the text (e.g. "the publisher", "Circana", "Sony", "the studio"); null if unstated.
 
-CUMULATIVE UNITS ONLY for "global" / "perPlatform" — this is critical. ONLY extract a figure there that represents the TOTAL CUMULATIVE LIFETIME number of UNITS (copies) sold for the game ("has sold X copies", "X copies sold to date", "lifetime sales of X", "X copies since launch"). NEVER put in "global" or "perPlatform":
+CUMULATIVE UNITS ONLY for "global" — this is critical. ONLY extract a figure there that represents the TOTAL CUMULATIVE LIFETIME number of UNITS (copies) sold for the game ("has sold X copies", "X copies sold to date", "lifetime sales of X", "X copies since launch"). NEVER put in "global":
   - "sold X in its first week / first month / launch weekend"
   - "X copies in [year/quarter/period]" when it's clearly a periodic figure (e.g. "X copies in 2024 alone", "X units in Q1", "weekly sales of X")
   - Fiscal-period figures: "in FY2024", "during fiscal year ended…", "fiscal Q3" — these are PERIODIC, not lifetime
@@ -67,17 +64,16 @@ CUMULATIVE UNITS ONLY for "global" / "perPlatform" — this is critical. ONLY ex
   - MONETARY figures: any number with $/€/£/¥ or words like "revenue", "earnings", "turnover". In English finance, "sales" often means revenue: "$3.9 million in sales" is REVENUE, NOT 3.9M units. If a currency sign appears, REJECT.
   - DLC, expansions, bundles, remasters, the franchise/series, or other games
 
-EXAMPLES OF FIGURES TO REJECT for "global"/"perPlatform" (return null):
+EXAMPLES OF FIGURES TO REJECT for "global" (return null):
   - "Payday 2 brought in $3.9 million in sales in FY2024" → revenue + fiscal period
   - "moved 200,000 copies in the first week" → periodic
   - "earned $50M in Q1" → revenue + periodic
 
-If the article only reports periodic, fiscal or monetary figures with no cumulative unit total, set "global" to null and "perPlatform" to []. Do NOT try to infer a cumulative unit total from such data.
+If the article only reports periodic, fiscal or monetary figures with no cumulative unit total, set "global" to null. Do NOT try to infer a cumulative unit total from such data.
 
-- "global": the cumulative worldwide sales total in UNITS. Convert to an integer (e.g. "5 million" -> 5000000).
+- "global": the cumulative WORLDWIDE (all-platforms combined) sales total in UNITS. Convert to an integer (e.g. "5 million" -> 5000000). We only track worldwide totals — NEVER report a single-platform figure (e.g. "3 million sold on PS5") here; if only a single-platform number is stated, set "global" to null.
   For "date": look EVERYWHERE in the provided text for a date associated with this figure — the article byline, publication metadata, introductory sentence, phrases like "as of [date]", "by [date]", "in fiscal Q… [year]", "announced [date]", etc. Use the most specific date you can find that is plausibly associated with the figure. Format as "YYYY-MM-DD", "YYYY-MM", or "YYYY". Only set null when no date can be inferred at all from the text.
   Put the verbatim sentence containing the figure in "quote".
-- "perPlatform": include a platform ONLY when the text gives a CUMULATIVE number specifically for that one platform (e.g. "3 million sold on PS5 to date"). NEVER split a worldwide/combined total across platforms; if only a combined total is given, "perPlatform" MUST be empty. The quote must itself name the platform AND describe a cumulative figure (not a periodic one). Map PS4/PS5 -> PLAYSTATION, Xbox One/Series -> XBOX, Windows/PC/Steam -> PC, else -> OTHER. We only track PC, PlayStation and Xbox; ignore Switch and mobile figures. Same date and cumulative rules apply.
 - "engagement": cumulative ENGAGEMENT milestones that are NOT copies sold but are still publisher-reported headline numbers about the target game. Examples to capture here (not in "global"):
     - "X million players have played the game"
     - "X million players reached" (especially when subscription users like Ubisoft+ / Xbox Game Pass / PS Plus are explicitly included)
@@ -103,23 +99,6 @@ const SCHEMA: Record<string, unknown> = {
       },
       required: ['units', 'date', 'quote'],
     },
-    perPlatform: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          platform: {
-            type: 'string',
-            enum: ['PC', 'PLAYSTATION', 'XBOX', 'OTHER'],
-          },
-          units: { type: 'integer' },
-          date: { type: ['string', 'null'] },
-          quote: { type: 'string' },
-        },
-        required: ['platform', 'units', 'date', 'quote'],
-      },
-    },
     engagement: {
       type: ['object', 'null'],
       additionalProperties: false,
@@ -131,7 +110,7 @@ const SCHEMA: Record<string, unknown> = {
       required: ['units', 'date', 'quote'],
     },
   },
-  required: ['matchesGame', 'attribution', 'global', 'perPlatform', 'engagement'],
+  required: ['matchesGame', 'attribution', 'global', 'engagement'],
 };
 
 @Injectable()
@@ -195,8 +174,7 @@ export class ArticleClient {
       const needsDedicatedDatePass =
         !knownFallback &&
         ((result.global?.date == null && result.global != null) ||
-          (result.engagement?.date == null && result.engagement != null) ||
-          (result.perPlatform ?? []).some((p) => p.date == null));
+          (result.engagement?.date == null && result.engagement != null));
 
       const dedicatedDate = needsDedicatedDatePass
         ? await this.resolveArticleDate(text)
@@ -229,24 +207,9 @@ export class ArticleClient {
           ? engagementCandidate
           : null;
 
-      const perPlatform = (result.perPlatform ?? [])
-        .filter((p) => isGrounded(p.quote) && !isPeriodicQuote(p.quote))
-        .map((p) => ({
-          platform: this.mapPlatform(p.platform),
-          figure: this.toFigure(p, effectiveFallback),
-        }))
-        .filter(
-          (p): p is { platform: Platform; figure: ArticleFigure } =>
-            p.platform !== null &&
-            p.figure.units > 0 &&
-            p.figure.reportedAt !== null &&
-            this.quoteMentionsPlatform(p.platform, p.figure.quote),
-        );
-
-      if (!global && perPlatform.length === 0 && !engagement) return null;
+      if (!global && !engagement) return null;
       return {
         global,
-        perPlatform,
         engagement,
         attribution: result.attribution,
       };
@@ -317,21 +280,6 @@ export class ArticleClient {
       reportedAt: this.parseDate(figure.date) ?? fallbackDate ?? null,
       quote: figure.quote.replace(/\s+/g, ' ').trim(),
     };
-  }
-
-  private mapPlatform(value: string): Platform | null {
-    const match = (Object.values(Platform) as string[]).includes(value);
-    return match ? (value as Platform) : null;
-  }
-
-  private quoteMentionsPlatform(platform: Platform, quote: string): boolean {
-    const patterns: Partial<Record<Platform, RegExp>> = {
-      [Platform.PLAYSTATION]: /playstation|\bps[2345]\b/i,
-      [Platform.XBOX]: /xbox/i,
-      [Platform.PC]: /\bpc\b|windows|steam/i,
-    };
-    const pattern = patterns[platform];
-    return pattern ? pattern.test(quote) : false;
   }
 
   /**

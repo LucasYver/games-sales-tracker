@@ -110,6 +110,29 @@ export class GenreProfile {
   @Column({ type: 'numeric', precision: 4, scale: 2 })
   peakCcuToWeekOneHigh: number;
 
+  // Per-genre Boxleiter default multiplier range. When set, overrides the
+  // global PC_BOXLEITER_DEFAULT_LOW/HIGH (and PS equivalent) constants in
+  // `estimation.service.ts` for every uncalibrated game of this genre.
+  // Null = fall back to the global constant (safe default for new profiles).
+  //
+  // Tuning guidance:
+  //   - Inspect calibrated games of the genre: their calibratedMultiplier
+  //     reveals the true reviews→sales ratio. Set the default range around
+  //     the observed distribution (e.g. p25–p75 of calibrated multipliers).
+  //   - Narrowing the range reduces disagreement inflation in the aggregate
+  //     and makes the pure-algo estimate converge toward declared milestones.
+  @Column({ type: 'numeric', precision: 5, scale: 2, nullable: true })
+  pcDefaultBoxleiterLow: number | null;
+
+  @Column({ type: 'numeric', precision: 5, scale: 2, nullable: true })
+  pcDefaultBoxleiterHigh: number | null;
+
+  @Column({ type: 'numeric', precision: 5, scale: 2, nullable: true })
+  psDefaultBoxleiterLow: number | null;
+
+  @Column({ type: 'numeric', precision: 5, scale: 2, nullable: true })
+  psDefaultBoxleiterHigh: number | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

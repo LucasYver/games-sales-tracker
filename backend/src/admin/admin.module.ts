@@ -20,6 +20,7 @@ import { IngestionModule } from '../ingestion/ingestion.module';
 import { GamesModule } from '../games/games.module';
 import { PublishersModule } from '../publishers/publishers.module';
 import { GenresModule } from '../genres/genres.module';
+import { EstimationModule } from '../estimation/estimation.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { GenresModule } from '../genres/genres.module';
     GamesModule,
     PublishersModule,
     GenresModule,
+    EstimationModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

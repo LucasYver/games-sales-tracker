@@ -79,13 +79,22 @@ export class Game {
   @Column({ type: 'simple-array', nullable: true })
   genres: string[] | null;
 
-  // Manual override of the genre profile used by the estimation model.
-  // When set, it takes precedence over the IGDB-genre-based resolution
-  // in `GenresService.resolveProfileForGame` — for outlier titles whose
-  // real sales dynamics no genre captures (e.g. a streamer-driven viral
-  // hit). Null = resolve from `genres` as usual.
+  // Genre profile driving the estimation model. Persisted (not resolved
+  // on the fly) so the chosen profile is visible directly on the game.
+  // Populated automatically at ingestion from the first matching genre
+  // (see `GenresService.applyAutoGenreProfile`); `null` when no genre
+  // maps to a profile. An admin can pin a specific profile from the
+  // admin UI, which sets `genreProfileManual = true` and protects the
+  // value from being overwritten on the next refresh.
   @Column({ type: 'uuid', nullable: true })
   genreProfileId: string | null;
+
+  // True when `genreProfileId` was set manually by an admin. While true,
+  // ingestion never touches `genreProfileId`. Reverting to auto (admin
+  // clears the override) flips this back to false and re-resolves from
+  // the genres.
+  @Column({ default: false })
+  genreProfileManual: boolean;
 
   @ManyToOne(() => GenreProfile, {
     onDelete: 'SET NULL',

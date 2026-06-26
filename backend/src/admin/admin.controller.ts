@@ -13,10 +13,11 @@ import {
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { AdminTokenGuard } from './admin-token.guard';
-import { Platform, SalesSource } from '../entities';
+import { SalesSource } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
 import { PublishersService } from '../publishers/publishers.service';
 import { GenresService } from '../genres/genres.service';
+import { EstimationService } from '../estimation/estimation.service';
 import { AddGameDto } from './dto/add-game.dto';
 import { ImportCcuCsvDto } from './dto/import-ccu-csv.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
@@ -32,6 +33,7 @@ export class AdminController {
     private readonly ingestion: IngestionService,
     private readonly publishers: PublishersService,
     private readonly genres: GenresService,
+    private readonly estimation: EstimationService,
   ) {}
 
   @Get('stats')
@@ -44,6 +46,11 @@ export class AdminController {
     @Query('q') q?: string,
     @Query('platform') platform?: string,
     @Query('hasSales') hasSales?: string,
+    @Query('genreProfile') genreProfile?: string,
+    @Query('calibrated') calibrated?: string,
+    @Query('hasEstimates') hasEstimates?: string,
+    @Query('sort') sort?: string,
+    @Query('direction') direction?: string,
     @Query('offset') offset?: string,
     @Query('limit') limit?: string,
   ) {
@@ -52,6 +59,26 @@ export class AdminController {
       platform,
       hasSales:
         hasSales === 'true' ? true : hasSales === 'false' ? false : undefined,
+      genreProfileId: genreProfile,
+      calibrated:
+        calibrated === 'true'
+          ? true
+          : calibrated === 'false'
+            ? false
+            : undefined,
+      hasEstimates:
+        hasEstimates === 'true'
+          ? true
+          : hasEstimates === 'false'
+            ? false
+            : undefined,
+      sort:
+        sort === 'reviews' ||
+        sort === 'releaseDate' ||
+        sort === 'lastRefreshed'
+          ? sort
+          : undefined,
+      direction: direction === 'asc' ? 'asc' : undefined,
       offset: offset ? Number(offset) : undefined,
       limit: limit ? Number(limit) : undefined,
     });
@@ -104,11 +131,15 @@ export class AdminController {
     return this.admin.rebuildEstimates(id);
   }
 
+  @Get('games/:id/estimate-breakdown')
+  estimateBreakdown(@Param('id', ParseUUIDPipe) id: string) {
+    return this.estimation.computeBreakdown(id);
+  }
+
   @Get('milestones')
   listMilestones(
     @Query('gameId') gameId?: string,
     @Query('source') source?: string,
-    @Query('platform') platform?: string,
     @Query('undated') undated?: string,
     @Query('suspect') suspect?: string,
     @Query('offset') offset?: string,
@@ -117,7 +148,6 @@ export class AdminController {
     return this.admin.listMilestones({
       gameId,
       source: source as SalesSource | undefined,
-      platform: platform as Platform | undefined,
       undated: undated === 'true',
       suspect: suspect === 'true',
       offset: offset ? Number(offset) : undefined,

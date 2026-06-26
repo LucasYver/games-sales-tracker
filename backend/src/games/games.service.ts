@@ -626,7 +626,7 @@ export class GamesService {
 
       const prior = await this.findPriorEstimateBand(
         gameId,
-        milestone.platform,
+        Platform.GLOBAL,
         referenceMoment,
       );
       if (!prior) continue;
@@ -642,7 +642,7 @@ export class GamesService {
       await this.discrepancies.save(
         this.discrepancies.create({
           gameId,
-          platform: milestone.platform,
+          platform: Platform.GLOBAL,
           milestoneId: milestone.id,
           declaredUnits: milestone.units,
           declaredSource: milestone.source,
@@ -862,19 +862,12 @@ export class GamesService {
     reconciliation: ReconciliationEntry[];
     estimatedToday: { low: number; high: number } | null;
   } {
-    const globalMilestones: Milestone[] = [];
+    // Milestones are worldwide totals only — there is no per-platform
+    // declared figure anymore, so every milestone is a global milestone and
+    // the per-platform declared map stays empty (platform lines are filled
+    // from estimates below).
+    const globalMilestones: Milestone[] = milestones;
     const bestByPlatform = new Map<Platform, Milestone>();
-
-    for (const milestone of milestones) {
-      if (milestone.platform === Platform.GLOBAL) {
-        globalMilestones.push(milestone);
-        continue;
-      }
-      const current = bestByPlatform.get(milestone.platform);
-      if (!current || this.isMoreAuthoritative(milestone, current)) {
-        bestByPlatform.set(milestone.platform, milestone);
-      }
-    }
 
     // Highest declared worldwide figure (if any) — used as a floor +
     // freshness-aware cap on the platform-summed estimate below. We pick the
@@ -891,9 +884,6 @@ export class GamesService {
       bestGlobal,
       releaseDate,
     );
-    const agreementByPlatform = new Map<Platform, Agreement>(
-      reconciliation.map((r) => [r.platform, r.agreement]),
-    );
     // Headline-level cross-check: how the Boxleiter-derived "today" estimate
     // sits relative to the most reliable global declared figure. Used to
     // adjust the headline confidence (boost when corroborated, drop on
@@ -902,19 +892,11 @@ export class GamesService {
       reconciliation.find((r) => r.platform === Platform.GLOBAL)?.agreement ??
       null;
 
-    const breakdown: PlatformSales[] = [...bestByPlatform.values()].map(
-      (m) => ({
-        platform: m.platform,
-        low: m.units,
-        high: m.units,
-        source: m.source,
-        confidence: scoreToLevel(m.confidenceScore),
-        sourceUrl: m.sourceUrl,
-        agreement: agreementByPlatform.get(m.platform) ?? null,
-      }),
-    );
+    // Declared figures are worldwide-only now, so the per-platform breakdown
+    // is built entirely from estimates; the worldwide milestone anchors the
+    // headline total via `buildTotal` below.
+    const breakdown: PlatformSales[] = [];
 
-    // Fall back to an estimate on any platform that has no concrete figure.
     for (const [platform, estimate] of estimates) {
       if (bestByPlatform.has(platform)) continue;
       breakdown.push({

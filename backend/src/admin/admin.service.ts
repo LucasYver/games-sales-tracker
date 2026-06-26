@@ -28,6 +28,7 @@ import {
 import { isPeriodicQuote } from '../ingestion/sales-figure.utils';
 import { slugify } from '../common/slug';
 import { GamesService } from '../games/games.service';
+import { GenresService } from '../genres/genres.service';
 
 export interface UpdateGameInput {
   name?: string;
@@ -52,7 +53,6 @@ export interface AdminStats {
   milestones: {
     total: number;
     bySource: Record<SalesSource, number>;
-    byPlatform: Record<Platform, number>;
     undated: number;
   };
   signals: {
@@ -86,6 +86,7 @@ export interface AdminGameSummary {
   estimatesCount: number;
   latestReviews: number | null;
   latestReviewsAt: Date | null;
+  lastRefreshedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -126,6 +127,7 @@ export interface AdminGameDetail extends AdminGameSummary {
   summary: string | null;
   genres: string[];
   genreProfileId: string | null;
+  genreProfileManual: boolean;
   lastRefreshedAt: Date | null;
   allTimePeakCcu: number | null;
   allTimePeakCcuAt: Date | null;
@@ -220,6 +222,7 @@ export class AdminService {
     @InjectRepository(GenreProfile)
     private readonly genreProfiles: Repository<GenreProfile>,
     private readonly gamesService: GamesService,
+    private readonly genresService: GenresService,
   ) {}
 
   async stats(): Promise<AdminStats> {
@@ -231,7 +234,6 @@ export class AdminService {
       salesTotal,
       salesUndated,
       bySourceRows,
-      byPlatformRows,
       latestSteamSignal,
       steamReviewsTotal,
       trustedTotal,
@@ -262,13 +264,6 @@ export class AdminService {
         .addSelect('COUNT(*)', 'c')
         .groupBy('m.source')
         .getRawMany<{ source: SalesSource; c: string }>(),
-      this.milestones
-        .createQueryBuilder('m')
-        .where('m.rejectedAt IS NULL')
-        .select('m.platform', 'platform')
-        .addSelect('COUNT(*)', 'c')
-        .groupBy('m.platform')
-        .getRawMany<{ platform: Platform; c: string }>(),
       this.signals
         .createQueryBuilder('s')
         .where('s.metric = :m', { m: SignalMetric.STEAM_REVIEWS })
@@ -294,15 +289,6 @@ export class AdminService {
     );
     for (const row of bySourceRows) bySource[row.source] = Number(row.c);
 
-    const byPlatform = Object.values(Platform).reduce(
-      (acc, p) => {
-        acc[p] = 0;
-        return acc;
-      },
-      {} as Record<Platform, number>,
-    );
-    for (const row of byPlatformRows) byPlatform[row.platform] = Number(row.c);
-
     // Count games that have at least one calibrated Boxleiter multiplier
     // (PC, PlayStation or Xbox). Done in raw SQL because TypeORM's typed
     // where helpers don't compose well with multi-column "any not null".
@@ -325,7 +311,6 @@ export class AdminService {
       milestones: {
         total: salesTotal,
         bySource,
-        byPlatform,
         undated: salesUndated,
       },
       signals: {
@@ -345,11 +330,21 @@ export class AdminService {
     q?: string;
     platform?: string;
     hasSales?: boolean;
+    genreProfileId?: string;
+    calibrated?: boolean;
+    hasEstimates?: boolean;
+    sort?: 'updated' | 'reviews' | 'releaseDate' | 'lastRefreshed';
+    direction?: 'asc' | 'desc';
     offset?: number;
     limit?: number;
   }): Promise<PaginatedAdmin<AdminGameSummary>> {
     const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
     const offset = Math.max(opts.offset ?? 0, 0);
+
+    const calibratedExpr =
+      'g.calibratedMultiplier IS NOT NULL ' +
+      'OR g.calibratedPsMultiplier IS NOT NULL ' +
+      'OR g.calibratedXboxMultiplier IS NOT NULL';
 
     const qb = this.games
       .createQueryBuilder('g')
@@ -371,6 +366,7 @@ export class AdminService {
         'g.calibrationSourcePc AS "calibrationSourcePc"',
         'g.calibrationSourcePs AS "calibrationSourcePs"',
         'g.calibrationSourceXbox AS "calibrationSourceXbox"',
+        'g.lastRefreshedAt AS "lastRefreshedAt"',
         'g.createdAt AS "createdAt"',
         'g.updatedAt AS "updatedAt"',
       ])
@@ -389,10 +385,25 @@ export class AdminService {
         { platform: opts.platform },
       );
     }
+    if (opts.genreProfileId === 'none') {
+      qb.andWhere('g.genreProfileId IS NULL');
+    } else if (opts.genreProfileId) {
+      qb.andWhere('g.genreProfileId = :gpid', { gpid: opts.genreProfileId });
+    }
+    if (opts.calibrated === true) {
+      qb.andWhere(`(${calibratedExpr})`);
+    } else if (opts.calibrated === false) {
+      qb.andWhere(`NOT (${calibratedExpr})`);
+    }
     if (opts.hasSales === true) {
       qb.andHaving('COUNT(DISTINCT m.id) > 0');
     } else if (opts.hasSales === false) {
       qb.andHaving('COUNT(DISTINCT m.id) = 0');
+    }
+    if (opts.hasEstimates === true) {
+      qb.andHaving('COUNT(DISTINCT e.id) > 0');
+    } else if (opts.hasEstimates === false) {
+      qb.andHaving('COUNT(DISTINCT e.id) = 0');
     }
 
     const countQb = this.games.createQueryBuilder('g');
@@ -405,11 +416,35 @@ export class AdminService {
         { platform: opts.platform },
       );
     }
-    // hasSales filter doesn't influence total here since we don't replicate
-    // the HAVING; admin-table totals are approximate when that filter is on.
+    if (opts.genreProfileId === 'none') {
+      countQb.andWhere('g.genreProfileId IS NULL');
+    } else if (opts.genreProfileId) {
+      countQb.andWhere('g.genreProfileId = :gpid', {
+        gpid: opts.genreProfileId,
+      });
+    }
+    if (opts.calibrated === true) {
+      countQb.andWhere(`(${calibratedExpr})`);
+    } else if (opts.calibrated === false) {
+      countQb.andWhere(`NOT (${calibratedExpr})`);
+    }
+    // hasSales / hasEstimates filters don't influence total here since we
+    // don't replicate the HAVING; admin-table totals are approximate when
+    // either of those filters is on.
+
+    const direction = opts.direction === 'asc' ? 'ASC' : 'DESC';
+    // NULLS LAST keeps games missing the sorted attribute (no reviews / no
+    // release date / never refreshed) at the bottom regardless of direction.
+    const SORT_EXPR: Record<string, string> = {
+      updated: 'g.updatedAt',
+      reviews: 'MAX(s.value)',
+      releaseDate: 'g.releaseDate',
+      lastRefreshed: 'g.lastRefreshedAt',
+    };
+    const sortExpr = SORT_EXPR[opts.sort ?? 'updated'] ?? SORT_EXPR.updated;
 
     const rawRows = await qb
-      .orderBy('g.updatedAt', 'DESC')
+      .orderBy(sortExpr, direction, 'NULLS LAST')
       .offset(offset)
       .limit(limit)
       .getRawMany<{
@@ -425,6 +460,7 @@ export class AdminService {
         calibrationSourcePc: SalesSource | null;
         calibrationSourcePs: SalesSource | null;
         calibrationSourceXbox: SalesSource | null;
+        lastRefreshedAt: Date | null;
         createdAt: Date;
         updatedAt: Date;
         milestonesCount: string;
@@ -459,6 +495,7 @@ export class AdminService {
       estimatesCount: Number(r.estimatesCount ?? 0),
       latestReviews: r.latestReviews == null ? null : Number(r.latestReviews),
       latestReviewsAt: r.latestReviewsAt,
+      lastRefreshedAt: r.lastRefreshedAt,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     }));
@@ -561,6 +598,7 @@ export class AdminService {
       summary: game.summary,
       genres: game.genres ?? [],
       genreProfileId: game.genreProfileId,
+      genreProfileManual: game.genreProfileManual,
       lastRefreshedAt: game.lastRefreshedAt,
       publisher: game.publisher,
       publisherRecord: game.publisherRecord
@@ -698,7 +736,13 @@ export class AdminService {
 
     if (input.genreProfileId !== undefined) {
       if (input.genreProfileId === null || input.genreProfileId === '') {
-        game.genreProfileId = null;
+        // Revert to auto: drop the manual flag and re-resolve the profile
+        // from the game's genres right away so the chosen profile stays
+        // visible without waiting for the next refresh.
+        game.genreProfileManual = false;
+        game.genreProfileId = await this.genresService.resolveFirstProfileId(
+          game.genres,
+        );
       } else {
         const profile = await this.genreProfiles.findOne({
           where: { id: input.genreProfileId },
@@ -709,6 +753,7 @@ export class AdminService {
           );
         }
         game.genreProfileId = input.genreProfileId;
+        game.genreProfileManual = true;
       }
     }
 
@@ -807,7 +852,6 @@ export class AdminService {
   async listMilestones(opts: {
     gameId?: string;
     source?: SalesSource;
-    platform?: Platform;
     undated?: boolean;
     suspect?: boolean;
     offset?: number;
@@ -825,7 +869,6 @@ export class AdminService {
 
     if (opts.gameId) qb.andWhere('m.gameId = :gid', { gid: opts.gameId });
     if (opts.source) qb.andWhere('m.source = :src', { src: opts.source });
-    if (opts.platform) qb.andWhere('m.platform = :pf', { pf: opts.platform });
     if (opts.undated) qb.andWhere('m.reportedAt IS NULL');
 
     const [entities, raws, total] = await Promise.all([

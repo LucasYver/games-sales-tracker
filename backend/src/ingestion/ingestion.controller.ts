@@ -8,15 +8,12 @@ import {
   IsUrl,
   IsUUID,
 } from 'class-validator';
-import { Platform, SalesSource } from '../entities';
+import { SalesSource } from '../entities';
 import { IngestionService } from './ingestion.service';
 
 class AddSalesDto {
   @IsUUID()
   gameId: string;
-
-  @IsEnum(Platform)
-  platform: Platform;
 
   @IsInt()
   @IsPositive()

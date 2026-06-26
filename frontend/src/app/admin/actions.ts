@@ -228,6 +228,10 @@ export interface UpdateGenreProfilePayload {
   lifecycleDriver?: string | null;
   peakCcuToWeekOneLow?: number;
   peakCcuToWeekOneHigh?: number;
+  pcDefaultBoxleiterLow?: number | null;
+  pcDefaultBoxleiterHigh?: number | null;
+  psDefaultBoxleiterLow?: number | null;
+  psDefaultBoxleiterHigh?: number | null;
 }
 
 export async function updateGenreProfile(
@@ -239,6 +243,7 @@ export async function updateGenreProfile(
     body: JSON.stringify(payload),
   });
   revalidatePath('/admin/genre-profiles');
+  revalidatePath(`/admin/genre-profiles/${id}`);
   return result;
 }
 

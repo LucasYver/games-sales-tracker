@@ -41,6 +41,7 @@ import { EstimateHistoryChart } from '../../_components/EstimateHistoryChart';
 import { CcuHistoryChart } from '../../_components/CcuHistoryChart';
 import { LauncherProfileBadge } from '../../_components/LauncherProfileBadge';
 import { GameGenreProfileSelect } from '../../_components/GameGenreProfileSelect';
+import { EstimateBreakdownPanel } from '../../_components/EstimateBreakdownPanel';
 import { deleteGame, deleteMilestone, deleteSignal } from '../../actions';
 
 export const dynamic = 'force-dynamic';
@@ -361,6 +362,7 @@ export default async function AdminGameDetailPage({
                 <GameGenreProfileSelect
                   gameId={game.id}
                   currentProfileId={game.genreProfileId}
+                  manual={game.genreProfileManual}
                   profiles={genreProfiles}
                 />
               </dd>
@@ -520,6 +522,8 @@ export default async function AdminGameDetailPage({
 
       <MethodsCard estimates={game.estimates} />
 
+      <EstimateBreakdownPanel gameId={game.id} />
+
       <Tabs defaultValue="sales" className="gap-4">
         <TabsList className="h-auto flex-wrap">
           <TabsTrigger value="sales">
@@ -550,7 +554,6 @@ export default async function AdminGameDetailPage({
                       <TableHead>Source tier</TableHead>
                       <TableHead>Reported by</TableHead>
                       <TableHead>Attribution</TableHead>
-                      <TableHead>Platform</TableHead>
                       <TableHead className="text-right">Units</TableHead>
                       <TableHead className="text-right">Confidence</TableHead>
                       <TableHead>Reported</TableHead>
@@ -601,9 +604,6 @@ export default async function AdminGameDetailPage({
                           title={m.publisher ?? undefined}
                         >
                           {m.publisher ?? '—'}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">{m.platform}</Badge>
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {m.units.toLocaleString()}

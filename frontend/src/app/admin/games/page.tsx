@@ -2,6 +2,7 @@ import Link from 'next/link';
 import {
   adminFetch,
   type AdminGameSummary,
+  type AdminGenreProfile,
   type PaginatedAdmin,
 } from '@/lib/admin';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,6 +36,53 @@ function formatDate(iso: string | null): string {
   });
 }
 
+/**
+ * Column header that drives server-side sorting via query params. Clicking
+ * an inactive column sorts it descending; clicking the active column toggles
+ * the direction. Resets to page 1 by omitting the `page` param.
+ */
+function SortableHead({
+  column,
+  label,
+  align = 'left',
+  sort,
+  direction,
+  filters,
+}: {
+  column: string;
+  label: string;
+  align?: 'left' | 'right';
+  sort?: string;
+  direction?: string;
+  filters: Record<string, string>;
+}) {
+  const isActive = sort === column;
+  const currentDir = isActive ? (direction === 'asc' ? 'asc' : 'desc') : null;
+  const nextDir = currentDir === 'desc' ? 'asc' : 'desc';
+  const indicator = !isActive ? '↕' : currentDir === 'asc' ? '↑' : '↓';
+  const href = `?${new URLSearchParams({
+    ...filters,
+    sort: column,
+    direction: nextDir,
+  })}`;
+
+  return (
+    <TableHead className={align === 'right' ? 'text-right' : undefined}>
+      <Link
+        href={href}
+        className={`hover:text-foreground inline-flex items-center gap-1 ${
+          isActive ? 'text-foreground' : ''
+        }`}
+      >
+        {label}
+        <span className={`text-xs ${isActive ? '' : 'opacity-40'}`}>
+          {indicator}
+        </span>
+      </Link>
+    </TableHead>
+  );
+}
+
 export default async function AdminGamesPage({
   searchParams,
 }: {
@@ -42,24 +90,49 @@ export default async function AdminGamesPage({
     q?: string;
     platform?: string;
     hasSales?: string;
+    genreProfile?: string;
+    calibrated?: string;
+    hasEstimates?: string;
+    sort?: string;
+    direction?: string;
     page?: string;
   }>;
 }) {
-  const { q, platform, hasSales, page: pageParam } = await searchParams;
+  const {
+    q,
+    platform,
+    hasSales,
+    genreProfile,
+    calibrated,
+    hasEstimates,
+    sort,
+    direction,
+    page: pageParam,
+  } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
   const offset = (page - 1) * PAGE_SIZE;
 
+  // Active filters/sort shared by the fetch query and the pagination links.
+  const filters: Record<string, string> = {};
+  if (q) filters.q = q;
+  if (platform) filters.platform = platform;
+  if (hasSales) filters.hasSales = hasSales;
+  if (genreProfile) filters.genreProfile = genreProfile;
+  if (calibrated) filters.calibrated = calibrated;
+  if (hasEstimates) filters.hasEstimates = hasEstimates;
+  if (sort) filters.sort = sort;
+  if (direction) filters.direction = direction;
+
   const params = new URLSearchParams({
+    ...filters,
     limit: String(PAGE_SIZE),
     offset: String(offset),
   });
-  if (q) params.set('q', q);
-  if (platform) params.set('platform', platform);
-  if (hasSales) params.set('hasSales', hasSales);
 
-  const { items, total } = await adminFetch<PaginatedAdmin<AdminGameSummary>>(
-    `/games?${params}`,
-  );
+  const [{ items, total }, genreProfiles] = await Promise.all([
+    adminFetch<PaginatedAdmin<AdminGameSummary>>(`/games?${params}`),
+    adminFetch<AdminGenreProfile[]>('/genre-profiles'),
+  ]);
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -121,8 +194,51 @@ export default async function AdminGamesPage({
                 className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs"
               >
                 <option value="">Any</option>
-                <option value="true">With sales</option>
-                <option value="false">Without sales</option>
+                <option value="true">With milestone</option>
+                <option value="false">Without milestone</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="genreProfile">Genre profile</Label>
+              <select
+                id="genreProfile"
+                name="genreProfile"
+                defaultValue={genreProfile ?? ''}
+                className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs"
+              >
+                <option value="">All</option>
+                <option value="none">None (unmatched)</option>
+                {genreProfiles.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="calibrated">Calibration</Label>
+              <select
+                id="calibrated"
+                name="calibrated"
+                defaultValue={calibrated ?? ''}
+                className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs"
+              >
+                <option value="">Any</option>
+                <option value="true">Calibrated</option>
+                <option value="false">Not calibrated</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="hasEstimates">Estimates</Label>
+              <select
+                id="hasEstimates"
+                name="hasEstimates"
+                defaultValue={hasEstimates ?? ''}
+                className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs"
+              >
+                <option value="">Any</option>
+                <option value="true">With estimate</option>
+                <option value="false">Without estimate</option>
               </select>
             </div>
             <Button type="submit">Apply</Button>
@@ -139,11 +255,32 @@ export default async function AdminGamesPage({
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Platforms</TableHead>
-              <TableHead>Released</TableHead>
-              <TableHead className="text-right">Reviews</TableHead>
+              <SortableHead
+                column="releaseDate"
+                label="Released"
+                sort={sort}
+                direction={direction}
+                filters={filters}
+              />
+              <SortableHead
+                column="reviews"
+                label="Reviews"
+                align="right"
+                sort={sort}
+                direction={direction}
+                filters={filters}
+              />
               <TableHead className="text-right">Milestones</TableHead>
               <TableHead className="text-right">Estimates</TableHead>
               <TableHead className="text-right">Calibrated</TableHead>
+              <SortableHead
+                column="lastRefreshed"
+                label="Last refresh"
+                align="right"
+                sort={sort}
+                direction={direction}
+                filters={filters}
+              />
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -199,6 +336,9 @@ export default async function AdminGamesPage({
                     .filter(Boolean)
                     .join(' · ') || '—'}
                 </TableCell>
+                <TableCell className="text-muted-foreground text-right text-sm">
+                  {formatDate(g.lastRefreshedAt)}
+                </TableCell>
                 <TableCell className="text-right">
                   <DeleteButton
                     action={deleteGame.bind(null, g.id)}
@@ -212,7 +352,7 @@ export default async function AdminGamesPage({
             {items.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={8}
+                  colSpan={9}
                   className="text-muted-foreground py-12 text-center"
                 >
                   No games match these filters.
@@ -229,9 +369,7 @@ export default async function AdminGamesPage({
             <Button asChild variant="outline" size="sm">
               <Link
                 href={`?${new URLSearchParams({
-                  ...(q ? { q } : {}),
-                  ...(platform ? { platform } : {}),
-                  ...(hasSales ? { hasSales } : {}),
+                  ...filters,
                   page: String(page - 1),
                 })}`}
               >
@@ -246,9 +384,7 @@ export default async function AdminGamesPage({
             <Button asChild variant="outline" size="sm">
               <Link
                 href={`?${new URLSearchParams({
-                  ...(q ? { q } : {}),
-                  ...(platform ? { platform } : {}),
-                  ...(hasSales ? { hasSales } : {}),
+                  ...filters,
                   page: String(page + 1),
                 })}`}
               >

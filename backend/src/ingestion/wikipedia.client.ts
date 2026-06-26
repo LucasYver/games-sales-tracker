@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
-import { Platform } from '../entities';
 import { LlmExtractorService } from '../llm/llm-extractor.service';
 import { isPeriodicQuote } from './sales-figure.utils';
 
@@ -12,7 +11,6 @@ export interface WikipediaFigure {
 
 export interface WikipediaSales {
   global: WikipediaFigure | null;
-  perPlatform: { platform: Platform; figure: WikipediaFigure }[];
   // Engagement milestone (e.g. "X million players", "X downloads"). Stored
   // separately so it can never feed the sales reconciliation / calibration
   // math — it conflates copies sold with subscription users and free trials.
@@ -27,7 +25,6 @@ interface LlmFigure {
 }
 interface LlmResult {
   global: LlmFigure | null;
-  perPlatform: (LlmFigure & { platform: string })[];
   engagement: LlmFigure | null;
 }
 
@@ -38,26 +35,25 @@ const MAX_TEXT_CHARS = 24000;
 
 const SYSTEM_PROMPT = `You are a precise data extractor. You are given the plain text of a Wikipedia article about a video game. Extract sales figures ONLY when explicitly stated in the text. NEVER use outside knowledge and NEVER estimate.
 
-CUMULATIVE UNITS ONLY for "global"/"perPlatform" — only put a figure there if it represents the TOTAL CUMULATIVE LIFETIME number of UNITS (copies) sold for the game ("has sold X copies", "X copies sold to date", "X copies as of [date]"). 
-NEVER put in "global"/"perPlatform":
+CUMULATIVE UNITS ONLY for "global" — only put a figure there if it represents the TOTAL CUMULATIVE LIFETIME number of UNITS (copies) sold for the game ("has sold X copies", "X copies sold to date", "X copies as of [date]"). 
+NEVER put in "global":
   - "sold X in its first week / first month / launch weekend"
   - "X copies in [year/quarter]" when it is clearly a periodic figure (e.g. "X in Q1", "weekly sales of X")
   - "X players" / "X downloads" / "X concurrent users" / "X subscribers" — these are engagement metrics; see the "engagement" field below
   - MONETARY figures: any number with $/€/£/¥ or words like "revenue", "earnings", "turnover". In English finance, "sales" often means revenue: "$3.9 million in sales" is REVENUE, NOT 3.9M units. If a currency sign appears, REJECT.
   - DLC, expansions, bundles, remasters, the franchise/series, or other games
 
-EXAMPLES OF FIGURES TO REJECT for "global"/"perPlatform" (return null):
+EXAMPLES OF FIGURES TO REJECT for "global" (return null):
   - "the game brought in $3.9 million in sales in FY2024" → revenue + fiscal period
   - "moved 200,000 copies in the first week" → periodic
 
-- "global": the most RECENT cumulative worldwide sales total for the base game in UNITS (copies/units sold or shipped). Convert to an integer (e.g. "30 million" -> 30000000). If several dated cumulative figures exist, choose the most recent one. Put that figure's date in "date" as "YYYY-MM-DD", "YYYY-MM" or "YYYY" (null if none is stated). Put the verbatim sentence the figure comes from in "quote".
-- "perPlatform": include a platform ONLY when the text gives a CUMULATIVE sales number specifically for that one platform (e.g. "sold 5 million on PS5 to date"). NEVER split or distribute a worldwide/combined total across platforms. If the text only states a worldwide/combined total, "perPlatform" MUST be empty. The quote must name the platform AND describe a cumulative figure. Map PS4/PS5 -> PLAYSTATION, Xbox One/Series -> XBOX, Windows/PC -> PC, anything else -> OTHER. We only track PC, PlayStation and Xbox; ignore Switch and mobile figures.
+- "global": the most RECENT cumulative WORLDWIDE (all-platforms combined) sales total for the base game in UNITS (copies/units sold or shipped). Convert to an integer (e.g. "30 million" -> 30000000). If several dated cumulative figures exist, choose the most recent one. We only track worldwide totals — NEVER report a single-platform figure (e.g. "sold 5 million on PS5") here. Put that figure's date in "date" as "YYYY-MM-DD", "YYYY-MM" or "YYYY" (null if none is stated). Put the verbatim sentence the figure comes from in "quote".
 - "engagement": the most RECENT cumulative ENGAGEMENT milestone reported for the target base game when no copies-sold number is available (or in addition to it). Examples to capture here (NOT in "global"):
     - "X million players have played the game"
     - "X million players reached" (especially when subscription users like Ubisoft+ / Xbox Game Pass / PS Plus are explicitly included)
     - "X million downloads" / "X million unique players"
   Must be CUMULATIVE LIFETIME for the TARGET base game. Same date/quote rules as "global". Set null when no such figure exists.
-- If no reliable figure exists at all, set "global" to null, "perPlatform" to [] and "engagement" to null.
+- If no reliable figure exists at all, set "global" to null and "engagement" to null.
 
 Every "quote" MUST be copied verbatim from the provided text.`;
 
@@ -75,23 +71,6 @@ const SCHEMA: Record<string, unknown> = {
       },
       required: ['units', 'date', 'quote'],
     },
-    perPlatform: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          platform: {
-            type: 'string',
-            enum: ['PC', 'PLAYSTATION', 'XBOX', 'OTHER'],
-          },
-          units: { type: 'integer' },
-          date: { type: ['string', 'null'] },
-          quote: { type: 'string' },
-        },
-        required: ['platform', 'units', 'date', 'quote'],
-      },
-    },
     engagement: {
       type: ['object', 'null'],
       additionalProperties: false,
@@ -103,7 +82,7 @@ const SCHEMA: Record<string, unknown> = {
       required: ['units', 'date', 'quote'],
     },
   },
-  required: ['global', 'perPlatform', 'engagement'],
+  required: ['global', 'engagement'],
 };
 
 @Injectable()
@@ -164,24 +143,8 @@ export class WikipediaClient {
           ? engagementCandidate
           : null;
 
-      const perPlatform = (result.perPlatform ?? [])
-        .filter((p) => isGrounded(p.quote) && !isPeriodicQuote(p.quote))
-        .map((p) => ({
-          platform: this.mapPlatform(p.platform),
-          figure: this.toFigure(p),
-        }))
-        .filter(
-          (p): p is { platform: Platform; figure: WikipediaFigure } =>
-            p.platform !== null &&
-            p.figure.units > 0 &&
-            p.figure.reportedAt !== null &&
-            // Guard against a worldwide total being mislabelled per-platform:
-            // the quote must actually name the platform.
-            this.quoteMentionsPlatform(p.platform, p.figure.quote),
-        );
-
-      if (!global && perPlatform.length === 0 && !engagement) return null;
-      return { global, perPlatform, engagement, sourceUrl };
+      if (!global && !engagement) return null;
+      return { global, engagement, sourceUrl };
     } catch (error) {
       // Rate-limit (429) is a transient issue — log at debug only so we don't
       // spam the console; the other sources (RSS, Tavily, stores) will pick up
@@ -213,21 +176,6 @@ export class WikipediaClient {
       reportedAt: this.parseDate(figure.date),
       quote: figure.quote.replace(/\s+/g, ' ').trim(),
     };
-  }
-
-  private mapPlatform(value: string): Platform | null {
-    const match = (Object.values(Platform) as string[]).includes(value);
-    return match ? (value as Platform) : null;
-  }
-
-  private quoteMentionsPlatform(platform: Platform, quote: string): boolean {
-    const patterns: Partial<Record<Platform, RegExp>> = {
-      [Platform.PLAYSTATION]: /playstation|\bps[2345]\b/i,
-      [Platform.XBOX]: /xbox/i,
-      [Platform.PC]: /\bpc\b|windows|steam/i,
-    };
-    const pattern = patterns[platform];
-    return pattern ? pattern.test(quote) : false;
   }
 
   private parseDate(value: string | null): Date | null {

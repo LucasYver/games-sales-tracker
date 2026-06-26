@@ -66,9 +66,6 @@ export default async function AdminDashboard() {
   const bySource = Object.entries(stats.milestones.bySource).sort(
     (a, b) => b[1] - a[1],
   );
-  const byPlatform = Object.entries(stats.milestones.byPlatform).sort(
-    (a, b) => b[1] - a[1],
-  );
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-8 px-6 py-8">
@@ -102,7 +99,7 @@ export default async function AdminDashboard() {
         />
       </section>
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <section>
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-semibold tracking-wide uppercase">
@@ -122,36 +119,6 @@ export default async function AdminDashboard() {
                   <TableRow key={source}>
                     <TableCell>
                       <Badge variant="outline">{source}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {count.toLocaleString()}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-              Milestones by platform
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Platform</TableHead>
-                  <TableHead className="text-right">Count</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {byPlatform.map(([platform, count]) => (
-                  <TableRow key={platform}>
-                    <TableCell>
-                      <Badge variant="secondary">{platform}</Badge>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {count.toLocaleString()}

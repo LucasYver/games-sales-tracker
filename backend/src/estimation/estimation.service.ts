@@ -175,6 +175,105 @@ export interface EstimateOptions {
   ignoreCalibration?: boolean;
 }
 
+// ───── Breakdown types (diagnostic / read-only) ──────────────────────────
+
+export interface BoxleiterBreakdownEntry {
+  type: 'boxleiter';
+  platform: Platform;
+  method: string;
+  signal: { metric: SignalMetric; value: number; capturedAt: string };
+  calibratedValue: number | null;
+  isCalibrated: boolean;
+  multiplierLow: number;
+  multiplierHigh: number;
+  rawLow: number;
+  rawHigh: number;
+  ccuPeak: number | null;
+  ccuRangeLow: number | null;
+  ccuRangeHigh: number | null;
+  ccuOutcome: 'intersect' | 'conflict' | null;
+  finalLow: number;
+  finalHigh: number;
+}
+
+export interface FirstWeekBreakdownEntry {
+  type: 'first-week';
+  method: string;
+  launchPeakValue: number;
+  launchPeakCapturedAt: string;
+  ccuRatioLow: number;
+  ccuRatioHigh: number;
+  weekOneFromCcuLow: number;
+  weekOneFromCcuHigh: number;
+  reviewsAtLaunch: number | null;
+  weekOneFinalLow: number;
+  weekOneFinalHigh: number;
+  ageDays: number;
+  projectionMultiplier: number;
+  m1: number | null;
+  finalLow: number;
+  finalHigh: number;
+}
+
+export interface WeightedEntry {
+  method: string;
+  weight: number;
+  confWeight: number;
+  effectiveWeight: number;
+}
+
+export interface PlatformBreakdownResult {
+  platform: Platform;
+  entries: (BoxleiterBreakdownEntry | FirstWeekBreakdownEntry)[];
+  weightedEntries: WeightedEntry[];
+  totalWeight: number;
+  weightedLow: number;
+  weightedHigh: number;
+  disagreement: number;
+  inflate: number;
+  aggregateLow: number;
+  aggregateHigh: number;
+}
+
+export interface EstimateBreakdownResult {
+  computedAt: string;
+  platforms: PlatformBreakdownResult[];
+  pureTotal: { low: number; high: number } | null;
+  declared: {
+    units: number;
+    source: string;
+    reportedAt: string | null;
+  } | null;
+}
+
+interface AggregateTrace {
+  weightedEntries: WeightedEntry[];
+  totalWeight: number;
+  weightedLow: number;
+  weightedHigh: number;
+  disagreement: number;
+  inflate: number;
+  aggregateLow: number;
+  aggregateHigh: number;
+}
+
+/**
+ * Mutable accumulator threaded (optionally) through the live estimation
+ * pipeline. When present, each stage records its intermediate inputs and
+ * outputs so an admin breakdown reflects *exactly* what the real
+ * calculation did — no parallel re-implementation. When absent (the
+ * production path), the pipeline behaves identically with zero overhead.
+ */
+export interface EstimateTrace {
+  boxleiter: BoxleiterBreakdownEntry[];
+  firstWeek: FirstWeekBreakdownEntry[];
+  aggregates: Map<Platform, AggregateTrace>;
+}
+
+function createEstimateTrace(): EstimateTrace {
+  return { boxleiter: [], firstWeek: [], aggregates: new Map() };
+}
+
 interface PlatformConfig {
   platform: Platform;
   signalMetric: SignalMetric;
@@ -292,6 +391,7 @@ export class EstimationService {
     gameId: string,
     asOf?: Date,
     opts: EstimateOptions = {},
+    trace?: EstimateTrace,
   ): Promise<EstimateResult[]> {
     const game = await this.games.findOne({
       where: { id: gameId },
@@ -303,7 +403,13 @@ export class EstimationService {
     for (const platform of game.platforms) {
       const cfg = this.platforms.find((p) => p.platform === platform);
       if (!cfg) continue;
-      const boxleiter = await this.estimateForPlatform(game, cfg, asOf, opts);
+      const boxleiter = await this.estimateForPlatform(
+        game,
+        cfg,
+        asOf,
+        opts,
+        trace,
+      );
       if (boxleiter) results.push(boxleiter);
     }
 
@@ -311,7 +417,11 @@ export class EstimationService {
     // Steam peak CCU and (when captured close to launch) review count,
     // bucketed by launch size. Independent of any calibrated multiplier
     // so it adds signal especially for newer titles.
-    const firstWeek = await this.estimateFirstWeekExtrapolationForPc(game, asOf);
+    const firstWeek = await this.estimateFirstWeekExtrapolationForPc(
+      game,
+      asOf,
+      trace,
+    );
     if (firstWeek) results.push(firstWeek);
 
     return results;
@@ -421,6 +531,7 @@ export class EstimationService {
   private async aggregateResultsByPlatform(
     gameId: string,
     results: EstimateResult[],
+    trace?: EstimateTrace,
   ): Promise<{
     aggregates: Map<Platform, EstimateResult>;
     splits: EstimateResult[];
@@ -450,7 +561,7 @@ export class EstimationService {
     const pcResults = byPlatform.get(Platform.PC) ?? [];
     const pcAggregate =
       pcResults.length > 0
-        ? this.aggregateMethodsForPlatform(pcResults)
+        ? this.aggregateMethodsForPlatform(pcResults, trace)
         : null;
     if (pcAggregate) aggregates.set(Platform.PC, pcAggregate);
 
@@ -473,7 +584,7 @@ export class EstimationService {
     const psResults = byPlatform.get(Platform.PLAYSTATION) ?? [];
     const psAggregate =
       psResults.length > 0
-        ? this.aggregateMethodsForPlatform(psResults)
+        ? this.aggregateMethodsForPlatform(psResults, trace)
         : null;
     if (psAggregate) aggregates.set(Platform.PLAYSTATION, psAggregate);
 
@@ -512,7 +623,7 @@ export class EstimationService {
       ) {
         continue;
       }
-      const aggregate = this.aggregateMethodsForPlatform(perPlatform);
+      const aggregate = this.aggregateMethodsForPlatform(perPlatform, trace);
       if (aggregate) aggregates.set(platform, aggregate);
     }
 
@@ -686,6 +797,7 @@ export class EstimationService {
    */
   private aggregateMethodsForPlatform(
     perPlatform: EstimateResult[],
+    trace?: EstimateTrace,
   ): EstimateResult | null {
     const eligible = perPlatform
       .map((r) => {
@@ -744,6 +856,24 @@ export class EstimationService {
     const aggLow = Math.max(0, weightedLow * (1 - inflate));
     const aggHigh = weightedHigh * (1 + inflate);
 
+    if (trace) {
+      trace.aggregates.set(eligible[0].result.platform, {
+        weightedEntries: eligible.map((entry) => ({
+          method: entry.result.method,
+          weight: Number(entry.method.defaultWeight),
+          confWeight: AGGREGATION_CONFIDENCE_WEIGHT[entry.result.confidence],
+          effectiveWeight: effectiveWeight(entry),
+        })),
+        totalWeight,
+        weightedLow: Math.round(weightedLow),
+        weightedHigh: Math.round(weightedHigh),
+        disagreement,
+        inflate,
+        aggregateLow: Math.round(aggLow),
+        aggregateHigh: Math.round(aggHigh),
+      });
+    }
+
     return {
       platform: eligible[0].result.platform,
       estimatedLow: Math.round(aggLow),
@@ -758,22 +888,12 @@ export class EstimationService {
 
   /**
    * Derive and persist this game's Boxleiter multipliers for every platform
-   * that has both a reliable declared figure and a contemporaneous signal.
-   * Each platform is calibrated independently; failures on one platform never
-   * affect the others.
-   *
-   * Two passes:
-   *  1. Per-platform records (`PC` / `PLAYSTATION` / `XBOX`) drive the
-   *     primary calibration via `recalibratePlatform`.
-   *  2. As a fallback, worldwide (`GLOBAL`) records are split
-   *     proportionally across platforms in `recalibrateFromGlobal`. Per-
-   *     platform calibration always wins: GLOBAL split only fills
-   *     platforms left without a calibrated multiplier after pass 1.
+   * from the worldwide declared figure. Milestones are worldwide totals, so
+   * the declared units are split proportionally across platforms (using each
+   * platform's static-default proxy weight) and each platform's multiplier is
+   * derived from its share — see `recalibrateFromGlobal`.
    */
   async recalibrateAll(gameId: string): Promise<void> {
-    for (const cfg of this.platforms) {
-      await this.recalibratePlatform(gameId, cfg);
-    }
     await this.recalibrateFromGlobal(gameId);
   }
 
@@ -784,6 +904,7 @@ export class EstimationService {
     cfg: PlatformConfig,
     asOf?: Date,
     opts: EstimateOptions = {},
+    trace?: EstimateTrace,
   ): Promise<EstimateResult | null> {
     const latestSignal = await this.signals.findOne({
       where: {
@@ -796,10 +917,13 @@ export class EstimationService {
     if (!latestSignal || latestSignal.value <= 0) return null;
 
     const signalValue = latestSignal.value;
+    const profile = await this.genres.resolveProfileForGame(game);
+    const profileDefaults = this.resolveProfileDefaults(cfg.platform, profile);
     const { low, high, method, isCalibrated } = this.resolveMultiplier(
       game,
       cfg,
       opts,
+      profileDefaults,
     );
 
     // Launcher profile only modulates the *PC* estimation today (the
@@ -820,10 +944,17 @@ export class EstimationService {
         ? LAUNCHER_REVIEWS_FACTOR[launcherProfile]
         : { low: 1, high: 1 };
 
-    let estimatedLow = signalValue * low * reviewsScale.low;
-    let estimatedHigh = signalValue * high * reviewsScale.high;
+    const rawLow = signalValue * low * reviewsScale.low;
+    const rawHigh = signalValue * high * reviewsScale.high;
+    let estimatedLow = rawLow;
+    let estimatedHigh = rawHigh;
     let finalMethod = method;
     let confidenceOverride: ConfidenceLevel | null = null;
+
+    let ccuPeak: number | null = null;
+    let ccuRangeLow: number | null = null;
+    let ccuRangeHigh: number | null = null;
+    let ccuOutcome: 'intersect' | 'conflict' | null = null;
 
     if (cfg.platform === Platform.PC) {
       const ccu = await this.applyCcuIntersection(
@@ -838,6 +969,10 @@ export class EstimationService {
         estimatedHigh = ccu.high;
         finalMethod = `${method}${ccu.methodSuffix}`;
         confidenceOverride = ccu.confidenceOverride;
+        ccuPeak = ccu.ccuPeak;
+        ccuRangeLow = ccu.ccuLow;
+        ccuRangeHigh = ccu.ccuHigh;
+        ccuOutcome = ccu.methodSuffix === '+ccu-intersect' ? 'intersect' : 'conflict';
       }
 
       const profileTag = LAUNCHER_PROFILE_METHOD_TAG[launcherProfile];
@@ -851,6 +986,31 @@ export class EstimationService {
       cfg.platform === Platform.PC
         ? capConfidence(baseConfidence, LAUNCHER_CONFIDENCE_CAP[launcherProfile])
         : baseConfidence;
+
+    if (trace) {
+      trace.boxleiter.push({
+        type: 'boxleiter',
+        platform: cfg.platform,
+        method: finalMethod,
+        signal: {
+          metric: cfg.signalMetric,
+          value: signalValue,
+          capturedAt: latestSignal.capturedAt.toISOString(),
+        },
+        calibratedValue: cfg.read(game) ?? null,
+        isCalibrated,
+        multiplierLow: low,
+        multiplierHigh: high,
+        rawLow: Math.round(rawLow),
+        rawHigh: Math.round(rawHigh),
+        ccuPeak,
+        ccuRangeLow: ccuRangeLow != null ? Math.round(ccuRangeLow) : null,
+        ccuRangeHigh: ccuRangeHigh != null ? Math.round(ccuRangeHigh) : null,
+        ccuOutcome,
+        finalLow: Math.round(estimatedLow),
+        finalHigh: Math.round(estimatedHigh),
+      });
+    }
 
     return {
       platform: cfg.platform,
@@ -887,6 +1047,9 @@ export class EstimationService {
     high: number;
     methodSuffix: string;
     confidenceOverride: ConfidenceLevel | null;
+    ccuPeak: number;
+    ccuLow: number;
+    ccuHigh: number;
   } | null> {
     // Sort by value DESC (not capturedAt): historical-imported peak rows
     // carry an old `capturedAt` so the *largest* value is the true current
@@ -917,6 +1080,9 @@ export class EstimationService {
         high: hi,
         methodSuffix: '+ccu-intersect',
         confidenceOverride: null,
+        ccuPeak: peak.value,
+        ccuLow,
+        ccuHigh,
       };
     }
 
@@ -925,6 +1091,9 @@ export class EstimationService {
       high: reviewsHigh,
       methodSuffix: '+ccu-conflict',
       confidenceOverride: ConfidenceLevel.LOW,
+      ccuPeak: peak.value,
+      ccuLow,
+      ccuHigh,
     };
   }
 
@@ -960,6 +1129,7 @@ export class EstimationService {
   private async estimateFirstWeekExtrapolationForPc(
     game: Game,
     asOf?: Date,
+    trace?: EstimateTrace,
   ): Promise<EstimateResult | null> {
     if (!game.releaseDate) return null;
 
@@ -1110,6 +1280,27 @@ export class EstimationService {
     const reviewsTag = combinedWithReviews ? '+reviews-corrected' : '';
     const method = `first-week-extrapolation-pc${projectionTag}${reviewsTag}${launcherTag}`;
 
+    if (trace) {
+      trace.firstWeek.push({
+        type: 'first-week',
+        method,
+        launchPeakValue: peak.value,
+        launchPeakCapturedAt: peak.capturedAt.toISOString(),
+        ccuRatioLow,
+        ccuRatioHigh,
+        weekOneFromCcuLow: Math.round(weekOneFromCcuLow),
+        weekOneFromCcuHigh: Math.round(weekOneFromCcuHigh),
+        reviewsAtLaunch: reviewsAtLaunch ?? null,
+        weekOneFinalLow: Math.round(weekOneLow),
+        weekOneFinalHigh: Math.round(weekOneHigh),
+        ageDays: Math.round(age),
+        projectionMultiplier: projection,
+        m1: genreProfile?.firstWeekToYearOneMultiplier ?? null,
+        finalLow: projectedLow,
+        finalHigh: projectedHigh,
+      });
+    }
+
     return {
       platform: Platform.PC,
       estimatedLow: projectedLow,
@@ -1156,10 +1347,43 @@ export class EstimationService {
     return best?.value ?? null;
   }
 
+  private resolveProfileDefaults(
+    platform: Platform,
+    profile: ResolvedGenreProfile | null,
+  ): { low: number; high: number } | undefined {
+    if (!profile) return undefined;
+    switch (platform) {
+      case Platform.PC:
+        if (
+          profile.pcDefaultBoxleiterLow != null &&
+          profile.pcDefaultBoxleiterHigh != null
+        ) {
+          return {
+            low: profile.pcDefaultBoxleiterLow,
+            high: profile.pcDefaultBoxleiterHigh,
+          };
+        }
+        break;
+      case Platform.PLAYSTATION:
+        if (
+          profile.psDefaultBoxleiterLow != null &&
+          profile.psDefaultBoxleiterHigh != null
+        ) {
+          return {
+            low: profile.psDefaultBoxleiterLow,
+            high: profile.psDefaultBoxleiterHigh,
+          };
+        }
+        break;
+    }
+    return undefined;
+  }
+
   private resolveMultiplier(
     game: Game,
     cfg: PlatformConfig,
     opts: EstimateOptions = {},
+    profileDefaults?: { low: number; high: number },
   ): { low: number; high: number; method: string; isCalibrated: boolean } {
     const calibrated = opts.ignoreCalibration ? null : cfg.read(game);
     if (calibrated && calibrated > 0) {
@@ -1171,100 +1395,35 @@ export class EstimationService {
       };
     }
     return {
-      low: cfg.defaultLow,
-      high: cfg.defaultHigh,
+      low: profileDefaults?.low ?? cfg.defaultLow,
+      high: profileDefaults?.high ?? cfg.defaultHigh,
       method: `${cfg.methodPrefix}-default`,
       isCalibrated: false,
     };
   }
 
-  private async recalibratePlatform(
-    gameId: string,
-    cfg: PlatformConfig,
-  ): Promise<number | null> {
-    const candidates = await this.milestones.find({
-      where: {
-        gameId,
-        platform: cfg.platform,
-        rejectedAt: IsNull(),
-        isEngagement: false,
-      },
-    });
-    if (candidates.length === 0) return null;
-
-    // Latest-dated-wins, regardless of source. Undated milestones are
-    // rejected at ingestion (see ingestion.service), so an absent
-    // `reportedAt` here is a defensive check only.
-    candidates.sort((a, b) => {
-      const ta = a.reportedAt?.getTime() ?? 0;
-      const tb = b.reportedAt?.getTime() ?? 0;
-      return tb - ta;
-    });
-    const best = candidates[0];
-    if (best.units <= 0 || !best.reportedAt) return null;
-
-    const target = best.reportedAt.getTime();
-    const snapshots = await this.signals.find({
-      where: { gameId, metric: cfg.signalMetric },
-    });
-    if (snapshots.length === 0) return null;
-
-    const closest = snapshots.reduce((acc, r) =>
-      Math.abs(r.capturedAt.getTime() - target) <
-      Math.abs(acc.capturedAt.getTime() - target)
-        ? r
-        : acc,
-    );
-
-    if (
-      Math.abs(closest.capturedAt.getTime() - target) >
-      CALIBRATION_WINDOW_DAYS * 24 * 3600 * 1000
-    ) {
-      return null;
-    }
-    if (closest.value <= 0) return null;
-
-    const multiplier = best.units / closest.value;
-    if (multiplier < cfg.plausibleMin || multiplier > cfg.plausibleMax) {
-      this.logger.debug(
-        `Skipping implausible ${cfg.platform} calibration for ${gameId}: ${multiplier.toFixed(1)}`,
-      );
-      return null;
-    }
-
-    await cfg.write(gameId, multiplier, best.source);
-    return multiplier;
-  }
-
   /**
-   * Calibrate per-platform multipliers from a worldwide (`platform =
-   * GLOBAL`) declared figure when no per-platform record is available.
-   * The vast majority of press/IR announcements are stated worldwide
-   * ("X million copies sold across all platforms") rather than broken
-   * down per platform, so this fallback unlocks calibration for cases
-   * `recalibratePlatform` cannot handle.
+   * Calibrate per-platform multipliers from the worldwide declared figure.
+   * Milestones are worldwide totals ("X million copies sold across all
+   * platforms"), so we split the declared units across platforms and derive
+   * a per-platform multiplier from each share.
    *
    * Algorithm:
-   *  1. Pick the best GLOBAL record (priority OFFICIAL > ANNOUNCEMENT >
-   *     MEDIA, then most recent reportedAt).
+   *  1. Pick the best record (most recent reportedAt; largest on ties).
    *  2. For each tracked platform, find the signal snapshot closest to
    *     the record's date (within `CALIBRATION_WINDOW_DAYS`).
    *  3. Compute a proxy estimate per platform using the **midpoint of
    *     the static default** multiplier (deliberately NOT the calibrated
    *     value — using the calibrated value would create a feedback loop
    *     that re-derives whatever was already stored).
-   *  4. Split the declared GLOBAL units proportionally to each
-   *     platform's share of the total proxy estimate.
-   *  5. For each platform NOT already calibrated by `recalibratePlatform`
-   *     AND whose share is at least `GLOBAL_SPLIT_MIN_PLATFORM_SHARE`,
-   *     derive `multiplier = declared_p / signal_p` and persist it
-   *     (with the GLOBAL record's source for spread modulation at read
-   *     time).
+   *  4. Split the declared units proportionally to each platform's share
+   *     of the total proxy estimate.
+   *  5. For each platform whose share is at least
+   *     `GLOBAL_SPLIT_MIN_PLATFORM_SHARE`, derive
+   *     `multiplier = declared_p / signal_p` and persist it (with the
+   *     record's source for spread modulation at read time).
    *
-   * Per-platform calibration always takes precedence: if any platform
-   * was already calibrated by a non-GLOBAL record in the same pass,
-   * we never overwrite it from the GLOBAL split.
-   * Example 
+   * Example
    *   - PC: 100,000 units
    *   - PS: 50,000 units
    *   - Xbox: 25,000 units
@@ -1277,7 +1436,6 @@ export class EstimationService {
     const candidates = await this.milestones.find({
       where: {
         gameId,
-        platform: Platform.GLOBAL,
         rejectedAt: IsNull(),
         isEngagement: false,
       },
@@ -1291,11 +1449,6 @@ export class EstimationService {
     });
     const best = candidates[0];
     if (best.units <= 0 || !best.reportedAt) return;
-
-    // Reload game so we see the calibrations any per-platform
-    // recalibratePlatform call may have written earlier in this pass.
-    const game = await this.games.findOne({ where: { id: gameId } });
-    if (!game) return;
 
     const target = best.reportedAt.getTime();
 
@@ -1339,9 +1492,6 @@ export class EstimationService {
     if (totalProxy <= 0) return;
 
     for (const slot of slots) {
-      // Per-platform calibration wins — don't overwrite.
-      if (slot.cfg.read(game) != null) continue;
-
       const share = slot.proxy / totalProxy;
       if (share < GLOBAL_SPLIT_MIN_PLATFORM_SHARE) continue;
 
@@ -1388,5 +1538,102 @@ export class EstimationService {
     if (signalValue < lowCutoff) return ConfidenceLevel.LOW;
     if (signalValue < highCutoff) return ConfidenceLevel.MEDIUM;
     return ConfidenceLevel.HIGH;
+  }
+
+  // ───── estimate breakdown (diagnostic) ──────────────────────────────────
+
+  /**
+   * Step-by-step breakdown of the **pure algo** estimation for a game.
+   *
+   * Single source of truth: this runs the *real* estimation pipeline
+   * (`estimateAllPlatforms` + `aggregateResultsByPlatform`) in pure mode
+   * (`ignoreCalibration: true`) with a `trace` collector attached, then
+   * assembles the recorded intermediate values. Nothing is re-computed
+   * and nothing is persisted, so the numbers shown are guaranteed
+   * identical to what the production pipeline produces.
+   */
+  async computeBreakdown(gameId: string): Promise<EstimateBreakdownResult> {
+    const computedAt = new Date().toISOString();
+
+    const trace = createEstimateTrace();
+    const results = await this.estimateAllPlatforms(
+      gameId,
+      undefined,
+      { ignoreCalibration: true },
+      trace,
+    );
+
+    const { aggregates } = await this.aggregateResultsByPlatform(
+      gameId,
+      results,
+      trace,
+    );
+
+    const milestones = await this.milestones.find({
+      where: { gameId, rejectedAt: IsNull(), isEngagement: false },
+      order: { units: 'DESC' },
+    });
+    const bestDeclared = milestones.length > 0 ? milestones[0] : null;
+
+    const platformOrder: Platform[] = [];
+    const seen = new Set<Platform>();
+    const pushPlatform = (p: Platform): void => {
+      if (!seen.has(p)) {
+        seen.add(p);
+        platformOrder.push(p);
+      }
+    };
+    for (const e of trace.boxleiter) pushPlatform(e.platform);
+    for (const p of aggregates.keys()) pushPlatform(p);
+
+    const platforms: PlatformBreakdownResult[] = platformOrder.map(
+      (platform) => {
+        const entries: (BoxleiterBreakdownEntry | FirstWeekBreakdownEntry)[] = [
+          ...trace.boxleiter.filter((e) => e.platform === platform),
+          ...(platform === Platform.PC ? trace.firstWeek : []),
+        ];
+        const agg = trace.aggregates.get(platform);
+        const aggResult = aggregates.get(platform);
+        return {
+          platform,
+          entries,
+          weightedEntries: agg?.weightedEntries ?? [],
+          totalWeight: agg?.totalWeight ?? 0,
+          weightedLow: agg?.weightedLow ?? 0,
+          weightedHigh: agg?.weightedHigh ?? 0,
+          disagreement: agg?.disagreement ?? 0,
+          inflate: agg?.inflate ?? 0,
+          aggregateLow: aggResult?.estimatedLow ?? agg?.aggregateLow ?? 0,
+          aggregateHigh: aggResult?.estimatedHigh ?? agg?.aggregateHigh ?? 0,
+        };
+      },
+    );
+
+    const pureTotal =
+      aggregates.size > 0
+        ? {
+            low: [...aggregates.values()].reduce(
+              (s, a) => s + a.estimatedLow,
+              0,
+            ),
+            high: [...aggregates.values()].reduce(
+              (s, a) => s + a.estimatedHigh,
+              0,
+            ),
+          }
+        : null;
+
+    return {
+      computedAt,
+      platforms,
+      pureTotal,
+      declared: bestDeclared
+        ? {
+            units: bestDeclared.units,
+            source: bestDeclared.source,
+            reportedAt: bestDeclared.reportedAt?.toISOString() ?? null,
+          }
+        : null,
+    };
   }
 }

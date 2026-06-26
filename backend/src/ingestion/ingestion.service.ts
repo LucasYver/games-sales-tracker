@@ -23,6 +23,7 @@ import {
 } from '../entities';
 import { EstimationService } from '../estimation/estimation.service';
 import { GamesService } from '../games/games.service';
+import { GenresService } from '../genres/genres.service';
 import { slugify } from '../common/slug';
 import { SteamAppDetails, SteamClient } from './steam.client';
 import { IgdbClient, IgdbGame } from './igdb.client';
@@ -94,7 +95,6 @@ const TAVILY_EXCLUDED_DOMAINS = [
 
 export interface ManualSalesInput {
   gameId: string;
-  platform: Platform;
   units: number;
   source: SalesSource;
   publisher?: string;
@@ -149,6 +149,7 @@ export class IngestionService {
     private readonly achievements: Repository<AchievementSnapshot>,
     private readonly estimation: EstimationService,
     private readonly gamesService: GamesService,
+    private readonly genres: GenresService,
     private readonly steam: SteamClient,
     private readonly igdb: IgdbClient,
     private readonly storeRatings: StoreRatingsClient,
@@ -337,6 +338,7 @@ export class IngestionService {
     }
 
     if (changed) {
+      await this.genres.applyAutoGenreProfile(game);
       await this.games.save(game);
       await this.publishers.resolveAndLink(game.id, game.publisher);
     }
@@ -558,23 +560,23 @@ export class IngestionService {
     });
     if (existing) return existing;
 
-    const game = await this.games.save(
-      this.games.create({
-        igdbId: candidate.igdbId,
-        name: candidate.name,
-        slug: await this.uniqueSlug(candidate.name),
-        summary: candidate.summary,
-        releaseDate: candidate.releaseDate,
-        coverUrl: candidate.coverUrl,
-        platforms:
-          candidate.platforms.length > 0
-            ? candidate.platforms
-            : [Platform.PLAYSTATION],
-        developer: candidate.developer,
-        publisher: candidate.publisher,
-        genres: candidate.genres.length > 0 ? candidate.genres : null,
-      }),
-    );
+    const entity = this.games.create({
+      igdbId: candidate.igdbId,
+      name: candidate.name,
+      slug: await this.uniqueSlug(candidate.name),
+      summary: candidate.summary,
+      releaseDate: candidate.releaseDate,
+      coverUrl: candidate.coverUrl,
+      platforms:
+        candidate.platforms.length > 0
+          ? candidate.platforms
+          : [Platform.PLAYSTATION],
+      developer: candidate.developer,
+      publisher: candidate.publisher,
+      genres: candidate.genres.length > 0 ? candidate.genres : null,
+    });
+    await this.genres.applyAutoGenreProfile(entity);
+    const game = await this.games.save(entity);
     await this.publishers.resolveAndLink(game.id, game.publisher);
     return game;
   }
@@ -629,10 +631,10 @@ export class IngestionService {
 
   /**
    * Have the LLM extract grounded sales figures from the game's Wikipedia
-   * article: a dated worldwide total (stored as a GLOBAL milestone) plus any
-   * per-platform figures the article states. Each carries the verbatim source
-   * quote. Best-effort: failures are logged. Milestones without `reportedAt`
-   * are rejected at extraction time — calibration needs a date.
+   * article: a dated worldwide total (stored as a milestone). Each carries
+   * the verbatim source quote. Best-effort: failures are logged. Milestones
+   * without `reportedAt` are rejected at extraction time — calibration needs
+   * a date.
    */
   async scrapeWikipedia(gameId: string, name: string): Promise<void> {
     try {
@@ -662,7 +664,6 @@ export class IngestionService {
           rows.push(
             this.milestones.create({
               gameId,
-              platform: Platform.GLOBAL,
               source: SalesSource.WIKIPEDIA,
               units: sales.global.units,
               confidenceScore: wikipediaScore,
@@ -674,26 +675,6 @@ export class IngestionService {
           );
         }
       }
-      for (const { platform, figure } of sales.perPlatform) {
-        if (!figure.reportedAt) {
-          undatedSkipped += 1;
-          continue;
-        }
-        if (!this.isReportedAfterRelease(figure.reportedAt, releaseDate)) continue;
-        rows.push(
-          this.milestones.create({
-            gameId,
-            platform,
-            source: SalesSource.WIKIPEDIA,
-            units: figure.units,
-            confidenceScore: wikipediaScore,
-            sourceUrl: sales.sourceUrl,
-            note: figure.quote,
-            reportedAt: figure.reportedAt,
-            region: 'GLOBAL',
-          }),
-        );
-      }
       if (sales.engagement) {
         if (!sales.engagement.reportedAt) {
           undatedSkipped += 1;
@@ -703,7 +684,6 @@ export class IngestionService {
           rows.push(
             this.milestones.create({
               gameId,
-              platform: Platform.GLOBAL,
               source: SalesSource.WIKIPEDIA,
               units: sales.engagement.units,
               confidenceScore: wikipediaScore,
@@ -727,7 +707,7 @@ export class IngestionService {
           ? `, engagement=${sales.engagement.units} (${sales.engagement.reportedAt?.toISOString().slice(0, 10) ?? 'no-date'})`
           : '';
         this.logger.log(
-          `[wikipedia] "${name}" — stored ${accepted.length} milestone(s) (${rows.length - accepted.length} rejected-fingerprint skip, ${undatedSkipped} undated skip): ${globalLog}, ${sales.perPlatform.length} per-platform${engagementLog}`,
+          `[wikipedia] "${name}" — stored ${accepted.length} milestone(s) (${rows.length - accepted.length} rejected-fingerprint skip, ${undatedSkipped} undated skip): ${globalLog}${engagementLog}`,
         );
       } else if (rows.length > 0) {
         this.logger.log(
@@ -1502,7 +1482,6 @@ export class IngestionService {
     return this.milestones.save(
       this.milestones.create({
         gameId: input.gameId,
-        platform: input.platform,
         source: input.source,
         units: input.units,
         confidenceScore: DEFAULT_CONFIDENCE_SCORE[input.source],
@@ -1704,11 +1683,10 @@ export class IngestionService {
   }
 
   // Replace a game's milestones for one source URL with the freshly extracted
-  // figures (a worldwide total as GLOBAL plus any per-platform figures).
-  // Milestones dated before the game's release date are dropped (they
-  // are almost always referring to an earlier title in the same series).
-  // Milestones without `reportedAt` are also dropped — calibration needs
-  // a date.
+  // figures (a worldwide total). Milestones dated before the game's release
+  // date are dropped (they are almost always referring to an earlier title in
+  // the same series). Milestones without `reportedAt` are also dropped —
+  // calibration needs a date.
   private async storeArticleSales(
     gameId: string,
     url: string,
@@ -1737,7 +1715,6 @@ export class IngestionService {
         rows.push(
           this.milestones.create({
             gameId,
-            platform: Platform.GLOBAL,
             source: tier,
             units: sales.global.units,
             confidenceScore,
@@ -1750,27 +1727,6 @@ export class IngestionService {
         );
       }
     }
-    for (const { platform, figure } of sales.perPlatform) {
-      if (!figure.reportedAt) {
-        undatedSkipped += 1;
-        continue;
-      }
-      if (!this.isReportedAfterRelease(figure.reportedAt, releaseDate)) continue;
-      rows.push(
-        this.milestones.create({
-          gameId,
-          platform,
-          source: tier,
-          units: figure.units,
-          confidenceScore,
-          publisher: sales.attribution,
-          sourceUrl: url,
-          note: figure.quote,
-          reportedAt: figure.reportedAt,
-          region: 'GLOBAL',
-        }),
-      );
-    }
     if (sales.engagement) {
       if (!sales.engagement.reportedAt) {
         undatedSkipped += 1;
@@ -1780,7 +1736,6 @@ export class IngestionService {
         rows.push(
           this.milestones.create({
             gameId,
-            platform: Platform.GLOBAL,
             source: tier,
             units: sales.engagement.units,
             confidenceScore,
@@ -1822,7 +1777,7 @@ export class IngestionService {
    * Drop the candidate rows whose strict fingerprint matches an existing
    * admin-rejected milestone (so a refresh can never resurrect a milestone
    * the admin manually deleted). Fingerprint:
-   *   (gameId, platform, source, sourceUrl, units, reportedAt).
+   *   (gameId, source, sourceUrl, units, reportedAt).
    * `null` values are compared as equal (both null = same fingerprint).
    */
   private async filterOutRejected(
@@ -1834,7 +1789,6 @@ export class IngestionService {
       where: { gameId: In(gameIds), rejectedAt: Not(IsNull()) },
       select: {
         gameId: true,
-        platform: true,
         source: true,
         sourceUrl: true,
         units: true,
@@ -1844,7 +1798,6 @@ export class IngestionService {
     if (rejected.length === 0) return rows;
     const fingerprint = (r: {
       gameId: string;
-      platform: Platform;
       source: SalesSource;
       sourceUrl: string | null;
       units: number;
@@ -1852,7 +1805,6 @@ export class IngestionService {
     }): string =>
       [
         r.gameId,
-        r.platform,
         r.source,
         r.sourceUrl ?? '',
         r.units,
@@ -1902,23 +1854,24 @@ export class IngestionService {
         if (g.developer) existing.developer = g.developer;
         if (g.publisher) existing.publisher = g.publisher;
         if (g.genres.length > 0) existing.genres = g.genres;
+        await this.genres.applyAutoGenreProfile(existing);
         const saved = await this.games.save(existing);
         await this.publishers.resolveAndLink(saved.id, saved.publisher);
       } else {
-        const saved = await this.games.save(
-          this.games.create({
-            igdbId: g.igdbId,
-            name: g.name,
-            slug: await this.uniqueSlug(g.name),
-            summary: g.summary,
-            releaseDate: g.releaseDate,
-            coverUrl: g.coverUrl,
-            platforms: g.platforms.length > 0 ? g.platforms : [Platform.PC],
-            developer: g.developer,
-            publisher: g.publisher,
-            genres: g.genres.length > 0 ? g.genres : null,
-          }),
-        );
+        const entity = this.games.create({
+          igdbId: g.igdbId,
+          name: g.name,
+          slug: await this.uniqueSlug(g.name),
+          summary: g.summary,
+          releaseDate: g.releaseDate,
+          coverUrl: g.coverUrl,
+          platforms: g.platforms.length > 0 ? g.platforms : [Platform.PC],
+          developer: g.developer,
+          publisher: g.publisher,
+          genres: g.genres.length > 0 ? g.genres : null,
+        });
+        await this.genres.applyAutoGenreProfile(entity);
+        const saved = await this.games.save(entity);
         await this.publishers.resolveAndLink(saved.id, saved.publisher);
       }
 
@@ -1997,6 +1950,7 @@ export class IngestionService {
         if (game.igdbId == null) game.igdbId = igdb.igdbId;
         if (igdb.platforms.length > 0) game.platforms = igdb.platforms;
       }
+      await this.genres.applyAutoGenreProfile(game);
       const saved = await this.games.save(game);
       await this.publishers.resolveAndLink(saved.id, saved.publisher);
       return saved;
@@ -2042,6 +1996,7 @@ export class IngestionService {
           existingByIgdb.categories = details.categories;
         }
         if (details.dlc.length > 0) existingByIgdb.dlc = details.dlc;
+        await this.genres.applyAutoGenreProfile(existingByIgdb);
         const saved = await this.games.save(existingByIgdb);
         await this.publishers.resolveAndLink(saved.id, saved.publisher);
         return saved;
@@ -2051,28 +2006,28 @@ export class IngestionService {
     const platforms =
       igdb && igdb.platforms.length > 0 ? igdb.platforms : [Platform.PC];
 
-    const game = await this.games.save(
-      this.games.create({
-        igdbId: igdb?.igdbId ?? null,
-        name: details.name,
-        slug: await this.uniqueSlug(details.name),
-        releaseDate: details.releaseDate,
-        coverUrl: details.headerImage ?? igdb?.coverUrl ?? null,
-        summary: details.shortDescription,
-        isFree: details.isFree,
-        platforms,
-        developer: details.developers[0] ?? igdb?.developer ?? null,
-        publisher: details.publishers[0] ?? igdb?.publisher ?? null,
-        genres:
-          details.genres.length > 0
-            ? details.genres
-            : igdb?.genres.length
-              ? igdb.genres
-              : null,
-        categories: details.categories.length > 0 ? details.categories : null,
-        dlc: details.dlc.length > 0 ? details.dlc : null,
-      }),
-    );
+    const entity = this.games.create({
+      igdbId: igdb?.igdbId ?? null,
+      name: details.name,
+      slug: await this.uniqueSlug(details.name),
+      releaseDate: details.releaseDate,
+      coverUrl: details.headerImage ?? igdb?.coverUrl ?? null,
+      summary: details.shortDescription,
+      isFree: details.isFree,
+      platforms,
+      developer: details.developers[0] ?? igdb?.developer ?? null,
+      publisher: details.publishers[0] ?? igdb?.publisher ?? null,
+      genres:
+        details.genres.length > 0
+          ? details.genres
+          : igdb?.genres.length
+            ? igdb.genres
+            : null,
+      categories: details.categories.length > 0 ? details.categories : null,
+      dlc: details.dlc.length > 0 ? details.dlc : null,
+    });
+    await this.genres.applyAutoGenreProfile(entity);
+    const game = await this.games.save(entity);
 
     await this.gameSources.save(
       this.gameSources.create({

@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import {
   ConfidenceLevel,
   Game,
@@ -33,7 +33,12 @@ export interface GenreProfileSummary {
   lifecycleDriver: string | null;
   peakCcuToWeekOneLow: number;
   peakCcuToWeekOneHigh: number;
+  pcDefaultBoxleiterLow: number | null;
+  pcDefaultBoxleiterHigh: number | null;
+  psDefaultBoxleiterLow: number | null;
+  psDefaultBoxleiterHigh: number | null;
   genreCount: number;
+  gameCount: number;
   updatedAt: Date;
 }
 
@@ -71,6 +76,10 @@ export interface UpdateGenreProfileInput {
   lifecycleDriver?: string | null;
   peakCcuToWeekOneLow?: number;
   peakCcuToWeekOneHigh?: number;
+  pcDefaultBoxleiterLow?: number | null;
+  pcDefaultBoxleiterHigh?: number | null;
+  psDefaultBoxleiterLow?: number | null;
+  psDefaultBoxleiterHigh?: number | null;
 }
 
 export interface UpdateGenreInput {
@@ -102,6 +111,10 @@ export interface ResolvedGenreProfile {
   peakCcuToWeekOneLow: number;
   peakCcuToWeekOneHigh: number;
   confidence: ConfidenceLevel;
+  pcDefaultBoxleiterLow: number | null;
+  pcDefaultBoxleiterHigh: number | null;
+  psDefaultBoxleiterLow: number | null;
+  psDefaultBoxleiterHigh: number | null;
 }
 
 // Year-2 / year-5 cumulative units expressed as a multiplier of the
@@ -169,6 +182,22 @@ export class GenresService {
       counts.map((c) => [c.profileId, Number(c.count)]),
     );
 
+    // How many games currently resolve to each profile (auto-assigned at
+    // ingestion or manually pinned). Queried on the `game` table via the
+    // shared manager to avoid injecting another repository here.
+    const gameCounts = await this.profiles.manager
+      .createQueryBuilder()
+      .select('g."genreProfileId"', 'profileId')
+      .addSelect('COUNT(*)', 'count')
+      .from(Game, 'g')
+      .where('g."genreProfileId" IS NOT NULL')
+      .groupBy('g."genreProfileId"')
+      .getRawMany<{ profileId: string; count: string }>();
+
+    const gameCountByProfileId = new Map(
+      gameCounts.map((c) => [c.profileId, Number(c.count)]),
+    );
+
     return profiles.map((p) => ({
       id: p.id,
       slug: p.slug,
@@ -186,7 +215,20 @@ export class GenresService {
       lifecycleDriver: p.lifecycleDriver,
       peakCcuToWeekOneLow: Number(p.peakCcuToWeekOneLow),
       peakCcuToWeekOneHigh: Number(p.peakCcuToWeekOneHigh),
+      pcDefaultBoxleiterLow:
+        p.pcDefaultBoxleiterLow != null ? Number(p.pcDefaultBoxleiterLow) : null,
+      pcDefaultBoxleiterHigh:
+        p.pcDefaultBoxleiterHigh != null
+          ? Number(p.pcDefaultBoxleiterHigh)
+          : null,
+      psDefaultBoxleiterLow:
+        p.psDefaultBoxleiterLow != null ? Number(p.psDefaultBoxleiterLow) : null,
+      psDefaultBoxleiterHigh:
+        p.psDefaultBoxleiterHigh != null
+          ? Number(p.psDefaultBoxleiterHigh)
+          : null,
       genreCount: countByProfileId.get(p.id) ?? 0,
+      gameCount: gameCountByProfileId.get(p.id) ?? 0,
       updatedAt: p.updatedAt,
     }));
   }
@@ -265,6 +307,48 @@ export class GenresService {
       );
     }
 
+    for (const key of [
+      'pcDefaultBoxleiterLow',
+      'pcDefaultBoxleiterHigh',
+      'psDefaultBoxleiterLow',
+      'psDefaultBoxleiterHigh',
+    ] as const) {
+      if (!(key in input)) continue;
+      const val = input[key];
+      if (val !== null && val !== undefined && Number(val) < 0) {
+        throw new BadRequestException(`${key} must be ≥ 0 or null`);
+      }
+      profile[key] = val ?? null;
+    }
+
+    const pcLow =
+      'pcDefaultBoxleiterLow' in input
+        ? input.pcDefaultBoxleiterLow
+        : profile.pcDefaultBoxleiterLow;
+    const pcHigh =
+      'pcDefaultBoxleiterHigh' in input
+        ? input.pcDefaultBoxleiterHigh
+        : profile.pcDefaultBoxleiterHigh;
+    if (pcLow != null && pcHigh != null && Number(pcLow) > Number(pcHigh)) {
+      throw new BadRequestException(
+        'pcDefaultBoxleiterLow must be ≤ pcDefaultBoxleiterHigh',
+      );
+    }
+
+    const psLow =
+      'psDefaultBoxleiterLow' in input
+        ? input.psDefaultBoxleiterLow
+        : profile.psDefaultBoxleiterLow;
+    const psHigh =
+      'psDefaultBoxleiterHigh' in input
+        ? input.psDefaultBoxleiterHigh
+        : profile.psDefaultBoxleiterHigh;
+    if (psLow != null && psHigh != null && Number(psLow) > Number(psHigh)) {
+      throw new BadRequestException(
+        'psDefaultBoxleiterLow must be ≤ psDefaultBoxleiterHigh',
+      );
+    }
+
     await this.profiles.save(profile);
 
     const summaries = await this.listProfiles();
@@ -323,36 +407,20 @@ export class GenresService {
   }
 
   /**
-   * Resolve a game's free-form IGDB genre strings into a single
-   * blended platform + lifecycle profile. Returns `null` when no
-   * genre on the game maps to a profile (the caller should fall
-   * back to whatever default behaviour was in place before).
+   * Pick the profile of the FIRST genre (in `genres` order) that maps to
+   * one. Returns `null` when the game has no genre or none of them is
+   * mapped. Matching is case-insensitive on `Genre.name` (the catalog
+   * strings drift on spacing / capitalisation); the profile assignment
+   * is what we curate via the admin.
    *
-   * Matching is case-insensitive on `Genre.name` (IGDB strings
-   * sometimes show up with stray spaces / capitalisation drift); the
-   * profile assignment is what we manually curate via the admin.
-   *
-   * Blending strategy: equal-weight average of every numeric field
-   * across the matched profiles. `year2Retention` is reported as the
-   * median (rounded down) of the matched levels but the consumer
-   * should prefer `tailFactorY2/Y5` since those are pre-averaged on
-   * the underlying numeric scale.
+   * This is the single source of truth for "which profile does this
+   * game's genres imply" — used both at ingestion (to persist
+   * `Game.genreProfileId`) and as the estimation-time fallback.
    */
-  async resolveProfileForGame(
-    game: Pick<Game, 'genres' | 'genreProfileId'>,
-  ): Promise<ResolvedGenreProfile | null> {
-    // Manual per-game override wins over genre-name resolution: outlier
-    // titles (e.g. a streamer-driven viral hit) get pinned to a chosen
-    // profile regardless of their IGDB genres. A dangling id falls back
-    // to the genre-based path below.
-    if (game.genreProfileId) {
-      const override = await this.profiles.findOne({
-        where: { id: game.genreProfileId },
-      });
-      if (override) return this.buildResolvedProfile([override]);
-    }
-
-    const names = (game.genres ?? [])
+  async resolveFirstProfileId(
+    genres: string[] | null,
+  ): Promise<string | null> {
+    const names = (genres ?? [])
       .map((g) => g.trim())
       .filter((g) => g.length > 0);
     if (names.length === 0) return null;
@@ -364,20 +432,49 @@ export class GenresService {
       })
       .andWhere('g."profileId" IS NOT NULL')
       .getMany();
-
     if (matched.length === 0) return null;
 
-    const profileIds = Array.from(
-      new Set(matched.map((g) => g.profileId).filter((id): id is string => !!id)),
+    const profileByName = new Map(
+      matched
+        .filter((g) => g.profileId)
+        .map((g) => [g.name.toLowerCase(), g.profileId as string]),
     );
-    if (profileIds.length === 0) return null;
+    for (const name of names) {
+      const profileId = profileByName.get(name.toLowerCase());
+      if (profileId) return profileId;
+    }
+    return null;
+  }
 
-    const profiles = await this.profiles.find({
-      where: { id: In(profileIds) },
-    });
-    if (profiles.length === 0) return null;
+  /**
+   * Persist the auto-resolved genre profile onto a game, unless it was
+   * pinned manually by an admin (`genreProfileManual`). Mutates the
+   * passed entity in place; the caller is responsible for saving it.
+   */
+  async applyAutoGenreProfile(game: Game): Promise<void> {
+    if (game.genreProfileManual) return;
+    game.genreProfileId = await this.resolveFirstProfileId(game.genres);
+  }
 
-    return this.buildResolvedProfile(profiles);
+  /**
+   * Resolve a game's persisted profile into the numeric platform +
+   * lifecycle bucket consumed by the estimation model. Reads
+   * `Game.genreProfileId` first (the value persisted at ingestion or
+   * pinned by an admin); when absent, falls back to resolving the first
+   * matching genre on the fly. Returns `null` when no genre maps to a
+   * profile.
+   */
+  async resolveProfileForGame(
+    game: Pick<Game, 'genres' | 'genreProfileId'>,
+  ): Promise<ResolvedGenreProfile | null> {
+    const profileId =
+      game.genreProfileId ?? (await this.resolveFirstProfileId(game.genres));
+    if (!profileId) return null;
+
+    const profile = await this.profiles.findOne({ where: { id: profileId } });
+    if (!profile) return null;
+
+    return this.buildResolvedProfile([profile]);
   }
 
   /**
@@ -439,6 +536,24 @@ export class GenresService {
       peakCcuToWeekOneLow: avg((p) => p.peakCcuToWeekOneLow),
       peakCcuToWeekOneHigh: avg((p) => p.peakCcuToWeekOneHigh),
       confidence: minConfidence,
+      // Nullable overrides: only propagate when every blended profile has a
+      // non-null value; otherwise fall back to global constants at call site.
+      pcDefaultBoxleiterLow: profiles.every((p) => p.pcDefaultBoxleiterLow != null)
+        ? avg((p) => p.pcDefaultBoxleiterLow)
+        : null,
+      pcDefaultBoxleiterHigh: profiles.every(
+        (p) => p.pcDefaultBoxleiterHigh != null,
+      )
+        ? avg((p) => p.pcDefaultBoxleiterHigh)
+        : null,
+      psDefaultBoxleiterLow: profiles.every((p) => p.psDefaultBoxleiterLow != null)
+        ? avg((p) => p.psDefaultBoxleiterLow)
+        : null,
+      psDefaultBoxleiterHigh: profiles.every(
+        (p) => p.psDefaultBoxleiterHigh != null,
+      )
+        ? avg((p) => p.psDefaultBoxleiterHigh)
+        : null,
     };
   }
 
