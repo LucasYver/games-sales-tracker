@@ -41,6 +41,7 @@ import { BackfillReviewsButton } from '../../_components/BackfillReviewsButton';
 import { EditGameForm } from '../../_components/EditGameForm';
 import { EstimateHistoryChart } from '../../_components/EstimateHistoryChart';
 import { CcuHistoryChart } from '../../_components/CcuHistoryChart';
+import { ReviewHistoryChart } from '../../_components/ReviewHistoryChart';
 import { SteamShareBadge } from '../../_components/SteamShareBadge';
 import { GameGenreProfileSelect } from '../../_components/GameGenreProfileSelect';
 import { EstimateBreakdownPanel } from '../../_components/EstimateBreakdownPanel';
@@ -464,6 +465,17 @@ export default async function AdminGameDetailPage({
             peak={game.allTimePeakCcu}
             peakAt={game.allTimePeakCcuAt}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold tracking-wide uppercase">
+            Steam reviews over time
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <ReviewHistoryChart reviewHistory={game.reviewHistory} />
         </CardContent>
       </Card>
 

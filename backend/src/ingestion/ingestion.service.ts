@@ -26,6 +26,7 @@ import { GamesService } from '../games/games.service';
 import { GenresService } from '../genres/genres.service';
 import { slugify } from '../common/slug';
 import { SteamAppDetails, SteamClient } from './steam.client';
+import { SteamChartsClient } from './steamcharts.client';
 import { IgdbClient, IgdbGame } from './igdb.client';
 import { StoreRatingsClient } from './store-ratings.client';
 import { WikipediaClient } from './wikipedia.client';
@@ -57,6 +58,9 @@ const DEFAULT_CONFIDENCE_SCORE: Record<SalesSource, number> = {
   [SalesSource.ANNOUNCEMENT]: 70,
   [SalesSource.WIKIPEDIA]: 45,
   [SalesSource.MEDIA]: 40,
+  // Measured ground-truth (real player counts), hence high — but it is an
+  // engagement figure, so it never feeds calibration regardless of score.
+  [SalesSource.STEAM_LEAK]: 90,
 };
 
 // Domains we never want Tavily backlog discovery to surface:
@@ -151,6 +155,7 @@ export class IngestionService {
     private readonly gamesService: GamesService,
     private readonly genres: GenresService,
     private readonly steam: SteamClient,
+    private readonly steamCharts: SteamChartsClient,
     private readonly igdb: IgdbClient,
     private readonly storeRatings: StoreRatingsClient,
     private readonly wikipedia: WikipediaClient,
@@ -656,6 +661,170 @@ export class IngestionService {
     await this.gamesService.rebuildEstimateHistory(game.id);
 
     return game.id;
+  }
+
+  /**
+   * Import one row of the July 2018 Steam achievement-leak player counts as a
+   * ground-truth snapshot for model validation/calibration (Phase 1).
+   *
+   * For the given Steam app it:
+   *   - fetches Steam details (skips free-to-play and apps with no store page);
+   *   - skips titles released before `minReleaseYear` (Steam reviews launched
+   *     Nov 2013, so older games have no contemporaneous review base);
+   *   - upserts the game with Steam + IGDB enrichment so it carries a genre
+   *     profile for per-genre analysis (retrying with IGDB genres when the
+   *     Steam genres don't resolve a profile);
+   *   - persists the leak player count as a `STEAM_PLAYERS_LEAK` snapshot
+   *     dated `leakDate` (idempotent: one leak row per game).
+   *
+   * Deliberately lean: it does NOT poll live signals or rebuild estimates.
+   * The leak figure is a calibration target only and never feeds estimation;
+   * the 2018-era review counts are backfilled separately.
+   */
+  async importLeakPlayerCount(
+    appId: number,
+    players: number,
+    opts: { leakDate: Date; minReleaseYear: number },
+  ): Promise<
+    | 'imported'
+    | 'skipped-free'
+    | 'skipped-old'
+    | 'skipped-no-details'
+    | 'failed'
+  > {
+    if (!Number.isFinite(players) || players <= 0) return 'failed';
+
+    // Don't re-fetch Steam/IGDB for a game we already track: the Steam source
+    // (externalId = appId) already points at its game. Validate free / release
+    // year from the stored record and just (re)write the leak snapshot.
+    const existingSource = await this.gameSources.findOne({
+      where: { source: SourceType.STEAM, externalId: String(appId) },
+    });
+    if (existingSource) {
+      const existing = await this.games.findOne({
+        where: { id: existingSource.gameId },
+        withDeleted: true,
+      });
+      if (existing && !existing.deletedAt) {
+        if (existing.isFree) return 'skipped-free';
+        const existingYear = existing.releaseDate?.getFullYear() ?? null;
+        if (existingYear !== null && existingYear < opts.minReleaseYear) {
+          return 'skipped-old';
+        }
+        await this.persistLeakGroundTruth(existing.id, players, opts.leakDate);
+        return 'imported';
+      }
+    }
+
+    const details = await this.steam.getAppDetails(appId);
+    if (!details) return 'skipped-no-details';
+    if (details.isFree) return 'skipped-free';
+
+    const steamYear = details.releaseDate?.getFullYear() ?? null;
+    if (steamYear !== null && steamYear < opts.minReleaseYear) {
+      return 'skipped-old';
+    }
+
+    const game = await this.upsertGameFromSteam(appId, details);
+    if (!game) return 'failed';
+
+    const year = steamYear ?? game.releaseDate?.getFullYear() ?? null;
+    if (year !== null && year < opts.minReleaseYear) return 'skipped-old';
+
+    // Steam genres map poorly to our IGDB-keyed genre profiles; when no
+    // profile resolved, retry with the IGDB genres so the game is usable for
+    // per-genre analysis.
+    if (game.genreProfileId == null) {
+      const igdb = await this.igdb.findBySteamAppId(appId);
+      if (igdb && igdb.genres.length > 0) {
+        game.genres = Array.from(
+          new Set([...(game.genres ?? []), ...igdb.genres]),
+        );
+        await this.genres.applyAutoGenreProfile(game);
+        await this.games.save(game);
+      }
+    }
+
+    await this.persistLeakGroundTruth(game.id, players, opts.leakDate);
+
+    return 'imported';
+  }
+
+  /**
+   * Persist the leak player count twice: as a `STEAM_PLAYERS_LEAK` signal
+   * snapshot AND as a milestone (so it shows up in the milestone workflow).
+   */
+  private async persistLeakGroundTruth(
+    gameId: string,
+    players: number,
+    leakDate: Date,
+  ): Promise<void> {
+    await this.storeLeakSignal(gameId, players, leakDate);
+    await this.storeLeakMilestone(gameId, players, leakDate);
+  }
+
+  /**
+   * Idempotently persist a single `STEAM_PLAYERS_LEAK` snapshot for a game:
+   * one leak row per game, so re-runs replace rather than accumulate.
+   */
+  private async storeLeakSignal(
+    gameId: string,
+    players: number,
+    leakDate: Date,
+  ): Promise<void> {
+    await this.signals.delete({
+      gameId,
+      metric: SignalMetric.STEAM_PLAYERS_LEAK,
+    });
+    await this.signals.save(
+      this.signals.create({
+        gameId,
+        source: SourceType.STEAM,
+        metric: SignalMetric.STEAM_PLAYERS_LEAK,
+        value: players,
+        capturedAt: leakDate,
+      }),
+    );
+  }
+
+  /**
+   * Mirror the leak player count into the milestone table as a PC-region sales
+   * figure. We only import paid games, so a Steam player is necessarily a
+   * buyer — the count is effectively PC copies sold (owners), NOT an
+   * engagement metric. It is tagged `region='PC'` (Steam-only, not worldwide),
+   * which keeps it out of the GLOBAL calibration / breakdown headline /
+   * discrepancy paths (all filter to region='GLOBAL'). Idempotent and
+   * rejection-aware: a single active leak milestone per game, never
+   * resurrected after an admin rejects it.
+   */
+  private async storeLeakMilestone(
+    gameId: string,
+    players: number,
+    leakDate: Date,
+  ): Promise<void> {
+    const candidate = this.milestones.create({
+      gameId,
+      source: SalesSource.STEAM_LEAK,
+      units: players,
+      region: 'PC',
+      isEngagement: false,
+      confidenceScore: DEFAULT_CONFIDENCE_SCORE[SalesSource.STEAM_LEAK],
+      sourceUrl: null,
+      note:
+        'July 2018 Steam achievement-data leak: unique players who launched ' +
+        'the game (Steam/PC). Paid game, so this approximates PC copies sold.',
+      reportedAt: leakDate,
+    });
+
+    const accepted = await this.filterOutRejected([candidate]);
+    if (accepted.length === 0) return;
+
+    await this.milestones.delete({
+      gameId,
+      source: SalesSource.STEAM_LEAK,
+      rejectedAt: IsNull(),
+    });
+    await this.milestones.save(accepted);
   }
 
   /**
@@ -1503,6 +1672,283 @@ export class IngestionService {
       latestTotal,
       latestRating,
     };
+  }
+
+  /**
+   * Backfill the full `STEAM_REVIEWS` cumulative series from the public review
+   * histogram (`appreviewhistogram`) — one cheap request that returns monthly
+   * buckets back to launch for high-volume games. When Steam only returns
+   * recent weekly buckets (low-volume games) or the buckets don't reach the
+   * release month, we fall back to `backfillReviewsFromApi` (the per-review
+   * enumeration, which is cheap precisely because such games have few reviews).
+   *
+   * Monthly granularity is sufficient for historical calibration/validation;
+   * the live poll keeps the current value fresh at finer granularity.
+   */
+  async backfillReviewsFromHistogram(gameId: string): Promise<{
+    method: 'histogram' | 'enumeration';
+    rollupType: string | null;
+    pointsImported: number;
+    rangeStart: string | null;
+    rangeEnd: string | null;
+    latestTotal: number;
+    latestRating: number | null;
+  }> {
+    const game = await this.games.findOne({ where: { id: gameId } });
+    if (!game) {
+      throw new NotFoundException(`Game ${gameId} not found.`);
+    }
+
+    const steamSource = await this.gameSources.findOne({
+      where: { gameId, source: SourceType.STEAM },
+    });
+    const appId = steamSource ? Number(steamSource.externalId) : NaN;
+    if (!Number.isFinite(appId)) {
+      throw new BadRequestException(
+        `Game "${game.name}" is not linked to a Steam app.`,
+      );
+    }
+
+    const releaseMonthStart = game.releaseDate
+      ? `${game.releaseDate.toISOString().slice(0, 7)}-01`
+      : null;
+
+    const hist = await this.steam.fetchReviewHistogram(appId);
+
+    // The histogram is only trustworthy as a full series when it's a monthly
+    // rollup that reaches back to (around) the release month. Otherwise fall
+    // back to the per-review enumeration.
+    const reachesRelease =
+      hist !== null &&
+      hist.rollupType === 'month' &&
+      (releaseMonthStart === null ||
+        hist.buckets[0].day <= this.addMonths(releaseMonthStart, 2));
+
+    if (!reachesRelease) {
+      const api = await this.backfillReviewsFromApi(gameId);
+      return {
+        method: 'enumeration',
+        rollupType: hist?.rollupType ?? null,
+        pointsImported: api.daysImported,
+        rangeStart: api.rangeStart,
+        rangeEnd: api.rangeEnd,
+        latestTotal: api.latestTotal,
+        latestRating: api.latestRating,
+      };
+    }
+
+    let cumulativePositive = 0;
+    let cumulativeNegative = 0;
+    let skippedPreRelease = 0;
+    const rows: SignalSnapshot[] = [];
+    const emittedDays: string[] = [];
+    for (const bucket of hist!.buckets) {
+      cumulativePositive += bucket.positive;
+      cumulativeNegative += bucket.negative;
+      if (releaseMonthStart && bucket.day < releaseMonthStart) {
+        skippedPreRelease += 1;
+        continue;
+      }
+      const total = cumulativePositive + cumulativeNegative;
+      rows.push(
+        this.signals.create({
+          gameId,
+          source: SourceType.STEAM,
+          metric: SignalMetric.STEAM_REVIEWS,
+          value: total,
+          averageRating: total > 0 ? cumulativePositive / total : null,
+          capturedAt: new Date(`${bucket.day}T00:00:00.000Z`),
+        }),
+      );
+      emittedDays.push(bucket.day);
+    }
+
+    if (rows.length === 0) {
+      // All buckets predate release: fall back rather than import nothing.
+      const api = await this.backfillReviewsFromApi(gameId);
+      return {
+        method: 'enumeration',
+        rollupType: hist!.rollupType,
+        pointsImported: api.daysImported,
+        rangeStart: api.rangeStart,
+        rangeEnd: api.rangeEnd,
+        latestTotal: api.latestTotal,
+        latestRating: api.latestRating,
+      };
+    }
+
+    const firstDay = new Date(`${emittedDays[0]}T00:00:00.000Z`);
+    const lastDay = new Date(
+      `${emittedDays[emittedDays.length - 1]}T00:00:00.000Z`,
+    );
+    const lastDayEnd = new Date(lastDay.getTime() + 24 * 3600 * 1000 - 1);
+
+    await this.signals.delete({
+      gameId,
+      metric: SignalMetric.STEAM_REVIEWS,
+      capturedAt: Between(firstDay, lastDayEnd),
+    });
+    await this.signals.save(rows, { chunk: 500 });
+
+    const latestTotal = cumulativePositive + cumulativeNegative;
+    const latestRating =
+      latestTotal > 0 ? cumulativePositive / latestTotal : null;
+
+    this.logger.log(
+      `[reviews-histogram] "${game.name}" — ${rows.length} months ` +
+        `(${emittedDays[0]} → ${emittedDays[emittedDays.length - 1]}), ` +
+        `latest ${latestTotal.toLocaleString()} reviews` +
+        (latestRating !== null
+          ? ` (${(latestRating * 100).toFixed(1)}% positive)`
+          : '') +
+        (skippedPreRelease > 0
+          ? ` (skipped ${skippedPreRelease} pre-release months)`
+          : ''),
+    );
+
+    return {
+      method: 'histogram',
+      rollupType: hist!.rollupType,
+      pointsImported: rows.length,
+      rangeStart: emittedDays[0],
+      rangeEnd: emittedDays[emittedDays.length - 1],
+      latestTotal,
+      latestRating,
+    };
+  }
+
+  /**
+   * Backfill historical monthly concurrent-player data from SteamCharts into
+   * `STEAM_CONCURRENT` (one row per completed month, holding that month's peak)
+   * plus the all-time `STEAM_PEAK_CCU`. Mirrors `importCcuCsv` but sources the
+   * data automatically instead of a manual SteamDB export. Months before
+   * release are dropped; the current partial month ("Last 30 Days") is skipped
+   * so live-poll rows are left untouched.
+   */
+  async backfillCcuFromSteamCharts(gameId: string): Promise<{
+    monthsImported: number;
+    rangeStart: string | null;
+    rangeEnd: string | null;
+    peakValue: number;
+    peakAt: string | null;
+  }> {
+    const game = await this.games.findOne({ where: { id: gameId } });
+    if (!game) {
+      throw new NotFoundException(`Game ${gameId} not found.`);
+    }
+
+    const steamSource = await this.gameSources.findOne({
+      where: { gameId, source: SourceType.STEAM },
+    });
+    const appId = steamSource ? Number(steamSource.externalId) : NaN;
+    if (!Number.isFinite(appId)) {
+      throw new BadRequestException(
+        `Game "${game.name}" is not linked to a Steam app.`,
+      );
+    }
+
+    const months = await this.steamCharts.fetchMonthlyCcu(appId);
+    if (!months || months.length === 0) {
+      throw new BadRequestException(
+        `No SteamCharts data returned for app ${appId}.`,
+      );
+    }
+
+    const releaseMonthStart = game.releaseDate
+      ? `${game.releaseDate.toISOString().slice(0, 7)}-01`
+      : null;
+
+    const usable = months.filter(
+      (m) =>
+        m.peakPlayers > 0 &&
+        (releaseMonthStart === null || m.monthStart >= releaseMonthStart),
+    );
+    if (usable.length === 0) {
+      throw new BadRequestException(
+        `All SteamCharts months for app ${appId} predate release or are empty.`,
+      );
+    }
+
+    const firstMonth = new Date(`${usable[0].monthStart}T00:00:00.000Z`);
+    const lastMonth = new Date(
+      `${usable[usable.length - 1].monthStart}T00:00:00.000Z`,
+    );
+    // Cover the whole last month so a previous monthly row for it is replaced,
+    // but stop short of the current (skipped) month's live-poll rows.
+    const lastMonthEnd = new Date(
+      Date.UTC(
+        lastMonth.getUTCFullYear(),
+        lastMonth.getUTCMonth() + 1,
+        0,
+        23,
+        59,
+        59,
+        999,
+      ),
+    );
+
+    await this.signals.delete({
+      gameId,
+      metric: SignalMetric.STEAM_CONCURRENT,
+      capturedAt: Between(firstMonth, lastMonthEnd),
+    });
+
+    const rows = usable.map((m) =>
+      this.signals.create({
+        gameId,
+        source: SourceType.STEAM,
+        metric: SignalMetric.STEAM_CONCURRENT,
+        value: m.peakPlayers,
+        capturedAt: new Date(`${m.monthStart}T00:00:00.000Z`),
+      }),
+    );
+    await this.signals.save(rows, { chunk: 500 });
+
+    let peakValue = 0;
+    let peakMonth = usable[0].monthStart;
+    for (const m of usable) {
+      if (m.peakPlayers > peakValue) {
+        peakValue = m.peakPlayers;
+        peakMonth = m.monthStart;
+      }
+    }
+    const peakAt = new Date(`${peakMonth}T00:00:00.000Z`);
+    const priorPeakRow = await this.signals.findOne({
+      where: { gameId, metric: SignalMetric.STEAM_PEAK_CCU },
+      order: { value: 'DESC' },
+    });
+    if (!priorPeakRow || peakValue > priorPeakRow.value) {
+      await this.signals.save(
+        this.signals.create({
+          gameId,
+          source: SourceType.STEAM,
+          metric: SignalMetric.STEAM_PEAK_CCU,
+          value: peakValue,
+          capturedAt: peakAt,
+        }),
+      );
+    }
+
+    this.logger.log(
+      `[ccu-steamcharts] "${game.name}" — ${usable.length} months ` +
+        `(${usable[0].monthStart} → ${usable[usable.length - 1].monthStart}), ` +
+        `peak ${peakValue.toLocaleString()} at ${peakMonth}`,
+    );
+
+    return {
+      monthsImported: usable.length,
+      rangeStart: usable[0].monthStart,
+      rangeEnd: usable[usable.length - 1].monthStart,
+      peakValue,
+      peakAt: peakAt.toISOString(),
+    };
+  }
+
+  /** Add `count` months to a `YYYY-MM-01` key, returning the same format. */
+  private addMonths(monthStart: string, count: number): string {
+    const [y, m] = monthStart.split('-').map(Number);
+    const d = new Date(Date.UTC(y, m - 1 + count, 1));
+    return `${d.toISOString().slice(0, 7)}-01`;
   }
 
   async scrapeAchievements(

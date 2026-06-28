@@ -39,6 +39,7 @@ export type SalesSourceLabel =
   | 'WIKIPEDIA'
   | 'ANNOUNCEMENT'
   | 'MEDIA'
+  | 'STEAM_LEAK'
   | 'ESTIMATE';
 
 export interface TotalSales {

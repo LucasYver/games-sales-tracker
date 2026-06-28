@@ -50,6 +50,15 @@ export interface SteamReviewHistory {
   reportedTotal: number | null;
 }
 
+export interface SteamReviewHistogram {
+  // Bucket granularity Steam chose for this app: 'month' (full history for
+  // high-volume games), 'week' or 'day' (recent-only for low-volume games).
+  rollupType: 'day' | 'week' | 'month';
+  // New positive/negative review counts per bucket (NOT cumulative), sorted
+  // ascending. `day` is the bucket's start (YYYY-MM-DD, UTC).
+  buckets: SteamReviewDailyCount[];
+}
+
 @Injectable()
 export class SteamClient {
   private readonly logger = new Logger(SteamClient.name);
@@ -302,6 +311,60 @@ export class SteamClient {
       .sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
 
     return { daily: sorted, totalFetched, reportedTotal };
+  }
+
+  /**
+   * Fetch the public review histogram for an app (`appreviewhistogram`). This
+   * is the cheap, single-request equivalent of the SteamDB review chart: Steam
+   * returns new positive/negative review counts bucketed by period. For
+   * high-volume games the buckets are MONTHLY and span the whole history back
+   * to launch; for low-volume games Steam only returns recent WEEKLY buckets,
+   * in which case the caller should fall back to `fetchReviewHistory`.
+   *
+   * Buckets are NOT cumulative — the caller accumulates them into a running
+   * total. The `recent` (last-30-days daily) block is intentionally ignored:
+   * it overlaps the final rollup bucket and would double-count.
+   */
+  async fetchReviewHistogram(
+    appId: number,
+  ): Promise<SteamReviewHistogram | null> {
+    let data: any;
+    try {
+      data = await this.getStoreJson(
+        `https://store.steampowered.com/appreviewhistogram/${appId}`,
+        { l: 'english' },
+      );
+    } catch (error) {
+      this.logger.warn(`fetchReviewHistogram failed for ${appId}: ${error}`);
+      return null;
+    }
+
+    const results = data?.results;
+    const rollups = Array.isArray(results?.rollups) ? results.rollups : [];
+    if (rollups.length === 0) return null;
+
+    const buckets: SteamReviewDailyCount[] = [];
+    for (const b of rollups as Array<{
+      date?: unknown;
+      recommendations_up?: unknown;
+      recommendations_down?: unknown;
+    }>) {
+      const ts = Number(b.date);
+      if (!Number.isFinite(ts) || ts <= 0) continue;
+      buckets.push({
+        day: new Date(ts * 1000).toISOString().slice(0, 10),
+        positive: Number(b.recommendations_up) || 0,
+        negative: Number(b.recommendations_down) || 0,
+      });
+    }
+    if (buckets.length === 0) return null;
+    buckets.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+
+    const raw = results?.rollup_type;
+    const rollupType: SteamReviewHistogram['rollupType'] =
+      raw === 'month' ? 'month' : raw === 'week' ? 'week' : 'day';
+
+    return { rollupType, buckets };
   }
 
   /**

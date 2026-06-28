@@ -147,6 +147,8 @@ export interface AdminGameDetail extends AdminGameSummary {
   // most recent rows for the table view; the CCU chart needs every point,
   // which can be years of daily history after a SteamDB CSV import).
   ccuHistory: { capturedAt: Date; value: number }[];
+  // Full STEAM_REVIEWS series (cumulative review counts over time).
+  reviewHistory: { capturedAt: Date; value: number }[];
   prices: PriceSnapshot[];
   achievementSnapshots: AdminAchievementSummary[];
   estimateSnapshots: AdminEstimateSnapshot[];
@@ -540,6 +542,16 @@ export class AdminService {
       value: s.value,
     }));
 
+    const reviewRows = await this.signals.find({
+      where: { gameId: id, metric: SignalMetric.STEAM_REVIEWS },
+      order: { capturedAt: 'ASC' },
+      select: { capturedAt: true, value: true },
+    });
+    const reviewHistory = reviewRows.map((s) => ({
+      capturedAt: s.capturedAt,
+      value: s.value,
+    }));
+
     const prices = await this.prices.find({
       where: { gameId: id },
       order: { capturedAt: 'ASC' },
@@ -611,6 +623,7 @@ export class AdminService {
       estimates: game.estimates,
       signals,
       ccuHistory,
+      reviewHistory,
       prices,
       achievementSnapshots,
       estimateSnapshots,

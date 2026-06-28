@@ -42,6 +42,11 @@ export enum SignalMetric {
   // row by date is NOT always the largest.
   STEAM_PEAK_CCU = 'STEAM_PEAK_CCU',
   STEAMSPY_OWNERS = 'STEAMSPY_OWNERS',
+  // Ground-truth unique-player count from the July 2018 Steam achievement
+  // data leak (Ars Technica / Steam Spy). Stored as a dated snapshot
+  // (capturedAt = 2018-07-01) purely as a calibration/validation target —
+  // it is NOT a live signal and never feeds the estimation pipeline.
+  STEAM_PLAYERS_LEAK = 'STEAM_PLAYERS_LEAK',
   PS_RATINGS = 'PS_RATINGS',
   XBOX_RATINGS = 'XBOX_RATINGS',
   SWITCH_RATINGS = 'SWITCH_RATINGS',
@@ -60,6 +65,7 @@ export enum SalesSource {
   WIKIPEDIA = 'WIKIPEDIA', // citation-backed figure extracted from Wikipedia
   ANNOUNCEMENT = 'ANNOUNCEMENT', // social/PR announcement (X, Instagram, email)
   MEDIA = 'MEDIA', // figure reported by a trusted media outlet / analyst
+  STEAM_LEAK = 'STEAM_LEAK', // July 2018 Steam leak: PC players ≈ buyers (paid games only)
 }
 
 // Kind of trusted source in the curated registry that feeds media extraction.

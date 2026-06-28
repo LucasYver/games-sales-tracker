@@ -18,6 +18,7 @@ import { PublishersModule } from '../publishers/publishers.module';
 import { IngestionController } from './ingestion.controller';
 import { IngestionService } from './ingestion.service';
 import { SteamClient } from './steam.client';
+import { SteamChartsClient } from './steamcharts.client';
 import { IgdbClient } from './igdb.client';
 import { StoreRatingsClient } from './store-ratings.client';
 import { WikipediaClient } from './wikipedia.client';
@@ -49,6 +50,7 @@ import { ExophaseClient } from './exophase.client';
   providers: [
     IngestionService,
     SteamClient,
+    SteamChartsClient,
     IgdbClient,
     StoreRatingsClient,
     WikipediaClient,

@@ -248,6 +248,7 @@ export interface AdminGameDetail extends AdminGameSummary {
   estimates: AdminEstimate[];
   signals: AdminSignal[];
   ccuHistory: AdminCcuPoint[];
+  reviewHistory: AdminCcuPoint[];
   prices: AdminPriceSnapshot[];
   achievementSnapshots: AdminAchievementSummary[];
   estimateSnapshots: AdminEstimateSnapshot[];

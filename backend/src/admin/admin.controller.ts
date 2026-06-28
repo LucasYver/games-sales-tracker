@@ -139,6 +139,18 @@ export class AdminController {
     return this.ingestion.backfillReviewsFromApi(id);
   }
 
+  @Post('games/:id/backfill-reviews-histogram')
+  @HttpCode(200)
+  backfillReviewsHistogram(@Param('id', ParseUUIDPipe) id: string) {
+    return this.ingestion.backfillReviewsFromHistogram(id);
+  }
+
+  @Post('games/:id/backfill-ccu-steamcharts')
+  @HttpCode(200)
+  backfillCcuSteamCharts(@Param('id', ParseUUIDPipe) id: string) {
+    return this.ingestion.backfillCcuFromSteamCharts(id);
+  }
+
   @Post('games/:id/rebuild')
   @HttpCode(200)
   rebuildEstimates(@Param('id', ParseUUIDPipe) id: string) {

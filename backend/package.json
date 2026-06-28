@@ -19,6 +19,8 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "bootstrap:games": "ts-node src/scripts/bootstrap-games.ts",
+    "import:leak-2018": "ts-node src/scripts/import-leak-2018.ts",
+    "backfill:leak-history": "ts-node src/scripts/backfill-leak-history.ts",
     "typeorm": "typeorm-ts-node-commonjs",
     "migration:generate": "npm run typeorm -- migration:generate -d src/db/data-source.ts",
     "migration:run": "npm run typeorm -- migration:run -d src/db/data-source.ts",
