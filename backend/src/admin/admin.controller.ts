@@ -133,12 +133,6 @@ export class AdminController {
     return this.ingestion.importReviewsCsv(id, body.csv);
   }
 
-  @Post('games/:id/backfill-reviews')
-  @HttpCode(200)
-  backfillReviews(@Param('id', ParseUUIDPipe) id: string) {
-    return this.ingestion.backfillReviewsFromApi(id);
-  }
-
   @Post('games/:id/backfill-reviews-histogram')
   @HttpCode(200)
   backfillReviewsHistogram(@Param('id', ParseUUIDPipe) id: string) {
@@ -207,16 +201,6 @@ export class AdminController {
   @Get('issues')
   issues() {
     return this.admin.issues();
-  }
-
-  @Post('backfill/igdb')
-  startIgdbBackfill() {
-    return this.ingestion.startIgdbBackfill();
-  }
-
-  @Get('backfill/igdb')
-  igdbBackfillStatus() {
-    return this.ingestion.getIgdbBackfillStatus();
   }
 
   @Get('publishers')

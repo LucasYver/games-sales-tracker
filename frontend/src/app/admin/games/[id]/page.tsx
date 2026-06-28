@@ -37,7 +37,6 @@ import { RefreshGameButton } from '../../_components/RefreshGameButton';
 import { RebuildEstimatesButton } from '../../_components/RebuildEstimatesButton';
 import { ImportCcuCsvButton } from '../../_components/ImportCcuCsvButton';
 import { ImportReviewsCsvButton } from '../../_components/ImportReviewsCsvButton';
-import { BackfillReviewsButton } from '../../_components/BackfillReviewsButton';
 import { EditGameForm } from '../../_components/EditGameForm';
 import { EstimateHistoryChart } from '../../_components/EstimateHistoryChart';
 import { CcuHistoryChart } from '../../_components/CcuHistoryChart';
@@ -270,7 +269,6 @@ export default async function AdminGameDetailPage({
           <RebuildEstimatesButton gameId={game.id} />
           <ImportCcuCsvButton gameId={game.id} />
           <ImportReviewsCsvButton gameId={game.id} />
-          <BackfillReviewsButton gameId={game.id} />
           <DeleteButton
             action={deleteGame.bind(null, game.id)}
             confirmMessage={`Permanently delete "${game.name}"?`}

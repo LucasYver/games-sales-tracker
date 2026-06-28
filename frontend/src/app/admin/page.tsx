@@ -1,9 +1,4 @@
-import {
-  adminFetch,
-  type AdminStats,
-  type IgdbBackfillStatus,
-} from '@/lib/admin';
-import { IgdbBackfillCard } from './_components/IgdbBackfillCard';
+import { adminFetch, type AdminStats } from '@/lib/admin';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -51,10 +46,7 @@ function StatCard({
 }
 
 export default async function AdminDashboard() {
-  const [stats, backfillStatus] = await Promise.all([
-    adminFetch<AdminStats>('/stats'),
-    adminFetch<IgdbBackfillStatus>('/backfill/igdb'),
-  ]);
+  const stats = await adminFetch<AdminStats>('/stats');
 
   const lastCapturedAt = stats.signals.lastCapturedAt
     ? new Date(stats.signals.lastCapturedAt).toLocaleString('en-US', {
@@ -149,10 +141,6 @@ export default async function AdminDashboard() {
             </p>
           </CardContent>
         </Card>
-      </section>
-
-      <section>
-        <IgdbBackfillCard initial={backfillStatus} />
       </section>
     </div>
   );

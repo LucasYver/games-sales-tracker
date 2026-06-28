@@ -282,17 +282,6 @@ export interface PaginatedAdmin<T> {
   total: number;
 }
 
-export interface IgdbBackfillStatus {
-  running: boolean;
-  total: number;
-  processed: number;
-  updated: number;
-  skipped: number;
-  startedAt: string | null;
-  finishedAt: string | null;
-  lastError: string | null;
-}
-
 export interface IssueGroup<T> {
   count: number;
   items: T[];

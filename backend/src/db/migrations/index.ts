@@ -29,6 +29,7 @@ import { AddGameDeletedAt1782656340237 } from './1782656340237-AddGameDeletedAt'
 import { AddSteamPlayersLeakMetric1782660000000 } from './1782660000000-AddSteamPlayersLeakMetric';
 import { AddSteamLeakSalesSource1782661000000 } from './1782661000000-AddSteamLeakSalesSource';
 import { BackfillSteamLeakMilestones1782662000000 } from './1782662000000-BackfillSteamLeakMilestones';
+import { AddSteamLeakToCalibrationSourceEnums1782663000000 } from './1782663000000-AddSteamLeakToCalibrationSourceEnums';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -69,4 +70,5 @@ export const migrations: MixedList<Function | string> = [
   AddSteamPlayersLeakMetric1782660000000,
   AddSteamLeakSalesSource1782661000000,
   BackfillSteamLeakMilestones1782662000000,
+  AddSteamLeakToCalibrationSourceEnums1782663000000,
 ];

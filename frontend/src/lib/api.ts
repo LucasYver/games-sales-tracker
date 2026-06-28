@@ -167,15 +167,3 @@ export async function getGame(slug: string): Promise<GameDetail | null> {
   return res.json();
 }
 
-export async function refreshGameSources(
-  gameId: string,
-): Promise<{ found: boolean; articlesIngested: number }> {
-  const res = await fetch(`${API_URL}/ingestion/refresh`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ gameId }),
-  });
-  if (!res.ok) throw new Error(`Refresh failed (${res.status})`);
-  return res.json();
-}
-

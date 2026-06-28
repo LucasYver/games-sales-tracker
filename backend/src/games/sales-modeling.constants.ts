@@ -135,13 +135,6 @@ export const XBOX_BOXLEITER_PLAUSIBLE_MAX = 600;
 //   Hogwarts Leg.  879K peak → ~15M    (~17×)
 //   Palworld       2.1M peak → ~15M+   (~7× short term, climbs with age)
 //   Stardew Valley  95K peak → ~30M+   (~315× long tail)
-//
-// PLAUSIBLE_MIN/MAX are reserved for a future per-game calibrated CCU
-// multiplier (mirroring the Boxleiter recalibration flow); they are not
-// yet read by EstimationService.
-
-export const PC_CCU_PLAUSIBLE_MIN = 4;
-export const PC_CCU_PLAUSIBLE_MAX = 500;
 
 // ─── Launcher / Steam-share scaling (Steam → total PC) ──────────────────────
 //
@@ -289,19 +282,6 @@ export const EXOPHASE_COVERAGE_PS_HIGH = 28;
 
 export const EXOPHASE_COVERAGE_XBOX_LOW = 8;
 export const EXOPHASE_COVERAGE_XBOX_HIGH = 22;
-
-// Hard plausibility band: an Exophase-based estimate outside this range
-// (units) is treated as broken (the game probably has too small a sample
-// or a parsing glitch) and the row is skipped rather than persisted with
-// nonsense numbers.
-export const ACHIEVEMENT_ESTIMATE_MIN_UNITS = 1_000;
-export const ACHIEVEMENT_ESTIMATE_MAX_UNITS = 500_000_000;
-
-// Minimum sample size below which an Exophase snapshot is too noisy to
-// drive an estimate. Mirrors the MIN_PLAYERS_TRACKED guard inside the
-// scraper but is enforced again at estimation time in case stale data
-// pre-dating the guard slipped into the table.
-export const ACHIEVEMENT_MIN_PLAYERS_TRACKED = 500;
 
 // ─── Estimation discrepancy detector ────────────────────────────────────────
 //

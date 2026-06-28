@@ -177,27 +177,6 @@ export async function importReviewsCsv(
   return result;
 }
 
-export interface BackfillReviewsResult {
-  daysImported: number;
-  reviewsFetched: number;
-  reportedTotal: number | null;
-  rangeStart: string | null;
-  rangeEnd: string | null;
-  latestTotal: number;
-  latestRating: number | null;
-}
-
-export async function backfillReviews(
-  id: string,
-): Promise<BackfillReviewsResult> {
-  const result = await adminFetch<BackfillReviewsResult>(
-    `/games/${id}/backfill-reviews`,
-    { method: 'POST' },
-  );
-  revalidatePath(`/admin/games/${id}`);
-  return result;
-}
-
 export async function deleteMilestone(id: string): Promise<void> {
   await adminFetch(`/milestones/${id}`, { method: 'DELETE' });
   revalidatePath('/admin/milestones');
@@ -212,19 +191,6 @@ export async function deleteSignal(id: string, gameId: string): Promise<void> {
 export async function deleteTrustedSource(id: string): Promise<void> {
   await adminFetch(`/trusted-sources/${id}`, { method: 'DELETE' });
   revalidatePath('/admin/trusted-sources');
-}
-
-export async function startIgdbBackfill(): Promise<{
-  started: boolean;
-  total: number;
-}> {
-  return adminFetch('/backfill/igdb', { method: 'POST' });
-}
-
-export async function getIgdbBackfillStatus() {
-  return adminFetch<import('@/lib/admin').IgdbBackfillStatus>(
-    '/backfill/igdb',
-  );
 }
 
 export async function updatePublisherSteamShare(
