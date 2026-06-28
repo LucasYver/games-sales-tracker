@@ -7,23 +7,32 @@ import { AppModule } from '../app.module';
 import { IngestionService } from '../ingestion/ingestion.service';
 
 /**
- * Backfill historical reviews + CCU for every game that carries a
- * `STEAM_PLAYERS_LEAK` snapshot (i.e. the games imported from the 2018 leak).
+ * Backfill historical reviews + CCU for Steam-linked games.
  *
  * Per game it calls:
  *   - `backfillReviewsFromHistogram` (Steam `appreviewhistogram`, monthly,
  *     falls back to per-review enumeration for low-volume games);
  *   - `backfillCcuFromSteamCharts` (steamcharts.com monthly peak CCU).
  *
- * Resumable via a JSON checkpoint, throttled between games (both endpoints
- * are rate-limited / scraped). Neither source is SteamDB (Cloudflare/ToS).
+ * Three scopes:
+ *   - `leak`     (default): games with a `STEAM_PLAYERS_LEAK` snapshot (2018 leak).
+ *   - `non-leak`: every game with a `STEAM` GameSource that does NOT have a leak row
+ *                 (i.e. tracked via the regular Steam refresh).
+ *   - `all`     : every game with a `STEAM` GameSource.
+ *
+ * Resumable via a scope-suffixed JSON checkpoint, throttled between games (both
+ * endpoints are rate-limited / scraped). Neither source is SteamDB (Cloudflare/ToS).
  *
  * Usage (from backend/):
  *   npx ts-node src/scripts/backfill-leak-history.ts \
+ *     [--scope leak|non-leak|all] \
  *     [--limit <n>] [--delay <ms>] [--reviews-only] [--ccu-only] [--no-resume]
  */
 
+type Scope = 'leak' | 'non-leak' | 'all';
+
 interface CliOptions {
+  scope: Scope;
   limit: number | null;
   delayMs: number;
   doReviews: boolean;
@@ -40,13 +49,55 @@ function parseArgs(): CliOptions {
   const reviewsOnly = args.includes('--reviews-only');
   const ccuOnly = args.includes('--ccu-only');
 
+  const rawScope = (get('--scope') ?? 'leak') as Scope;
+  if (!['leak', 'non-leak', 'all'].includes(rawScope)) {
+    throw new Error(
+      `Invalid --scope "${rawScope}". Expected one of: leak, non-leak, all.`,
+    );
+  }
+
   return {
+    scope: rawScope,
     limit: get('--limit') ? Number(get('--limit')) : null,
     delayMs: get('--delay') ? Number(get('--delay')) : 1500,
     doReviews: !ccuOnly,
     doCcu: !reviewsOnly,
     resume: !args.includes('--no-resume'),
   };
+}
+
+// The histogram + SteamCharts backfills DELETE existing rows in the covered
+// window before reinserting one point per month. To avoid downgrading the
+// daily-resolution history collected by the regular cron on long-tracked
+// games, we skip each metric whose existing row count is above this cap.
+const PRESERVE_EXISTING_SNAPSHOTS = 200;
+
+const SCOPE_FILTERS: Record<Scope, string> = {
+  leak: `EXISTS (
+           SELECT 1 FROM signal_snapshot s
+           WHERE s."gameId" = gs."gameId" AND s.metric = 'STEAM_PLAYERS_LEAK'
+         )`,
+  'non-leak': `NOT EXISTS (
+                 SELECT 1 FROM signal_snapshot s
+                 WHERE s."gameId" = gs."gameId" AND s.metric = 'STEAM_PLAYERS_LEAK'
+               )`,
+  all: 'TRUE',
+};
+
+function buildScopeQuery(scope: Scope): string {
+  return `SELECT
+            gs."gameId" AS "gameId",
+            g.name AS name,
+            COALESCE(SUM(CASE WHEN s.metric = 'STEAM_REVIEWS' THEN 1 ELSE 0 END), 0)::int AS "reviewsCount",
+            COALESCE(SUM(CASE WHEN s.metric = 'STEAM_CONCURRENT' THEN 1 ELSE 0 END), 0)::int AS "ccuCount"
+          FROM game_source gs
+          JOIN game g ON g.id = gs."gameId"
+          LEFT JOIN signal_snapshot s ON s."gameId" = gs."gameId"
+          WHERE gs.source = 'STEAM'
+            AND g."deletedAt" IS NULL
+            AND ${SCOPE_FILTERS[scope]}
+          GROUP BY gs."gameId", g.name
+          ORDER BY g.name ASC`;
 }
 
 function loadCheckpoint(path: string): Set<string> {
@@ -70,7 +121,7 @@ async function main(): Promise<void> {
 
   const checkpointPath = resolve(
     __dirname,
-    '../../../scripts/.backfill-leak-history-progress.json',
+    `../../../scripts/.backfill-leak-history-progress.${opts.scope}.json`,
   );
   const done = opts.resume ? loadCheckpoint(checkpointPath) : new Set<string>();
 
@@ -80,28 +131,35 @@ async function main(): Promise<void> {
   const ingestion = app.get(IngestionService);
   const dataSource = app.get(DataSource);
 
-  const leakGames = await dataSource.query<
-    Array<{ gameId: string; name: string }>
-  >(
-    `SELECT DISTINCT s."gameId" AS "gameId", g.name AS name
-     FROM signal_snapshot s
-     JOIN game g ON g.id = s."gameId"
-     WHERE s.metric = 'STEAM_PLAYERS_LEAK' AND g."deletedAt" IS NULL
-     ORDER BY g.name ASC`,
-  );
+  const games = await dataSource.query<
+    Array<{
+      gameId: string;
+      name: string;
+      reviewsCount: number;
+      ccuCount: number;
+    }>
+  >(buildScopeQuery(opts.scope));
 
   logger.log(
-    `Found ${leakGames.length} leak game(s) ` +
+    `Scope=${opts.scope}: found ${games.length} game(s) ` +
       `(reviews=${opts.doReviews}, ccu=${opts.doCcu}, delay=${opts.delayMs}ms` +
-      `${opts.limit ? `, limit=${opts.limit}` : ''}). ` +
+      `${opts.limit ? `, limit=${opts.limit}` : ''}, ` +
+      `preserve>${PRESERVE_EXISTING_SNAPSHOTS} existing snapshots). ` +
       `${done.size} already done.`,
   );
 
-  const counts = { reviewsOk: 0, reviewsErr: 0, ccuOk: 0, ccuErr: 0 };
+  const counts = {
+    reviewsOk: 0,
+    reviewsErr: 0,
+    reviewsSkipped: 0,
+    ccuOk: 0,
+    ccuErr: 0,
+    ccuSkipped: 0,
+  };
   let processed = 0;
 
   try {
-    for (const { gameId, name } of leakGames) {
+    for (const { gameId, name, reviewsCount, ccuCount } of games) {
       if (opts.limit !== null && processed >= opts.limit) break;
       if (done.has(gameId)) continue;
 
@@ -109,26 +167,36 @@ async function main(): Promise<void> {
       let ccuLabel = 'skip';
 
       if (opts.doReviews) {
-        try {
-          const r = await ingestion.backfillReviewsFromHistogram(gameId);
-          reviewsLabel = `${r.method}:${r.pointsImported}`;
-          counts.reviewsOk++;
-        } catch (error) {
-          reviewsLabel = 'ERR';
-          counts.reviewsErr++;
-          logger.warn(`reviews "${name}" (${gameId}): ${String(error)}`);
+        if (reviewsCount > PRESERVE_EXISTING_SNAPSHOTS) {
+          reviewsLabel = `skip(${reviewsCount})`;
+          counts.reviewsSkipped++;
+        } else {
+          try {
+            const r = await ingestion.backfillReviewsFromHistogram(gameId);
+            reviewsLabel = `${r.method}:${r.pointsImported}`;
+            counts.reviewsOk++;
+          } catch (error) {
+            reviewsLabel = 'ERR';
+            counts.reviewsErr++;
+            logger.warn(`reviews "${name}" (${gameId}): ${String(error)}`);
+          }
         }
       }
 
       if (opts.doCcu) {
-        try {
-          const c = await ingestion.backfillCcuFromSteamCharts(gameId);
-          ccuLabel = `${c.monthsImported}m`;
-          counts.ccuOk++;
-        } catch (error) {
-          ccuLabel = 'ERR';
-          counts.ccuErr++;
-          logger.warn(`ccu "${name}" (${gameId}): ${String(error)}`);
+        if (ccuCount > PRESERVE_EXISTING_SNAPSHOTS) {
+          ccuLabel = `skip(${ccuCount})`;
+          counts.ccuSkipped++;
+        } else {
+          try {
+            const c = await ingestion.backfillCcuFromSteamCharts(gameId);
+            ccuLabel = `${c.monthsImported}m`;
+            counts.ccuOk++;
+          } catch (error) {
+            ccuLabel = 'ERR';
+            counts.ccuErr++;
+            logger.warn(`ccu "${name}" (${gameId}): ${String(error)}`);
+          }
         }
       }
 
@@ -147,8 +215,10 @@ async function main(): Promise<void> {
   }
 
   logger.log(
-    `Done. processed=${processed} | reviews ok=${counts.reviewsOk} ` +
-      `err=${counts.reviewsErr} | ccu ok=${counts.ccuOk} err=${counts.ccuErr}`,
+    `Done. processed=${processed} | ` +
+      `reviews ok=${counts.reviewsOk} err=${counts.reviewsErr} ` +
+      `skipped=${counts.reviewsSkipped} | ` +
+      `ccu ok=${counts.ccuOk} err=${counts.ccuErr} skipped=${counts.ccuSkipped}`,
   );
 }
 

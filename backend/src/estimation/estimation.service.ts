@@ -801,6 +801,7 @@ export class EstimationService {
    */
   async recalibrateAll(gameId: string): Promise<void> {
     await this.recalibrateFromGlobal(gameId);
+    await this.recalibrateFromPcRegion(gameId);
   }
 
   // ───── internals ────────────────────────────────────────────────────────
@@ -1194,6 +1195,100 @@ export class EstimationService {
           `(from ${best.source} ${best.units.toLocaleString()} units)`,
       );
     }
+  }
+
+  /**
+   * Calibrate the PC multiplier directly from a `region='PC'` milestone
+   * (e.g. `STEAM_LEAK`: 2018 Steam-leak owner counts, treated as paid
+   * buyers on Steam). Skipped when a more recent `region='GLOBAL'`
+   * milestone exists — that figure would already have set the PC
+   * multiplier via `recalibrateFromGlobal` and is presumed more current.
+   *
+   * Algorithm:
+   *  1. Pick the most recent PC milestone (tie-break: largest units).
+   *  2. Bail if the latest GLOBAL milestone is more recent (or same date)
+   *     so the GLOBAL-split keeps priority.
+   *  3. Find the STEAM_REVIEWS signal closest to the PC milestone's
+   *     `reportedAt` (within `CALIBRATION_WINDOW_DAYS`).
+   *  4. `multiplier = declared_PC / signal_PC`, validated against the PC
+   *     plausibility bounds, then persisted on `calibratedMultiplier`.
+   *
+   * Spread on read stays the standard `CALIBRATED_MULTIPLIER_SPREAD` —
+   * STEAM_LEAK has confidenceScore=90 and is treated like an authoritative
+   * source.
+   */
+  private async recalibrateFromPcRegion(gameId: string): Promise<void> {
+    const pcCandidates = await this.milestones.find({
+      where: {
+        gameId,
+        rejectedAt: IsNull(),
+        isEngagement: false,
+        region: 'PC',
+      },
+    });
+    if (pcCandidates.length === 0) return;
+
+    pcCandidates.sort((a, b) => {
+      const ta = a.reportedAt?.getTime() ?? 0;
+      const tb = b.reportedAt?.getTime() ?? 0;
+      if (tb !== ta) return tb - ta;
+      return b.units - a.units;
+    });
+    const best = pcCandidates[0];
+    if (best.units <= 0 || !best.reportedAt) return;
+
+    const latestGlobal = await this.milestones.findOne({
+      where: {
+        gameId,
+        rejectedAt: IsNull(),
+        isEngagement: false,
+        region: 'GLOBAL',
+      },
+      order: { reportedAt: 'DESC' },
+    });
+    if (
+      latestGlobal?.reportedAt &&
+      latestGlobal.reportedAt.getTime() >= best.reportedAt.getTime()
+    ) {
+      return;
+    }
+
+    const cfg = this.platforms.find((p) => p.platform === Platform.PC);
+    if (!cfg) return;
+
+    const snapshots = await this.signals.find({
+      where: { gameId, metric: cfg.signalMetric },
+    });
+    if (snapshots.length === 0) return;
+    const target = best.reportedAt.getTime();
+    const closest = snapshots.reduce((acc, r) =>
+      Math.abs(r.capturedAt.getTime() - target) <
+      Math.abs(acc.capturedAt.getTime() - target)
+        ? r
+        : acc,
+    );
+    if (
+      Math.abs(closest.capturedAt.getTime() - target) >
+      CALIBRATION_WINDOW_DAYS * 24 * 3600 * 1000
+    ) {
+      return;
+    }
+    if (closest.value <= 0) return;
+
+    const multiplier = best.units / closest.value;
+    if (multiplier < cfg.plausibleMin || multiplier > cfg.plausibleMax) {
+      this.logger.debug(
+        `Skipping implausible PC-region calibration for ${gameId}: ${multiplier.toFixed(1)}`,
+      );
+      return;
+    }
+
+    await cfg.write(gameId, multiplier, best.source);
+    this.logger.log(
+      `[calibration:pc-region] ${gameId} PC: multiplier=${multiplier.toFixed(2)} ` +
+        `(from ${best.source} ${best.units.toLocaleString()} units @ ` +
+        `${best.reportedAt.toISOString().slice(0, 10)}, signal=${closest.value.toLocaleString()})`,
+    );
   }
 
 
