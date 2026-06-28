@@ -43,6 +43,8 @@ export default async function AdminPublishersPage() {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Steam share</TableHead>
+              <TableHead className="text-right">Steam low</TableHead>
+              <TableHead className="text-right">Steam high</TableHead>
               <TableHead className="text-right">Games</TableHead>
               <TableHead>Updated</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -57,6 +59,12 @@ export default async function AdminPublishersPage() {
                     low={p.steamSharePctLow}
                     high={p.steamSharePctHigh}
                   />
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {p.steamSharePctLow}%
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {p.steamSharePctHigh}%
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {p.gameCount}
@@ -82,7 +90,7 @@ export default async function AdminPublishersPage() {
             {publishers.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={7}
                   className="text-muted-foreground py-12 text-center"
                 >
                   No curated publishers yet. Restart the backend to seed the
