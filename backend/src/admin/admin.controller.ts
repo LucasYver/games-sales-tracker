@@ -46,6 +46,7 @@ export class AdminController {
   listGames(
     @Query('q') q?: string,
     @Query('platform') platform?: string,
+    @Query('platformExclusive') platformExclusive?: string,
     @Query('hasSales') hasSales?: string,
     @Query('genreProfile') genreProfile?: string,
     @Query('calibrated') calibrated?: string,
@@ -58,6 +59,7 @@ export class AdminController {
     return this.admin.listGames({
       q,
       platform,
+      platformExclusive: platformExclusive === 'true',
       hasSales:
         hasSales === 'true' ? true : hasSales === 'false' ? false : undefined,
       genreProfileId: genreProfile,

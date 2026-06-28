@@ -25,6 +25,7 @@ import { DropMilestonePlatform1782467589649 } from './1782467589649-DropMileston
 import { DropGenreProfileConfidence1782470000000 } from './1782470000000-DropGenreProfileConfidence';
 import { DropConfidenceFromSalesEstimate1782490393633 } from './1782490393633-DropConfidenceFromSalesEstimate';
 import { ReplaceLauncherProfileWithSteamShare1782636884692 } from './1782636884692-ReplaceLauncherProfileWithSteamShare';
+import { AddGameDeletedAt1782656340237 } from './1782656340237-AddGameDeletedAt';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -61,4 +62,5 @@ export const migrations: MixedList<Function | string> = [
   DropGenreProfileConfidence1782470000000,
   DropConfidenceFromSalesEstimate1782490393633,
   ReplaceLauncherProfileWithSteamShare1782636884692,
+  AddGameDeletedAt1782656340237,
 ];

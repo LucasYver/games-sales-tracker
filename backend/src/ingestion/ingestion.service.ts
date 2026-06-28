@@ -367,6 +367,7 @@ export class IngestionService {
         await this.games.find({
           where: { igdbId: Not(IsNull()) },
           select: ['igdbId'],
+          withDeleted: true,
         })
       ).map((g) => g.igdbId),
     );
@@ -494,8 +495,9 @@ export class IngestionService {
 
     const existing = await this.games.findOne({
       where: { igdbId: candidate.igdbId },
+      withDeleted: true,
     });
-    if (existing) {
+    if (existing && !existing.deletedAt) {
       return {
         gameId: existing.id,
         name: existing.name,
@@ -503,6 +505,9 @@ export class IngestionService {
         steamLinked: candidate.steamAppId != null,
       };
     }
+    // A soft-deleted existing row is intentionally NOT returned here: we let
+    // the ingest path below run with `restoreDeleted: true` so the row is
+    // resurrected and refreshed in one go.
 
     // Mirror the discovery path: if no Steam external id is linked on IGDB but
     // the title ships on PC, try resolving the appId by name search.
@@ -518,10 +523,10 @@ export class IngestionService {
 
     let gameId: string | null = null;
     if (steamAppId) {
-      gameId = await this.ingestSteamApp(steamAppId);
+      gameId = await this.ingestSteamApp(steamAppId, { restoreDeleted: true });
     }
     if (!gameId) {
-      await this.ingestIgdbGame(candidate);
+      await this.ingestIgdbGame(candidate, { restoreDeleted: true });
       const created = await this.games.findOne({
         where: { igdbId: candidate.igdbId },
       });
@@ -548,17 +553,39 @@ export class IngestionService {
    * the canonical rebuild path so the (single) point lands consistently
    * with later refreshes.
    */
-  private async ingestIgdbGame(candidate: IgdbGame): Promise<void> {
-    const game = await this.upsertGameFromIgdb(candidate);
+  private async ingestIgdbGame(
+    candidate: IgdbGame,
+    options: { restoreDeleted?: boolean } = {},
+  ): Promise<void> {
+    const game = await this.upsertGameFromIgdb(candidate, options);
+    if (!game) return;
     await this.scrapeStoreRatings(game.id, game.name, game.platforms);
     await this.gamesService.rebuildEstimateHistory(game.id);
   }
 
-  private async upsertGameFromIgdb(candidate: IgdbGame): Promise<Game> {
+  private async upsertGameFromIgdb(
+    candidate: IgdbGame,
+    options: { restoreDeleted?: boolean } = {},
+  ): Promise<Game | null> {
+    const { restoreDeleted = false } = options;
+
     const existing = await this.games.findOne({
       where: { igdbId: candidate.igdbId },
+      withDeleted: true,
     });
-    if (existing) return existing;
+    if (existing) {
+      if (existing.deletedAt) {
+        if (!restoreDeleted) {
+          this.logger.log(
+            `[ingest-igdb] skipping soft-deleted game "${existing.name}" (igdb=${candidate.igdbId})`,
+          );
+          return null;
+        }
+        await this.games.restore(existing.id);
+        existing.deletedAt = null;
+      }
+      return existing;
+    }
 
     const entity = this.games.create({
       igdbId: candidate.igdbId,
@@ -589,6 +616,7 @@ export class IngestionService {
    */
   async ingestSteamApp(
     appId: number,
+    options: { restoreDeleted?: boolean } = {},
   ): Promise<string | null> {
     const details = await this.steam.getAppDetails(appId);
     if (!details) {
@@ -606,7 +634,8 @@ export class IngestionService {
       return null;
     }
 
-    const game = await this.upsertGameFromSteam(appId, details);
+    const game = await this.upsertGameFromSteam(appId, details, options);
+    if (!game) return null;
 
     await this.pollSteamReviews(game.id, appId);
     await this.pollSteamCcu(game.id, appId);
@@ -2142,7 +2171,15 @@ export class IngestionService {
     for (const g of results) {
       const existing = await this.games.findOne({
         where: { igdbId: g.igdbId },
+        withDeleted: true,
       });
+
+      if (existing?.deletedAt) {
+        this.logger.log(
+          `[import-igdb] skipping soft-deleted game "${existing.name}" (igdb=${g.igdbId})`,
+        );
+        continue;
+      }
 
       if (existing) {
         existing.name = g.name;
@@ -2209,14 +2246,25 @@ export class IngestionService {
   private async upsertGameFromSteam(
     appId: number,
     details: SteamAppDetails,
-  ): Promise<Game> {
+    options: { restoreDeleted?: boolean } = {},
+  ): Promise<Game | null> {
+    const { restoreDeleted = false } = options;
+
     const existingSource = await this.gameSources.findOne({
       where: {
         source: SourceType.STEAM,
         externalId: String(appId),
       },
-      relations: { game: true },
     });
+    // Reload the game via its id with `withDeleted` so a soft-deleted game
+    // is still found (the eager join used previously hides soft-deleted
+    // related rows). We need to see it to know whether to skip or restore.
+    const existingGame = existingSource
+      ? await this.games.findOne({
+          where: { id: existingSource.gameId },
+          withDeleted: true,
+        })
+      : null;
 
     // IGDB enrichment: best-effort lookup that gives us the real platforms
     // list (Steam ingestion alone can't tell us if a title also ships on
@@ -2224,8 +2272,18 @@ export class IngestionService {
     // Steam payload is missing publisher / developer / cover.
     const igdb = await this.igdb.findBySteamAppId(appId);
 
-    if (existingSource) {
-      const game = existingSource.game;
+    if (existingGame) {
+      if (existingGame.deletedAt) {
+        if (!restoreDeleted) {
+          this.logger.log(
+            `[ingest-steam] skipping soft-deleted game "${existingGame.name}" (app=${appId})`,
+          );
+          return null;
+        }
+        await this.games.restore(existingGame.id);
+        existingGame.deletedAt = null;
+      }
+      const game = existingGame;
       game.releaseDate = details.releaseDate ?? game.releaseDate;
       game.coverUrl =
         details.headerImage ?? igdb?.coverUrl ?? game.coverUrl;
@@ -2262,8 +2320,19 @@ export class IngestionService {
     if (igdb) {
       const existingByIgdb = await this.games.findOne({
         where: { igdbId: igdb.igdbId },
+        withDeleted: true,
       });
       if (existingByIgdb) {
+        if (existingByIgdb.deletedAt) {
+          if (!restoreDeleted) {
+            this.logger.log(
+              `[ingest-steam] skipping soft-deleted game "${existingByIgdb.name}" (igdb=${igdb.igdbId})`,
+            );
+            return null;
+          }
+          await this.games.restore(existingByIgdb.id);
+          existingByIgdb.deletedAt = null;
+        }
         await this.gameSources.save(
           this.gameSources.create({
             gameId: existingByIgdb.id,
@@ -2345,7 +2414,15 @@ export class IngestionService {
     const base = slugify(name) || 'game';
     let candidate = base;
     let suffix = 1;
-    while (await this.games.findOne({ where: { slug: candidate } })) {
+    // `withDeleted` because the `slug` column has a DB-level unique index that
+    // also covers soft-deleted rows. Without it we'd happily return a slug
+    // already held by a soft-deleted game and crash on insert.
+    while (
+      await this.games.findOne({
+        where: { slug: candidate },
+        withDeleted: true,
+      })
+    ) {
       candidate = `${base}-${suffix++}`;
     }
     return candidate;

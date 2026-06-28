@@ -25,7 +25,29 @@ import { deleteGame } from '../actions';
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 50;
-const VALID_PLATFORMS = ['PC', 'PLAYSTATION', 'XBOX', 'SWITCH', 'MOBILE'];
+const PLATFORM_OPTIONS = [
+  { value: 'PC', label: 'PC' },
+  { value: 'PC_ONLY', label: 'PC only' },
+  { value: 'PLAYSTATION', label: 'PlayStation' },
+  { value: 'PLAYSTATION_ONLY', label: 'PlayStation only' },
+  { value: 'XBOX', label: 'Xbox' },
+  { value: 'XBOX_ONLY', label: 'Xbox only' },
+  { value: 'SWITCH', label: 'Switch' },
+  { value: 'SWITCH_ONLY', label: 'Switch only' },
+  { value: 'MOBILE', label: 'Mobile' },
+  { value: 'MOBILE_ONLY', label: 'Mobile only' },
+];
+
+function parsePlatformFilter(raw: string | undefined): {
+  platform?: string;
+  platformExclusive?: boolean;
+} {
+  if (!raw) return {};
+  if (raw.endsWith('_ONLY')) {
+    return { platform: raw.slice(0, -5), platformExclusive: true };
+  }
+  return { platform: raw };
+}
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -123,8 +145,16 @@ export default async function AdminGamesPage({
   if (sort) filters.sort = sort;
   if (direction) filters.direction = direction;
 
+  const { platform: apiPlatform, platformExclusive } =
+    parsePlatformFilter(platform);
+
+  const filtersWithoutPlatform = Object.fromEntries(
+    Object.entries(filters).filter(([k]) => k !== 'platform'),
+  );
   const params = new URLSearchParams({
-    ...filters,
+    ...filtersWithoutPlatform,
+    ...(apiPlatform ? { platform: apiPlatform } : {}),
+    ...(platformExclusive ? { platformExclusive: 'true' } : {}),
     limit: String(PAGE_SIZE),
     offset: String(offset),
   });
@@ -178,9 +208,9 @@ export default async function AdminGamesPage({
                 className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs"
               >
                 <option value="">All</option>
-                {VALID_PLATFORMS.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
+                {PLATFORM_OPTIONS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
                   </option>
                 ))}
               </select>

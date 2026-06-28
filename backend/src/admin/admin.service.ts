@@ -331,6 +331,7 @@ export class AdminService {
   async listGames(opts: {
     q?: string;
     platform?: string;
+    platformExclusive?: boolean;
     hasSales?: boolean;
     genreProfileId?: string;
     calibrated?: boolean;
@@ -366,10 +367,17 @@ export class AdminService {
         builder.andWhere('g.name ILIKE :q', { q: `%${opts.q.trim()}%` });
       }
       if (opts.platform) {
-        builder.andWhere(
-          'g.platforms @> ARRAY[:platform]::game_platforms_enum[]',
-          { platform: opts.platform },
-        );
+        if (opts.platformExclusive) {
+          builder.andWhere(
+            'g.platforms = ARRAY[:platform]::game_platforms_enum[]',
+            { platform: opts.platform },
+          );
+        } else {
+          builder.andWhere(
+            'g.platforms @> ARRAY[:platform]::game_platforms_enum[]',
+            { platform: opts.platform },
+          );
+        }
       }
       if (opts.genreProfileId === 'none') {
         builder.andWhere('g.genreProfileId IS NULL');
@@ -666,7 +674,7 @@ export class AdminService {
   }
 
   async deleteGame(id: string): Promise<{ deleted: boolean }> {
-    const result = await this.games.delete(id);
+    const result = await this.games.softDelete(id);
     return { deleted: (result.affected ?? 0) > 0 };
   }
 
