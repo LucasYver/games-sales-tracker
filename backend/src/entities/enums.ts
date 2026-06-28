@@ -71,31 +71,6 @@ export enum SourceCategory {
 }
 
 /**
- * How representative Steam is of a publisher's PC sales. Drives how
- * aggressively Boxleiter / peak-CCU Steam estimates can be trusted as a
- * proxy for *total* PC sales:
- *  - STEAM_DOMINANT: Steam ≈ 90%+ of PC. Most indie + many AAA titles.
- *    Boxleiter/CCU on Steam ≈ total PC, multipliers used as-is.
- *  - MULTI_STORE: Steam ≈ 40-70% of PC. Game also ships on a significant
- *    competing PC store (EGS, GOG). Boxleiter on Steam undershoots total
- *    PC by ~2x.
- *  - LAUNCHER_PRIMARY: Steam ≈ 10-25% of PC. The publisher's own launcher
- *    (Ubisoft Connect, EA App, Battle.net, Microsoft Store) is the
- *    dominant PC entry point. Boxleiter on Steam undershoots total PC
- *    by 3-5×.
- *
- * Currently stored as `Publisher.launcherProfile` (and inherited by every
- * game linked to that publisher). Not yet consumed by the estimation
- * engine — captured here so the admin can curate the data ahead of the
- * follow-up calibration work.
- */
-export enum LauncherProfile {
-  STEAM_DOMINANT = 'STEAM_DOMINANT',
-  MULTI_STORE = 'MULTI_STORE',
-  LAUNCHER_PRIMARY = 'LAUNCHER_PRIMARY',
-}
-
-/**
  * Qualitative grade for how much a game type keeps selling past
  * year 1. Encoded as an ordered enum so callers can compare strengths.
  * Levels map 1:1 to the French wording from the empirical lifecycle

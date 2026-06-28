@@ -8,7 +8,7 @@
  * stay traceable.
  */
 
-import { ConfidenceLevel, LauncherProfile } from '../entities';
+import { ConfidenceLevel } from '../entities';
 
 const DAY_MS = 24 * 3600 * 1000;
 const YEAR_MS = 365 * DAY_MS;
@@ -143,7 +143,7 @@ export const XBOX_BOXLEITER_PLAUSIBLE_MAX = 600;
 export const PC_CCU_PLAUSIBLE_MIN = 4;
 export const PC_CCU_PLAUSIBLE_MAX = 500;
 
-// ─── Launcher profile scaling (Steam → total PC) ────────────────────────────
+// ─── Launcher / Steam-share scaling (Steam → total PC) ──────────────────────
 //
 // The Boxleiter reviews multiplier and the peak-CCU multiplier above both
 // implicitly assume Steam captures ~100% of the PC market for a game —
@@ -151,57 +151,95 @@ export const PC_CCU_PLAUSIBLE_MAX = 500;
 // publisher pushes players to a competing storefront (Epic, GOG) or a
 // proprietary launcher (Ubisoft Connect, EA App, Battle.net, Microsoft
 // Store). Without correction, Boxleiter on Steam under-shoots total PC
-// units by ~2× (multi-store) up to ~5× (launcher-primary) for those games.
+// units for those games.
 //
-// The `Publisher.launcherProfile` field (set by heuristic on a curated
-// list of big publishers, editable in the admin) drives a per-profile
-// scaling of the *default* reviews and CCU ranges. When a game has a
-// per-game calibrated multiplier (`calibratedMultiplier`, derived from
-// a declared OFFICIAL/MEDIA figure), scaling is intentionally skipped:
-// the empirical calibration has already absorbed the launcher effect.
+// Each `Publisher` stores an editable estimate of Steam's share of its PC
+// sales as a percentage range (`steamSharePctLow/High`). The scaling
+// factor applied to the *default* reviews and CCU ranges is the inverse
+// of that share: a publisher selling 50% of PC on Steam needs a ×2 boost
+// to recover total PC. There is no longer a fixed set of preset profiles
+// — the share is curated per publisher in the admin.
 //
-// Anchor reasoning:
-//   - STEAM_DOMINANT (default for unmatched publishers): no scaling.
-//   - MULTI_STORE: Steam ~ 40-70% of PC → range × [1.4, 2.0].
-//   - LAUNCHER_PRIMARY: Steam ~ 10-25% of PC → range × [3.5, 7.0].
+// When a game has a per-game calibrated multiplier (`calibratedMultiplier`,
+// derived from a declared OFFICIAL/MEDIA figure), scaling is intentionally
+// skipped: the empirical calibration has already absorbed the launcher
+// effect.
 //
-// The fourchette widens proportionally because per-game variance grows
-// with launcher fragmentation: confidence is also capped (see
-// `LAUNCHER_CONFIDENCE_CAP`) so callers don't mistake a wide launcher-
-// primary estimate for a HIGH-confidence one.
+// The factor fourchette widens as the share drops because per-game
+// variance grows with launcher fragmentation: confidence is also capped
+// (see `launcherConfidenceCapFromShare`) so callers don't mistake a wide
+// low-share estimate for a HIGH-confidence one.
 
-export const LAUNCHER_REVIEWS_FACTOR: Record<
-  LauncherProfile,
-  { low: number; high: number }
-> = {
-  [LauncherProfile.STEAM_DOMINANT]: { low: 1.0, high: 1.0 },
-  [LauncherProfile.MULTI_STORE]: { low: 1.4, high: 2.0 },
-  [LauncherProfile.LAUNCHER_PRIMARY]: { low: 3.5, high: 7.0 },
-};
+// Default Steam share for unmatched publishers and games without a
+// publisher record: Steam captures ~all PC sales (neutral ×1.0 factor).
+export const DEFAULT_STEAM_SHARE_PCT = 100;
 
-export const LAUNCHER_CCU_FACTOR: Record<
-  LauncherProfile,
-  { low: number; high: number }
-> = {
-  [LauncherProfile.STEAM_DOMINANT]: { low: 1.0, high: 1.0 },
-  [LauncherProfile.MULTI_STORE]: { low: 1.4, high: 2.0 },
-  [LauncherProfile.LAUNCHER_PRIMARY]: { low: 3.5, high: 7.0 },
-};
+// Steam share (midpoint) at or above which no confidence cap applies —
+// Steam is representative enough of total PC to keep the natural
+// signal-density confidence. Below it, the Steam-only signal can never be
+// HIGH-confidence on a fragmented title.
+export const STEAM_SHARE_FULL_CONFIDENCE_PCT = 85;
 
-// Maximum confidence the estimation engine is allowed to return for a
-// PC estimate, based on the publisher's launcher profile. STEAM_DOMINANT
-// keeps the natural HIGH/MEDIUM/LOW from signal density; MULTI_STORE caps
-// at MEDIUM (Steam-only signals can never be HIGH-confidence on a multi-
-// store title); LAUNCHER_PRIMARY caps at LOW (Steam signal is a minority
-// proxy by construction).
-export const LAUNCHER_CONFIDENCE_CAP: Record<
-  LauncherProfile,
-  ConfidenceLevel | null
-> = {
-  [LauncherProfile.STEAM_DOMINANT]: null,
-  [LauncherProfile.MULTI_STORE]: ConfidenceLevel.MEDIUM,
-  [LauncherProfile.LAUNCHER_PRIMARY]: ConfidenceLevel.LOW,
-};
+// Steam share (midpoint) at or above which the cap is MEDIUM (multi-store
+// regime); below it the cap drops to LOW (the launcher, not Steam, is the
+// dominant PC entry point).
+export const STEAM_SHARE_MEDIUM_CONFIDENCE_PCT = 35;
+
+export interface SteamShareRange {
+  low: number;
+  high: number;
+}
+
+function clampSharePct(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_STEAM_SHARE_PCT;
+  return Math.min(100, Math.max(1, value));
+}
+
+/**
+ * Steam→total-PC scaling factor range derived from a publisher's Steam
+ * share. `factor = 100 / steamShare`, so the *higher* share yields the
+ * *lower* factor and vice-versa. A 100/100 share returns the neutral
+ * { low: 1, high: 1 }.
+ */
+export function launcherFactorFromSteamShare(
+  share: SteamShareRange,
+): { low: number; high: number } {
+  const lowShare = clampSharePct(share.low);
+  const highShare = clampSharePct(share.high);
+  const minShare = Math.min(lowShare, highShare);
+  const maxShare = Math.max(lowShare, highShare);
+  return {
+    low: 100 / maxShare,
+    high: 100 / minShare,
+  };
+}
+
+/**
+ * Maximum confidence the estimation engine may return for a PC estimate
+ * given the publisher's Steam share (midpoint of the range). Mirrors the
+ * old per-profile cap: full share → no cap, mid share → MEDIUM, low share
+ * → LOW.
+ */
+export function launcherConfidenceCapFromShare(
+  share: SteamShareRange,
+): ConfidenceLevel | null {
+  const mid = (clampSharePct(share.low) + clampSharePct(share.high)) / 2;
+  if (mid >= STEAM_SHARE_FULL_CONFIDENCE_PCT) return null;
+  if (mid >= STEAM_SHARE_MEDIUM_CONFIDENCE_PCT) return ConfidenceLevel.MEDIUM;
+  return ConfidenceLevel.LOW;
+}
+
+/**
+ * Suffix appended to the estimation method label so the launcher
+ * correction regime is traceable on the persisted estimate. Derived from
+ * the same share thresholds as the confidence cap.
+ */
+export function launcherMethodTagFromShare(share: SteamShareRange): string {
+  const cap = launcherConfidenceCapFromShare(share);
+  if (cap === null) return '';
+  if (cap === ConfidenceLevel.MEDIUM) return '+multi-store';
+  return '+launcher-primary';
+}
 
 // Tightening factor applied around a calibrated multiplier when computing the
 // per-platform Boxleiter range: low = m * (1 - X), high = m * (1 + X).

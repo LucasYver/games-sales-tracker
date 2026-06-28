@@ -99,7 +99,7 @@ longer mixed in (they live in the Boxleiter method, Step 4).
 
 ```
 peak        = max STEAM_CONCURRENT in [release, release + FIRST_WEEK_PEAK_CCU_WINDOW_DAYS], capped at asOf
-ccuScale    = LAUNCHER_CCU_FACTOR[launcherProfile]      (STEAM_DOMINANT = ×1.0)
+ccuScale    = launcherFactorFromSteamShare(publisher steam share)   (100/100 share = ×1.0; factor = 100 / steamShare)
 weekOne{Low,High} = peak × peakCcuToWeekOne{Low,High} × ccuScale{low,high}
 
 projection  = genreProjectionMultiplier(m1, tailY2, tailY5, ageDays)
@@ -132,7 +132,7 @@ PC Boxleiter pure (no CCU intersection — peak CCU only feeds the first-week
 lifecycle estimate, see Step 3):
 ```
 reviewsLow/High = latest STEAM_REVIEWS × default{Low,High}
-finalLow/High   = reviewsLow/High × launcherReviewsFactor{low,high}
+finalLow/High   = reviewsLow/High × launcherFactorFromSteamShare(steam share){low,high}
 ```
 
 Console:
@@ -196,8 +196,9 @@ top-down. The fault is always in a **default parameter**, never in
       manual pin vs first-matched genre; stale value from before a genre change)
 - [ ] peakCcuToWeekOne ratio realistic for this genre's concurrency?
       (if CCU-derived week-1 is already off, everything downstream is off)
-- [ ] Launcher factor correct? (STEAM_DOMINANT vs MULTI_STORE/LAUNCHER_PRIMARY
-      inflates ×1.4–7 — only fix if publisher is truly multi-store)
+- [ ] Publisher Steam share correct? (`steamSharePctLow/High` on the publisher;
+      a low share inflates the factor ×1.4–7 via 100/share — only fix if the
+      publisher is truly multi-store / launcher-primary)
 - [ ] Reviews-near-launch present & sane? combination dragging the band?
 - [ ] Projection multiplier (m1 + tails) — too high/low for the lifecycle?
       (front-loaded viral hits over-project; heavy-tail live-service under-project)

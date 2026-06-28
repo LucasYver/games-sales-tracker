@@ -202,15 +202,11 @@ export interface AdminEstimateSnapshot {
   reconciliation: AdminReconciliationEntry[];
 }
 
-export type LauncherProfile =
-  | 'STEAM_DOMINANT'
-  | 'MULTI_STORE'
-  | 'LAUNCHER_PRIMARY';
-
 export interface AdminPublisherSummary {
   id: string;
   name: string;
-  launcherProfile: LauncherProfile;
+  steamSharePctLow: number;
+  steamSharePctHigh: number;
   gameCount: number;
   createdAt: string;
   updatedAt: string;
@@ -244,7 +240,8 @@ export interface AdminGameDetail extends AdminGameSummary {
   publisherRecord: {
     id: string;
     name: string;
-    launcherProfile: LauncherProfile;
+    steamSharePctLow: number;
+    steamSharePctHigh: number;
   } | null;
   sources: AdminGameSource[];
   milestones: AdminMilestone[];

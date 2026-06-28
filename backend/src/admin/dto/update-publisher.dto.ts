@@ -1,8 +1,15 @@
-import { IsEnum, IsOptional } from 'class-validator';
-import { LauncherProfile } from '../../entities';
+import { IsNumber, IsOptional, Max, Min } from 'class-validator';
 
 export class UpdatePublisherDto {
   @IsOptional()
-  @IsEnum(LauncherProfile)
-  launcherProfile?: LauncherProfile;
+  @IsNumber()
+  @Min(1)
+  @Max(100)
+  steamSharePctLow?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(100)
+  steamSharePctHigh?: number;
 }

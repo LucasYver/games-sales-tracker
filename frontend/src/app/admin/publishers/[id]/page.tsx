@@ -11,8 +11,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { LauncherProfileSelect } from '../../_components/LauncherProfileSelect';
-import { LauncherProfileBadge } from '../../_components/LauncherProfileBadge';
+import { SteamShareEditor } from '../../_components/SteamShareEditor';
+import { SteamShareBadge } from '../../_components/SteamShareBadge';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,7 +51,10 @@ export default async function AdminPublisherDetailPage({
             {publisher.id}
           </p>
           <div className="mt-2">
-            <LauncherProfileBadge profile={publisher.launcherProfile} />
+            <SteamShareBadge
+              low={publisher.steamSharePctLow}
+              high={publisher.steamSharePctHigh}
+            />
           </div>
         </div>
       </header>
@@ -59,18 +62,20 @@ export default async function AdminPublisherDetailPage({
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-            Launcher profile
+            Steam share of PC sales
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <p className="text-muted-foreground text-sm">
-            How representative Steam is of this publisher&apos;s PC sales.
-            Changes here persist in DB and are inherited by every game linked
-            via the publisher FK.
+            Estimated percentage range of this publisher&apos;s PC sales that
+            go through Steam. The estimation engine derives a Steam→total-PC
+            scaling factor from it (factor = 100 / share). Changes persist in
+            DB and are inherited by every game linked via the publisher FK.
           </p>
-          <LauncherProfileSelect
+          <SteamShareEditor
             publisherId={publisher.id}
-            current={publisher.launcherProfile}
+            low={publisher.steamSharePctLow}
+            high={publisher.steamSharePctHigh}
           />
         </CardContent>
       </Card>

@@ -1,36 +1,48 @@
-import { LauncherProfile } from '../entities';
-
 /**
  * Curated heuristic registry of "big" publishers whose PC distribution
  * profile deviates from the Steam-default. On every game ingestion the
  * raw IGDB publisher string is matched against `patterns` here; on a
  * match, the game is linked to the corresponding `Publisher` row (created
- * idempotently at boot with `defaultLauncherProfile`).
+ * idempotently at boot with the default Steam-share range below).
  *
- * Admin-edited profiles persist in DB — `defaultLauncherProfile` is only
- * used for the *initial* insert and never overwrites an existing row's
- * profile during subsequent boot seeding.
+ * Admin-edited shares persist in DB — the default range is only used for
+ * the *initial* insert and never overwrites an existing row's share
+ * during subsequent boot seeding.
  *
- * Patterns are intentionally tight: every regex must clearly identify
- * the publisher with no false-positives on indies/subsidiaries we want
- * to leave as STEAM_DOMINANT by default. Add a new heuristic only when
- * you're sure the publisher's PC sales mostly bypass Steam.
+ * The share is Steam's estimated cut of the publisher's *PC* sales,
+ * expressed as a percentage range. Anchors mirror the former preset
+ * profiles:
+ *   - launcher-primary (Ubisoft Connect / EA App / Battle.net / MS Store):
+ *     Steam ≈ 14–29% of PC → ×3.5–7 correction.
+ *   - multi-store (significant EGS / GOG presence): Steam ≈ 50–71% of PC
+ *     → ×1.4–2 correction.
+ * Patterns are intentionally tight: every regex must clearly identify the
+ * publisher with no false-positives on indies/subsidiaries we want to
+ * leave at the Steam-dominant default (100/100). Add a new heuristic only
+ * when you're sure the publisher's PC sales mostly bypass Steam.
  */
 export interface PublisherHeuristic {
   name: string;
-  defaultLauncherProfile: LauncherProfile;
+  defaultSteamSharePctLow: number;
+  defaultSteamSharePctHigh: number;
   patterns: RegExp[];
 }
+
+// Steam-share anchors equivalent to the former launcher profiles.
+const LAUNCHER_PRIMARY_SHARE = { low: 14, high: 29 } as const;
+const MULTI_STORE_SHARE = { low: 50, high: 71 } as const;
 
 export const PUBLISHER_HEURISTICS: PublisherHeuristic[] = [
   {
     name: 'Ubisoft',
-    defaultLauncherProfile: LauncherProfile.LAUNCHER_PRIMARY,
+    defaultSteamSharePctLow: LAUNCHER_PRIMARY_SHARE.low,
+    defaultSteamSharePctHigh: LAUNCHER_PRIMARY_SHARE.high,
     patterns: [/\bubisoft\b/i],
   },
   {
     name: 'Electronic Arts',
-    defaultLauncherProfile: LauncherProfile.LAUNCHER_PRIMARY,
+    defaultSteamSharePctLow: LAUNCHER_PRIMARY_SHARE.low,
+    defaultSteamSharePctHigh: LAUNCHER_PRIMARY_SHARE.high,
     patterns: [
       /^electronic arts/i,
       /\bea\s+(games|sports|originals|dice|inc)\b/i,
@@ -38,17 +50,20 @@ export const PUBLISHER_HEURISTICS: PublisherHeuristic[] = [
   },
   {
     name: 'Activision',
-    defaultLauncherProfile: LauncherProfile.LAUNCHER_PRIMARY,
+    defaultSteamSharePctLow: LAUNCHER_PRIMARY_SHARE.low,
+    defaultSteamSharePctHigh: LAUNCHER_PRIMARY_SHARE.high,
     patterns: [/^activision(\s+blizzard|\s+publishing)?$/i, /^activision\b/i],
   },
   {
     name: 'Blizzard Entertainment',
-    defaultLauncherProfile: LauncherProfile.LAUNCHER_PRIMARY,
+    defaultSteamSharePctLow: LAUNCHER_PRIMARY_SHARE.low,
+    defaultSteamSharePctHigh: LAUNCHER_PRIMARY_SHARE.high,
     patterns: [/^blizzard\b/i, /activision blizzard/i],
   },
   {
     name: 'Xbox Game Studios',
-    defaultLauncherProfile: LauncherProfile.LAUNCHER_PRIMARY,
+    defaultSteamSharePctLow: LAUNCHER_PRIMARY_SHARE.low,
+    defaultSteamSharePctHigh: LAUNCHER_PRIMARY_SHARE.high,
     patterns: [
       /xbox game studios/i,
       /microsoft game studios/i,
@@ -57,7 +72,8 @@ export const PUBLISHER_HEURISTICS: PublisherHeuristic[] = [
   },
   {
     name: 'Bethesda Softworks',
-    defaultLauncherProfile: LauncherProfile.LAUNCHER_PRIMARY,
+    defaultSteamSharePctLow: LAUNCHER_PRIMARY_SHARE.low,
+    defaultSteamSharePctHigh: LAUNCHER_PRIMARY_SHARE.high,
     patterns: [
       /bethesda softworks/i,
       /bethesda game studios/i,
@@ -66,18 +82,21 @@ export const PUBLISHER_HEURISTICS: PublisherHeuristic[] = [
   },
   {
     name: 'Rockstar Games',
-    defaultLauncherProfile: LauncherProfile.LAUNCHER_PRIMARY,
+    defaultSteamSharePctLow: LAUNCHER_PRIMARY_SHARE.low,
+    defaultSteamSharePctHigh: LAUNCHER_PRIMARY_SHARE.high,
     patterns: [/rockstar games/i],
   },
   // Multi-store (Steam + significant alternative PC storefront).
   {
     name: 'Epic Games',
-    defaultLauncherProfile: LauncherProfile.MULTI_STORE,
+    defaultSteamSharePctLow: MULTI_STORE_SHARE.low,
+    defaultSteamSharePctHigh: MULTI_STORE_SHARE.high,
     patterns: [/^epic games(\s+publishing)?$/i],
   },
   {
     name: 'CD Projekt',
-    defaultLauncherProfile: LauncherProfile.MULTI_STORE,
+    defaultSteamSharePctLow: MULTI_STORE_SHARE.low,
+    defaultSteamSharePctHigh: MULTI_STORE_SHARE.high,
     patterns: [/cd projekt/i],
   },
 ];

@@ -251,9 +251,15 @@ historical-import path stores peaks with the SteamCharts month as
 `capturedAt`):
 
 ```
-weekOneLow  = peak × FIRST_WEEK_PEAK_CCU_LOW  × launcherCcuFactor.low
-weekOneHigh = peak × FIRST_WEEK_PEAK_CCU_HIGH × launcherCcuFactor.high
+ccuScale    = launcherFactorFromSteamShare(publisher steam share)
+weekOneLow  = peak × FIRST_WEEK_PEAK_CCU_LOW  × ccuScale.low
+weekOneHigh = peak × FIRST_WEEK_PEAK_CCU_HIGH × ccuScale.high
 ```
+
+`ccuScale` corrects the Steam-only peak up to total PC using the
+publisher's editable Steam-share range (`factor = 100 / steamShare`); a
+publisher selling all of its PC on Steam (`100/100`, the default) yields a
+neutral `×1.0`.
 
 The week-1 baseline is derived from the peak CCU alone. Launch-window
 reviews are **not** mixed in here — the reviews signal lives in the
@@ -299,10 +305,12 @@ date-of-release glitches.
 - `LOW` if released less than `RECENT_RELEASE_DAYS = 14` days ago, OR
   if peak CCU < 10k (sample too small to project from).
 - `MEDIUM` otherwise. The peak-CCU signal alone never reaches `HIGH`
-  (capped at MEDIUM, then further reduced by the launcher profile).
+  (capped at MEDIUM, then further reduced by the publisher's Steam share).
 
-All capped by `LAUNCHER_CONFIDENCE_CAP[publisher.launcherProfile]`
-identically to the Boxleiter path.
+All capped by `launcherConfidenceCapFromShare(publisher steam share)`
+identically to the Boxleiter path: a full Steam share keeps the natural
+cap, a mid share (multi-store regime) caps at MEDIUM, a low share
+(launcher-primary regime) caps at LOW.
 
 ### Why a separate method (vs. patching `LIFETIME_SALES_CURVE`)
 
@@ -326,7 +334,8 @@ inflation surfaces the uncertainty rather than hiding it.
 Every `SalesEstimate` row is linked to a canonical method through
 `SalesEstimate.methodId` (FK to `estimation_method.id`). The free-form
 `SalesEstimate.method` string survives for backward compatibility and
-carries dynamic modifier suffixes (`+multi-store`, `+launcher-primary`)
+carries dynamic modifier suffixes (`+multi-store`, `+launcher-primary`,
+derived from the publisher's Steam share via `launcherMethodTagFromShare`)
 that aren't yet first-class methods. It will be dropped in a follow-up
 migration once nothing reads it.
 

@@ -5,7 +5,6 @@ import {
   AchievementSnapshot,
   EstimationMethod,
   Game,
-  LauncherProfile,
   Milestone,
   Platform,
   SalesEstimate,
@@ -34,11 +33,13 @@ import {
   FIRST_WEEK_BUCKET_THRESHOLD,
   FIRST_WEEK_ESTIMATE_MAX_UNITS,
   FIRST_WEEK_ESTIMATE_MIN_UNITS,
+  DEFAULT_STEAM_SHARE_PCT,
   FIRST_WEEK_PEAK_CCU_HIGH,
   FIRST_WEEK_PEAK_CCU_LOW,
   FIRST_WEEK_PEAK_CCU_WINDOW_DAYS,
-  LAUNCHER_CCU_FACTOR,
-  LAUNCHER_REVIEWS_FACTOR,
+  launcherFactorFromSteamShare,
+  launcherMethodTagFromShare,
+  type SteamShareRange,
   PC_BOXLEITER_DEFAULT_HIGH,
   PC_BOXLEITER_DEFAULT_LOW,
   PC_BOXLEITER_PLAUSIBLE_MAX,
@@ -57,11 +58,16 @@ import {
 } from '../games/sales-modeling.constants';
 
 
-const LAUNCHER_PROFILE_METHOD_TAG: Record<LauncherProfile, string> = {
-  [LauncherProfile.STEAM_DOMINANT]: '',
-  [LauncherProfile.MULTI_STORE]: '+multi-store',
-  [LauncherProfile.LAUNCHER_PRIMARY]: '+launcher-primary',
-};
+/**
+ * Steam-share range for a game, falling back to the neutral default when
+ * the game has no curated publisher record.
+ */
+function steamShareForGame(game: Game): SteamShareRange {
+  return {
+    low: game.publisherRecord?.steamSharePctLow ?? DEFAULT_STEAM_SHARE_PCT,
+    high: game.publisherRecord?.steamSharePctHigh ?? DEFAULT_STEAM_SHARE_PCT,
+  };
+}
 
 const ACHIEVEMENT_COVERAGE: Record<
   Platform.PC | Platform.PLAYSTATION | Platform.XBOX,
@@ -826,23 +832,21 @@ export class EstimationService {
       profileDefaults,
     );
 
-    // Launcher profile only modulates the *PC* estimation today (the
-    // Steam-vs-rest-of-PC fragmentation problem). PS / Xbox keep their
+    // The publisher's Steam share only modulates the *PC* estimation today
+    // (the Steam-vs-rest-of-PC fragmentation problem). PS / Xbox keep their
     // native multipliers untouched.
-    const launcherProfile =
+    const steamShare =
       cfg.platform === Platform.PC
-        ? (game.publisherRecord?.launcherProfile ??
-          LauncherProfile.STEAM_DOMINANT)
-        : LauncherProfile.STEAM_DOMINANT;
-    
+        ? steamShareForGame(game)
+        : { low: DEFAULT_STEAM_SHARE_PCT, high: DEFAULT_STEAM_SHARE_PCT };
 
     // Per-game calibration (from a declared OFFICIAL/MEDIA figure) has
     // already absorbed the launcher effect empirically — applying the
-    // profile scaling on top would double-count it. Only scale when we
+    // share scaling on top would double-count it. Only scale when we
     // fall back on the static default multiplier range.
     const reviewsScale =
       !isCalibrated && cfg.platform === Platform.PC
-        ? LAUNCHER_REVIEWS_FACTOR[launcherProfile]
+        ? launcherFactorFromSteamShare(steamShare)
         : { low: 1, high: 1 };
 
     const estimatedLow = signalValue * low * reviewsScale.low;
@@ -850,7 +854,7 @@ export class EstimationService {
     let finalMethod = method;
 
     if (cfg.platform === Platform.PC) {
-      const profileTag = LAUNCHER_PROFILE_METHOD_TAG[launcherProfile];
+      const profileTag = launcherMethodTagFromShare(steamShare);
       if (profileTag) finalMethod = `${finalMethod}${profileTag}`;
     }
 
@@ -906,9 +910,8 @@ export class EstimationService {
     const age = ageInDays(game.releaseDate, referenceDate);
     if (age <= 0) return null;
 
-    const launcherProfile =
-      game.publisherRecord?.launcherProfile ?? LauncherProfile.STEAM_DOMINANT;
-    const ccuScale = LAUNCHER_CCU_FACTOR[launcherProfile];
+    const steamShare = steamShareForGame(game);
+    const ccuScale = launcherFactorFromSteamShare(steamShare);
 
     // Week-1 peak only: the largest daily CCU captured in the 7 days
     // following release. A later all-time peak (sale, DLC, F2P switch)
@@ -991,7 +994,7 @@ export class EstimationService {
       return null;
     }
 
-    const launcherTag = LAUNCHER_PROFILE_METHOD_TAG[launcherProfile];
+    const launcherTag = launcherMethodTagFromShare(steamShare);
     const method = `first-week-extrapolation-pc${launcherTag}`;
 
     if (trace) {

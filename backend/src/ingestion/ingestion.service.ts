@@ -1324,6 +1324,137 @@ export class IngestionService {
     };
   }
 
+  /**
+   * Reconstruct and persist a game's daily review history straight from
+   * Steam's public `appreviews` API — the API-only equivalent of importing a
+   * SteamDB review CSV. Paginates every individual review, aggregates new
+   * positive/negative counts per UTC day, then accumulates them into the same
+   * cumulative `STEAM_REVIEWS` daily series the CSV import produces (`value` =
+   * cumulative total, `averageRating` = cumulative positive / total).
+   *
+   * Pre-release reviews still count toward the cumulative totals but never get
+   * their own snapshot, so the first persisted day already includes them
+   * (matching SteamDB's cumulative export). Re-running overwrites existing
+   * rows in the covered date range only (upsert at day granularity). Large
+   * games can span hundreds of throttled pages; rebuild estimates afterwards
+   * to apply the refreshed history.
+   */
+  async backfillReviewsFromApi(gameId: string): Promise<{
+    daysImported: number;
+    reviewsFetched: number;
+    reportedTotal: number | null;
+    rangeStart: string | null;
+    rangeEnd: string | null;
+    latestTotal: number;
+    latestRating: number | null;
+  }> {
+    const game = await this.games.findOne({ where: { id: gameId } });
+    if (!game) {
+      throw new NotFoundException(`Game ${gameId} not found.`);
+    }
+
+    const steamSource = await this.gameSources.findOne({
+      where: { gameId, source: SourceType.STEAM },
+    });
+    const appId = steamSource ? Number(steamSource.externalId) : NaN;
+    if (!Number.isFinite(appId)) {
+      throw new BadRequestException(
+        `Game "${game.name}" is not linked to a Steam app.`,
+      );
+    }
+
+    const history = await this.steam.fetchReviewHistory(appId);
+    if (!history || history.daily.length === 0) {
+      throw new BadRequestException(
+        `No reviews returned by the Steam API for app ${appId}.`,
+      );
+    }
+
+    const releaseDayKey = game.releaseDate
+      ? game.releaseDate.toISOString().slice(0, 10)
+      : null;
+
+    // Accumulate over every day (incl. pre-release) so the first persisted day
+    // carries the full cumulative total, but only emit snapshots from release
+    // onward to avoid polluting the week-1 lifecycle window.
+    let cumulativePositive = 0;
+    let cumulativeNegative = 0;
+    let skippedPreRelease = 0;
+    const rows: SignalSnapshot[] = [];
+    const emittedDays: string[] = [];
+    for (const entry of history.daily) {
+      cumulativePositive += entry.positive;
+      cumulativeNegative += entry.negative;
+      if (releaseDayKey && entry.day < releaseDayKey) {
+        skippedPreRelease += 1;
+        continue;
+      }
+      const total = cumulativePositive + cumulativeNegative;
+      rows.push(
+        this.signals.create({
+          gameId,
+          source: SourceType.STEAM,
+          metric: SignalMetric.STEAM_REVIEWS,
+          value: total,
+          averageRating: total > 0 ? cumulativePositive / total : null,
+          capturedAt: new Date(`${entry.day}T00:00:00.000Z`),
+        }),
+      );
+      emittedDays.push(entry.day);
+    }
+
+    if (rows.length === 0) {
+      throw new BadRequestException(
+        `All ${history.daily.length} review day(s) for app ${appId} predate ` +
+          `the game's release date; nothing to import.`,
+      );
+    }
+
+    const firstDay = new Date(`${emittedDays[0]}T00:00:00.000Z`);
+    const lastDay = new Date(
+      `${emittedDays[emittedDays.length - 1]}T00:00:00.000Z`,
+    );
+    const lastDayEnd = new Date(lastDay.getTime() + 24 * 3600 * 1000 - 1);
+
+    // Upsert at day granularity: drop existing STEAM_REVIEWS rows in the
+    // covered range (incl. live-poll rows) then insert one per day.
+    await this.signals.delete({
+      gameId,
+      metric: SignalMetric.STEAM_REVIEWS,
+      capturedAt: Between(firstDay, lastDayEnd),
+    });
+    await this.signals.save(rows, { chunk: 500 });
+
+    const latestDay = emittedDays[emittedDays.length - 1];
+    const latestTotal = cumulativePositive + cumulativeNegative;
+    const latestRating =
+      latestTotal > 0 ? cumulativePositive / latestTotal : null;
+
+    this.logger.log(
+      `[reviews-api] "${game.name}" — ${rows.length} days ` +
+        `(${emittedDays[0]} → ${latestDay}), ` +
+        `fetched ${history.totalFetched.toLocaleString()} reviews ` +
+        `(reported ${history.reportedTotal?.toLocaleString() ?? 'n/a'}), ` +
+        `latest ${latestTotal.toLocaleString()} reviews` +
+        (latestRating !== null
+          ? ` (${(latestRating * 100).toFixed(1)}% positive)`
+          : '') +
+        (skippedPreRelease > 0
+          ? ` (skipped ${skippedPreRelease} pre-release days)`
+          : ''),
+    );
+
+    return {
+      daysImported: rows.length,
+      reviewsFetched: history.totalFetched,
+      reportedTotal: history.reportedTotal,
+      rangeStart: emittedDays[0],
+      rangeEnd: latestDay,
+      latestTotal,
+      latestRating,
+    };
+  }
+
   async scrapeAchievements(
     gameId: string,
     name: string,

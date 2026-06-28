@@ -32,6 +32,24 @@ export interface SteamAppDetails {
   price: SteamPrice | null;
 }
 
+export interface SteamReviewDailyCount {
+  // UTC day (YYYY-MM-DD).
+  day: string;
+  // New positive/negative reviews created that day (not cumulative).
+  positive: number;
+  negative: number;
+}
+
+export interface SteamReviewHistory {
+  // Per-day new-review counts, sorted ascending by day.
+  daily: SteamReviewDailyCount[];
+  // Number of individual reviews actually paginated through.
+  totalFetched: number;
+  // `query_summary.total_reviews` reported by Steam on the first page; may
+  // exceed `totalFetched` because deleted reviews are excluded from results.
+  reportedTotal: number | null;
+}
+
 @Injectable()
 export class SteamClient {
   private readonly logger = new Logger(SteamClient.name);
@@ -189,6 +207,101 @@ export class SteamClient {
       this.logger.warn(`getTotalReviews failed for ${appId}: ${error}`);
       return null;
     }
+  }
+
+  /**
+   * Reconstruct the game's full review history from the public `appreviews`
+   * endpoint. Steam doesn't expose a cumulative time series, but it does
+   * return every individual review (with its creation timestamp and verdict)
+   * when paginated chronologically via the `cursor` token. We aggregate those
+   * into per-UTC-day counts of new positive/negative reviews; the caller turns
+   * that into a cumulative series.
+   *
+   * This is the legitimate, API-only equivalent of the SteamDB review-chart
+   * CSV (which we can't scrape behind Cloudflare). Deleted reviews are absent
+   * from the API, so the reconstructed totals can run slightly below SteamDB's
+   * live-recorded history, but the curve shape is faithful.
+   *
+   * `appreviews` shares the store's ~200 req/5 min IP rate limit, so pages are
+   * throttled and retried on 429. Pagination stops when Steam returns no more
+   * reviews or repeats a cursor; `maxPages` is a safety ceiling against loops.
+   */
+  async fetchReviewHistory(
+    appId: number,
+    options: { throttleMs?: number; maxPages?: number } = {},
+  ): Promise<SteamReviewHistory | null> {
+    const throttleMs = options.throttleMs ?? 700;
+    const maxPages = options.maxPages ?? 5000;
+
+    const daily = new Map<string, { positive: number; negative: number }>();
+    const seenCursors = new Set<string>();
+    let cursor = '*';
+    let reportedTotal: number | null = null;
+    let totalFetched = 0;
+    let pages = 0;
+
+    while (pages < maxPages) {
+      let data: any;
+      try {
+        data = await this.getStoreJson(
+          `https://store.steampowered.com/appreviews/${appId}`,
+          {
+            json: 1,
+            filter: 'recent',
+            language: 'all',
+            purchase_type: 'all',
+            review_type: 'all',
+            num_per_page: 100,
+            cursor,
+          },
+        );
+      } catch (error) {
+        this.logger.warn(
+          `fetchReviewHistory page ${pages + 1} failed for ${appId}: ${error}`,
+        );
+        break;
+      }
+
+      if (pages === 0) {
+        const summaryTotal = data?.query_summary?.total_reviews;
+        reportedTotal =
+          typeof summaryTotal === 'number' ? summaryTotal : null;
+      }
+
+      const reviews = Array.isArray(data?.reviews) ? data.reviews : [];
+      if (reviews.length === 0) break;
+
+      for (const review of reviews as Array<{
+        timestamp_created?: unknown;
+        voted_up?: unknown;
+      }>) {
+        const ts = Number(review.timestamp_created);
+        if (!Number.isFinite(ts) || ts <= 0) continue;
+        const day = new Date(ts * 1000).toISOString().slice(0, 10);
+        const bucket = daily.get(day) ?? { positive: 0, negative: 0 };
+        if (review.voted_up === true) bucket.positive += 1;
+        else bucket.negative += 1;
+        daily.set(day, bucket);
+        totalFetched += 1;
+      }
+
+      const nextCursor =
+        typeof data?.cursor === 'string' ? data.cursor : null;
+      if (!nextCursor || seenCursors.has(nextCursor)) break;
+      seenCursors.add(nextCursor);
+      cursor = nextCursor;
+      pages += 1;
+
+      if (throttleMs > 0) await new Promise((r) => setTimeout(r, throttleMs));
+    }
+
+    if (daily.size === 0) return null;
+
+    const sorted = Array.from(daily.entries())
+      .map(([day, counts]) => ({ day, ...counts }))
+      .sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+
+    return { daily: sorted, totalFetched, reportedTotal };
   }
 
   /**

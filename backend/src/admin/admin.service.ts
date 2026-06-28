@@ -12,7 +12,6 @@ import {
   Game,
   GameSource,
   GenreProfile,
-  LauncherProfile,
   Milestone,
   Platform,
   PriceSnapshot,
@@ -137,7 +136,8 @@ export interface AdminGameDetail extends AdminGameSummary {
   publisherRecord: {
     id: string;
     name: string;
-    launcherProfile: LauncherProfile;
+    steamSharePctLow: number;
+    steamSharePctHigh: number;
   } | null;
   sources: GameSource[];
   milestones: Milestone[];
@@ -591,7 +591,8 @@ export class AdminService {
         ? {
             id: game.publisherRecord.id,
             name: game.publisherRecord.name,
-            launcherProfile: game.publisherRecord.launcherProfile,
+            steamSharePctLow: game.publisherRecord.steamSharePctLow,
+            steamSharePctHigh: game.publisherRecord.steamSharePctHigh,
           }
         : null,
       sources: game.sources,

@@ -37,10 +37,11 @@ import { RefreshGameButton } from '../../_components/RefreshGameButton';
 import { RebuildEstimatesButton } from '../../_components/RebuildEstimatesButton';
 import { ImportCcuCsvButton } from '../../_components/ImportCcuCsvButton';
 import { ImportReviewsCsvButton } from '../../_components/ImportReviewsCsvButton';
+import { BackfillReviewsButton } from '../../_components/BackfillReviewsButton';
 import { EditGameForm } from '../../_components/EditGameForm';
 import { EstimateHistoryChart } from '../../_components/EstimateHistoryChart';
 import { CcuHistoryChart } from '../../_components/CcuHistoryChart';
-import { LauncherProfileBadge } from '../../_components/LauncherProfileBadge';
+import { SteamShareBadge } from '../../_components/SteamShareBadge';
 import { GameGenreProfileSelect } from '../../_components/GameGenreProfileSelect';
 import { EstimateBreakdownPanel } from '../../_components/EstimateBreakdownPanel';
 import { deleteGame, deleteMilestone, deleteSignal } from '../../actions';
@@ -268,6 +269,7 @@ export default async function AdminGameDetailPage({
           <RebuildEstimatesButton gameId={game.id} />
           <ImportCcuCsvButton gameId={game.id} />
           <ImportReviewsCsvButton gameId={game.id} />
+          <BackfillReviewsButton gameId={game.id} />
           <DeleteButton
             action={deleteGame.bind(null, game.id)}
             confirmMessage={`Permanently delete "${game.name}"?`}
@@ -387,8 +389,9 @@ export default async function AdminGameDetailPage({
               </dd>
               {game.publisherRecord && (
                 <dd className="mt-1">
-                  <LauncherProfileBadge
-                    profile={game.publisherRecord.launcherProfile}
+                  <SteamShareBadge
+                    low={game.publisherRecord.steamSharePctLow}
+                    high={game.publisherRecord.steamSharePctHigh}
                   />
                 </dd>
               )}

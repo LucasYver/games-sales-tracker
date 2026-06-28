@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { LauncherProfileBadge } from '../_components/LauncherProfileBadge';
+import { SteamShareBadge } from '../_components/SteamShareBadge';
 import { PublisherBackfillButton } from '../_components/PublisherBackfillButton';
 
 export const dynamic = 'force-dynamic';
@@ -24,14 +24,14 @@ export default async function AdminPublishersPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Publishers</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Curated registry of big publishers whose PC distribution profile
-            deviates from the Steam-default. Games whose IGDB publisher matches
-            one of these entries inherit the profile via the
+            Curated registry of big publishers whose PC distribution deviates
+            from the Steam-default. Games whose IGDB publisher matches one of
+            these entries inherit the Steam-share range via the
             <code className="bg-muted mx-1 rounded px-1 py-0.5 font-mono text-xs">
               Game.publisherId
             </code>
-            FK. The profile is captured here but not yet consumed by the
-            estimation engine.
+            FK, which the estimation engine uses to scale Steam signals up to
+            total PC.
           </p>
         </div>
         <PublisherBackfillButton />
@@ -42,7 +42,7 @@ export default async function AdminPublishersPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Profile</TableHead>
+              <TableHead>Steam share</TableHead>
               <TableHead className="text-right">Games</TableHead>
               <TableHead>Updated</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -53,7 +53,10 @@ export default async function AdminPublishersPage() {
               <TableRow key={p.id}>
                 <TableCell className="font-medium">{p.name}</TableCell>
                 <TableCell>
-                  <LauncherProfileBadge profile={p.launcherProfile} />
+                  <SteamShareBadge
+                    low={p.steamSharePctLow}
+                    high={p.steamSharePctHigh}
+                  />
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {p.gameCount}
@@ -98,7 +101,7 @@ export default async function AdminPublishersPage() {
             backend/src/publishers/publishers.seed.ts
           </code>
           and restart the backend. The seed is idempotent and never overwrites
-          a profile you have edited here.
+          a Steam share you have edited here.
         </CardContent>
       </Card>
     </div>

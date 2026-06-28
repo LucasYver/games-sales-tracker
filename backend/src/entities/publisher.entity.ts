@@ -7,7 +7,6 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { LauncherProfile } from './enums';
 import { Game } from './game.entity';
 
 /**
@@ -29,17 +28,24 @@ export class Publisher {
   name: string;
 
   /**
-   * How representative Steam is of this publisher's PC sales. Used to
-   * adjust calibration when Boxleiter/CCU on Steam would otherwise
-   * undershoot the true PC total (Ubisoft Connect, EA App, Battle.net,
-   * Microsoft Store, etc.).
+   * Editable estimate of how much of this publisher's *PC* sales go
+   * through Steam, expressed as a percentage range [low, high] (e.g.
+   * 50–71 for a multi-store publisher). The estimation engine derives a
+   * Steam→total-PC scaling factor from it (factor = 100 / steamShare) to
+   * correct Boxleiter/CCU undershoot when players are pushed to a
+   * competing storefront (Epic, GOG) or a proprietary launcher (Ubisoft
+   * Connect, EA App, Battle.net, Microsoft Store).
+   *
+   * Defaults to 100/100 (Steam captures ~all PC sales — most indie and
+   * many AAA titles), which yields a neutral ×1.0 factor. Values are
+   * fully admin-editable per publisher; there is no longer a fixed set of
+   * preset profiles.
    */
-  @Column({
-    type: 'enum',
-    enum: LauncherProfile,
-    default: LauncherProfile.STEAM_DOMINANT,
-  })
-  launcherProfile: LauncherProfile;
+  @Column({ type: 'float', default: 100 })
+  steamSharePctLow: number;
+
+  @Column({ type: 'float', default: 100 })
+  steamSharePctHigh: number;
 
   @CreateDateColumn()
   createdAt: Date;

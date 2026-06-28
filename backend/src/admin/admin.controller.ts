@@ -131,6 +131,12 @@ export class AdminController {
     return this.ingestion.importReviewsCsv(id, body.csv);
   }
 
+  @Post('games/:id/backfill-reviews')
+  @HttpCode(200)
+  backfillReviews(@Param('id', ParseUUIDPipe) id: string) {
+    return this.ingestion.backfillReviewsFromApi(id);
+  }
+
   @Post('games/:id/rebuild')
   @HttpCode(200)
   rebuildEstimates(@Param('id', ParseUUIDPipe) id: string) {

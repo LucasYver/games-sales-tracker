@@ -9,7 +9,6 @@ import {
   type AdminGenreIgdbSyncResult,
   type AdminGenreProfile,
   type AdminGenreRow,
-  type LauncherProfile,
   type SalesSource,
   type Year2Retention,
 } from '@/lib/admin';
@@ -178,6 +177,27 @@ export async function importReviewsCsv(
   return result;
 }
 
+export interface BackfillReviewsResult {
+  daysImported: number;
+  reviewsFetched: number;
+  reportedTotal: number | null;
+  rangeStart: string | null;
+  rangeEnd: string | null;
+  latestTotal: number;
+  latestRating: number | null;
+}
+
+export async function backfillReviews(
+  id: string,
+): Promise<BackfillReviewsResult> {
+  const result = await adminFetch<BackfillReviewsResult>(
+    `/games/${id}/backfill-reviews`,
+    { method: 'POST' },
+  );
+  revalidatePath(`/admin/games/${id}`);
+  return result;
+}
+
 export async function deleteMilestone(id: string): Promise<void> {
   await adminFetch(`/milestones/${id}`, { method: 'DELETE' });
   revalidatePath('/admin/milestones');
@@ -207,13 +227,14 @@ export async function getIgdbBackfillStatus() {
   );
 }
 
-export async function updatePublisherLauncherProfile(
+export async function updatePublisherSteamShare(
   id: string,
-  launcherProfile: LauncherProfile,
+  steamSharePctLow: number,
+  steamSharePctHigh: number,
 ): Promise<void> {
   await adminFetch(`/publishers/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ launcherProfile }),
+    body: JSON.stringify({ steamSharePctLow, steamSharePctHigh }),
   });
   revalidatePath('/admin/publishers');
   revalidatePath(`/admin/publishers/${id}`);
