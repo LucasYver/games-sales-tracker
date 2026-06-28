@@ -1114,6 +1114,10 @@ export class EstimationService {
         gameId,
         rejectedAt: IsNull(),
         isEngagement: false,
+        // Worldwide totals only. PC-specific milestones (region='PC') are not
+        // (yet) consumed by the GLOBAL→platform split — feeding one here would
+        // be mistaken for a worldwide figure and split across platforms.
+        region: 'GLOBAL',
       },
     });
     if (candidates.length === 0) return;
@@ -1223,7 +1227,7 @@ export class EstimationService {
     );
 
     const milestones = await this.milestones.find({
-      where: { gameId, rejectedAt: IsNull(), isEngagement: false },
+      where: { gameId, rejectedAt: IsNull(), isEngagement: false, region: 'GLOBAL' },
       order: { units: 'DESC' },
     });
     const bestDeclared = milestones.length > 0 ? milestones[0] : null;

@@ -612,7 +612,7 @@ export class GamesService {
    */
   async evaluateDiscrepanciesForGame(gameId: string): Promise<number> {
     const milestones = await this.milestones.find({
-      where: { gameId, rejectedAt: IsNull(), isEngagement: false },
+      where: { gameId, rejectedAt: IsNull(), isEngagement: false, region: 'GLOBAL' },
     });
     if (milestones.length === 0) return 0;
 
@@ -851,7 +851,7 @@ export class GamesService {
   ): Promise<Milestone[]> {
     if (!asOf) {
       return this.milestones.find({
-        where: { gameId, rejectedAt: IsNull(), isEngagement: false },
+        where: { gameId, rejectedAt: IsNull(), isEngagement: false, region: 'GLOBAL' },
       });
     }
     return this.milestones.find({
@@ -859,6 +859,7 @@ export class GamesService {
         gameId,
         rejectedAt: IsNull(),
         isEngagement: false,
+        region: 'GLOBAL',
         reportedAt: Or(LessThanOrEqual(asOf), IsNull()),
       },
     });

@@ -675,6 +675,24 @@ export class IngestionService {
           );
         }
       }
+      if (sales.pc) {
+        if (!sales.pc.reportedAt) {
+          undatedSkipped += 1;
+        } else if (this.isReportedAfterRelease(sales.pc.reportedAt, releaseDate)) {
+          rows.push(
+            this.milestones.create({
+              gameId,
+              source: SalesSource.WIKIPEDIA,
+              units: sales.pc.units,
+              confidenceScore: wikipediaScore,
+              sourceUrl: sales.sourceUrl,
+              note: sales.pc.quote,
+              reportedAt: sales.pc.reportedAt,
+              region: 'PC',
+            }),
+          );
+        }
+      }
       if (sales.engagement) {
         if (!sales.engagement.reportedAt) {
           undatedSkipped += 1;
@@ -703,11 +721,14 @@ export class IngestionService {
         const globalLog = sales.global
           ? `global=${sales.global.units} (${sales.global.reportedAt?.toISOString().slice(0, 10) ?? 'no-date'})`
           : 'no global';
+        const pcLog = sales.pc
+          ? `, pc=${sales.pc.units} (${sales.pc.reportedAt?.toISOString().slice(0, 10) ?? 'no-date'})`
+          : '';
         const engagementLog = sales.engagement
           ? `, engagement=${sales.engagement.units} (${sales.engagement.reportedAt?.toISOString().slice(0, 10) ?? 'no-date'})`
           : '';
         this.logger.log(
-          `[wikipedia] "${name}" — stored ${accepted.length} milestone(s) (${rows.length - accepted.length} rejected-fingerprint skip, ${undatedSkipped} undated skip): ${globalLog}${engagementLog}`,
+          `[wikipedia] "${name}" — stored ${accepted.length} milestone(s) (${rows.length - accepted.length} rejected-fingerprint skip, ${undatedSkipped} undated skip): ${globalLog}${pcLog}${engagementLog}`,
         );
       } else if (rows.length > 0) {
         this.logger.log(
@@ -1982,6 +2003,25 @@ export class IngestionService {
             note: sales.global.quote,
             reportedAt: sales.global.reportedAt,
             region: 'GLOBAL',
+          }),
+        );
+      }
+    }
+    if (sales.pc) {
+      if (!sales.pc.reportedAt) {
+        undatedSkipped += 1;
+      } else if (this.isReportedAfterRelease(sales.pc.reportedAt, releaseDate)) {
+        rows.push(
+          this.milestones.create({
+            gameId,
+            source: tier,
+            units: sales.pc.units,
+            confidenceScore,
+            publisher: sales.attribution,
+            sourceUrl: url,
+            note: sales.pc.quote,
+            reportedAt: sales.pc.reportedAt,
+            region: 'PC',
           }),
         );
       }

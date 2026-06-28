@@ -12,6 +12,13 @@ export interface ArticleFigure {
 
 export interface ArticleSales {
   global: ArticleFigure | null;
+  // PC-only cumulative copies-sold figure (e.g. "X copies sold on Steam",
+  // "X million on PC"). Captured separately from `global` because it is a
+  // single-platform total, not a worldwide one: it gives a direct,
+  // assumption-free PC signal (no GLOBAL→platform split needed) for
+  // calibrating the PC Boxleiter multiplier. Only PC is captured — PS / Xbox
+  // / Switch / mobile single-platform figures are still ignored.
+  pc: ArticleFigure | null;
   // Engagement milestone (e.g. "X million players reached", "X downloads").
   // Reported separately from `global` because it conflates copies sold with
   // subscription users (Ubisoft+/Game Pass) and free-trial play, so it cannot
@@ -30,6 +37,7 @@ interface LlmResult {
   matchesGame: boolean;
   attribution: string | null;
   global: LlmFigure | null;
+  pc: LlmFigure | null;
   engagement: LlmFigure | null;
 }
 interface LlmDateResult {
@@ -71,9 +79,10 @@ EXAMPLES OF FIGURES TO REJECT for "global" (return null):
 
 If the article only reports periodic, fiscal or monetary figures with no cumulative unit total, set "global" to null. Do NOT try to infer a cumulative unit total from such data.
 
-- "global": the cumulative WORLDWIDE (all-platforms combined) sales total in UNITS. Convert to an integer (e.g. "5 million" -> 5000000). We only track worldwide totals — NEVER report a single-platform figure (e.g. "3 million sold on PS5") here; if only a single-platform number is stated, set "global" to null.
+- "global": the cumulative WORLDWIDE (all-platforms combined) sales total in UNITS. Convert to an integer (e.g. "5 million" -> 5000000). This MUST be an all-platforms total — NEVER report a single-platform figure here. If only a single-platform PC figure is stated, set "global" to null and put it in "pc" instead; if only a single-platform PS/Xbox/Switch/mobile figure is stated, set "global" to null and ignore that figure entirely.
   For "date": look EVERYWHERE in the provided text for a date associated with this figure — the article byline, publication metadata, introductory sentence, phrases like "as of [date]", "by [date]", "in fiscal Q… [year]", "announced [date]", etc. Use the most specific date you can find that is plausibly associated with the figure. Format as "YYYY-MM-DD", "YYYY-MM", or "YYYY". Only set null when no date can be inferred at all from the text.
   Put the verbatim sentence containing the figure in "quote".
+- "pc": the cumulative LIFETIME copies-sold total for the target game ON PC SPECIFICALLY — and ONLY the PC platform. Capture figures phrased as "X copies sold on Steam", "X million on PC", "X copies on Steam/Epic/PC". Treat a Steam-only number as PC. This is a single-platform PC total and is DISTINCT from the worldwide "global" total — never put the same number in both. Same rules as "global": cumulative lifetime only (no first-week/periodic/fiscal), units only (no $/€/£/¥ or revenue), target base game only (no DLC/series). Do NOT capture PS, Xbox, Switch or mobile single-platform figures here — only PC. Same "date" and "quote" rules as "global". Set null when no PC-specific figure exists.
 - "engagement": cumulative ENGAGEMENT milestones that are NOT copies sold but are still publisher-reported headline numbers about the target game. Examples to capture here (not in "global"):
     - "X million players have played the game"
     - "X million players reached" (especially when subscription users like Ubisoft+ / Xbox Game Pass / PS Plus are explicitly included)
@@ -99,6 +108,16 @@ const SCHEMA: Record<string, unknown> = {
       },
       required: ['units', 'date', 'quote'],
     },
+    pc: {
+      type: ['object', 'null'],
+      additionalProperties: false,
+      properties: {
+        units: { type: 'integer' },
+        date: { type: ['string', 'null'] },
+        quote: { type: 'string' },
+      },
+      required: ['units', 'date', 'quote'],
+    },
     engagement: {
       type: ['object', 'null'],
       additionalProperties: false,
@@ -110,7 +129,7 @@ const SCHEMA: Record<string, unknown> = {
       required: ['units', 'date', 'quote'],
     },
   },
-  required: ['matchesGame', 'attribution', 'global', 'engagement'],
+  required: ['matchesGame', 'attribution', 'global', 'pc', 'engagement'],
 };
 
 @Injectable()
@@ -174,6 +193,7 @@ export class ArticleClient {
       const needsDedicatedDatePass =
         !knownFallback &&
         ((result.global?.date == null && result.global != null) ||
+          (result.pc?.date == null && result.pc != null) ||
           (result.engagement?.date == null && result.engagement != null));
 
       const dedicatedDate = needsDedicatedDatePass
@@ -194,6 +214,17 @@ export class ArticleClient {
       const global =
         globalCandidate && globalCandidate.reportedAt ? globalCandidate : null;
 
+      const pcCandidate =
+        result.pc &&
+        isGrounded(result.pc.quote) &&
+        !isPeriodicQuote(result.pc.quote)
+          ? this.toFigure(result.pc, effectiveFallback)
+          : null;
+      const pc =
+        pcCandidate && pcCandidate.reportedAt && pcCandidate.units > 0
+          ? pcCandidate
+          : null;
+
       const engagementCandidate =
         result.engagement &&
         isGrounded(result.engagement.quote) &&
@@ -207,9 +238,10 @@ export class ArticleClient {
           ? engagementCandidate
           : null;
 
-      if (!global && !engagement) return null;
+      if (!global && !pc && !engagement) return null;
       return {
         global,
+        pc,
         engagement,
         attribution: result.attribution,
       };

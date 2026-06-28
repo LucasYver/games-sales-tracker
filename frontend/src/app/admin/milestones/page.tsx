@@ -149,7 +149,18 @@ export default async function AdminMilestonesPage({
                   </Link>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline">{m.source}</Badge>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Badge variant="outline">{m.source}</Badge>
+                    {m.region === 'PC' && (
+                      <Badge
+                        variant="secondary"
+                        className="border-sky-300 bg-sky-100 text-[10px] tracking-wide text-sky-800 uppercase dark:border-sky-700 dark:bg-sky-900/40 dark:text-sky-200"
+                        title="PC-only sales figure (e.g. copies sold on Steam). Stored for analysis; not yet fed into calibration."
+                      >
+                        PC
+                      </Badge>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {m.units.toLocaleString()}

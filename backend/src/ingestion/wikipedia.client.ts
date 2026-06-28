@@ -11,6 +11,11 @@ export interface WikipediaFigure {
 
 export interface WikipediaSales {
   global: WikipediaFigure | null;
+  // PC-only cumulative copies-sold figure (e.g. "X copies sold on Steam").
+  // Captured separately from `global` because it is a single-platform total,
+  // not a worldwide one: it gives a direct, assumption-free PC signal for
+  // calibrating the PC Boxleiter multiplier. Only PC is captured.
+  pc: WikipediaFigure | null;
   // Engagement milestone (e.g. "X million players", "X downloads"). Stored
   // separately so it can never feed the sales reconciliation / calibration
   // math — it conflates copies sold with subscription users and free trials.
@@ -25,6 +30,7 @@ interface LlmFigure {
 }
 interface LlmResult {
   global: LlmFigure | null;
+  pc: LlmFigure | null;
   engagement: LlmFigure | null;
 }
 
@@ -47,7 +53,8 @@ EXAMPLES OF FIGURES TO REJECT for "global" (return null):
   - "the game brought in $3.9 million in sales in FY2024" → revenue + fiscal period
   - "moved 200,000 copies in the first week" → periodic
 
-- "global": the most RECENT cumulative WORLDWIDE (all-platforms combined) sales total for the base game in UNITS (copies/units sold or shipped). Convert to an integer (e.g. "30 million" -> 30000000). If several dated cumulative figures exist, choose the most recent one. We only track worldwide totals — NEVER report a single-platform figure (e.g. "sold 5 million on PS5") here. Put that figure's date in "date" as "YYYY-MM-DD", "YYYY-MM" or "YYYY" (null if none is stated). Put the verbatim sentence the figure comes from in "quote".
+- "global": the most RECENT cumulative WORLDWIDE (all-platforms combined) sales total for the base game in UNITS (copies/units sold or shipped). Convert to an integer (e.g. "30 million" -> 30000000). If several dated cumulative figures exist, choose the most recent one. This MUST be an all-platforms total — NEVER report a single-platform figure here. If only a single-platform PC figure is stated, set "global" to null and put it in "pc"; if only a single-platform PS/Xbox/Switch/mobile figure is stated, set "global" to null and ignore that figure. Put that figure's date in "date" as "YYYY-MM-DD", "YYYY-MM" or "YYYY" (null if none is stated). Put the verbatim sentence the figure comes from in "quote".
+- "pc": the most RECENT cumulative LIFETIME copies-sold total for the target base game ON PC SPECIFICALLY — and ONLY the PC platform. Capture figures like "X copies sold on Steam", "X million on PC". Treat a Steam-only number as PC. This is a single-platform PC total, DISTINCT from the worldwide "global" total — never put the same number in both. Same rules as "global": cumulative lifetime only, units only (no $/€/£/¥ or revenue), target base game only. Do NOT capture PS / Xbox / Switch / mobile single-platform figures — only PC. Same date/quote rules. Set null when no PC-specific figure exists.
 - "engagement": the most RECENT cumulative ENGAGEMENT milestone reported for the target base game when no copies-sold number is available (or in addition to it). Examples to capture here (NOT in "global"):
     - "X million players have played the game"
     - "X million players reached" (especially when subscription users like Ubisoft+ / Xbox Game Pass / PS Plus are explicitly included)
@@ -71,6 +78,16 @@ const SCHEMA: Record<string, unknown> = {
       },
       required: ['units', 'date', 'quote'],
     },
+    pc: {
+      type: ['object', 'null'],
+      additionalProperties: false,
+      properties: {
+        units: { type: 'integer' },
+        date: { type: ['string', 'null'] },
+        quote: { type: 'string' },
+      },
+      required: ['units', 'date', 'quote'],
+    },
     engagement: {
       type: ['object', 'null'],
       additionalProperties: false,
@@ -82,7 +99,7 @@ const SCHEMA: Record<string, unknown> = {
       required: ['units', 'date', 'quote'],
     },
   },
-  required: ['global', 'engagement'],
+  required: ['global', 'pc', 'engagement'],
 };
 
 @Injectable()
@@ -130,6 +147,17 @@ export class WikipediaClient {
       const global =
         globalCandidate && globalCandidate.reportedAt ? globalCandidate : null;
 
+      const pcCandidate =
+        result.pc &&
+        isGrounded(result.pc.quote) &&
+        !isPeriodicQuote(result.pc.quote)
+          ? this.toFigure(result.pc)
+          : null;
+      const pc =
+        pcCandidate && pcCandidate.reportedAt && pcCandidate.units > 0
+          ? pcCandidate
+          : null;
+
       const engagementCandidate =
         result.engagement &&
         isGrounded(result.engagement.quote) &&
@@ -143,8 +171,8 @@ export class WikipediaClient {
           ? engagementCandidate
           : null;
 
-      if (!global && !engagement) return null;
-      return { global, engagement, sourceUrl };
+      if (!global && !pc && !engagement) return null;
+      return { global, pc, engagement, sourceUrl };
     } catch (error) {
       // Rate-limit (429) is a transient issue — log at debug only so we don't
       // spam the console; the other sources (RSS, Tavily, stores) will pick up
