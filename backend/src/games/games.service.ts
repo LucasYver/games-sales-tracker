@@ -36,6 +36,8 @@ import {
   FRESHNESS_VARIANCE_BUFFER,
   PC_DOMINANCE_RATIO_THRESHOLD,
   REVIEWS_REBUILD_BUCKET_DAYS,
+  REVIEWS_REBUILD_MONTHLY_AFTER_DAYS,
+  REVIEWS_REBUILD_MONTHLY_BUCKET_DAYS,
   ageInDays,
   ageInYears,
   lifetimeSalesPct,
@@ -768,14 +770,20 @@ export class GamesService {
    * SteamDB CSV import (years of daily rows) would generate thousands of
    * identical rebuild moments and make the rebuild crawl.
    *
-   * Daily `STEAM_REVIEWS` points past the launch window are downsampled to
-   * one per `REVIEWS_REBUILD_BUCKET_DAYS`. Reviews are the live Boxleiter
+   * Daily `STEAM_REVIEWS` points past the launch window are downsampled on
+   * a progressive, age-tiered schedule. Reviews are the live Boxleiter
    * input so they DO move the estimate over time (unlike CCU) and can't be
-   * dropped, but the mature sales curve is captured fine at weekly
-   * resolution — and a SteamDB review CSV import backfills a daily value
-   * from launch (hundreds to thousands of rows). Daily granularity is kept
-   * inside the launch window, where the curve is steep and feeds the
-   * first-week extrapolation.
+   * dropped, but the mature sales curve needs less resolution as it flattens
+   * — and a SteamDB review CSV import backfills a daily value from launch
+   * (hundreds to thousands of rows). Tiers by age since release:
+   *   - launch window (≤ `FIRST_WEEK_PEAK_CCU_WINDOW_DAYS`): daily (steep
+   *     curve, feeds the first-week extrapolation);
+   *   - launch window → `REVIEWS_REBUILD_MONTHLY_AFTER_DAYS`: one point per
+   *     `REVIEWS_REBUILD_BUCKET_DAYS` (weekly);
+   *   - beyond that: one point per `REVIEWS_REBUILD_MONTHLY_BUCKET_DAYS`
+   *     (monthly).
+   * Games with no release date can't be age-tiered and keep the weekly
+   * bucket for everything past a (nonexistent) launch window.
    *
    * Milestone `reportedAt` dates are added too: the reconciled headline
    * also shifts when a declared figure becomes visible, independently of
@@ -809,8 +817,14 @@ export class GamesService {
       if (!byMinute.has(minuteKey)) byMinute.set(minuteKey, t);
     };
 
-    const reviewBucketMs = REVIEWS_REBUILD_BUCKET_DAYS * 24 * 3600 * 1000;
-    const seenReviewBuckets = new Set<number>();
+    const weeklyBucketMs = REVIEWS_REBUILD_BUCKET_DAYS * 24 * 3600 * 1000;
+    const monthlyBucketMs =
+      REVIEWS_REBUILD_MONTHLY_BUCKET_DAYS * 24 * 3600 * 1000;
+    const monthlyThreshold = releaseDate
+      ? releaseDate.getTime() +
+        REVIEWS_REBUILD_MONTHLY_AFTER_DAYS * 24 * 3600 * 1000
+      : null;
+    const seenReviewBuckets = new Set<string>();
 
     for (const row of signals) {
       const t = row.capturedAt.getTime();
@@ -821,9 +835,11 @@ export class GamesService {
       }
 
       if (row.metric === SignalMetric.STEAM_REVIEWS && pastLaunchWindow) {
-        const bucket = Math.floor(t / reviewBucketMs);
-        if (seenReviewBuckets.has(bucket)) continue;
-        seenReviewBuckets.add(bucket);
+        const isMature = monthlyThreshold !== null && t > monthlyThreshold;
+        const bucketMs = isMature ? monthlyBucketMs : weeklyBucketMs;
+        const bucketKey = `${isMature ? 'm' : 'w'}:${Math.floor(t / bucketMs)}`;
+        if (seenReviewBuckets.has(bucketKey)) continue;
+        seenReviewBuckets.add(bucketKey);
       }
 
       addMoment(row.capturedAt);

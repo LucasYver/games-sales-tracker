@@ -362,12 +362,21 @@ export const FIRST_WEEK_PEAK_CCU_HIGH = 7;
 export const FIRST_WEEK_PEAK_CCU_WINDOW_DAYS = 14;
 
 // Past the launch window, `STEAM_REVIEWS` rebuild moments are downsampled
-// to one per this many days. A SteamDB review CSV import backfills a daily
-// cumulative review count from launch, which would otherwise spawn one
-// rebuild point per day (hundreds to thousands per game) even though the
-// mature sales curve is perfectly captured at weekly resolution. Daily
-// granularity is kept inside the launch window where the curve is steep.
+// on a progressive (age-tiered) schedule. A SteamDB review CSV import
+// backfills a daily cumulative review count from launch, which would
+// otherwise spawn one rebuild point per day (hundreds to thousands per
+// game) even though the mature sales curve is captured fine at coarser
+// resolution. Daily granularity is kept inside the launch window where the
+// curve is steep; weekly for the rest of year 1; monthly beyond that (the
+// curve is nearly flat, so weekly resolution buys no accuracy).
 export const REVIEWS_REBUILD_BUCKET_DAYS = 7;
+
+// Age (days since release) past which `STEAM_REVIEWS` rebuild moments switch
+// from weekly to monthly downsampling.
+export const REVIEWS_REBUILD_MONTHLY_AFTER_DAYS = 365;
+
+// Monthly bucket width used beyond `REVIEWS_REBUILD_MONTHLY_AFTER_DAYS`.
+export const REVIEWS_REBUILD_MONTHLY_BUCKET_DAYS = 30;
 
 // Above this week-1 sales mid-point (units), a game is "large launch"
 // and follows the more front-loaded year-1 ratio (2.68×). Below it,
