@@ -1,6 +1,7 @@
 /**
  * Refresh cadence based on a game's age (days since release):
- *   - Pre-release / unknown release date: every day
+ *   - Unknown release date:                never (returns null)
+ *   - Pre-release (date in the future):    every day
  *   - 0 to 180 days:                       every day
  *   - 180 days to 1 year:                  every 7 days
  *   - 1 year to 3 years:                   every 30 days
@@ -11,7 +12,7 @@ export function getRefreshIntervalDays(
   releaseDate: Date | null | undefined,
   now: Date = new Date(),
 ): number | null {
-  if (!releaseDate) return 1;
+  if (!releaseDate) return null;
 
   const ageDays =
     (now.getTime() - releaseDate.getTime()) / (1000 * 60 * 60 * 24);
