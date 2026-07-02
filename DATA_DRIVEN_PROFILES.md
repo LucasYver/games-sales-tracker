@@ -159,6 +159,38 @@ target game features ──► MatcherService (kNN) ─────────�
   franchise / live-service features. Replaces the per-field backfills
   (`backfill-steam-tags`, `backfill-game-features`, both removed).
 
+### First-week `peakCcuRatio` — launch-window fix
+- The anchor's `peakCcuRatio = week1Units / launchPeakCCU` used a 14-day
+  launch window, but leak-era CCU is stored as one point **per calendar
+  month** — so every pre-live-tracking anchor (incl. the whole
+  grand-strategy family: EU4, HoI4, Stellaris) silently got `launchPeak = 0`
+  → `null` ratio. High-retention targets (EU5) then had no genre-relevant
+  neighbour and inherited a corpus-generic ratio ~30, inflating week-1 by
+  ~5×.
+- Fix in `computePeakCcuRatio` (`reference-profile.service.ts`):
+  - **Launch window = launch month + the following one**
+    (`LAUNCH_CCU_WINDOW_MONTHS`), aligned to the monthly leak granularity;
+    works for daily live series too. Family now anchors (EU4 0.73, HoI4 1.10,
+    Stellaris 3.37).
+  - **Representativeness gate**: drop when `launchPeak < 15%` of the game's
+    all-time peak (re-releases / late-blooming free titles whose launch never
+    captured the real peak — e.g. The Descendant 18 CCU at launch vs 126k
+    later).
+  - **Physical cap** `MAX_PEAK_CCU_RATIO = 60`: guards against
+    franchise-contaminated `scaleUnits` (e.g. a GOTY edition inheriting 14M
+    units over a 200-CCU re-release).
+- The reviews-based `week1Units` is a **within-game shape ratio**
+  (`week1Reviews / reviewsAtMilestone`) in which the review-rate era cancels,
+  so — unlike Boxleiter's `reviewsToUnits` — `peakCcuRatio` is **not**
+  era-normalised.
+- Result: EU5 resolved `peakCcuToWeekOne` 30 → **6.76**, first-week estimate
+  3.67–6.82M → **0.94–1.75M**, aggregate 0.96–1.72M (real ≈ 980k), method
+  disagreement 1.7%.
+- Known gap: `rebuildAll` only visits current candidates (milestone w/
+  `reportedAt` or leak signal); anchors that fell out of that set keep a
+  **stale** row the new gate/cap never re-applies (6 rows, incl. Borderlands
+  GOTY at 66097). Pruning non-candidate rows in `rebuildAll` is a follow-up.
+
 ---
 
 ## 4. File map

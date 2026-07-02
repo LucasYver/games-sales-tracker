@@ -28,7 +28,7 @@ import {
   DEFAULT_STEAM_SHARE_PCT,
   FIRST_WEEK_PEAK_CCU_HIGH,
   FIRST_WEEK_PEAK_CCU_LOW,
-  FIRST_WEEK_PEAK_CCU_WINDOW_DAYS,
+  LAUNCH_PEAK_CCU_WINDOW_MONTHS,
   launcherFactorFromSteamShare,
   launcherMethodTagFromShare,
   type SteamShareRange,
@@ -631,6 +631,7 @@ export class EstimationService {
         genres: true,
         steamTags: true,
         publisherId: true,
+        publisher: true,
         dlc: true,
         releaseDate: true,
         developer: true,
@@ -947,24 +948,37 @@ export class EstimationService {
     const steamShare = steamShareForGame(game);
     const ccuScale = launcherFactorFromSteamShare(steamShare);
 
-    // Week-1 peak only: the largest daily CCU captured in the 7 days
-    // following release. A later all-time peak (sale, DLC, F2P switch)
-    // does not represent the launch and must not drive the week-1
-    // baseline. The window is further capped at `asOf` so historical
-    // rebuilds never see a future peak. We read the daily STEAM_CONCURRENT
-    // series (the SteamDB CSV import lands one peak value per day there),
-    // not the all-time STEAM_PEAK_CCU.
-    const weekOneEnd = new Date(
-      game.releaseDate.getTime() +
-        FIRST_WEEK_PEAK_CCU_WINDOW_DAYS * 24 * 3600 * 1000,
+    // Launch peak CCU: the largest STEAM_CONCURRENT value over the release
+    // month plus the following one. A later all-time peak (sale, DLC, F2P
+    // switch) does not represent the launch and must not drive the week-1
+    // baseline, but leak-era CCU is stored as one point per calendar month
+    // (stamped on the 1st, so the launch-month peak can predate a mid-month
+    // release date). We therefore anchor the window at the first of the
+    // release month — identical to the anchor's `peakCcuRatio` launch window
+    // — so the resolved peak-CCU→week-1 ratio is applied to a peak measured
+    // the same way. The window is capped at `asOf` so historical rebuilds
+    // never see a future peak.
+    const releaseMonthStart = new Date(
+      Date.UTC(
+        game.releaseDate.getUTCFullYear(),
+        game.releaseDate.getUTCMonth(),
+        1,
+      ),
     );
-    const windowEnd = asOf && asOf < weekOneEnd ? asOf : weekOneEnd;
-    if (windowEnd < game.releaseDate) return null;
+    const launchWindowEnd = new Date(
+      Date.UTC(
+        game.releaseDate.getUTCFullYear(),
+        game.releaseDate.getUTCMonth() + LAUNCH_PEAK_CCU_WINDOW_MONTHS,
+        1,
+      ),
+    );
+    const windowEnd = asOf && asOf < launchWindowEnd ? asOf : launchWindowEnd;
+    if (windowEnd <= releaseMonthStart) return null;
     const peak = await this.signals.findOne({
       where: {
         gameId: game.id,
         metric: SignalMetric.STEAM_CONCURRENT,
-        capturedAt: Between(game.releaseDate, windowEnd),
+        capturedAt: Between(releaseMonthStart, windowEnd),
       },
       order: { value: 'DESC' },
     });

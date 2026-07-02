@@ -26,6 +26,7 @@ import {
 import { isPeriodicQuote } from '../ingestion/sales-figure.utils';
 import { slugify } from '../common/slug';
 import { GamesService } from '../games/games.service';
+import { ReferenceProfileService } from '../reference-profiles/reference-profile.service';
 
 export interface UpdateGameInput {
   name?: string;
@@ -227,6 +228,7 @@ export class AdminService {
     @InjectRepository(EstimationDiscrepancy)
     private readonly discrepancies: Repository<EstimationDiscrepancy>,
     private readonly gamesService: GamesService,
+    private readonly referenceProfiles: ReferenceProfileService,
   ) {}
 
   async stats(): Promise<AdminStats> {
@@ -687,7 +689,11 @@ export class AdminService {
 
   async deleteGame(id: string): Promise<{ deleted: boolean }> {
     const result = await this.games.softDelete(id);
-    return { deleted: (result.affected ?? 0) > 0 };
+    const deleted = (result.affected ?? 0) > 0;
+    if (deleted) {
+      await this.referenceProfiles.removeForGame(id);
+    }
+    return { deleted };
   }
 
   /**

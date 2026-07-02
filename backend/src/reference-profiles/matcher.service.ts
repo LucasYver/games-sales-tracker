@@ -19,6 +19,32 @@ const DEFAULT_NEIGHBOURS = 15;
 const MIN_NEIGHBOURS = 3;
 
 /**
+ * Exponent applied to `similarity` when turning it into an aggregation
+ * weight (`similarity^EXP × qualityScore`). >1 sharpens the blend so the
+ * few genuinely-close neighbours dominate and the long tail of loosely
+ * related anchors contributes far less — e.g. Europa Universalis IV /
+ * Stellaris (sim ~0.7) should drive Hearts of Iron IV's ratio, not the
+ * dozen tangential strategy titles (sim ~0.4) whose review-to-units ratio
+ * is 2–4× higher.
+ */
+const SIMILARITY_WEIGHT_EXPONENT = 2;
+
+/**
+ * `reviewsToUnits` neighbours whose ratio exceeds this multiple of the
+ * neighbourhood median are dropped before the log-weighted mean. Old,
+ * low-selling leak titles (Magicka 2, Stronghold Crusader 2) carry an
+ * inflated ratio — their leak "player" count bundles free-weekend /
+ * family-sharing / giveaway installs that never bought the game — which,
+ * even after era normalisation, sits far above the real cluster and would
+ * otherwise drag every neighbour's estimate up.
+ */
+const REVIEWS_TO_UNITS_OUTLIER_FACTOR = 2;
+
+function neighbourWeight(similarity: number, qualityScore: number): number {
+  return Math.pow(similarity, SIMILARITY_WEIGHT_EXPONENT) * qualityScore;
+}
+
+/**
  * Soft-similarity weights per feature. Sum = 1.0 so the resulting
  * `similarity` stays in [0, 1]. Play-mode is a hard filter and does
  * not appear here.
@@ -32,9 +58,12 @@ const MIN_NEIGHBOURS = 3;
  *     gameplay signal available ("Grand Strategy", "4X", "Roguelike") — and
  *     falls back to the coarse store `genres` otherwise.
  *  2. `publisherMatch` + `developerMatch` — exact identity. Another game
- *     by the same studio or the same publisher is an extremely strong
- *     prior for behaviour (a second Paradox grand-strategy title tells us
- *     far more than a random same-scale PC game).
+ *     by the same studio or the same publisher is a strong prior for
+ *     behaviour (a second Paradox grand-strategy title tells us far more
+ *     than a random same-scale PC game). Kept deliberately below
+ *     `gameplayType` so a same-publisher title in a *different* genre
+ *     (e.g. Paradox's Magicka 2, a twin-stick shooter, vs a grand-strategy
+ *     target) cannot ride the publisher axis into the neighbourhood.
  *  3. `releaseEra` — promoted, because the observed `reviewsToUnits` ratio
  *     is dominated by the game's review-rate maturity/era. Even after the
  *     ETL normalises each anchor's ratio to the current review-rate era,
@@ -55,17 +84,17 @@ const MIN_NEIGHBOURS = 3;
  * Price is intentionally absent: no reliable per-game price coverage.
  */
 const SIMILARITY_WEIGHTS = {
-  gameplayType: 0.3,
-  publisherMatch: 0.14,
-  developerMatch: 0.14,
-  releaseEra: 0.13,
-  scaleBucket: 0.07,
+  gameplayType: 0.46,
+  publisherMatch: 0.1,
+  developerMatch: 0.1,
+  releaseEra: 0.05,
+  scaleBucket: 0.04,
   platformsOverlap: 0.06,
-  dlcTier: 0.04,
+  dlcTier: 0.06,
   franchise: 0.04,
   liveService: 0.03,
   devTrackRecord: 0.03,
-  annualIteration: 0.02,
+  annualIteration: 0.03,
 } as const;
 
 /**
@@ -121,6 +150,12 @@ export interface MatchTargetFeatures {
   steamTags: string[] | null;
   /** Curated publisher id (`Game.publisherId`), for exact publisher match. */
   publisherId: string | null;
+  /**
+   * Raw Steam/IGDB publisher string (`Game.publisher`). Used as the
+   * publisher-match fallback when either game lacks a curated `publisherId`
+   * (the vast majority) — the raw string is populated for nearly every game.
+   */
+  publisher: string | null;
   /** Steam DLC appIds (`Game.dlc`); only the count feeds the DLC axis. */
   dlc: number[] | null;
   releaseDate: Date | null;
@@ -176,6 +211,7 @@ interface AnchorRow {
   steamTags: string[];
   playMode: PlayMode;
   publisherId: string | null;
+  publisher: string | null;
   releaseEra: ReleaseEra;
   scaleBucket: ScaleBucket;
   dlcTier: DlcTier;
@@ -300,7 +336,7 @@ export class MatcherService {
     const anchors: MatchedAnchor[] = top.map(({ row, similarity }) => ({
       gameId: row.gameId,
       similarity,
-      weight: similarity * row.qualityScore,
+      weight: neighbourWeight(similarity, row.qualityScore),
     }));
 
     return {
@@ -324,7 +360,12 @@ export class MatcherService {
       target.steamTags,
       target.genres,
     );
-    const publisherScore = identityMatch(row.publisherId, target.publisherId);
+    const publisherScore = publisherMatch(
+      row.publisherId,
+      row.publisher,
+      target.publisherId,
+      target.publisher,
+    );
     const developerScore = developerMatch(row.developer, target.developer);
     const eraScore = eraSimilarity(row.releaseEra, target.releaseEra);
     const scaleScore =
@@ -380,7 +421,7 @@ export class MatcherService {
       const entries = top
         .map(({ row, similarity }) => ({
           value: row.curve[key],
-          weight: similarity * row.qualityScore,
+          weight: neighbourWeight(similarity, row.qualityScore),
         }))
         .filter(
           (e): e is { value: number; weight: number } => e.value !== null,
@@ -396,16 +437,20 @@ export class MatcherService {
     // reviewsToUnits spans ~two orders of magnitude across genres
     // (indie ~15, AAA ~150). Aggregate in log-10 space to avoid the
     // mean being dragged by the largest outliers.
-    const entries = top
+    const raw = top
       .map(({ row, similarity }) => ({
         value: row.reviewsToUnits,
-        weight: similarity * row.qualityScore,
+        weight: neighbourWeight(similarity, row.qualityScore),
       }))
       .filter(
         (e): e is { value: number; weight: number } =>
           e.value !== null && e.value > 0,
-      )
-      .map((e) => ({ value: Math.log10(e.value), weight: e.weight }));
+      );
+    const kept = rejectHighOutliers(raw, REVIEWS_TO_UNITS_OUTLIER_FACTOR);
+    const entries = kept.map((e) => ({
+      value: Math.log10(e.value),
+      weight: e.weight,
+    }));
     const meanLog = weightedMean(entries);
     if (meanLog === null) return null;
     return Math.pow(10, meanLog);
@@ -420,7 +465,7 @@ export class MatcherService {
     const entries = top
       .map(({ row, similarity }) => ({
         value: row.peakCcuRatio,
-        weight: similarity * row.qualityScore,
+        weight: neighbourWeight(similarity, row.qualityScore),
       }))
       .filter(
         (e): e is { value: number; weight: number } =>
@@ -445,7 +490,7 @@ export class MatcherService {
     const totals = { pc: 0, ps: 0, xbox: 0, switch: 0 };
     let weightSum = 0;
     for (const { row, similarity } of rows) {
-      const w = similarity * row.qualityScore;
+      const w = neighbourWeight(similarity, row.qualityScore);
       const shares = row.platformShares!;
       totals.pc += shares.pc * w;
       totals.ps += shares.ps * w;
@@ -504,6 +549,7 @@ export class MatcherService {
         genres: string[] | string | null;
         steamTags: string[] | string | null;
         publisherId: string | null;
+        publisher: string | null;
         dlcCount: string | number | null;
         releaseDate: Date | null;
         developer: string | null;
@@ -532,6 +578,7 @@ export class MatcherService {
               g.genres AS genres,
               g."steamTags" AS "steamTags",
               g."publisherId" AS "publisherId",
+              g.publisher AS publisher,
               COALESCE(array_length(g.dlc, 1), 0) AS "dlcCount",
               g."releaseDate" AS "releaseDate",
               g.developer AS developer,
@@ -570,6 +617,7 @@ export class MatcherService {
         steamTags,
         playMode: playModeFromCategories(categories),
         publisherId: r.publisherId,
+        publisher: r.publisher,
         releaseEra: releaseEraFromDate(r.releaseDate),
         scaleBucket: scaleBucketFromUnits(scaleUnits),
         dlcTier: dlcTierFromCount(Number(r.dlcCount ?? 0)),
@@ -606,6 +654,7 @@ export class MatcherService {
       steamTags: normaliseGenres(target.steamTags ?? []),
       playMode: playModeFromCategories(target.categories),
       publisherId: target.publisherId,
+      publisher: target.publisher,
       developer: target.developer,
       releaseEra: releaseEraFromDate(target.releaseDate),
       scaleBucket: scaleBucketFromUnits(target.scaleHint ?? null),
@@ -678,6 +727,7 @@ interface TargetInternal {
   steamTags: string[];
   playMode: PlayMode;
   publisherId: string | null;
+  publisher: string | null;
   developer: string | null;
   releaseEra: ReleaseEra;
   scaleBucket: ScaleBucket;
@@ -885,6 +935,27 @@ function identityMatch(a: string | null, b: string | null): number {
 }
 
 /**
+ * Same-publisher axis. Prefers the curated `publisherId` (alias-resolved)
+ * when BOTH games are linked; otherwise falls back to the normalised raw
+ * `publisher` string, which is populated for nearly every game. Without the
+ * fallback the axis is dead — `publisherId` is currently unset on the vast
+ * majority of the corpus, so `identityMatch(null, null)` returned a flat
+ * neutral 0.5 that never separated e.g. the Paradox grand-strategy family
+ * from unrelated same-era strategy games.
+ */
+function publisherMatch(
+  aId: string | null,
+  aName: string | null,
+  bId: string | null,
+  bName: string | null,
+): number {
+  if (aId !== null && bId !== null) return aId === bId ? 1.0 : 0.0;
+  const na = aName?.trim().toLowerCase() || null;
+  const nb = bName?.trim().toLowerCase() || null;
+  return identityMatch(na, nb);
+}
+
+/**
  * Same-developer axis. Normalises casing/whitespace before comparing so
  * "Paradox Development Studio" matches regardless of source formatting.
  */
@@ -953,6 +1024,28 @@ function trackRecordSimilarity(a: TrackRecordTier, b: TrackRecordTier): number {
   const order: TrackRecordTier[] = ['NONE', 'MID', 'HIT'];
   const distance = Math.abs(order.indexOf(a) - order.indexOf(b));
   return distance === 1 ? 0.5 : 0.1;
+}
+
+/**
+ * Drop entries whose `value` exceeds `factor` × the (unweighted) median of
+ * the set. Used to strip inflated `reviewsToUnits` outliers (old low-selling
+ * leak titles whose leak player count bundles non-buyers) before averaging.
+ * Never trims below three survivors so a small neighbourhood keeps enough
+ * signal; returns the input untouched when there are fewer than four entries.
+ */
+function rejectHighOutliers(
+  entries: Array<{ value: number; weight: number }>,
+  factor: number,
+): Array<{ value: number; weight: number }> {
+  if (entries.length < 4) return entries;
+  const sorted = [...entries].map((e) => e.value).sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median =
+    sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  if (!Number.isFinite(median) || median <= 0) return entries;
+  const ceiling = factor * median;
+  const kept = entries.filter((e) => e.value <= ceiling);
+  return kept.length >= 3 ? kept : entries;
 }
 
 function weightedMean(

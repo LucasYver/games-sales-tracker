@@ -58,6 +58,7 @@ interface LeakGameRow {
   steamTags: string[] | null;
   platforms: string[] | null;
   publisherId: string | null;
+  publisher: string | null;
   dlc: number[] | null;
   developer: string | null;
   franchiseSlug: string | null;
@@ -154,6 +155,7 @@ async function loadLeakGames(
       steamTags: string[] | string | null;
       platforms: string[] | string | null;
       publisherId: string | null;
+      publisher: string | null;
       dlc: number[] | null;
       developer: string | null;
       franchiseSlug: string | null;
@@ -170,6 +172,7 @@ async function loadLeakGames(
             g."steamTags" AS "steamTags",
             g.platforms::text[] AS platforms,
             g."publisherId" AS "publisherId",
+            g.publisher AS publisher,
             g.dlc AS dlc,
             g.developer AS developer,
             g."franchiseSlug" AS "franchiseSlug",
@@ -193,6 +196,7 @@ async function loadLeakGames(
     steamTags: parseArray(r.steamTags),
     platforms: parseArray(r.platforms),
     publisherId: r.publisherId,
+    publisher: r.publisher,
     dlc: r.dlc ?? null,
     developer: r.developer,
     franchiseSlug: r.franchiseSlug,
@@ -285,6 +289,7 @@ async function predictWithMatcher(
       genres: row.genres,
       steamTags: row.steamTags,
       publisherId: row.publisherId,
+      publisher: row.publisher,
       dlc: row.dlc,
       releaseDate: row.releaseDate,
       developer: row.developer,

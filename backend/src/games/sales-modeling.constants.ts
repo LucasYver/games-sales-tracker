@@ -371,6 +371,16 @@ export const FIRST_WEEK_PEAK_CCU_HIGH = 7;
 // launch peak (the method name/tag is unchanged).
 export const FIRST_WEEK_PEAK_CCU_WINDOW_DAYS = 14;
 
+// Launch peak CCU is instead observed over the release month plus the
+// following one when driving the first-week extrapolation. Leak-era CCU is
+// stored as a single point per calendar month (stamped on the 1st), so a
+// tight day-based window silently misses it and every pre-live-tracking
+// title (incl. the whole grand-strategy family) abstains from the first-week
+// method. This MUST match the anchor's `peakCcuRatio` launch window
+// (`LAUNCH_CCU_WINDOW_MONTHS` in `reference-profile.service.ts`) so the
+// resolved peak-CCU→week-1 ratio is applied to a peak measured the same way.
+export const LAUNCH_PEAK_CCU_WINDOW_MONTHS = 2;
+
 // Past the launch window, `STEAM_REVIEWS` rebuild moments are downsampled
 // on a progressive (age-tiered) schedule. A SteamDB review CSV import
 // backfills a daily cumulative review count from launch, which would
@@ -558,6 +568,13 @@ export function buildGenreProjectionCurve(
   tailY5: number,
 ): ReadonlyArray<readonly [number, number]> {
   const delta = m1 - 1;
+  // Extend the tail to year 10. `tailY5 = a2^1.5`; we continue the same
+  // decelerating power law to `tailY10 = a2^1.85 = tailY5^(1.85/1.5)`.
+  // Long-supported catalogues (grand strategy, sims, live titles) keep
+  // selling well past year 5, so clamping the projection at the year-5
+  // value structurally under-projects decade-old games. Beyond year 10
+  // `interpolateCurve` still clamps flat.
+  const tailY10 = Math.pow(tailY5, 1.85 / 1.5);
   return [
     [7, 1.0],
     ...GENRE_INTRA_YEAR_SHAPE.map(
@@ -566,6 +583,7 @@ export function buildGenreProjectionCurve(
     [365, m1],
     [730, m1 * tailY2],
     [1825, m1 * tailY5],
+    [3650, m1 * tailY10],
   ];
 }
 

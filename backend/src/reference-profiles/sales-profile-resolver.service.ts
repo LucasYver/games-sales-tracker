@@ -160,6 +160,7 @@ export class SalesProfileResolverService {
       | 'genres'
       | 'steamTags'
       | 'publisherId'
+      | 'publisher'
       | 'dlc'
       | 'releaseDate'
       | 'developer'
@@ -178,6 +179,7 @@ export class SalesProfileResolverService {
         genres: game.genres ?? null,
         steamTags: game.steamTags ?? null,
         publisherId: game.publisherId ?? null,
+        publisher: game.publisher ?? null,
         dlc: game.dlc ?? null,
         releaseDate: game.releaseDate ?? null,
         developer: game.developer ?? null,

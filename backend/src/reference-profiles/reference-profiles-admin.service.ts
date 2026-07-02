@@ -236,6 +236,7 @@ export class ReferenceProfilesAdminService {
       genres: game.genres ?? null,
       steamTags: game.steamTags ?? null,
       publisherId: game.publisherId ?? null,
+      publisher: game.publisher ?? null,
       dlc: game.dlc ?? null,
       releaseDate: game.releaseDate ?? null,
       developer: game.developer ?? null,

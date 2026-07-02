@@ -9,8 +9,6 @@ import {
   SignalMetric,
   SignalSnapshot,
 } from '../entities';
-import { FIRST_WEEK_PEAK_CCU_WINDOW_DAYS } from '../games/sales-modeling.constants';
-
 /**
  * Curve checkpoints (days from release) at which we sample the observed
  * cumulative-units fraction. Normalised to `a1` (= 1.0). Ordered chronologically
@@ -91,6 +89,30 @@ const ERA_FLOOR = 33.4;
 
 const DAY_MS = 24 * 3600 * 1000;
 const YEAR_MS = 365 * DAY_MS;
+
+/**
+ * Launch-window used to observe the peak CCU that feeds `peakCcuRatio`.
+ * Leak-era CCU is stored as one point per calendar month (first of the
+ * month), so the estimator's tight 14-day window silently misses it and
+ * every pre-live-tracking anchor (incl. the whole grand-strategy family)
+ * ends up with a `null` ratio. We instead take the max over the launch
+ * month plus the following one, which captures the launch spike for both
+ * monthly leak points and daily live series.
+ */
+const LAUNCH_CCU_WINDOW_MONTHS = 2;
+
+/**
+ * Guardrails for the observed `peakCcuRatio`:
+ *   - the launch peak must be a meaningful fraction of the game's all-time
+ *     peak, otherwise the launch window never captured the real launch
+ *     (re-releases, or late-blooming free/bundled titles whose popularity
+ *     came years after release) and the ratio is garbage;
+ *   - the resulting ratio is capped to a physical ceiling — week-1 units
+ *     per launch concurrent player above this only happens when `scaleUnits`
+ *     is franchise-contaminated (e.g. a GOTY edition inheriting 14M units).
+ */
+const MIN_LAUNCH_PEAK_ALLTIME_FRAC = 0.15;
+const MAX_PEAK_CCU_RATIO = 60;
 
 interface AnchorSelection {
   observedAt: Date;
@@ -197,6 +219,15 @@ export class ReferenceProfileService {
     entity.observedAt = anchor.observedAt;
 
     return this.anchors.save(entity);
+  }
+
+  /**
+   * Drop a game's anchor. Called when a game is soft-deleted: the matcher
+   * already excludes deleted games, but the row would otherwise linger
+   * (rebuildAll skips deleted games, so the ETL never revisits it).
+   */
+  async removeForGame(gameId: string): Promise<void> {
+    await this.anchors.delete({ gameId });
   }
 
   /**
@@ -448,14 +479,17 @@ export class ReferenceProfileService {
    *   week1Units = launchPeakCCU × ratio          (estimation)
    *   ratio      = week1Units / launchPeakCCU      (this observation)
    *
-   * `launchPeakCCU` is the largest daily `STEAM_CONCURRENT` in the same
-   * two-week launch window the estimator uses. `week1Units` is derived
-   * from the anchor's own signals — week-1 cumulative reviews scaled by
-   * its measured `reviewsToUnits` — so no external units figure is
-   * needed. Returns `null` when either side is missing; the launcher /
-   * Steam-share correction stays in the estimator (applied uniformly on
-   * top), so we deliberately keep the raw ratio here, matching the
-   * hand-set genre-profile values it replaces.
+   * `launchPeakCCU` is the largest `STEAM_CONCURRENT` over the launch month
+   * and the following one (see `LAUNCH_CCU_WINDOW_MONTHS`) — wide enough to
+   * catch the monthly leak points that a 14-day window misses. `week1Units`
+   * is derived from the anchor's own signals — week-1 cumulative reviews
+   * scaled by its measured `reviewsToUnits`, a within-game shape ratio in
+   * which the review-rate era cancels out. Returns `null` when either side
+   * is missing, when the launch peak is not representative of the game's
+   * all-time peak, or when the ratio exceeds the physical ceiling; the
+   * launcher / Steam-share correction stays in the estimator (applied
+   * uniformly on top), so we deliberately keep the raw ratio here, matching
+   * the hand-set genre-profile values it replaces.
    */
   private async computePeakCcuRatio(
     gameId: string,
@@ -464,23 +498,44 @@ export class ReferenceProfileService {
   ): Promise<number | null> {
     if (reviewsToUnits === null || reviewsToUnits <= 0) return null;
 
-    const windowEnd = new Date(
-      releaseDate.getTime() + FIRST_WEEK_PEAK_CCU_WINDOW_DAYS * DAY_MS,
+    const windowStart = new Date(
+      Date.UTC(releaseDate.getUTCFullYear(), releaseDate.getUTCMonth(), 1),
     );
-    const peakRow = await this.signals
-      .createQueryBuilder('s')
-      .select('MAX(s.value)', 'value')
-      .where('s."gameId" = :gameId', { gameId })
-      .andWhere('s.metric = :metric', {
-        metric: SignalMetric.STEAM_CONCURRENT,
-      })
-      .andWhere('s."capturedAt" BETWEEN :start AND :end', {
-        start: releaseDate,
-        end: windowEnd,
-      })
-      .getRawOne<{ value: string | null }>();
-    const launchPeak = peakRow?.value != null ? Number(peakRow.value) : 0;
+    const windowEnd = new Date(
+      Date.UTC(
+        releaseDate.getUTCFullYear(),
+        releaseDate.getUTCMonth() + LAUNCH_CCU_WINDOW_MONTHS,
+        1,
+      ),
+    );
+    const [launchRow, allTimeRow] = await Promise.all([
+      this.signals
+        .createQueryBuilder('s')
+        .select('MAX(s.value)', 'value')
+        .where('s."gameId" = :gameId', { gameId })
+        .andWhere('s.metric = :metric', {
+          metric: SignalMetric.STEAM_CONCURRENT,
+        })
+        .andWhere('s."capturedAt" >= :start AND s."capturedAt" < :end', {
+          start: windowStart,
+          end: windowEnd,
+        })
+        .getRawOne<{ value: string | null }>(),
+      this.signals
+        .createQueryBuilder('s')
+        .select('MAX(s.value)', 'value')
+        .where('s."gameId" = :gameId', { gameId })
+        .andWhere('s.metric = :metric', {
+          metric: SignalMetric.STEAM_CONCURRENT,
+        })
+        .getRawOne<{ value: string | null }>(),
+    ]);
+    const launchPeak = launchRow?.value != null ? Number(launchRow.value) : 0;
     if (!Number.isFinite(launchPeak) || launchPeak <= 0) return null;
+
+    const allTimePeak =
+      allTimeRow?.value != null ? Number(allTimeRow.value) : launchPeak;
+    if (launchPeak < MIN_LAUNCH_PEAK_ALLTIME_FRAC * allTimePeak) return null;
 
     const week1Reviews = await this.cumulativeSignalAt(
       gameId,
@@ -491,7 +546,9 @@ export class ReferenceProfileService {
 
     const week1Units = week1Reviews * reviewsToUnits;
     const ratio = week1Units / launchPeak;
-    return Number.isFinite(ratio) && ratio > 0 ? ratio : null;
+    if (!Number.isFinite(ratio) || ratio <= 0) return null;
+    if (ratio > MAX_PEAK_CCU_RATIO) return null;
+    return ratio;
   }
 
   /**
