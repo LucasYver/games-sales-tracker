@@ -1397,6 +1397,48 @@ export class IngestionService {
   }
 
   /**
+   * Anchor a reconstructed cumulative `STEAM_REVIEWS` series to the live
+   * authoritative total before persisting it.
+   *
+   * The reconstruction sources (`appreviewhistogram`, and to a lesser extent
+   * the per-review enumeration) count reviews on a narrower filter than the
+   * daily cron's `getTotalReviews` (`purchase_type=all`): e.g. for app 236850
+   * the histogram sums to ~101k while the live total is ~137k. Left as-is the
+   * reconstructed magnitude sits below what the cron records, producing a
+   * step up at the backfill→cron junction and inflating the Boxleiter
+   * multiplier calibrated on the (undercounted) historical point.
+   *
+   * We keep the reconstructed curve SHAPE but rescale every point by
+   * `liveTotal / reconstructedLatest`, so the last historical point equals
+   * the live total and the cron continues the series seamlessly. Mutates
+   * `rows` in place and returns the anchored latest total (or the original
+   * latest when the live total is unavailable or the series already matches).
+   */
+  private async anchorReviewSeriesToLive(
+    rows: SignalSnapshot[],
+    appId: number,
+  ): Promise<number> {
+    if (rows.length === 0) return 0;
+    const reconstructedLatest = rows[rows.length - 1].value;
+    if (reconstructedLatest <= 0) return reconstructedLatest;
+
+    const liveTotal = await this.steam.getTotalReviews(appId);
+    if (liveTotal === null || liveTotal <= 0) return reconstructedLatest;
+
+    const scale = liveTotal / reconstructedLatest;
+    // Within 2% the reconstruction is already on the live scale (e.g. the
+    // enumeration path) — skip a pointless rewrite.
+    if (Math.abs(scale - 1) < 0.02) return reconstructedLatest;
+
+    for (const row of rows) {
+      row.value = Math.round(row.value * scale);
+    }
+    // Pin the last point exactly to the live total to avoid rounding drift.
+    rows[rows.length - 1].value = liveTotal;
+    return liveTotal;
+  }
+
+  /**
    * Reconstruct and persist a game's daily review history straight from
    * Steam's public `appreviews` API — the API-only equivalent of importing a
    * SteamDB review CSV. Paginates every individual review, aggregates new
@@ -1482,6 +1524,8 @@ export class IngestionService {
       );
     }
 
+    const anchoredLatest = await this.anchorReviewSeriesToLive(rows, appId);
+
     const firstDay = new Date(`${emittedDays[0]}T00:00:00.000Z`);
     const lastDay = new Date(
       `${emittedDays[emittedDays.length - 1]}T00:00:00.000Z`,
@@ -1498,9 +1542,9 @@ export class IngestionService {
     await this.signals.save(rows, { chunk: 500 });
 
     const latestDay = emittedDays[emittedDays.length - 1];
-    const latestTotal = cumulativePositive + cumulativeNegative;
-    const latestRating =
-      latestTotal > 0 ? cumulativePositive / latestTotal : null;
+    const rawLatest = cumulativePositive + cumulativeNegative;
+    const latestTotal = anchoredLatest;
+    const latestRating = rawLatest > 0 ? cumulativePositive / rawLatest : null;
 
     this.logger.log(
       `[reviews-api] "${game.name}" — ${rows.length} days ` +
@@ -1630,6 +1674,8 @@ export class IngestionService {
       };
     }
 
+    const anchoredLatest = await this.anchorReviewSeriesToLive(rows, appId);
+
     const firstDay = new Date(`${emittedDays[0]}T00:00:00.000Z`);
     const lastDay = new Date(
       `${emittedDays[emittedDays.length - 1]}T00:00:00.000Z`,
@@ -1643,9 +1689,9 @@ export class IngestionService {
     });
     await this.signals.save(rows, { chunk: 500 });
 
-    const latestTotal = cumulativePositive + cumulativeNegative;
-    const latestRating =
-      latestTotal > 0 ? cumulativePositive / latestTotal : null;
+    const rawLatest = cumulativePositive + cumulativeNegative;
+    const latestTotal = anchoredLatest;
+    const latestRating = rawLatest > 0 ? cumulativePositive / rawLatest : null;
 
     this.logger.log(
       `[reviews-histogram] "${game.name}" — ${rows.length} months ` +

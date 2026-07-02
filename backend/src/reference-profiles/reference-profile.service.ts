@@ -70,6 +70,25 @@ const RECENCY_STEPS = [
  */
 const MIN_CURVE_POINTS_WITHOUT_RATIO = 2;
 
+/**
+ * Steam's review rate (reviews per sale) has risen steadily since ~2013, so a
+ * units/reviews ratio measured in an early calendar year is far higher than the
+ * same game's ratio measured today. Because the estimator applies
+ * `reviewsToUnits` to a game's CURRENT cumulative reviews, we normalise every
+ * anchor's raw ratio from its observation year to the current review-rate era —
+ * otherwise leak-2018 anchors (~89% of the corpus) inflate estimates ~2×.
+ *
+ * `kEra(year)` is fitted on the whole corpus (median units/reviews by calendar
+ * year of observation), anchored by known-sales titles (e.g. EU5 = 980k /
+ * 29.6k reviews ≈ 33 in 2026):
+ *   kEra(year) = ERA_AMP · exp(-ERA_SLOPE · (year − ERA_BASE_YEAR)) + ERA_FLOOR
+ * The normalisation factor to the current year is `kEra(now) / kEra(observed)`.
+ */
+const ERA_AMP = 193.8;
+const ERA_SLOPE = 0.275;
+const ERA_BASE_YEAR = 2013;
+const ERA_FLOOR = 33.4;
+
 const DAY_MS = 24 * 3600 * 1000;
 const YEAR_MS = 365 * DAY_MS;
 
@@ -122,7 +141,15 @@ export class ReferenceProfileService {
       return null;
     }
 
-    const reviewsToUnits = await this.computeReviewsToUnits(gameId, anchor);
+    // Raw ratio = units/reviews at the observation date; `reviewsToUnits` is
+    // the same value normalised to the current review-rate era (what the
+    // estimator applies to current reviews). The launch-window CCU ratio pairs
+    // with launch-era reviews, so it keeps the raw (observation-era) ratio.
+    const rawReviewsToUnits = await this.computeReviewsToUnits(gameId, anchor);
+    const reviewsToUnits =
+      rawReviewsToUnits !== null
+        ? rawReviewsToUnits * this.reviewRateEraFactor(anchor.observedAt)
+        : null;
 
     const curve = game.releaseDate
       ? await this.computeCurve(gameId, game.releaseDate)
@@ -134,7 +161,11 @@ export class ReferenceProfileService {
     );
 
     const peakCcuRatio = game.releaseDate
-      ? await this.computePeakCcuRatio(gameId, game.releaseDate, reviewsToUnits)
+      ? await this.computePeakCcuRatio(
+          gameId,
+          game.releaseDate,
+          rawReviewsToUnits,
+        )
       : null;
 
     const qualityScore = this.computeQuality(anchor, curve, reviewsToUnits);
@@ -267,9 +298,12 @@ export class ReferenceProfileService {
   }
 
   /**
-   * PC Boxleiter-equivalent: `units / cumulativeReviews` at the anchor
-   * date. `null` when the game has no Steam review coverage close to
-   * the observation window (never worth persisting as a ratio then).
+   * Raw PC Boxleiter-equivalent: `units / cumulativeReviews` **at the anchor
+   * date** (observation-era ratio, before era normalisation). `null` when the
+   * game has no Steam review coverage close to the observation window (never
+   * worth persisting as a ratio then). Callers apply
+   * `reviewRateEraFactor(observedAt)` to shift it to the current review-rate era
+   * before storing it as `reviewsToUnits`.
    */
   private async computeReviewsToUnits(
     gameId: string,
@@ -283,6 +317,25 @@ export class ReferenceProfileService {
     if (cumReviews === null || cumReviews <= 0) return null;
     if (anchor.scaleUnits <= 0) return null;
     return anchor.scaleUnits / cumReviews;
+  }
+
+  /**
+   * Multiplicative factor that shifts an observation-era units/reviews ratio to
+   * the current review-rate era: `kEra(now) / kEra(observedYear)` (≤ 1 for past
+   * observations, since Steam's review rate keeps rising). Years before
+   * `ERA_BASE_YEAR` are clamped to it to avoid extrapolating the fit outside its
+   * support.
+   */
+  private reviewRateEraFactor(observedAt: Date): number {
+    const kEra = (year: number): number => {
+      const clamped = Math.max(ERA_BASE_YEAR, year);
+      return (
+        ERA_AMP * Math.exp(-ERA_SLOPE * (clamped - ERA_BASE_YEAR)) + ERA_FLOOR
+      );
+    };
+    const nowYear = new Date().getUTCFullYear();
+    const factor = kEra(nowYear) / kEra(observedAt.getUTCFullYear());
+    return Number.isFinite(factor) && factor > 0 ? factor : 1;
   }
 
   /**

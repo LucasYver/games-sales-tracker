@@ -29,6 +29,12 @@ const YEAR_MS = 365 * DAY_MS;
 //   todayPct    = lifetimeSalesPct(ageToday)
 //   expected    = declared.units * todayPct / declaredPct
 
+// Values past Y5 exceed 1.0 on purpose: many titles keep selling for years
+// (long-tail catalog, remasters, sales spikes). The curve is only ever used
+// as a RATIO (todayPct / declaredPct) by `freshnessCap`, so anchoring Y5 at
+// 1.0 and letting the tail rise above it lets a dated declared figure be
+// projected modestly forward instead of being frozen at Y5. Growth
+// decelerates (~3%/yr at Y7 → ~1%/yr past Y10) and soft-caps at Y15.
 export const LIFETIME_SALES_CURVE: ReadonlyArray<readonly [number, number]> = [
   [0, 0],
   [7, 0.13], // 13% in the first week
@@ -37,7 +43,10 @@ export const LIFETIME_SALES_CURVE: ReadonlyArray<readonly [number, number]> = [
   [730, 0.75], // 75% by Y2
   [1095, 0.87], // 87% by Y3
   [1460, 0.95], // 95% by Y4
-  [1825, 1.0], // ~100% by Y5 (post-Y5 growth treated as flat)
+  [1825, 1.0], // Y5 reference point
+  [2555, 1.06], // Y7 (~3%/yr continued sales)
+  [3650, 1.12], // Y10 (~2%/yr)
+  [5475, 1.18], // Y15 (~1%/yr, soft cap beyond)
 ];
 
 // ─── Freshness cap ───────────────────────────────────────────────────────────
@@ -388,9 +397,11 @@ export const FIRST_WEEK_BUCKET_SMALL_YEAR1_RATIO = 3.77;
 
 // Degressive curves mapping age-in-days to a multiplier of week-1
 // sales. Both land on their bucket's year-1 ratio at day 365 and
-// extend through Y5 with a slow tail. Tuned so:
+// extend past Y5 with a decelerating tail (games keep selling for years,
+// so the projection must not freeze at Y5). Tuned so:
 //   - Most additional sales happen between day 7 and day 90.
-//   - Past year-1 the slope flattens (mature catalog regime).
+//   - Past year-1 the slope flattens (mature catalog regime), and past Y5
+//     it keeps rising slowly, soft-capping at Y15.
 //
 // Source: derived from the user's empirical median (2.68 / 3.77 at
 // year-1) plus a generic degressive shape calibrated to industry
@@ -404,7 +415,10 @@ export const FIRST_WEEK_PROJECTION_CURVE_LARGE: ReadonlyArray<
   [180, 2.45],
   [365, 2.68],
   [730, 3.0],
-  [1825, 3.4],
+  [1825, 3.4], // Y5
+  [2555, 3.6], // Y7
+  [3650, 3.8], // Y10
+  [5475, 4.0], // Y15 (soft cap beyond)
 ];
 
 export const FIRST_WEEK_PROJECTION_CURVE_SMALL: ReadonlyArray<
@@ -416,7 +430,10 @@ export const FIRST_WEEK_PROJECTION_CURVE_SMALL: ReadonlyArray<
   [180, 3.3],
   [365, 3.77],
   [730, 4.5],
-  [1825, 5.5],
+  [1825, 5.5], // Y5
+  [2555, 5.9], // Y7
+  [3650, 6.3], // Y10
+  [5475, 6.7], // Y15 (soft cap beyond)
 ];
 
 // Hard plausibility band for the first-week extrapolation. An estimate
@@ -431,8 +448,8 @@ export const FIRST_WEEK_ESTIMATE_MAX_UNITS = 200_000_000;
 /**
  * Cumulative % of lifetime sales reached at a given age in days from release.
  * Piecewise-linear interpolation over `LIFETIME_SALES_CURVE`. Pre-release
- * (negative age) returns 0; past the last anchor returns 1.0 (post-Y5 growth
- * is negligible enough to treat as flat).
+ * (negative age) returns 0; past the last anchor (Y15) clamps to its value
+ * (~1.18), the soft cap on continued long-tail sales.
  */
 export function lifetimeSalesPct(ageDays: number): number {
   if (ageDays <= 0) return 0;

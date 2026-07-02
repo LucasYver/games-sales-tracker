@@ -631,6 +631,7 @@ export class EstimationService {
         genres: true,
         steamTags: true,
         publisherId: true,
+        dlc: true,
         releaseDate: true,
         developer: true,
         franchiseSlug: true,

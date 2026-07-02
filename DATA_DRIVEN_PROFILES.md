@@ -1,8 +1,10 @@
 # Data-driven profiles (Forme C) — working memo
 
-> **Status.** Code complete and type/lint clean. Not yet activated in
-> production (`USE_MATCHER_PROFILE` off by default). Awaiting the
-> enriched-features holdout re-run before deciding to switch on.
+> **Status.** Active: the matcher is the sole profile source
+> (`USE_MATCHER_PROFILE` on by default) and the legacy `GenreProfile` has
+> been removed. Latest additions: Steam-tags gameplay axis, DLC-tier axis,
+> and review-series anchoring. A holdout re-run on the enriched features is
+> still recommended to quantify the gain.
 
 This memo tracks the migration from hand-typed `GenreProfile` buckets to
 a **similarity-based model (Forme C)**: a game's behaviour is derived
@@ -53,21 +55,25 @@ signals + milestones ──► ReferenceProfileService (ETL) ──► reference
                                                                     │
 target game features ──► MatcherService (kNN) ──────────────────────┤
                                                                     ▼
-                        SalesProfileResolverService (overlay on GenreProfile baseline)
+                        SalesProfileResolverService (matcher-only, flag-gated)
                                                                     ▼
                                                        EstimationService
 ```
 
 - **Observed vector** (`reference_profile`): only measured quantities,
   **no genre**. `curveS1..A2` (normalised to A1 = 1.0), `reviewsToUnits`,
-  `platformShare*` (proxy, nullable), `scaleUnits`, `qualityScore`.
-- **Matching features** (inputs): platforms, play-mode, price tier,
-  publisher tier, release era, scale bucket, **franchise, annual flag,
-  live-service flag, developer track-record**. Genre survives only if it
-  proves useful — the diagnostic decides.
-- **Overlay**: the resolver keeps the `GenreProfile` value for fields the
-  observed vector doesn't measure (peak-CCU ratio, lifecycle index, PS
-  Boxleiter), and overrides the rest when a non-cold-start match exists.
+  `peakCcuRatio`, `platformShare*` (proxy, nullable), `scaleUnits`,
+  `qualityScore`.
+- **Matching features** (inputs): **gameplay type** (Steam community tags
+  when available, else store genres), publisher identity, developer
+  identity, scale bucket, platform overlap, **DLC tier** (lifecycle-tail
+  proxy), release era, franchise, annual flag, live-service flag, developer
+  track-record. Play-mode is a hard filter. **Price was dropped** (no
+  reliable per-game coverage).
+- **Resolver**: `SalesProfileResolverService` produces the estimation
+  profile **solely from the matcher** (the legacy `GenreProfile` has been
+  removed). When the corpus yields no anchor (empty/cold-start) it returns
+  `null` and the estimator falls back to its global-constant defaults.
 
 ---
 
@@ -112,15 +118,46 @@ target game features ──► MatcherService (kNN) ─────────�
   `developer → prior >5M / >1M hit`, HIT/MID/NONE/UNKNOWN tiers).
   **Leak-safe** (a game is never its own antecedent; only siblings
   released before it count).
-- Similarity weights rebalanced: `platformsOverlap 0.26`,
-  `scaleBucket 0.16`, `franchise 0.14`, `liveService 0.09`,
-  `devTrackRecord 0.08`, `priceTier 0.08`, `annualIteration 0.07`,
-  `publisherTier 0.06`, `releaseEra 0.06`.
 - New diagnostic partitions: `annual`, `liveService`, `franchise`,
   `annual × platforms`, `liveService × playMode`,
   `platforms × playMode × liveService`.
-- Backfill script `backend/src/scripts/backfill-game-features.ts`
-  (`npm run backfill:game-features`, supports `--dry-run` / `--limit`).
+
+### Enrichment — gameplay type, Steam tags, DLC axis (latest batch)
+- **Legacy `GenreProfile` removed** — the matcher is the sole profile
+  source; `USE_MATCHER_PROFILE` is **on by default** (set to `false`/`off`
+  to emit no profile). `priceTier` and `publisherTier` were dropped.
+- **Publisher / developer identity**: replaced the coarse `publisherTier`
+  with exact-id publisher match + case-insensitive developer match.
+- **Gameplay-type axis** (`gameplayType`): Jaccard over **Steam community
+  tags** when both games carry them (finest signal), else store `genres`.
+  Column `Game.steamTags` (migration `1782710000000-AddGameSteamTags`),
+  scraped from the store page (`SteamClient.getStoreTags`, `InitAppTagModal`).
+  SteamSpy was rejected — it returns empty tags for recent/low-traffic games.
+- **DLC axis** (`dlcTier`): DLC-count bucket (NONE / FEW 1-4 / SOME 5-14 /
+  MANY 15+), a lifecycle-tail proxy — heavily-DLC'd games (Paradox, Sims)
+  keep selling for years. Contiguous tiers are close (0.6), UNKNOWN neutral.
+- Current similarity weights (sum = 1.0): `gameplayType 0.30`,
+  `publisherMatch 0.14`, `developerMatch 0.14`, `scaleBucket 0.09`,
+  `platformsOverlap 0.08`, `dlcTier 0.05`, `releaseEra 0.05`,
+  `franchise 0.05`, `liveService 0.04`, `devTrackRecord 0.03`,
+  `annualIteration 0.03`.
+
+### Data quality — review-series anchoring
+- The `STEAM_REVIEWS` reconstruction (`appreviewhistogram`) counts on a
+  narrower filter than the daily cron's `getTotalReviews`
+  (`purchase_type=all`), so the backfilled history sat below the live
+  values (e.g. app 236850: ~101k vs ~137k) — a step up at the
+  backfill→cron junction that inflated the calibrated Boxleiter multiplier.
+- Fix: `anchorReviewSeriesToLive` rescales the reconstructed series so its
+  last point equals the live total (curve **shape** kept, **magnitude**
+  aligned). Applied in both review backfill paths (histogram + API).
+
+### Unified Steam backfill
+- Single `backfill:steam-metadata` (`backend/src/scripts/backfill-steam-metadata.ts`)
+  re-fetches Steam `appdetails` + tags and upserts every Steam-derived
+  `Game` column (incl. `steamTags`, `dlc`) plus the re-derived
+  franchise / live-service features. Replaces the per-field backfills
+  (`backfill-steam-tags`, `backfill-game-features`, both removed).
 
 ---
 
@@ -129,18 +166,20 @@ target game features ──► MatcherService (kNN) ─────────�
 | File | Role |
 |------|------|
 | `backend/src/entities/reference-profile.entity.ts` | Observed vector table |
-| `backend/src/entities/game.entity.ts` | + franchise / annual / liveService columns |
+| `backend/src/entities/game.entity.ts` | + franchise / annual / liveService / steamTags columns |
 | `backend/src/games/game-features.ts` | Pure franchise + live-service derivation |
+| `backend/src/ingestion/steam.client.ts` | Steam client (+ `getStoreTags` tag scrape) |
 | `backend/src/reference-profiles/reference-profile.service.ts` | ETL (anchor build) |
 | `backend/src/reference-profiles/matcher.service.ts` | kNN matcher + track-record index |
-| `backend/src/reference-profiles/sales-profile-resolver.service.ts` | Overlay facade (flag-gated) |
+| `backend/src/reference-profiles/sales-profile-resolver.service.ts` | Matcher-only profile facade (flag-gated) |
 | `backend/src/reference-profiles/reference-profiles.module.ts` | DI wiring |
 | `backend/src/scripts/diagnose-grouping.ts` | Phase 0 diagnostic |
 | `backend/src/scripts/rebuild-reference-profiles.ts` | Corpus batch rebuild |
-| `backend/src/scripts/backfill-game-features.ts` | Franchise/live-service backfill |
+| `backend/src/scripts/backfill-steam-metadata.ts` | Unified Steam metadata + tags backfill |
 | `backend/src/scripts/validate-matcher-holdout.ts` | Holdout validation |
 | `backend/src/db/migrations/1782670000000-AddReferenceProfile.ts` | reference_profile table |
 | `backend/src/db/migrations/1782680000000-AddGameFranchiseAndLiveService.ts` | game feature columns |
+| `backend/src/db/migrations/1782710000000-AddGameSteamTags.ts` | game.steamTags column |
 
 ---
 
@@ -148,16 +187,15 @@ target game features ──► MatcherService (kNN) ─────────�
 
 ```bash
 cd backend
-npm run migration:run                          # apply both migrations
-npm run backfill:game-features -- --dry-run    # sanity-check franchise/annual/liveService counts
-npm run backfill:game-features                 # write features
-npm run rebuild:reference-profiles             # materialise anchors
-npm run diagnose:grouping                      # R² of new partitions
-npm run validate:matcher-holdout               # Forme C vs baseline
+npm run migration:run                          # apply all migrations (incl. steamTags)
+npm run backfill:steam-metadata                # refetch Steam appdetails+tags, upsert all Steam columns (+ derived features)
+npm run rebuild:reference-profiles             # materialise anchors (reads the fresh tags/dlc)
+npm run diagnose:grouping                      # R² of partitions
+npm run validate:matcher-holdout               # Forme C holdout on the leak
 ```
 
-To activate in production once the holdout confirms a gain:
-set `USE_MATCHER_PROFILE=true` in the backend env.
+`USE_MATCHER_PROFILE` is **on by default** — set it to `false`/`off` in the
+backend env to disable the matcher (estimator then uses global constants).
 
 ---
 
@@ -190,8 +228,8 @@ set `USE_MATCHER_PROFILE=true` in the backend env.
       Wikipedia). Feeds the ETL automatically at the next rebuild — no
       code change. This is the single biggest lever (neutralises the leak's
       survivor bias + the `releaseEra` observation bias).
-- [ ] Optional later features: launch price (vs current price), Steam
-      fine-grained tags.
+- [x] Steam fine-grained tags — done (gameplay-type axis).
+- [ ] Optional later feature: launch price (vs current price).
 
 **Model hardening (later)**
 - [ ] Fit similarity weights + neighbourhood `k` on the leak (supervised

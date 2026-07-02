@@ -20,10 +20,11 @@ export class RefreshService {
    * the admin "Refresh data" button (Steam details + reviews, Wikipedia LLM
    * extraction, store ratings, trusted-search / Tavily backlog
    * discovery, and estimation). Each game has its own cadence based on its
-   * release date (newer titles refreshed more often); games older than 5 years
-   * and games with no known release date are skipped entirely. The cron may
-   * not finish all eligible games in a
-   * single run — leftovers will be picked up by the next nightly execution.
+   * release date (newer titles refreshed more often; games older than 5 years
+   * still refresh every 180 days rather than stopping); games with no known
+   * release date are skipped entirely. The cron may not finish all eligible
+   * games in a single run — leftovers will be picked up by the next nightly
+   * execution.
    *
    * Covers every tracked game (PC + console-only) and excludes free-to-play
    * titles, for which we don't compute sales estimates.

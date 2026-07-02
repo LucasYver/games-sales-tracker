@@ -35,9 +35,18 @@ const MIN_NEIGHBOURS = 3;
  *     by the same studio or the same publisher is an extremely strong
  *     prior for behaviour (a second Paradox grand-strategy title tells us
  *     far more than a random same-scale PC game).
- *  3. `scaleBucket` + `platformsOverlap` — kept but deliberately lower;
- *     they refine within a gameplay/publisher neighbourhood rather than
- *     drive the match.
+ *  3. `releaseEra` — promoted, because the observed `reviewsToUnits` ratio
+ *     is dominated by the game's review-rate maturity/era. Even after the
+ *     ETL normalises each anchor's ratio to the current review-rate era,
+ *     a young title's reviews are far less mature than an old title's, so
+ *     borrowing behaviour from a same-era neighbour is much safer than from
+ *     a decade-older one.
+ *  4. `scaleBucket` + `platformsOverlap` + `dlcTier` — kept but deliberately
+ *     lower; they refine within a gameplay/publisher neighbourhood rather
+ *     than drive the match. `dlcTier` (DLC count bucket) is a lifecycle-shape
+ *     proxy: heavily-DLC'd games (Paradox grand strategy, The Sims, sim
+ *     franchises) keep selling for years, so their curve has a much longer
+ *     tail than a one-and-done title.
  *
  * `franchise`, `liveService`, `devTrackRecord` and `annualIteration` stay
  * low: muted on the leak population (PC paid pre-2018 hits), kept active so
@@ -49,13 +58,14 @@ const SIMILARITY_WEIGHTS = {
   gameplayType: 0.3,
   publisherMatch: 0.14,
   developerMatch: 0.14,
-  scaleBucket: 0.12,
-  platformsOverlap: 0.1,
-  releaseEra: 0.05,
-  franchise: 0.05,
-  liveService: 0.04,
+  releaseEra: 0.13,
+  scaleBucket: 0.07,
+  platformsOverlap: 0.06,
+  dlcTier: 0.04,
+  franchise: 0.04,
+  liveService: 0.03,
   devTrackRecord: 0.03,
-  annualIteration: 0.03,
+  annualIteration: 0.02,
 } as const;
 
 /**
@@ -94,6 +104,11 @@ type ReleaseEra =
 
 type ScaleBucket = 'SMALL' | 'MEDIUM' | 'LARGE' | 'HUGE' | 'UNKNOWN';
 
+// DLC-count bucket, a proxy for how long a game keeps selling. NONE = no
+// DLC, MANY = a long-supported franchise (Paradox / Sims style). UNKNOWN
+// only when the DLC list itself is absent (never ingested from Steam).
+type DlcTier = 'NONE' | 'FEW' | 'SOME' | 'MANY' | 'UNKNOWN';
+
 export interface MatchTargetFeatures {
   platforms: Platform[];
   categories: string[] | null;
@@ -106,6 +121,8 @@ export interface MatchTargetFeatures {
   steamTags: string[] | null;
   /** Curated publisher id (`Game.publisherId`), for exact publisher match. */
   publisherId: string | null;
+  /** Steam DLC appIds (`Game.dlc`); only the count feeds the DLC axis. */
+  dlc: number[] | null;
   releaseDate: Date | null;
   /** Raw developer name, for exact developer match + track-record lookup. */
   developer: string | null;
@@ -161,6 +178,7 @@ interface AnchorRow {
   publisherId: string | null;
   releaseEra: ReleaseEra;
   scaleBucket: ScaleBucket;
+  dlcTier: DlcTier;
   franchiseSlug: string | null;
   isAnnualIteration: boolean;
   liveService: boolean;
@@ -313,6 +331,7 @@ export class MatcherService {
       target.scaleBucket === 'UNKNOWN'
         ? 1.0
         : matchOrZero(row.scaleBucket, target.scaleBucket);
+    const dlcScore = dlcTierSimilarity(row.dlcTier, target.dlcTier);
     const franchiseScore = franchiseSimilarity(
       row.franchiseSlug,
       target.franchiseSlug,
@@ -331,6 +350,7 @@ export class MatcherService {
       SIMILARITY_WEIGHTS.developerMatch * developerScore +
       SIMILARITY_WEIGHTS.scaleBucket * scaleScore +
       SIMILARITY_WEIGHTS.platformsOverlap * platformScore +
+      SIMILARITY_WEIGHTS.dlcTier * dlcScore +
       SIMILARITY_WEIGHTS.releaseEra * eraScore +
       SIMILARITY_WEIGHTS.franchise * franchiseScore +
       SIMILARITY_WEIGHTS.liveService * liveServiceScore +
@@ -484,6 +504,7 @@ export class MatcherService {
         genres: string[] | string | null;
         steamTags: string[] | string | null;
         publisherId: string | null;
+        dlcCount: string | number | null;
         releaseDate: Date | null;
         developer: string | null;
         franchiseSlug: string | null;
@@ -511,6 +532,7 @@ export class MatcherService {
               g.genres AS genres,
               g."steamTags" AS "steamTags",
               g."publisherId" AS "publisherId",
+              COALESCE(array_length(g.dlc, 1), 0) AS "dlcCount",
               g."releaseDate" AS "releaseDate",
               g.developer AS developer,
               g."franchiseSlug" AS "franchiseSlug",
@@ -550,6 +572,7 @@ export class MatcherService {
         publisherId: r.publisherId,
         releaseEra: releaseEraFromDate(r.releaseDate),
         scaleBucket: scaleBucketFromUnits(scaleUnits),
+        dlcTier: dlcTierFromCount(Number(r.dlcCount ?? 0)),
         franchiseSlug: r.franchiseSlug,
         isAnnualIteration: Boolean(r.isAnnualIteration),
         liveService: Boolean(r.liveService),
@@ -586,6 +609,7 @@ export class MatcherService {
       developer: target.developer,
       releaseEra: releaseEraFromDate(target.releaseDate),
       scaleBucket: scaleBucketFromUnits(target.scaleHint ?? null),
+      dlcTier: dlcTierFromCount(target.dlc === null ? null : target.dlc.length),
       franchiseSlug: target.franchiseSlug,
       isAnnualIteration: target.isAnnualIteration,
       liveService: target.liveService,
@@ -657,6 +681,7 @@ interface TargetInternal {
   developer: string | null;
   releaseEra: ReleaseEra;
   scaleBucket: ScaleBucket;
+  dlcTier: DlcTier;
   franchiseSlug: string | null;
   isAnnualIteration: boolean;
   liveService: boolean;
@@ -768,6 +793,33 @@ function scaleBucketFromUnits(units: number | null): ScaleBucket {
   if (units >= 3_000_000) return 'LARGE';
   if (units >= 1_000_000) return 'MEDIUM';
   return 'SMALL';
+}
+
+// DLC-count buckets. Thresholds are coarse on purpose: what matters for the
+// lifecycle-tail proxy is "one-and-done" vs "steadily expanded" vs "long-tail
+// franchise", not the exact count.
+function dlcTierFromCount(count: number | null): DlcTier {
+  if (count === null || !Number.isFinite(count)) return 'UNKNOWN';
+  if (count <= 0) return 'NONE';
+  if (count <= 4) return 'FEW';
+  if (count <= 14) return 'SOME';
+  return 'MANY';
+}
+
+/**
+ * DLC axis: ordered NONE < FEW < SOME < MANY. Exact match = 1.0, contiguous
+ * tiers are close (0.6) rather than fully mismatched so the axis rewards
+ * comparable lifecycle shapes without over-penalising near neighbours.
+ * UNKNOWN is neutral (0.5).
+ */
+function dlcTierSimilarity(a: DlcTier, b: DlcTier): number {
+  if (a === 'UNKNOWN' || b === 'UNKNOWN') return 0.5;
+  if (a === b) return 1.0;
+  const order: DlcTier[] = ['NONE', 'FEW', 'SOME', 'MANY'];
+  const distance = Math.abs(order.indexOf(a) - order.indexOf(b));
+  if (distance === 1) return 0.6;
+  if (distance === 2) return 0.3;
+  return 0.1;
 }
 
 // ─── Small pure helpers ──────────────────────────────────────────────

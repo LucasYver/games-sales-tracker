@@ -89,6 +89,12 @@ export interface AdminMatcherInspection {
   platformShares: AdminReferencePlatformShares | null;
   neighbours: AdminMatchedNeighbour[];
   resolved: ResolvedGenreProfile | null;
+  /**
+   * This game's OWN observed vector when it is itself an anchor (`isAnchor`).
+   * Lets the back-office compare the game's measured ratios against the
+   * matcher's aggregate — the usual culprit when an anchor's estimate is off.
+   */
+  anchorProfile: AdminReferenceProfileRow | null;
 }
 
 interface AnchorJoinRow {
@@ -230,6 +236,7 @@ export class ReferenceProfilesAdminService {
       genres: game.genres ?? null,
       steamTags: game.steamTags ?? null,
       publisherId: game.publisherId ?? null,
+      dlc: game.dlc ?? null,
       releaseDate: game.releaseDate ?? null,
       developer: game.developer ?? null,
       franchiseSlug: game.franchiseSlug ?? null,
@@ -238,7 +245,9 @@ export class ReferenceProfilesAdminService {
     });
 
     const resolved = await this.resolver.resolveForGame(game);
-    const isAnchor = (await this.anchors.count({ where: { gameId } })) > 0;
+    const anchorRows = await this.loadAnchorJoin(gameId);
+    const anchorProfile = anchorRows.length ? this.mapRow(anchorRows[0]) : null;
+    const isAnchor = anchorProfile !== null;
 
     const neighbourIds = match.anchors.map((a) => a.gameId);
     const names = neighbourIds.length
@@ -269,10 +278,11 @@ export class ReferenceProfilesAdminService {
         };
       }),
       resolved,
+      anchorProfile,
     };
   }
 
-  private async loadAnchorJoin(): Promise<AnchorJoinRow[]> {
+  private async loadAnchorJoin(gameId?: string): Promise<AnchorJoinRow[]> {
     return this.anchors.manager.query<AnchorJoinRow[]>(
       `SELECT r."gameId" AS "gameId",
               g.name AS "gameName",
@@ -295,7 +305,9 @@ export class ReferenceProfilesAdminService {
               g.platforms::text[] AS platforms
          FROM reference_profile r
          INNER JOIN game g ON g.id = r."gameId"
-        WHERE g."deletedAt" IS NULL`,
+        WHERE g."deletedAt" IS NULL
+          ${gameId ? 'AND r."gameId" = $1' : ''}`,
+      gameId ? [gameId] : [],
     );
   }
 

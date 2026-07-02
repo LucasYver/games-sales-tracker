@@ -425,6 +425,7 @@ export interface AdminMatcherInspection {
   platformShares: AdminReferencePlatformShares | null;
   neighbours: AdminMatchedNeighbour[];
   resolved: AdminResolvedProfile | null;
+  anchorProfile: AdminReferenceProfile | null;
 }
 
 export interface AdminGenreRow {

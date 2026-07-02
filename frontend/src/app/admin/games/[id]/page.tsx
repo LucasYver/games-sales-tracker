@@ -965,6 +965,10 @@ function MatcherCard({ matcher }: { matcher: AdminMatcherInspection }) {
           </div>
         )}
 
+        {matcher.anchorProfile && (
+          <AnchorProfilePanel anchor={matcher.anchorProfile} matcher={matcher} />
+        )}
+
         {matcher.neighbours.length > 0 ? (
           <Table>
             <TableHeader>
@@ -1024,6 +1028,145 @@ function MatcherStat({ label, value }: { label: string; value: string }) {
         {label}
       </span>
       <span className="text-lg font-semibold tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+function AnchorProfilePanel({
+  anchor,
+  matcher,
+}: {
+  anchor: NonNullable<AdminMatcherInspection['anchorProfile']>;
+  matcher: AdminMatcherInspection;
+}) {
+  const rows: Array<{
+    label: string;
+    observed: number | null;
+    aggregate: number | null;
+    format: (v: number) => string;
+  }> = [
+    {
+      label: 'Reviews→units',
+      observed: anchor.reviewsToUnits,
+      aggregate: matcher.reviewsToUnits,
+      format: (v) => v.toFixed(1),
+    },
+    {
+      label: 'CCU→W1 ratio',
+      observed: anchor.peakCcuRatio,
+      aggregate: matcher.peakCcuRatio,
+      format: (v) => `×${v.toFixed(1)}`,
+    },
+    {
+      label: 'Curve s1',
+      observed: anchor.curve.s1,
+      aggregate: matcher.curve.s1,
+      format: (v) => v.toFixed(2),
+    },
+    {
+      label: 'Curve m1',
+      observed: anchor.curve.m1,
+      aggregate: matcher.curve.m1,
+      format: (v) => v.toFixed(2),
+    },
+    {
+      label: 'Curve m3',
+      observed: anchor.curve.m3,
+      aggregate: matcher.curve.m3,
+      format: (v) => v.toFixed(2),
+    },
+    {
+      label: 'Curve m6',
+      observed: anchor.curve.m6,
+      aggregate: matcher.curve.m6,
+      format: (v) => v.toFixed(2),
+    },
+    {
+      label: 'Curve a1',
+      observed: anchor.curve.a1,
+      aggregate: matcher.curve.a1,
+      format: (v) => v.toFixed(2),
+    },
+    {
+      label: 'Curve a2',
+      observed: anchor.curve.a2,
+      aggregate: matcher.curve.a2,
+      format: (v) => v.toFixed(2),
+    },
+  ];
+
+  return (
+    <div className="border-border/60 bg-muted/30 flex flex-col gap-3 rounded-md border p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h4 className="text-xs font-semibold tracking-wide uppercase">
+          Observed anchor vector (this game)
+        </h4>
+        <span className="text-muted-foreground text-[11px] tabular-nums">
+          scale{' '}
+          {anchor.scaleUnits !== null
+            ? formatUnitsCompact(anchor.scaleUnits)
+            : '—'}{' '}
+          · quality{' '}
+          {anchor.qualityScore.toFixed(2)} · observed{' '}
+          {formatDate(anchor.observedAt)}
+        </span>
+      </div>
+      <p className="text-muted-foreground text-xs">
+        This game&apos;s own measured ratios. Compare them against the matcher
+        aggregate (from its neighbours) — a large gap here is the usual reason an
+        anchor&apos;s estimate diverges from its real numbers.
+      </p>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Metric</TableHead>
+            <TableHead className="text-right">Observed</TableHead>
+            <TableHead className="text-right">Matcher aggregate</TableHead>
+            <TableHead className="text-right">Δ</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r) => {
+            const delta =
+              r.observed !== null &&
+              r.aggregate !== null &&
+              r.aggregate !== 0
+                ? (r.observed - r.aggregate) / Math.abs(r.aggregate)
+                : null;
+            return (
+              <TableRow key={r.label}>
+                <TableCell className="text-sm">{r.label}</TableCell>
+                <TableCell className="text-right text-xs tabular-nums">
+                  {r.observed !== null ? r.format(r.observed) : '—'}
+                </TableCell>
+                <TableCell className="text-muted-foreground text-right text-xs tabular-nums">
+                  {r.aggregate !== null ? r.format(r.aggregate) : '—'}
+                </TableCell>
+                <TableCell
+                  className={`text-right text-xs tabular-nums ${
+                    delta !== null && Math.abs(delta) >= 0.25
+                      ? 'text-destructive font-medium'
+                      : 'text-muted-foreground'
+                  }`}
+                >
+                  {delta !== null
+                    ? `${delta >= 0 ? '+' : ''}${(delta * 100).toFixed(0)}%`
+                    : '—'}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+      {anchor.platformShares && (
+        <div className="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs tabular-nums">
+          <span>Observed shares:</span>
+          <span>PC {(anchor.platformShares.pc * 100).toFixed(0)}%</span>
+          <span>PS {(anchor.platformShares.ps * 100).toFixed(0)}%</span>
+          <span>Xbox {(anchor.platformShares.xbox * 100).toFixed(0)}%</span>
+          <span>Switch {(anchor.platformShares.switch * 100).toFixed(0)}%</span>
+        </div>
+      )}
     </div>
   );
 }
