@@ -2101,8 +2101,9 @@ export class IngestionService {
     };
 
     const perplexityJob = async (): Promise<number> => {
-      // Perplexity's Search API accepts multi-query natively (up to 5 queries
-      // per HTTP call); our 4 variants fit in a single billed request.
+      // Perplexity's Search API batches up to 5 queries per billed request;
+      // the client chunks our query set accordingly (e.g. 9 queries → 2
+      // requests) so none are silently dropped.
       const list = await this.perplexity.search(queries, {
         maxResults: 12,
         excludeDomains: TAVILY_EXCLUDED_DOMAINS,

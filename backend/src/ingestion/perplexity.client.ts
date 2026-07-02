@@ -46,10 +46,11 @@ export class PerplexityClient {
   }
 
   /**
-   * Run one or more web search queries in a single API call (multi-query batch,
-   * up to 5 queries). Returns deduplicated results across all queries — order
-   * preserved per Perplexity's ranking. Best-effort: returns [] when disabled
-   * or on any API failure.
+   * Run one or more web search queries and return a URL-deduplicated result
+   * list. Perplexity's Search API accepts at most 5 queries per HTTP call, so
+   * a larger set is split into chunks of 5 — each chunk is ONE billed request
+   * (e.g. 9 queries → 2 requests). Chunks run in parallel and are deduped
+   * across the whole set. Best-effort: returns [] when disabled or on failure.
    *
    * Note: Perplexity's Search API uses an allowlist OR denylist filter (not
    * both). `excludeDomains` is mapped to the denylist form (prefix `-`).
@@ -60,7 +61,35 @@ export class PerplexityClient {
   ): Promise<TavilyResult[]> {
     if (!this.apiKey || queries.length === 0) return [];
 
-    const batched = queries.slice(0, 5);
+    const chunks: string[][] = [];
+    for (let i = 0; i < queries.length; i += 5) {
+      chunks.push(queries.slice(i, i + 5));
+    }
+
+    const perChunk = await Promise.all(
+      chunks.map((chunk) => this.searchBatch(chunk, options)),
+    );
+
+    // Dedupe by URL across all chunks — overlapping queries commonly surface
+    // the same URL. Keep the first (best-ranked) occurrence.
+    const seen = new Set<string>();
+    const out: TavilyResult[] = [];
+    for (const list of perChunk) {
+      for (const r of list) {
+        if (seen.has(r.url)) continue;
+        seen.add(r.url);
+        out.push(r);
+      }
+    }
+    return out;
+  }
+
+  // Run a single billed Perplexity request for up to 5 queries.
+  private async searchBatch(
+    batched: string[],
+    options: { maxResults?: number; excludeDomains?: string[] },
+  ): Promise<TavilyResult[]> {
+    if (!this.apiKey || batched.length === 0) return [];
     try {
       const { data } = await axios.post<{
         results?: PerplexityApiResult[] | PerplexityApiResult[][];
@@ -94,8 +123,7 @@ export class PerplexityClient {
         ? (raw as PerplexityApiResult[][]).flat()
         : (raw as PerplexityApiResult[]);
 
-      // Dedupe by URL — multi-query batches commonly surface the same URL for
-      // overlapping queries. Keep the first occurrence (best rank).
+      // Dedupe by URL within this batch — keep the first occurrence (best rank).
       const seen = new Set<string>();
       const out: TavilyResult[] = [];
       for (const r of flat) {
