@@ -11,7 +11,6 @@ import {
   EstimationDiscrepancy,
   Game,
   GameSource,
-  GenreProfile,
   Milestone,
   Platform,
   PriceSnapshot,
@@ -27,7 +26,6 @@ import {
 import { isPeriodicQuote } from '../ingestion/sales-figure.utils';
 import { slugify } from '../common/slug';
 import { GamesService } from '../games/games.service';
-import { GenresService } from '../genres/genres.service';
 
 export interface UpdateGameInput {
   name?: string;
@@ -39,7 +37,6 @@ export interface UpdateGameInput {
   calibrationSourcePc?: SalesSource | null;
   calibrationSourcePs?: SalesSource | null;
   calibrationSourceXbox?: SalesSource | null;
-  genreProfileId?: string | null;
 }
 
 export interface AdminStats {
@@ -127,8 +124,14 @@ export interface AdminGameDetail extends AdminGameSummary {
   coverUrl: string | null;
   summary: string | null;
   genres: string[];
-  genreProfileId: string | null;
-  genreProfileManual: boolean;
+  categories: string[];
+  steamTags: string[];
+  dlc: number[];
+  developer: string | null;
+  franchiseSlug: string | null;
+  isAnnualIteration: boolean;
+  iterationNumber: number | null;
+  liveService: boolean;
   lastRefreshedAt: Date | null;
   allTimePeakCcu: number | null;
   allTimePeakCcuAt: Date | null;
@@ -223,10 +226,7 @@ export class AdminService {
     private readonly estimateSnapshots: Repository<EstimateSnapshot>,
     @InjectRepository(EstimationDiscrepancy)
     private readonly discrepancies: Repository<EstimationDiscrepancy>,
-    @InjectRepository(GenreProfile)
-    private readonly genreProfiles: Repository<GenreProfile>,
     private readonly gamesService: GamesService,
-    private readonly genresService: GenresService,
   ) {}
 
   async stats(): Promise<AdminStats> {
@@ -335,7 +335,6 @@ export class AdminService {
     platform?: string;
     platformExclusive?: boolean;
     hasSales?: boolean;
-    genreProfileId?: string;
     calibrated?: boolean;
     hasEstimates?: boolean;
     sort?: 'updated' | 'releaseDate' | 'lastRefreshed';
@@ -380,13 +379,6 @@ export class AdminService {
             { platform: opts.platform },
           );
         }
-      }
-      if (opts.genreProfileId === 'none') {
-        builder.andWhere('g.genreProfileId IS NULL');
-      } else if (opts.genreProfileId) {
-        builder.andWhere('g.genreProfileId = :gpid', {
-          gpid: opts.genreProfileId,
-        });
       }
       if (opts.calibrated === true) {
         builder.andWhere(`(${calibratedExpr})`);
@@ -603,8 +595,14 @@ export class AdminService {
       coverUrl: game.coverUrl,
       summary: game.summary,
       genres: game.genres ?? [],
-      genreProfileId: game.genreProfileId,
-      genreProfileManual: game.genreProfileManual,
+      categories: game.categories ?? [],
+      steamTags: game.steamTags ?? [],
+      dlc: game.dlc ?? [],
+      developer: game.developer,
+      franchiseSlug: game.franchiseSlug,
+      isAnnualIteration: game.isAnnualIteration,
+      iterationNumber: game.iterationNumber,
+      liveService: game.liveService,
       lastRefreshedAt: game.lastRefreshedAt,
       publisher: game.publisher,
       publisherRecord: game.publisherRecord
@@ -681,7 +679,8 @@ export class AdminService {
         };
       })
       .sort((a, b) => {
-        if (a.platform !== b.platform) return a.platform.localeCompare(b.platform);
+        if (a.platform !== b.platform)
+          return a.platform.localeCompare(b.platform);
         return a.source.localeCompare(b.source);
       });
   }
@@ -739,29 +738,6 @@ export class AdminService {
           }
           game.igdbId = input.igdbId;
         }
-      }
-    }
-
-    if (input.genreProfileId !== undefined) {
-      if (input.genreProfileId === null || input.genreProfileId === '') {
-        // Revert to auto: drop the manual flag and re-resolve the profile
-        // from the game's genres right away so the chosen profile stays
-        // visible without waiting for the next refresh.
-        game.genreProfileManual = false;
-        game.genreProfileId = await this.genresService.resolveFirstProfileId(
-          game.genres,
-        );
-      } else {
-        const profile = await this.genreProfiles.findOne({
-          where: { id: input.genreProfileId },
-        });
-        if (!profile) {
-          throw new BadRequestException(
-            `genre profile ${input.genreProfileId} not found`,
-          );
-        }
-        game.genreProfileId = input.genreProfileId;
-        game.genreProfileManual = true;
       }
     }
 
@@ -931,7 +907,9 @@ export class AdminService {
     return this.gamesService.rebuildEstimateHistory(id);
   }
 
-  async listTrustedSources(): Promise<(TrustedSource & { recordCount: number })[]> {
+  async listTrustedSources(): Promise<
+    (TrustedSource & { recordCount: number })[]
+  > {
     const sources = await this.trustedSources.find({
       order: { active: 'DESC', weight: 'DESC', name: 'ASC' },
     });
@@ -949,8 +927,8 @@ export class AdminService {
     const countsByHost = new Map<string, number>();
     for (const r of rows) {
       try {
-        const host = new URL(r.sourceUrl)
-          .hostname.replace(/^www\./, '')
+        const host = new URL(r.sourceUrl).hostname
+          .replace(/^www\./, '')
           .toLowerCase();
         countsByHost.set(host, (countsByHost.get(host) ?? 0) + 1);
       } catch {
@@ -986,7 +964,9 @@ export class AdminService {
       .orderBy('m.capturedAt', 'DESC')
       .limit(ISSUE_PREVIEW_LIMIT)
       .getManyAndCount();
-    const undatedNames = await this.gameNameMap(undatedRows.map((r) => r.gameId));
+    const undatedNames = await this.gameNameMap(
+      undatedRows.map((r) => r.gameId),
+    );
 
     // Suspect quotes: pull a bounded recent window and apply the regex
     // filter in-memory. We deliberately limit this scan to avoid scanning
@@ -1002,7 +982,9 @@ export class AdminService {
     const suspectAll = recentForScan.filter(
       (m) => m.note && isPeriodicQuote(m.note),
     );
-    const suspectNames = await this.gameNameMap(suspectAll.map((s) => s.gameId));
+    const suspectNames = await this.gameNameMap(
+      suspectAll.map((s) => s.gameId),
+    );
 
     // Calibration outliers: any per-platform calibrated multiplier sitting
     // near the plausible-bounds edges, across PC / PlayStation / Xbox.
@@ -1054,9 +1036,7 @@ export class AdminService {
     );
 
     // Stale games: no STEAM_REVIEWS signal in the last STALE_DAYS.
-    const staleCutoff = new Date(
-      Date.now() - STALE_DAYS * 24 * 3600 * 1000,
-    );
+    const staleCutoff = new Date(Date.now() - STALE_DAYS * 24 * 3600 * 1000);
     const staleRows = await this.games
       .createQueryBuilder('g')
       .leftJoin('g.signals', 's', 's.metric = :m', {
@@ -1069,7 +1049,11 @@ export class AdminService {
         cutoff: staleCutoff,
       })
       .limit(ISSUE_PREVIEW_LIMIT)
-      .getRawMany<{ gameId: string; gameName: string; lastSignalAt: Date | null }>();
+      .getRawMany<{
+        gameId: string;
+        gameName: string;
+        lastSignalAt: Date | null;
+      }>();
     const staleTotalRow = await this.games
       .createQueryBuilder('g')
       .leftJoin('g.signals', 's', 's.metric = :m', {
@@ -1092,7 +1076,7 @@ export class AdminService {
         // Heuristic: match by sourceUrl host or matching tier — we don't
         // have a direct FK from milestone to trusted_source. Fall back to
         // entries flagged inactive in the registry.
-        'ts.host IS NOT NULL AND m.sourceUrl ILIKE \'%\' || ts.host || \'%\'',
+        "ts.host IS NOT NULL AND m.sourceUrl ILIKE '%' || ts.host || '%'",
       )
       .where('ts.active = false OR m.id IS NULL')
       .andWhere('ts.host IS NOT NULL')

@@ -194,9 +194,10 @@ function clampSharePct(value: number): number {
  * *lower* factor and vice-versa. A 100/100 share returns the neutral
  * { low: 1, high: 1 }.
  */
-export function launcherFactorFromSteamShare(
-  share: SteamShareRange,
-): { low: number; high: number } {
+export function launcherFactorFromSteamShare(share: SteamShareRange): {
+  low: number;
+  high: number;
+} {
   const lowShare = clampSharePct(share.low);
   const highShare = clampSharePct(share.high);
   const minShare = Math.min(lowShare, highShare);
@@ -499,12 +500,12 @@ export function firstWeekProjectionMultiplier(
   return interpolateCurve(curve, ageDays);
 }
 
-// ─── Genre-aware first-week projection ──────────────────────────────────────
+// ─── Profile-aware first-week projection ────────────────────────────────────
 //
-// When a game's IGDB genres resolve to a `GenreProfile`, we replace
-// the size-bucketed projection curve with a dynamic one built around
-// the profile's own `firstWeekToYearOneMultiplier` (m1) and tail
-// factor pair `(tailY2, tailY5)` (derived from `year2Retention`):
+// When the matcher resolves a sales profile for a game, we replace the
+// size-bucketed projection curve with a dynamic one built around the
+// profile's own `firstWeekToYearOneMultiplier` (m1) and tail factor
+// pair `(tailY2, tailY5)` (derived from `year2Retention`):
 //
 //   day 7   → 1.0   (week-1 baseline)
 //   day 30  → 1 + 0.425 × (m1 − 1)
@@ -521,7 +522,7 @@ export function firstWeekProjectionMultiplier(
 // blended shape costs little fidelity and avoids a third tunable.
 //
 // Used by `EstimationService.estimateFirstWeekExtrapolationForPc`
-// when `GenresService.resolveProfileForGame` returns a profile.
+// when `SalesProfileResolverService.resolveForGame` returns a profile.
 
 const GENRE_INTRA_YEAR_SHAPE: ReadonlyArray<readonly [number, number]> = [
   [30, 0.425],
@@ -564,5 +565,8 @@ export function genreProjectionMultiplier(
 ): number {
   if (ageDays <= 0) return 0;
   if (ageDays < 7) return ageDays / 7;
-  return interpolateCurve(buildGenreProjectionCurve(m1, tailY2, tailY5), ageDays);
+  return interpolateCurve(
+    buildGenreProjectionCurve(m1, tailY2, tailY5),
+    ageDays,
+  );
 }

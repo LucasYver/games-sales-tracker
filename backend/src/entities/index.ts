@@ -1,6 +1,5 @@
 export * from './enums';
 export * from './publisher.entity';
-export * from './genre-profile.entity';
 export * from './genre.entity';
 export * from './game.entity';
 export * from './game-source.entity';
@@ -14,3 +13,4 @@ export * from './estimation-discrepancy.entity';
 export * from './milestone.entity';
 export * from './trusted-source.entity';
 export * from './processed-article.entity';
+export * from './reference-profile.entity';

@@ -368,6 +368,94 @@ export class SteamClient {
   }
 
   /**
+   * Scrape a game's Steam **community tags** (e.g. "Grand Strategy", "4X",
+   * "Roguelike") from its store page. This is the richest gameplay-type
+   * signal for the data-driven matcher — much finer than the coarse store
+   * `genres`.
+   *
+   * Why scrape the HTML instead of an API: neither `appdetails` nor SteamSpy
+   * expose community tags reliably. SteamSpy returns an empty list for
+   * recently-released or low-traffic games (exactly the titles we most need
+   * to estimate), whereas the store page carries the tags Steam assigns at
+   * launch. The tags live in an inline `InitAppTagModal( <appId>, [ ... ] )`
+   * call, already ordered by popularity; we keep the top `maxTags`.
+   *
+   * The `birthtime`/`mature_content` cookies bypass the age gate that would
+   * otherwise return an interstitial with no tags. Best-effort: returns null
+   * on any failure or when the page carries no tags, so the caller leaves the
+   * game's existing `steamTags` untouched.
+   */
+  async getStoreTags(
+    appId: number,
+    options: { maxTags?: number } = {},
+  ): Promise<string[] | null> {
+    const maxTags = options.maxTags ?? 20;
+    try {
+      const html = await this.getStoreHtml(
+        `https://store.steampowered.com/app/${appId}/`,
+      );
+      if (!html) return null;
+
+      const match = html.match(
+        new RegExp(`InitAppTagModal\\(\\s*${appId}\\s*,\\s*(\\[.*?\\])`, 's'),
+      );
+      if (!match) return null;
+
+      const parsed: unknown = JSON.parse(match[1]);
+      if (!Array.isArray(parsed)) return null;
+
+      const tags = parsed
+        .map((entry) =>
+          entry && typeof (entry as { name?: unknown }).name === 'string'
+            ? (entry as { name: string }).name.trim()
+            : null,
+        )
+        .filter((name): name is string => !!name && name.length > 0)
+        .slice(0, maxTags);
+
+      return tags.length > 0 ? tags : null;
+    } catch (error) {
+      this.logger.warn(`getStoreTags failed for ${appId}: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * GET a Steam store HTML page with the age-gate cookies pre-set and a small
+   * retry on HTTP 429 (the store shares a ~200 req/5 min IP budget). Returns
+   * the raw HTML string, or null after exhausting retries.
+   */
+  private async getStoreHtml(url: string): Promise<string | null> {
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const { data } = await axios.get<string>(url, {
+          timeout: 15000,
+          responseType: 'text',
+          headers: {
+            Cookie: 'birthtime=0; mature_content=1; wants_mature_content=1',
+          },
+        });
+        return typeof data === 'string' ? data : null;
+      } catch (error) {
+        const status = axios.isAxiosError(error)
+          ? error.response?.status
+          : undefined;
+        if (status === 429 && attempt < maxAttempts) {
+          const backoffMs = attempt * 5000;
+          this.logger.warn(
+            `Steam 429 on ${url} (attempt ${attempt}/${maxAttempts}); retrying in ${backoffMs}ms`,
+          );
+          await new Promise((r) => setTimeout(r, backoffMs));
+          continue;
+        }
+        throw error;
+      }
+    }
+    return null;
+  }
+
+  /**
    * GET a Steam store endpoint with a small retry on HTTP 429. The store
    * `appdetails` / `appreviews` APIs are aggressively rate-limited (~200
    * requests / 5 min per IP); on 429 we back off and retry a couple of times

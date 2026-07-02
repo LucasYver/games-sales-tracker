@@ -16,7 +16,6 @@ import { SignalSnapshot } from './signal-snapshot.entity';
 import { SalesEstimate } from './sales-estimate.entity';
 import { Milestone } from './milestone.entity';
 import { Publisher } from './publisher.entity';
-import { GenreProfile } from './genre-profile.entity';
 
 @Entity('game')
 // GIN trigram index for fuzzy game-name search. Created (and refreshed)
@@ -80,38 +79,56 @@ export class Game {
   @Column({ type: 'simple-array', nullable: true })
   genres: string[] | null;
 
-  // Genre profile driving the estimation model. Persisted (not resolved
-  // on the fly) so the chosen profile is visible directly on the game.
-  // Populated automatically at ingestion from the first matching genre
-  // (see `GenresService.applyAutoGenreProfile`); `null` when no genre
-  // maps to a profile. An admin can pin a specific profile from the
-  // admin UI, which sets `genreProfileManual = true` and protects the
-  // value from being overwritten on the next refresh.
-  @Column({ type: 'uuid', nullable: true })
-  genreProfileId: string | null;
-
-  // True when `genreProfileId` was set manually by an admin. While true,
-  // ingestion never touches `genreProfileId`. Reverting to auto (admin
-  // clears the override) flips this back to false and re-resolves from
-  // the genres.
-  @Column({ default: false })
-  genreProfileManual: boolean;
-
-  @ManyToOne(() => GenreProfile, {
-    onDelete: 'SET NULL',
-    nullable: true,
-  })
-  @JoinColumn({ name: 'genreProfileId' })
-  genreProfileOverride: GenreProfile | null;
-
   // Steam store "categories" (e.g. "Single-player", "Multi-player", "Co-op").
   // Distinct from `genres`: categories describe play modes / features.
   @Column({ type: 'simple-array', nullable: true })
   categories: string[] | null;
 
+  // Steam community tags (e.g. "Grand Strategy", "4X", "Roguelike"), the
+  // richest gameplay-type signal we have — far finer than the ~5 coarse
+  // Steam `genres`. Sourced from SteamSpy (top tags by vote), used by the
+  // data-driven matcher as its dominant similarity axis. `null` until a
+  // tag fetch/backfill has run for the game.
+  @Column({ type: 'simple-array', nullable: true })
+  steamTags: string[] | null;
+
   // appIds of this game's Steam DLC.
   @Column({ type: 'int', array: true, nullable: true })
   dlc: number[] | null;
+
+  // Franchise identity, used by the data-driven matcher as a strong
+  // similarity axis: two entries of the same franchise (e.g. successive
+  // "FIFA" or "Call of Duty" releases) behave far more alike than two
+  // unrelated games sharing a genre. `null` when the game isn't
+  // recognised as part of a tracked franchise. Derived by
+  // `backfill-franchise.ts` (curated annual-franchise dictionary + name
+  // normalisation); never hand-edited per game.
+  @Column({ type: 'varchar', nullable: true })
+  franchiseSlug: string | null;
+
+  // True for annually-iterated titles (sports sims, yearly shooters).
+  // Their lifecycle is sharply different from one-shot games — a big
+  // week-1 spike then fast decay as the next iteration supersedes them.
+  // Independent of `franchiseSlug` so an annual game with an unknown
+  // franchise still carries the signal.
+  @Column({ type: 'boolean', default: false })
+  isAnnualIteration: boolean;
+
+  // Best-effort iteration marker parsed from the title (the year for
+  // "FIFA 18", the sequel number for "Battlefield 4"). Purely a
+  // tie-breaker / diagnostic aid; `null` when nothing parses. Not used
+  // as a hard matching key.
+  @Column({ type: 'int', nullable: true })
+  iterationNumber: number | null;
+
+  // True for live-service titles (persistent online games with ongoing
+  // content: MMOs, season-pass shooters, battle-royale). They retain
+  // players — and accumulate reviews — for years, so both their
+  // reviews→units ratio and their year-2 retention differ markedly from
+  // one-shot games. Derived from Steam categories + a curated set (see
+  // `live-service.ts`); refreshed at ingestion.
+  @Column({ type: 'boolean', default: false })
+  liveService: boolean;
 
   // Per-platform Boxleiter multipliers (signal → units) derived from this
   // game's most reliable declared figure for each platform. When set, they

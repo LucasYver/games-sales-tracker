@@ -2,7 +2,6 @@ import Link from 'next/link';
 import {
   adminFetch,
   type AdminGameSummary,
-  type AdminGenreProfile,
   type PaginatedAdmin,
 } from '@/lib/admin';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -112,7 +111,6 @@ export default async function AdminGamesPage({
     q?: string;
     platform?: string;
     hasSales?: string;
-    genreProfile?: string;
     calibrated?: string;
     hasEstimates?: string;
     sort?: string;
@@ -124,7 +122,6 @@ export default async function AdminGamesPage({
     q,
     platform,
     hasSales,
-    genreProfile,
     calibrated,
     hasEstimates,
     sort,
@@ -139,7 +136,6 @@ export default async function AdminGamesPage({
   if (q) filters.q = q;
   if (platform) filters.platform = platform;
   if (hasSales) filters.hasSales = hasSales;
-  if (genreProfile) filters.genreProfile = genreProfile;
   if (calibrated) filters.calibrated = calibrated;
   if (hasEstimates) filters.hasEstimates = hasEstimates;
   if (sort) filters.sort = sort;
@@ -159,10 +155,9 @@ export default async function AdminGamesPage({
     offset: String(offset),
   });
 
-  const [{ items, total }, genreProfiles] = await Promise.all([
-    adminFetch<PaginatedAdmin<AdminGameSummary>>(`/games?${params}`),
-    adminFetch<AdminGenreProfile[]>('/genre-profiles'),
-  ]);
+  const { items, total } = await adminFetch<PaginatedAdmin<AdminGameSummary>>(
+    `/games?${params}`,
+  );
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -226,23 +221,6 @@ export default async function AdminGamesPage({
                 <option value="">Any</option>
                 <option value="true">With milestone</option>
                 <option value="false">Without milestone</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="genreProfile">Genre profile</Label>
-              <select
-                id="genreProfile"
-                name="genreProfile"
-                defaultValue={genreProfile ?? ''}
-                className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs"
-              >
-                <option value="">All</option>
-                <option value="none">None (unmatched)</option>
-                {genreProfiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
               </select>
             </div>
             <div className="flex flex-col gap-1.5">

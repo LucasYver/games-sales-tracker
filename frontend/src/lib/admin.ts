@@ -231,8 +231,14 @@ export interface AdminGameDetail extends AdminGameSummary {
   coverUrl: string | null;
   summary: string | null;
   genres: string[];
-  genreProfileId: string | null;
-  genreProfileManual: boolean;
+  categories: string[];
+  steamTags: string[];
+  dlc: number[];
+  developer: string | null;
+  franchiseSlug: string | null;
+  isAnnualIteration: boolean;
+  iterationNumber: number | null;
+  liveService: boolean;
   lastRefreshedAt: string | null;
   allTimePeakCcu: number | null;
   allTimePeakCcuAt: string | null;
@@ -318,29 +324,107 @@ export type Year2Retention =
   | 'HIGH'
   | 'VERY_HIGH';
 
-export interface AdminGenreProfile {
-  id: string;
-  slug: string;
-  name: string;
-  description: string | null;
+
+// ─── Reference profiles / matcher (data-driven "Forme C") ───────────────────
+
+export interface AdminReferenceCurve {
+  s1: number | null;
+  m1: number | null;
+  m3: number | null;
+  m6: number | null;
+  a1: number | null;
+  a2: number | null;
+}
+
+export interface AdminReferencePlatformShares {
+  pc: number;
+  ps: number;
+  xbox: number;
+  switch: number;
+}
+
+export type ReferencePlatformClass =
+  | 'PC_ONLY'
+  | 'CONSOLE_ONLY'
+  | 'PC_PLUS_CONSOLE'
+  | 'UNKNOWN';
+
+export interface AdminReferenceProfile {
+  gameId: string;
+  gameName: string;
+  gameSlug: string;
+  scaleUnits: number | null;
+  reviewsToUnits: number | null;
+  peakCcuRatio: number | null;
+  curve: AdminReferenceCurve;
+  platformShares: AdminReferencePlatformShares | null;
+  qualityScore: number;
+  platformClass: ReferencePlatformClass;
+  observedAt: string;
+}
+
+export interface AdminCorpusBucket {
+  label: string;
+  count: number;
+}
+
+export interface AdminCorpusStats {
+  matcherEnabled: boolean;
+  total: number;
+  coverage: {
+    curve: number;
+    reviewsToUnits: number;
+    platformShares: number;
+  };
+  quality: {
+    mean: number;
+    median: number;
+    min: number;
+    max: number;
+  };
+  platformClass: Record<ReferencePlatformClass, number>;
+  scaleBuckets: AdminCorpusBucket[];
+  qualityBuckets: AdminCorpusBucket[];
+}
+
+export interface AdminMatchedNeighbour {
+  gameId: string;
+  gameName: string;
+  gameSlug: string;
+  similarity: number;
+  weight: number;
+}
+
+export interface AdminResolvedProfile {
+  matchedSlugs: string[];
   pcShare: number;
   playstationShare: number;
   xboxShare: number;
   switchShare: number;
-  leanLabel: string | null;
-  lifecycleIndex: number;
   firstWeekToYearOneMultiplier: number;
   year2Retention: Year2Retention;
-  lifecycleDriver: string | null;
+  tailFactorY2: number;
+  tailFactorY5: number;
+  lifecycleIndex: number;
   peakCcuToWeekOneLow: number;
   peakCcuToWeekOneHigh: number;
   pcDefaultBoxleiterLow: number | null;
   pcDefaultBoxleiterHigh: number | null;
   psDefaultBoxleiterLow: number | null;
   psDefaultBoxleiterHigh: number | null;
-  genreCount: number;
-  gameCount: number;
-  updatedAt: string;
+}
+
+export interface AdminMatcherInspection {
+  matcherEnabled: boolean;
+  isAnchor: boolean;
+  coldStart: boolean;
+  neighboursUsed: number;
+  reviewsToUnits: number | null;
+  peakCcuRatio: number | null;
+  curve: AdminReferenceCurve;
+  platformShares: AdminReferencePlatformShares | null;
+  neighbours: AdminMatchedNeighbour[];
+  resolved: AdminResolvedProfile | null;
 }
 
 export interface AdminGenreRow {
@@ -349,9 +433,6 @@ export interface AdminGenreRow {
   name: string;
   source: GenreSourceLabel;
   externalId: number | null;
-  profileId: string | null;
-  profileSlug: string | null;
-  profileName: string | null;
   updatedAt: string;
 }
 
@@ -384,6 +465,7 @@ export interface BoxleiterBreakdownEntry {
   signal: { metric: string; value: number; capturedAt: string };
   calibratedValue: number | null;
   isCalibrated: boolean;
+  multiplierSource: 'matcher' | 'global' | 'calibrated';
   multiplierLow: number;
   multiplierHigh: number;
   finalLow: number;
@@ -402,6 +484,21 @@ export interface FirstWeekBreakdownEntry {
   ageDays: number;
   projectionMultiplier: number;
   m1: number | null;
+  profileSource: 'matcher' | 'global';
+  finalLow: number;
+  finalHigh: number;
+}
+
+export interface SplitBreakdownEntry {
+  type: 'split';
+  platform: Platform;
+  method: string;
+  sourcePlatform: Platform;
+  sourceLow: number;
+  sourceHigh: number;
+  sourceShare: number;
+  targetShare: number;
+  ratio: number;
   finalLow: number;
   finalHigh: number;
 }
@@ -413,7 +510,11 @@ export interface WeightedBreakdownEntry {
 
 export interface PlatformBreakdownResult {
   platform: Platform;
-  entries: (BoxleiterBreakdownEntry | FirstWeekBreakdownEntry)[];
+  entries: (
+    | BoxleiterBreakdownEntry
+    | FirstWeekBreakdownEntry
+    | SplitBreakdownEntry
+  )[];
   weightedEntries: WeightedBreakdownEntry[];
   totalWeight: number;
   weightedLow: number;

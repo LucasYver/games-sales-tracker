@@ -5,7 +5,7 @@ import {
   type AdminEstimate,
   type AdminEstimateSnapshot,
   type AdminGameDetail,
-  type AdminGenreProfile,
+  type AdminMatcherInspection,
   type AdminPriceSnapshot,
 } from '@/lib/admin';
 import { cn } from '@/lib/utils';
@@ -42,7 +42,6 @@ import { EstimateHistoryChart } from '../../_components/EstimateHistoryChart';
 import { CcuHistoryChart } from '../../_components/CcuHistoryChart';
 import { ReviewHistoryChart } from '../../_components/ReviewHistoryChart';
 import { SteamShareBadge } from '../../_components/SteamShareBadge';
-import { GameGenreProfileSelect } from '../../_components/GameGenreProfileSelect';
 import { EstimateBreakdownPanel } from '../../_components/EstimateBreakdownPanel';
 import { deleteGame, deleteMilestone, deleteSignal } from '../../actions';
 
@@ -222,9 +221,11 @@ export default async function AdminGameDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [game, genreProfiles] = await Promise.all([
+  const [game, matcher] = await Promise.all([
     adminFetch<AdminGameDetail>(`/games/${id}`),
-    adminFetch<AdminGenreProfile[]>('/genre-profiles'),
+    adminFetch<AdminMatcherInspection | null>(`/games/${id}/matcher`).catch(
+      () => null,
+    ),
   ]);
 
   const latestSnapshot =
@@ -262,6 +263,12 @@ export default async function AdminGameDetailPage({
               </Badge>
             ))}
             {game.isFree && <Badge variant="outline">Free-to-play</Badge>}
+            {game.liveService && (
+              <Badge variant="outline">Live-service</Badge>
+            )}
+            {game.isAnnualIteration && (
+              <Badge variant="outline">Annual iteration</Badge>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -292,6 +299,20 @@ export default async function AdminGameDetailPage({
               mono
             />
             <Field label="Release date" value={formatDate(game.releaseDate)} />
+            <Field label="Developer" value={game.developer ?? '—'} />
+            <Field
+              label="Franchise"
+              value={game.franchiseSlug ?? '—'}
+              mono
+            />
+            <Field
+              label="Iteration"
+              value={game.iterationNumber?.toString() ?? '—'}
+            />
+            <Field
+              label="DLC"
+              value={game.dlc.length > 0 ? game.dlc.length.toString() : '—'}
+            />
             <Field
               label="Calibrated PC"
               value={formatCalibration(
@@ -359,15 +380,38 @@ export default async function AdminGameDetailPage({
             </div>
             <div className="flex flex-col gap-1 text-sm">
               <dt className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                Genre profile (estimation)
+                Categories
               </dt>
               <dd>
-                <GameGenreProfileSelect
-                  gameId={game.id}
-                  currentProfileId={game.genreProfileId}
-                  manual={game.genreProfileManual}
-                  profiles={genreProfiles}
-                />
+                {game.categories.length === 0 ? (
+                  '—'
+                ) : (
+                  <div className="flex flex-wrap gap-1">
+                    {game.categories.map((c) => (
+                      <Badge key={c} variant="outline">
+                        {c}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </dd>
+            </div>
+            <div className="flex flex-col gap-1 text-sm">
+              <dt className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                Steam tags
+              </dt>
+              <dd>
+                {game.steamTags.length === 0 ? (
+                  '—'
+                ) : (
+                  <div className="flex flex-wrap gap-1">
+                    {game.steamTags.map((t) => (
+                      <Badge key={t} variant="secondary">
+                        {t}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </dd>
             </div>
             <div className="flex flex-col gap-1 text-sm">
@@ -438,6 +482,8 @@ export default async function AdminGameDetailPage({
           )}
         </CardContent>
       </Card>
+
+      {matcher && <MatcherCard matcher={matcher} />}
 
       <Card>
         <CardHeader>
@@ -820,6 +866,168 @@ export default async function AdminGameDetailPage({
   );
 }
 
+function MatcherCard({ matcher }: { matcher: AdminMatcherInspection }) {
+  const { resolved } = matcher;
+  return (
+    <Card>
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+        <div>
+          <CardTitle className="text-sm font-semibold tracking-wide uppercase">
+            Data-driven matcher
+          </CardTitle>
+          <CardDescription>
+            Nearest anchors in the reference corpus and the profile they resolve
+            to. This is what the estimation model consumes when the matcher is
+            on.
+          </CardDescription>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge variant={matcher.matcherEnabled ? 'default' : 'outline'}>
+            Matcher {matcher.matcherEnabled ? 'on' : 'off'}
+          </Badge>
+          {matcher.isAnchor && <Badge variant="secondary">Is anchor</Badge>}
+          <Badge variant={matcher.coldStart ? 'destructive' : 'outline'}>
+            {matcher.coldStart ? 'Cold-start (baseline)' : 'Matched'}
+          </Badge>
+          <Badge variant="outline">{matcher.neighboursUsed} neighbours</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <MatcherStat
+            label="Reviews→units"
+            value={
+              matcher.reviewsToUnits !== null
+                ? matcher.reviewsToUnits.toFixed(1)
+                : '—'
+            }
+          />
+          <MatcherStat
+            label="m1 (×Y1)"
+            value={
+              resolved
+                ? `×${resolved.firstWeekToYearOneMultiplier.toFixed(2)}`
+                : '—'
+            }
+          />
+          <MatcherStat
+            label="Y2 retention"
+            value={resolved ? resolved.year2Retention : '—'}
+          />
+          <MatcherStat
+            label="PC Boxleiter"
+            value={
+              resolved &&
+              resolved.pcDefaultBoxleiterLow !== null &&
+              resolved.pcDefaultBoxleiterHigh !== null
+                ? `${resolved.pcDefaultBoxleiterLow.toFixed(1)}–${resolved.pcDefaultBoxleiterHigh.toFixed(1)}`
+                : '—'
+            }
+          />
+          <MatcherStat
+            label="PS Boxleiter"
+            value={
+              resolved &&
+              resolved.psDefaultBoxleiterLow !== null &&
+              resolved.psDefaultBoxleiterHigh !== null
+                ? `${resolved.psDefaultBoxleiterLow.toFixed(1)}–${resolved.psDefaultBoxleiterHigh.toFixed(1)}`
+                : '—'
+            }
+          />
+          <MatcherStat
+            label="CCU→W1"
+            value={
+              matcher.peakCcuRatio !== null
+                ? `×${matcher.peakCcuRatio.toFixed(1)}`
+                : '—'
+            }
+          />
+          <MatcherStat
+            label="CCU→W1 band"
+            value={
+              resolved
+                ? `${resolved.peakCcuToWeekOneLow.toFixed(1)}–${resolved.peakCcuToWeekOneHigh.toFixed(1)}`
+                : '—'
+            }
+          />
+        </div>
+
+        {resolved && (
+          <div className="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs tabular-nums">
+            <span>PC {(resolved.pcShare * 100).toFixed(0)}%</span>
+            <span>PS {(resolved.playstationShare * 100).toFixed(0)}%</span>
+            <span>Xbox {(resolved.xboxShare * 100).toFixed(0)}%</span>
+            <span>Switch {(resolved.switchShare * 100).toFixed(0)}%</span>
+            <span>
+              tail Y2 ×{resolved.tailFactorY2.toFixed(2)} · Y5 ×
+              {resolved.tailFactorY5.toFixed(2)}
+            </span>
+          </div>
+        )}
+
+        {matcher.neighbours.length > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Anchor</TableHead>
+                <TableHead
+                  className="text-right"
+                  title="Feature similarity in [0,1]"
+                >
+                  Similarity
+                </TableHead>
+                <TableHead
+                  className="text-right"
+                  title="similarity × anchor quality score (aggregation weight)"
+                >
+                  Weight
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {matcher.neighbours.map((n) => (
+                <TableRow key={n.gameId}>
+                  <TableCell>
+                    <Link
+                      href={`/admin/games/${n.gameId}`}
+                      className="text-primary text-sm hover:underline"
+                    >
+                      {n.gameName}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-right text-xs tabular-nums">
+                    {n.similarity.toFixed(3)}
+                  </TableCell>
+                  <TableCell className="text-right text-xs tabular-nums">
+                    {n.weight.toFixed(3)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <p className="text-muted-foreground text-sm">
+            No neighbours found — this game is cold-start. The matcher emits no
+            profile, so the estimation falls back to the model&apos;s global
+            constant multipliers and shares.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MatcherStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-muted-foreground text-[11px] tracking-wide uppercase">
+        {label}
+      </span>
+      <span className="text-lg font-semibold tabular-nums">{value}</span>
+    </div>
+  );
+}
+
 function CurrentPrice({ price }: { price: AdminPriceSnapshot }) {
   const onSale = price.discountPercent > 0;
   return (
@@ -1161,7 +1369,7 @@ function MethodLegend({ className }: { className?: string }) {
     {
       tag: 'boxleiter',
       description:
-        'PC estimate: Steam reviews × Boxleiter multiplier. Default range when no calibration is available.',
+        'PC estimate: Steam reviews × Boxleiter multiplier. The default range is derived by the data-driven matcher (reviews→units of the nearest anchors) when no per-game calibration is available.',
     },
     {
       tag: 'ps-ratings-boxleiter',
@@ -1175,12 +1383,12 @@ function MethodLegend({ className }: { className?: string }) {
     {
       tag: 'first-week-extrapolation-pc',
       description:
-        'PC lifecycle method: week-1 units from peak CCU (and launch reviews) projected to today via a degressive curve.',
+        'PC lifecycle method: week-1 units from peak CCU (and launch reviews) projected to today via a degressive curve built from the matcher profile (m1 + tail factors).',
     },
     {
-      tag: 'genre-console-split-from-pc-{platform}',
+      tag: 'genre-console-split-from-{source}-{target}',
       description:
-        'Console estimate ventilated from the PC aggregate using the genre profile platform split (psShare/xboxShare ÷ pcShare).',
+        'Console estimate ventilated from the PC (or PS) aggregate using the matcher-derived platform shares (targetShare ÷ sourceShare).',
     },
     {
       tag: 'aggregated',

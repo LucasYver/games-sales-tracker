@@ -1,0 +1,5555 @@
+{
+  "generatedAt": "2026-07-01T20:54:59.026Z",
+  "opts": {
+    "leakDate": "2018-07-01",
+    "k": 15
+  },
+  "summary": [
+    {
+      "method": "matcher",
+      "target": "reviewsToUnits",
+      "n": 319,
+      "medianAbsLogError": 0.17217408975981444,
+      "meanAbsLogError": 0.2340650374836299,
+      "mape": 0.5782229293026264
+    },
+    {
+      "method": "matcher",
+      "target": "m1",
+      "n": 326,
+      "medianAbsLogError": 0.24352271207738824,
+      "meanAbsLogError": 0.31174011315863653,
+      "mape": 0.6280378988465104
+    },
+    {
+      "method": "matcher",
+      "target": "y2",
+      "n": 327,
+      "medianAbsLogError": 0.07654557504437055,
+      "meanAbsLogError": 0.10255104666847728,
+      "mape": 0.2823408464415681
+    }
+  ],
+  "perGame": [
+    {
+      "gameId": "30027272-1b18-499c-9d2c-7b306c9d5e15",
+      "name": "60 Seconds!",
+      "observed": {
+        "reviewsToUnits": 121.04896421845574,
+        "m1": 17.808988764044944,
+        "y2": 1.7331230283911672
+      },
+      "matcher": {
+        "reviewsToUnits": 149.98664811586792,
+        "m1": 3.202940183108484,
+        "y2": 1.8453804197410102,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "0180aee4-35ed-49e8-ae59-c1beb725b17d",
+      "name": "7 Days to Die",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": 1.131955851295632,
+        "y2": 1.483902731556717
+      },
+      "matcher": {
+        "reviewsToUnits": 79.1615660648419,
+        "m1": 2.118042395475083,
+        "y2": 1.3954569256957816,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "2b3a61ba-c7d0-4f2e-a0c7-e395e4248b74",
+      "name": "ABZU",
+      "observed": {
+        "reviewsToUnits": 50.01646019232435,
+        "m1": 3.99273057701045,
+        "y2": 1.3303368229403731
+      },
+      "matcher": {
+        "reviewsToUnits": 111.17861468758457,
+        "m1": 2.9497390615645487,
+        "y2": 1.56678780103732,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "a2eab4f3-7b8c-4ef8-8384-628ca61eda21",
+      "name": "ARK: Survival Evolved",
+      "observed": {
+        "reviewsToUnits": 64.74746634235849,
+        "m1": 1.2166117348164933,
+        "y2": 1.2127059155525768
+      },
+      "matcher": {
+        "reviewsToUnits": 151.3453699894018,
+        "m1": 2.1942919047041194,
+        "y2": 1.346647000635526,
+        "coldStart": false,
+        "neighbours": 12
+      }
+    },
+    {
+      "gameId": "914bf5e7-a32b-4c4a-be60-8bf1e242a2be",
+      "name": "ARK: The Survival Of The Fittest",
+      "observed": {
+        "reviewsToUnits": 1497.8996721311476,
+        "m1": 1.2746071133167907,
+        "y2": 1.173913043478261
+      },
+      "matcher": {
+        "reviewsToUnits": 111.67672896439421,
+        "m1": 2.598076538578329,
+        "y2": 1.4771136691130315,
+        "coldStart": false,
+        "neighbours": 12
+      }
+    },
+    {
+      "gameId": "71c39b3e-a352-4da6-894d-d5a56e9dc4f9",
+      "name": "Ace Combat Assault Horizon - Enhanced Edition",
+      "observed": {
+        "reviewsToUnits": 189.2419239052405,
+        "m1": 12,
+        "y2": 5.181159420289855
+      },
+      "matcher": {
+        "reviewsToUnits": 215.141118562631,
+        "m1": 4.053176300395587,
+        "y2": 1.7899752003050793,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "d3cdea5c-3318-415c-90b8-9fca8f5a9883",
+      "name": "Ace of Spades: Battle Builder",
+      "observed": {
+        "reviewsToUnits": 161.20927871984713,
+        "m1": null,
+        "y2": null
+      },
+      "matcher": {
+        "reviewsToUnits": 133.46095913711773,
+        "m1": 2.4790391295180347,
+        "y2": 1.4674233000252745,
+        "coldStart": false,
+        "neighbours": 12
+      }
+    },
+    {
+      "gameId": "f4c5ea68-d11f-4bdb-9b79-e8d4573ce17e",
+      "name": "Age of Empires II (Retired)",
+      "observed": {
+        "reviewsToUnits": 151.82909726023826,
+        "m1": 12.418879056047198,
+        "y2": 2.340855106888361
+      },
+      "matcher": {
+        "reviewsToUnits": 267.8509835590783,
+        "m1": 2.7549293937057984,
+        "y2": 9.50308193410887,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "74007267-5a12-478e-9d25-85c91f1b576d",
+      "name": "Age of Mythology: Extended Edition",
+      "observed": {
+        "reviewsToUnits": 175.84797123780174,
+        "m1": 4.0936254980079685,
+        "y2": 1.9445255474452554
+      },
+      "matcher": {
+        "reviewsToUnits": 219.72310055863585,
+        "m1": 2.6314337577562887,
+        "y2": 9.355930303454569,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "85266313-4b6f-4476-9189-25fbaab8b2b5",
+      "name": "Age of Wonders III",
+      "observed": {
+        "reviewsToUnits": 185.64245810055866,
+        "m1": 3.148706896551724,
+        "y2": 1.6064339493497604
+      },
+      "matcher": {
+        "reviewsToUnits": 233.22725323586377,
+        "m1": 3.4843541615960527,
+        "y2": 1.7278399587714295,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "6eb087d2-64d8-4913-966d-b3b17fbf7ca2",
+      "name": "Amnesia: A Machine for Pigs",
+      "observed": {
+        "reviewsToUnits": 141.38980891719746,
+        "m1": 4.6776470588235295,
+        "y2": 1.3375251509054327
+      },
+      "matcher": {
+        "reviewsToUnits": 122.98176231499481,
+        "m1": 3.8833909663265533,
+        "y2": 1.7457056206190114,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "8694bc66-a7e6-4a2b-b961-51602c850ad8",
+      "name": "Arma 3",
+      "observed": {
+        "reviewsToUnits": 93.19087945986846,
+        "m1": 7.20952380952381,
+        "y2": 2.1961690885072653
+      },
+      "matcher": {
+        "reviewsToUnits": 121.78829376797934,
+        "m1": 3.63837269431378,
+        "y2": 1.6132854875599136,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "93b337d3-04be-47ec-8529-f1ec92ed2bf2",
+      "name": "Armello",
+      "observed": {
+        "reviewsToUnits": 114.29287012724703,
+        "m1": 3.1763636363636363,
+        "y2": 2.051516886090441
+      },
+      "matcher": {
+        "reviewsToUnits": 163.9689041786533,
+        "m1": 3.5408776785001668,
+        "y2": 1.6321792578153673,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "92020d3e-2f75-49f2-ab95-c747f5b940e6",
+      "name": "Assassin's Creed® Origins",
+      "observed": {
+        "reviewsToUnits": 39.96358771521638,
+        "m1": 1.8239380706629615,
+        "y2": 1.2400696484927631
+      },
+      "matcher": {
+        "reviewsToUnits": 106.43470684617859,
+        "m1": 2.9560700780484077,
+        "y2": 1.5650771445633813,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "2c7ed92a-90a9-4053-a585-2d4644a83df3",
+      "name": "Assassin’s Creed® IV Black Flag™",
+      "observed": {
+        "reviewsToUnits": 79.18928851430812,
+        "m1": 6.74746192893401,
+        "y2": 1.5952604852360353
+      },
+      "matcher": {
+        "reviewsToUnits": 152.86438995956388,
+        "m1": 3.8486549183255514,
+        "y2": 1.7127614520395311,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "6eac4c04-0d27-4c9c-b5ac-199ffd89ff26",
+      "name": "Assetto Corsa",
+      "observed": {
+        "reviewsToUnits": 67.49616075804607,
+        "m1": 1.6830702568864129,
+        "y2": 1.4223979404192717
+      },
+      "matcher": {
+        "reviewsToUnits": 147.12124430898987,
+        "m1": 2.9866382798018463,
+        "y2": 1.5547313538599226,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "232edc4b-a484-462c-bb4f-0af1f7e76ba5",
+      "name": "Atlas Reactor",
+      "observed": {
+        "reviewsToUnits": 160.33484367920255,
+        "m1": 2.4828921885087154,
+        "y2": 1.173426937077483
+      },
+      "matcher": {
+        "reviewsToUnits": 133.56537666438615,
+        "m1": 2.4636409118808205,
+        "y2": 1.494678193068521,
+        "coldStart": false,
+        "neighbours": 12
+      }
+    },
+    {
+      "gameId": "651bc741-642e-4985-8aea-9d69b2010d7b",
+      "name": "Baldur's Gate: Enhanced Edition",
+      "observed": {
+        "reviewsToUnits": 197.30201164637376,
+        "m1": 22.48148148148148,
+        "y2": 2.1812191103789127
+      },
+      "matcher": {
+        "reviewsToUnits": 163.8167338345063,
+        "m1": 4.325606432088197,
+        "y2": 1.6487266009315382,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "e3dcc515-0074-41e4-a073-e4be738fe271",
+      "name": "Banished",
+      "observed": {
+        "reviewsToUnits": 97.92717406174472,
+        "m1": 4.295611015490533,
+        "y2": 1.4309325853951718
+      },
+      "matcher": {
+        "reviewsToUnits": 133.87310643230995,
+        "m1": 3.7708176590122067,
+        "y2": 1.7077184759107316,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "6be4439b-8188-4058-a793-9669a68e8adb",
+      "name": "Batman™: Arkham Knight",
+      "observed": {
+        "reviewsToUnits": 81.77488290398126,
+        "m1": 2.2689045936395758,
+        "y2": 1.9026631365830868
+      },
+      "matcher": {
+        "reviewsToUnits": 103.79693704202452,
+        "m1": 4.6124310929517796,
+        "y2": 1.850267826044942,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "f85fcae1-2b57-4483-b758-0c2163c162fc",
+      "name": "Batman™: Arkham Origins",
+      "observed": {
+        "reviewsToUnits": 155.658401277633,
+        "m1": 35.80392156862745,
+        "y2": 1.815169769989047
+      },
+      "matcher": {
+        "reviewsToUnits": 129.46310852125342,
+        "m1": 4.1039868365784615,
+        "y2": 1.847260361996885,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "d158c7f5-531d-4bd7-8c00-5eb98753e3c2",
+      "name": "BattleBlock Theater®",
+      "observed": {
+        "reviewsToUnits": 116.37017430600388,
+        "m1": 15.924198250728862,
+        "y2": 1.523892347125595
+      },
+      "matcher": {
+        "reviewsToUnits": 117.50378341729116,
+        "m1": 3.0330988372138474,
+        "y2": 1.6275549848241544,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "b78b70f2-5ab3-4be0-8152-c775aff59412",
+      "name": "BeamNG.drive",
+      "observed": {
+        "reviewsToUnits": 86.21295303452713,
+        "m1": 6.889221556886228,
+        "y2": 2.148631029986962
+      },
+      "matcher": {
+        "reviewsToUnits": 132.5806583313687,
+        "m1": 2.2630213809434485,
+        "y2": 1.5918726980635696,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "ec0207ad-6c28-4f28-889b-394b6bf0694f",
+      "name": "Bendy and the Ink Machine",
+      "observed": {
+        "reviewsToUnits": 2084.300578034682,
+        "m1": 5.705882352941177,
+        "y2": 5.65979381443299
+      },
+      "matcher": {
+        "reviewsToUnits": 122.67987653857561,
+        "m1": 3.810457992210985,
+        "y2": 1.6493415209753273,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "17edec3c-2df0-41b5-a62c-1326886ced81",
+      "name": "BioShock Infinite",
+      "observed": {
+        "reviewsToUnits": 89.15771890751377,
+        "m1": 11.584536082474227,
+        "y2": 1.9951944469164369
+      },
+      "matcher": {
+        "reviewsToUnits": 107.73854378158114,
+        "m1": 5.542902772463964,
+        "y2": 1.775276986853258,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "0d44b549-f217-460b-977a-c81560b5c8cb",
+      "name": "BioShock™ Remastered",
+      "observed": {
+        "reviewsToUnits": 162.62272956609485,
+        "m1": 2.964021164021164,
+        "y2": 1.4748304177079614
+      },
+      "matcher": {
+        "reviewsToUnits": 91.00149036349505,
+        "m1": 4.084621882588973,
+        "y2": 1.571960422799293,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "a5079503-5cc4-4cd9-be2b-f621e086ff55",
+      "name": "Black Desert",
+      "observed": {
+        "reviewsToUnits": 146.0829111961129,
+        "m1": 11.478543563068921,
+        "y2": 1.505607794267588
+      },
+      "matcher": {
+        "reviewsToUnits": 137.64097240002025,
+        "m1": 1.8415904193177715,
+        "y2": 1.313029490277388,
+        "coldStart": false,
+        "neighbours": 12
+      }
+    },
+    {
+      "gameId": "d7443344-b1b5-42ec-a67a-ba41b9b60d61",
+      "name": "Black Mesa",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": 1.8183323947394574,
+        "y2": 1.3549826926580433
+      },
+      "matcher": {
+        "reviewsToUnits": 195.32619478580747,
+        "m1": 3.962559553003362,
+        "y2": 1.832353849314339,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "dcc600c0-5d8c-4915-856c-080116eb7521",
+      "name": "Block N Load",
+      "observed": {
+        "reviewsToUnits": 206.58017987442727,
+        "m1": 3.252918287937743,
+        "y2": 1.5469924812030076
+      },
+      "matcher": {
+        "reviewsToUnits": 207.2868210088391,
+        "m1": 3.2933510490899534,
+        "y2": 1.5281760728502047,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "2558924a-e0f7-4ee5-b9c8-9980d30d10b5",
+      "name": "Blood and Bacon",
+      "observed": {
+        "reviewsToUnits": 72.07334816843547,
+        "m1": 34.101190476190474,
+        "y2": 1.7636585791586665
+      },
+      "matcher": {
+        "reviewsToUnits": 212.44651463526887,
+        "m1": 4.3714751696757705,
+        "y2": 1.8796800931549584,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "7f757dad-82f0-4ed6-b9d2-125a7add96f9",
+      "name": "Borderlands: The Pre-Sequel",
+      "observed": {
+        "reviewsToUnits": 203.73385133870062,
+        "m1": 9.143112701252235,
+        "y2": 1.4171395030326746
+      },
+      "matcher": {
+        "reviewsToUnits": 143.46074054018038,
+        "m1": 3.415900302557233,
+        "y2": 1.5658056490405863,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "84bf43f7-e6cd-464a-8f8e-4e4a5169bd94",
+      "name": "Broforce",
+      "observed": {
+        "reviewsToUnits": 85.06399196677165,
+        "m1": 1.8833494675701838,
+        "y2": 1.5397070161912105
+      },
+      "matcher": {
+        "reviewsToUnits": 158.11936284550703,
+        "m1": 4.327026475405408,
+        "y2": 1.8176482593931458,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "2d924d0c-a265-4e06-b8f3-54d6a1fb27b0",
+      "name": "Brothers - A Tale of Two Sons",
+      "observed": {
+        "reviewsToUnits": 40.093996660595025,
+        "m1": 42.656716417910445,
+        "y2": 1.6505714952181012
+      },
+      "matcher": {
+        "reviewsToUnits": 141.31783891563933,
+        "m1": 4.099111249281798,
+        "y2": 1.8578921630089869,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "924f22ee-23f8-4873-a4d7-3fb53450cde0",
+      "name": "Brutal Legend",
+      "observed": {
+        "reviewsToUnits": 191.40551425030978,
+        "m1": 5.711678832116788,
+        "y2": 1.665814696485623
+      },
+      "matcher": {
+        "reviewsToUnits": 184.88391279177725,
+        "m1": 5.910808089122843,
+        "y2": 1.8053198140431859,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "b013fa86-29f5-407a-959a-afb6cdb0e7e5",
+      "name": "Call of Duty®: Advanced Warfare - Gold Edition",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": null,
+        "y2": null
+      },
+      "matcher": {
+        "reviewsToUnits": 122.32073079121574,
+        "m1": 2.730469858509482,
+        "y2": 1.5113177975313536,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "9a4c5fa4-b9e3-4b0c-a99c-9845c4f764da",
+      "name": "Call of Duty®: Black Ops III",
+      "observed": {
+        "reviewsToUnits": 139.6959315765141,
+        "m1": 2.840461642905635,
+        "y2": 1.2269359464627152
+      },
+      "matcher": {
+        "reviewsToUnits": 122.99220804975867,
+        "m1": 3.120943523211908,
+        "y2": 1.604910473147199,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "849e3270-1e8e-4913-b0ed-10f1e94d31d3",
+      "name": "Call of Duty®: Ghosts",
+      "observed": {
+        "reviewsToUnits": 181.4032340208811,
+        "m1": 1.4843995510662178,
+        "y2": 1.094964463934674
+      },
+      "matcher": {
+        "reviewsToUnits": 118.281483778326,
+        "m1": 3.101594762669948,
+        "y2": 1.6195997923124175,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "8ac79440-c3a0-4da9-a639-d39f26dd0296",
+      "name": "Call of Duty®: Infinite Warfare",
+      "observed": {
+        "reviewsToUnits": 107.40612648221344,
+        "m1": 2.5512736773350753,
+        "y2": 1.0540194572452637
+      },
+      "matcher": {
+        "reviewsToUnits": 130.43580432964362,
+        "m1": 3.4267276875928343,
+        "y2": 1.6903509922984834,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "2f72b777-f76e-4c53-a37c-a88c3c2da9a9",
+      "name": "Call of Duty®: WWII",
+      "observed": {
+        "reviewsToUnits": 82.61942719436463,
+        "m1": 1.7402754654154684,
+        "y2": 1.1286310662723953
+      },
+      "matcher": {
+        "reviewsToUnits": 127.97089485333987,
+        "m1": 2.884337444938812,
+        "y2": 1.5078954643984663,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "dc375b31-7e94-4f45-ad99-26b6af739651",
+      "name": "Car Mechanic Simulator 2015",
+      "observed": {
+        "reviewsToUnits": 260.1809630102041,
+        "m1": 11.01875,
+        "y2": 2.0794100964265456
+      },
+      "matcher": {
+        "reviewsToUnits": 212.77212826983057,
+        "m1": 2.7625501873599068,
+        "y2": 1.5702096347972774,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "0a2231d0-5fa2-4fec-b4eb-c39342ff5d71",
+      "name": "Cities: Skylines",
+      "observed": {
+        "reviewsToUnits": 141.7888092485549,
+        "m1": 2.944172010562052,
+        "y2": 1.7054452274183216
+      },
+      "matcher": {
+        "reviewsToUnits": 221.23522629210748,
+        "m1": 3.0594852864236195,
+        "y2": 1.596071089029847,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "c4c03380-fcbe-445c-8a96-0e894e8bfacb",
+      "name": "Company of Heroes 2",
+      "observed": {
+        "reviewsToUnits": 196.43646875131873,
+        "m1": 11.025,
+        "y2": 1.9550264550264551
+      },
+      "matcher": {
+        "reviewsToUnits": 116.77778717427714,
+        "m1": 4.5165850479878245,
+        "y2": 1.704709714008481,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "eb6ef0fc-e011-4f44-9487-6049f48d10bf",
+      "name": "Conan Exiles Enhanced",
+      "observed": {
+        "reviewsToUnits": 60.17230460710328,
+        "m1": 1.4037693087612573,
+        "y2": 1.5188426732378808
+      },
+      "matcher": {
+        "reviewsToUnits": 116.61463608946151,
+        "m1": 1.9995847846238841,
+        "y2": 1.499847179266745,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "b7726715-7bc4-41ec-92ef-dedd08e57cac",
+      "name": "Contagion",
+      "observed": {
+        "reviewsToUnits": 218.6604462474645,
+        "m1": 102.71052631578948,
+        "y2": 1.3487061234947477
+      },
+      "matcher": {
+        "reviewsToUnits": 201.08749349183222,
+        "m1": 4.707116388366559,
+        "y2": 1.9604199797941546,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "709fa6e3-b1b8-40ac-ae27-20da23686170",
+      "name": "Craft The World",
+      "observed": {
+        "reviewsToUnits": 81.1902182571292,
+        "m1": 1.7842622950819673,
+        "y2": 1.6038221242190371
+      },
+      "matcher": {
+        "reviewsToUnits": 284.0075989285451,
+        "m1": 4.516413249457991,
+        "y2": 2.03644285361151,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "e1ec17da-52f8-425b-ad90-20de89195277",
+      "name": "Crypt of the NecroDancer",
+      "observed": {
+        "reviewsToUnits": 99.20897764425202,
+        "m1": 2.113581440309328,
+        "y2": 1.7210153212897326
+      },
+      "matcher": {
+        "reviewsToUnits": 122.66465200296909,
+        "m1": 3.19021017796873,
+        "y2": 1.6440789636066582,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "c31b44ff-843c-4de3-a1af-eb31062de00f",
+      "name": "Cuphead",
+      "observed": {
+        "reviewsToUnits": 62.40269687162891,
+        "m1": 2.302389409105586,
+        "y2": 1.2460556763200337
+      },
+      "matcher": {
+        "reviewsToUnits": 125.91770497362549,
+        "m1": 2.7232468715218223,
+        "y2": 1.6088045186547475,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "602a85da-c2d3-4eef-a43f-052811032c1a",
+      "name": "DARK SOULS™ II",
+      "observed": {
+        "reviewsToUnits": 64.26901415596936,
+        "m1": 3.0631534922626518,
+        "y2": 1.1407018022938284
+      },
+      "matcher": {
+        "reviewsToUnits": 132.51732745898224,
+        "m1": 4.294137819899051,
+        "y2": 1.7195958507783669,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "52a47fa0-aa00-42dd-b259-f78cd9c9bfd0",
+      "name": "DARK SOULS™ II: Scholar of the First Sin",
+      "observed": {
+        "reviewsToUnits": 86.78672957477305,
+        "m1": 4.5739814152966405,
+        "y2": 1.748085638380997
+      },
+      "matcher": {
+        "reviewsToUnits": 147.37040855782817,
+        "m1": 3.75417903818776,
+        "y2": 1.59086448186204,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "421d9572-9025-4f48-91c1-b9b305c355bd",
+      "name": "DARK SOULS™ III",
+      "observed": {
+        "reviewsToUnits": 61.287936005952936,
+        "m1": 3.1680037753657384,
+        "y2": 1.844741546253538
+      },
+      "matcher": {
+        "reviewsToUnits": 114.70201093308226,
+        "m1": 3.190918080962874,
+        "y2": 1.6576278364934214,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "ef04e281-dd3a-41a6-8d00-dcfe76b5f4d9",
+      "name": "DOOM",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": null,
+        "y2": null
+      },
+      "matcher": {
+        "reviewsToUnits": 122.06334327295771,
+        "m1": 2.7520186242549936,
+        "y2": 1.4723508348209264,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "71fdad00-7d38-49d9-947d-fe56c333ffe5",
+      "name": "DRAGON BALL XENOVERSE",
+      "observed": {
+        "reviewsToUnits": 81.4983694040913,
+        "m1": 1.924109931292942,
+        "y2": 1.4223340366823567
+      },
+      "matcher": {
+        "reviewsToUnits": 120.16671751176382,
+        "m1": 3.6592287810831174,
+        "y2": 1.7384025758091741,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "711f4c1b-1707-47d8-b407-ae18703f0247",
+      "name": "DRAGON BALL XENOVERSE 2",
+      "observed": {
+        "reviewsToUnits": 77.65457710721022,
+        "m1": 2.3193116634799233,
+        "y2": 1.4800082440230833
+      },
+      "matcher": {
+        "reviewsToUnits": 141.71689715315108,
+        "m1": 2.9747546023355427,
+        "y2": 1.5884474557292292,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "85db7616-24f7-4c3f-949c-9d1111b826a1",
+      "name": "Darkest Dungeon®",
+      "observed": {
+        "reviewsToUnits": 64.61433198144312,
+        "m1": 1.808305012744265,
+        "y2": 1.7096376343454514
+      },
+      "matcher": {
+        "reviewsToUnits": 132.45697746948173,
+        "m1": 3.88889668640871,
+        "y2": 1.5522047696357235,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "506c8350-c78d-4ff7-8562-2300cf51a663",
+      "name": "Darksiders II Deathinitive Edition",
+      "observed": {
+        "reviewsToUnits": 127.34197362437472,
+        "m1": 4.570388349514563,
+        "y2": 1.9155602761550716
+      },
+      "matcher": {
+        "reviewsToUnits": 132.48113740665312,
+        "m1": 3.6288075689195067,
+        "y2": 1.6176686568404113,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "e363a7d0-8a2d-4b3d-9299-6f6e77f13db5",
+      "name": "Darksiders Warmastered Edition",
+      "observed": {
+        "reviewsToUnits": 192.80898513251455,
+        "m1": 2.8772348033373065,
+        "y2": 1.6048053024026512
+      },
+      "matcher": {
+        "reviewsToUnits": 128.79624476430027,
+        "m1": 3.7478869292938564,
+        "y2": 1.6388004439691883,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "8aeac572-a2f1-4cb2-962f-c5fb5b0bace8",
+      "name": "Day of Infamy",
+      "observed": {
+        "reviewsToUnits": 93.24149539333806,
+        "m1": 3.4071453837990804,
+        "y2": 1.3216362126245846
+      },
+      "matcher": {
+        "reviewsToUnits": 143.92747490738526,
+        "m1": 2.3700920121380866,
+        "y2": 1.4785979760544716,
+        "coldStart": false,
+        "neighbours": 12
+      }
+    },
+    {
+      "gameId": "1ff92c57-d99c-412d-a7e4-9ddedf28f0f4",
+      "name": "Dead Cells",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": null,
+        "y2": null
+      },
+      "matcher": {
+        "reviewsToUnits": 122.67503728490767,
+        "m1": 3.81137012880077,
+        "y2": 1.6493600158730213,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "5c9f3632-ca73-441e-8a51-4c5e98411163",
+      "name": "Dead by Daylight",
+      "observed": {
+        "reviewsToUnits": 60.40740118981418,
+        "m1": 8.605372935090939,
+        "y2": 1.7673349879779725
+      },
+      "matcher": {
+        "reviewsToUnits": 146.92305376152106,
+        "m1": 2.1886875380997304,
+        "y2": 1.41018038961187,
+        "coldStart": false,
+        "neighbours": 12
+      }
+    },
+    {
+      "gameId": "0c3f57ef-bd68-47b9-aa21-6ae435ef400b",
+      "name": "Deceit",
+      "observed": {
+        "reviewsToUnits": 165.79728783345004,
+        "m1": 10.47766323024055,
+        "y2": 1.8081338143653658
+      },
+      "matcher": {
+        "reviewsToUnits": 132.33190560841513,
+        "m1": 2.2657192027684774,
+        "y2": 1.4213478707080862,
+        "coldStart": false,
+        "neighbours": 12
+      }
+    },
+    {
+      "gameId": "ab44e6fe-d19c-433f-95c3-e9d14bdf2e33",
+      "name": "Defy Gravity Extended",
+      "observed": {
+        "reviewsToUnits": 114.43967218090758,
+        "m1": 1.1295754026354319,
+        "y2": 1.0560596241088789
+      },
+      "matcher": {
+        "reviewsToUnits": 206.1740696405084,
+        "m1": 3.213547548040394,
+        "y2": 1.636200260286632,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "0a73f0b1-5868-4a36-804d-682557e879c6",
+      "name": "Democracy 3",
+      "observed": {
+        "reviewsToUnits": 143.98389121338911,
+        "m1": 55.88,
+        "y2": 2.021474588403722
+      },
+      "matcher": {
+        "reviewsToUnits": 219.7595082739062,
+        "m1": 2.867273790814036,
+        "y2": 1.5730396185178137,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "018aec5b-7199-4fa7-a471-a56abb90523f",
+      "name": "Depth",
+      "observed": {
+        "reviewsToUnits": 123.58546666666666,
+        "m1": 11.540389972144848,
+        "y2": 1.830557566980449
+      },
+      "matcher": {
+        "reviewsToUnits": 234.19431794161488,
+        "m1": 3.820343638572824,
+        "y2": 10.312812267440053,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "954e854b-aeda-478e-935f-2b31de32ae00",
+      "name": "Deus Ex: Human Revolution - Director's Cut",
+      "observed": {
+        "reviewsToUnits": 138.67762687634024,
+        "m1": 55.7,
+        "y2": 1.6876122082585279
+      },
+      "matcher": {
+        "reviewsToUnits": 101.38649857958204,
+        "m1": 4.126664480986084,
+        "y2": 1.5912931187789172,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "412162ac-07b5-4f51-930f-cd4ff530096f",
+      "name": "Deus Ex: Mankind Divided",
+      "observed": {
+        "reviewsToUnits": 93.3660606060606,
+        "m1": 2.445646295294754,
+        "y2": 1.3939628482972137
+      },
+      "matcher": {
+        "reviewsToUnits": 95.33391580150192,
+        "m1": 3.561641627192389,
+        "y2": 1.532141914295352,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "f7fadb12-02d5-4357-9a64-fb6e083f1c39",
+      "name": "DiRT Rally",
+      "observed": {
+        "reviewsToUnits": 63.84216788625141,
+        "m1": 1.6491372226787182,
+        "y2": 1.4815146985550574
+      },
+      "matcher": {
+        "reviewsToUnits": 118.51990311747001,
+        "m1": 2.011086536050729,
+        "y2": 1.5618530171028175,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "74dc43ee-cf80-4314-b728-4950c7016688",
+      "name": "Dishonored 2",
+      "observed": {
+        "reviewsToUnits": 95.13708111758251,
+        "m1": 2.171340839303992,
+        "y2": 1.1905345526539077
+      },
+      "matcher": {
+        "reviewsToUnits": 95.03446924936416,
+        "m1": 3.6247228070544253,
+        "y2": 1.7110655847357399,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "10dce980-98c9-4620-a456-ae4de22973cf",
+      "name": "Divinity: Original Sin (Classic)",
+      "observed": {
+        "reviewsToUnits": 161.2183079797171,
+        "m1": 2.1793149764942914,
+        "y2": 1.0921417565485363
+      },
+      "matcher": {
+        "reviewsToUnits": 139.09414785212192,
+        "m1": 4.012980647991983,
+        "y2": 1.6979379379322688,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "20c3d31a-2591-4baf-a6a7-7e27f1e59845",
+      "name": "Divinity: Original Sin - Enhanced Edition",
+      "observed": {
+        "reviewsToUnits": 208.7801724137931,
+        "m1": 5.991735537190083,
+        "y2": 2.099310344827586
+      },
+      "matcher": {
+        "reviewsToUnits": 166.48761469187968,
+        "m1": 3.7726104198382315,
+        "y2": 1.6742910482478428,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "e1cf41c2-57e5-4517-b46e-cd238c4abfa2",
+      "name": "Divinity: Original Sin 2 - Definitive Edition",
+      "observed": {
+        "reviewsToUnits": 63.00906581107297,
+        "m1": 3.331339850488787,
+        "y2": 1.6902920665607954
+      },
+      "matcher": {
+        "reviewsToUnits": 215.4376139913609,
+        "m1": 2.6711831733027913,
+        "y2": 1.573941193128576,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "daa00115-5251-45e2-b216-cbc72b4993c7",
+      "name": "DmC: Devil May Cry",
+      "observed": {
+        "reviewsToUnits": 127.49070487993804,
+        "m1": 13.659574468085106,
+        "y2": 2.0771028037383177
+      },
+      "matcher": {
+        "reviewsToUnits": 131.14320969850363,
+        "m1": 4.153844609918211,
+        "y2": 1.830341473283175,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "e4c0fae4-cf38-4775-b130-0c01fdb2e84b",
+      "name": "Door Kickers",
+      "observed": {
+        "reviewsToUnits": 129.45497406883547,
+        "m1": 3.632596685082873,
+        "y2": 1.685171102661597
+      },
+      "matcher": {
+        "reviewsToUnits": 213.14420973776916,
+        "m1": 3.859894045255226,
+        "y2": 1.9294423447034497,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "68aabf50-3d7d-4373-8dec-ac30121bf819",
+      "name": "Dragon's Dogma: Dark Arisen",
+      "observed": {
+        "reviewsToUnits": 111.11654264453348,
+        "m1": 2.604251012145749,
+        "y2": 1.5213758258841819
+      },
+      "matcher": {
+        "reviewsToUnits": 144.67018125837754,
+        "m1": 3.0781815059427298,
+        "y2": 1.598046680288051,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "0fa13ea9-e0ac-4a98-afa6-1087b009fe86",
+      "name": "Dragons and Titans",
+      "observed": {
+        "reviewsToUnits": 295.62160326086956,
+        "m1": 5.119741100323624,
+        "y2": 1.3653603034134008
+      },
+      "matcher": {
+        "reviewsToUnits": 205.2947019862487,
+        "m1": 6.233398413790633,
+        "y2": 1.9767250349068075,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "72155368-563e-4a13-904d-dfa2d15e04fb",
+      "name": "Duck Game",
+      "observed": {
+        "reviewsToUnits": 136.77270626299978,
+        "m1": 4.440758293838862,
+        "y2": 2.031661330487371
+      },
+      "matcher": {
+        "reviewsToUnits": 110.59161435151314,
+        "m1": 3.151586495723723,
+        "y2": 1.698795843180317,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "077ca3ac-5edc-445d-b645-1b7ea3b1d48b",
+      "name": "Duelyst",
+      "observed": {
+        "reviewsToUnits": 139.93428571428572,
+        "m1": 3.9111644657863147,
+        "y2": 1.1952117863720073
+      },
+      "matcher": {
+        "reviewsToUnits": 251.01166960246098,
+        "m1": 3.1327887449454797,
+        "y2": 1.610075009862997,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "f5c40a7f-8ab6-44da-b5ba-d1d531d67422",
+      "name": "Dungeon of the ENDLESS™",
+      "observed": {
+        "reviewsToUnits": 182.7980720446474,
+        "m1": 2.0931174089068825,
+        "y2": 1.3868471953578336
+      },
+      "matcher": {
+        "reviewsToUnits": 187.421150095528,
+        "m1": 4.497637971256234,
+        "y2": 1.6984200709776267,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "37ec3d1d-76fe-4ff9-9039-14becab6bf70",
+      "name": "Dungeons 2",
+      "observed": {
+        "reviewsToUnits": 387.4612326043738,
+        "m1": 4.936708860759493,
+        "y2": 1.5538461538461539
+      },
+      "matcher": {
+        "reviewsToUnits": 156.1831426599412,
+        "m1": 2.4144286052892525,
+        "y2": 1.6624414541238988,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "e2f625a1-bc7d-4e05-bc18-7831a63c24b2",
+      "name": "Dust: An Elysian Tail",
+      "observed": {
+        "reviewsToUnits": 88.48391936240037,
+        "m1": 20.457286432160803,
+        "y2": 1.5674281503316139
+      },
+      "matcher": {
+        "reviewsToUnits": 132.63990547294426,
+        "m1": 3.801196805711852,
+        "y2": 1.639546290179901,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "55df0be3-a8ec-4d9e-b6b5-8e5254626345",
+      "name": "Dying Light",
+      "observed": {
+        "reviewsToUnits": 79.23611809332297,
+        "m1": 2.5116452394261226,
+        "y2": 1.6321216617210683
+      },
+      "matcher": {
+        "reviewsToUnits": 141.7773053083707,
+        "m1": 3.3992685482727336,
+        "y2": 1.5247609002558455,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "1e39fdbc-34b0-4dec-8b91-ad8ea2dd8e62",
+      "name": "ENDLESS Legend™",
+      "observed": {
+        "reviewsToUnits": 174.0788748564868,
+        "m1": 4.91404011461318,
+        "y2": 1.564139941690962
+      },
+      "matcher": {
+        "reviewsToUnits": 205.8622619050569,
+        "m1": 3.1281996022119314,
+        "y2": 1.7475071889354996,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "7281fa41-6939-4744-bb36-b5610a6ad954",
+      "name": "ENDLESS Space™ 2",
+      "observed": {
+        "reviewsToUnits": 131.96712954825102,
+        "m1": 2.6063931297709924,
+        "y2": 1.3485264506681311
+      },
+      "matcher": {
+        "reviewsToUnits": 195.93443968026017,
+        "m1": 3.1195511485772958,
+        "y2": 1.624063974591219,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "ed2d90c4-128c-4a2f-b96d-5b49ef69a0c2",
+      "name": "Eador. Masters of the Broken World",
+      "observed": {
+        "reviewsToUnits": 499.2984073763621,
+        "m1": 20.066666666666666,
+        "y2": 2.272425249169435
+      },
+      "matcher": {
+        "reviewsToUnits": 190.3955673592117,
+        "m1": 3.0205745805717177,
+        "y2": 1.6950066841501201,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "975aade8-975a-4045-be14-8483bca28fda",
+      "name": "Enter the Gungeon",
+      "observed": {
+        "reviewsToUnits": 74.46686178861789,
+        "m1": 3.252415458937198,
+        "y2": 1.6181458101250155
+      },
+      "matcher": {
+        "reviewsToUnits": 139.87623780037356,
+        "m1": 3.631271049957877,
+        "y2": 1.7581106142306486,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "3bb52ab6-0f15-43f0-a49d-1a4944c2acfd",
+      "name": "Europa Universalis IV",
+      "observed": {
+        "reviewsToUnits": 71.33404056386651,
+        "m1": 25.064,
+        "y2": 2.3466326204915418
+      },
+      "matcher": {
+        "reviewsToUnits": 132.02926677262832,
+        "m1": 3.8886997827535343,
+        "y2": 1.6679992053900552,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "8c736a37-2538-4482-8b83-96543098e868",
+      "name": "Evolve Stage 2",
+      "observed": {
+        "reviewsToUnits": 552.8493872408659,
+        "m1": 2.230552196694881,
+        "y2": 1.5043368268883268
+      },
+      "matcher": {
+        "reviewsToUnits": 185.15036494353447,
+        "m1": 4.953383665058464,
+        "y2": 1.8679681217970847,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "8833ef55-2dbd-4b07-b906-b7e8a078c7f9",
+      "name": "F1 2015",
+      "observed": {
+        "reviewsToUnits": 195.49235474006116,
+        "m1": 2.0824524312896404,
+        "y2": 1.0959390862944163
+      },
+      "matcher": {
+        "reviewsToUnits": 87.20505747849246,
+        "m1": 2.96985154714232,
+        "y2": 1.5825616165980196,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "4540fae1-6c83-48ab-a746-b34d814ba732",
+      "name": "FEZ",
+      "observed": {
+        "reviewsToUnits": 180.8011049723757,
+        "m1": 9.853535353535353,
+        "y2": 1.8482829318298308
+      },
+      "matcher": {
+        "reviewsToUnits": 101.35694757220882,
+        "m1": 7.039797491193543,
+        "y2": 1.6820537335552967,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "6b82ed26-e4ca-403f-a9e4-48286b1e8af3",
+      "name": "FINAL FANTASY VII",
+      "observed": {
+        "reviewsToUnits": 98.7998956430994,
+        "m1": null,
+        "y2": null
+      },
+      "matcher": {
+        "reviewsToUnits": 188.19814825833944,
+        "m1": 2.6986700836572126,
+        "y2": 1.5070569829356248,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "fc193443-c6fc-4bce-b847-d26677cd57ea",
+      "name": "FINAL FANTASY VIII",
+      "observed": {
+        "reviewsToUnits": 128.93680709534368,
+        "m1": 2.6556016597510372,
+        "y2": 1.3692708333333334
+      },
+      "matcher": {
+        "reviewsToUnits": 183.76714800466019,
+        "m1": 3.2626722867174305,
+        "y2": 1.5810978894669565,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "2010fe0f-8a57-4425-9de6-f792f8507e44",
+      "name": "FINAL FANTASY X/X-2 HD Remaster",
+      "observed": {
+        "reviewsToUnits": 108.17281368821293,
+        "m1": 2.196470588235294,
+        "y2": 1.3660953401178362
+      },
+      "matcher": {
+        "reviewsToUnits": 118.22653335211285,
+        "m1": 3.3405268036923577,
+        "y2": 1.671030182151016,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "0166f0f2-5d31-43ea-be0d-0b6f2a5a0943",
+      "name": "FINAL FANTASY® XIII",
+      "observed": {
+        "reviewsToUnits": 100.6989186112692,
+        "m1": 2.303344867358708,
+        "y2": 1.3420130195292939
+      },
+      "matcher": {
+        "reviewsToUnits": 119.54748738698079,
+        "m1": 3.224043933896284,
+        "y2": 1.501134792592256,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "1c478a66-3b37-4648-b89b-915816b3b977",
+      "name": "FORCED: Slightly Better Edition",
+      "observed": {
+        "reviewsToUnits": 380.1750629722922,
+        "m1": 27.423076923076923,
+        "y2": 1.670406732117812
+      },
+      "matcher": {
+        "reviewsToUnits": 156.16094897196587,
+        "m1": 4.6579027641345,
+        "y2": 1.6675908117793912,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "5b65cb5b-28bb-4162-9471-6340d6af362b",
+      "name": "Fable Anniversary",
+      "observed": {
+        "reviewsToUnits": 146.37280040221216,
+        "m1": 2.0290620871862615,
+        "y2": 1.52734375
+      },
+      "matcher": {
+        "reviewsToUnits": 97.44904398207744,
+        "m1": 2.9945086902514952,
+        "y2": 1.6309071375206452,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "58f7c933-06d6-4645-af53-ad0a9f193244",
+      "name": "FaceRig",
+      "observed": {
+        "reviewsToUnits": 147.4601150287572,
+        "m1": 1.689198606271777,
+        "y2": 1.3382838283828382
+      },
+      "matcher": {
+        "reviewsToUnits": 127.15132443831553,
+        "m1": 4.0253153601386815,
+        "y2": 1.804239354406623,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "eaa51769-24b3-4e35-876e-2fcb41b7681b",
+      "name": "Factorio",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": 1.464596166023833,
+        "y2": 1.228887840732661
+      },
+      "matcher": {
+        "reviewsToUnits": 133.12905995143498,
+        "m1": 3.365380867015449,
+        "y2": 1.7841755978755651,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "3fe4d1c1-17a7-45e0-b3c7-54e35fee0f07",
+      "name": "Fallout 4",
+      "observed": {
+        "reviewsToUnits": 87.63724709256014,
+        "m1": 2.4013128615932353,
+        "y2": 1.556919797989158
+      },
+      "matcher": {
+        "reviewsToUnits": 108.95141226152495,
+        "m1": 3.1402505860928334,
+        "y2": 1.6349211985678518,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "5f9b265b-c325-4a54-bdbe-451a26345566",
+      "name": "Farming Simulator 15",
+      "observed": {
+        "reviewsToUnits": 105.52937111264686,
+        "m1": 3.008223684210526,
+        "y2": 1.8039912520503008
+      },
+      "matcher": {
+        "reviewsToUnits": 127.16972013570998,
+        "m1": 4.335888270104866,
+        "y2": 1.7438353169379923,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "c25d3a5c-1a77-4231-bc4c-39b7946d2f09",
+      "name": "Farming Simulator 17",
+      "observed": {
+        "reviewsToUnits": 91.231588592372,
+        "m1": 5.500475737392959,
+        "y2": 1.65334717176959
+      },
+      "matcher": {
+        "reviewsToUnits": 92.45870333855498,
+        "m1": 2.714422301365424,
+        "y2": 1.6260201186953909,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "2052309a-f1de-4d0a-bf8a-2d2a3668b3e5",
+      "name": "Farming Simulator 2013 Titanium Edition",
+      "observed": {
+        "reviewsToUnits": 199.23009446693658,
+        "m1": 6.228373702422146,
+        "y2": 1.2605555555555557
+      },
+      "matcher": {
+        "reviewsToUnits": 96.14242924335892,
+        "m1": 3.5435306492514234,
+        "y2": 1.7196282627115518,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "f4ec7d3c-bd77-404f-baeb-b479da5d6117",
+      "name": "Firewatch",
+      "observed": {
+        "reviewsToUnits": 30.467405807230445,
+        "m1": 2.4897502795378306,
+        "y2": 1.4629241516966067
+      },
+      "matcher": {
+        "reviewsToUnits": 109.12994627672349,
+        "m1": 3.031216784016389,
+        "y2": 1.5168309204787838,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "02f7ced1-77dd-4157-b0d0-8fc2196a8477",
+      "name": "Fortified",
+      "observed": {
+        "reviewsToUnits": 4122.782608695652,
+        "m1": 1.7894736842105263,
+        "y2": 1.3235294117647058
+      },
+      "matcher": {
+        "reviewsToUnits": 188.05150227289334,
+        "m1": 2.961734124997286,
+        "y2": 1.6011232759467522,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "cdd51f27-b981-4c7e-8c41-c20f451a6f2f",
+      "name": "Friday the 13th: The Game",
+      "observed": {
+        "reviewsToUnits": 29.56075117370892,
+        "m1": 2.232407509056977,
+        "y2": 1.2744529136955987
+      },
+      "matcher": {
+        "reviewsToUnits": 127.37147898305805,
+        "m1": 3.4019767272141057,
+        "y2": 1.7397707419827029,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "f081e154-857d-44d8-abce-13fab9a7e80c",
+      "name": "Frostpunk",
+      "observed": {
+        "reviewsToUnits": 61.38375350140056,
+        "m1": 2.262280891581909,
+        "y2": 1.8056724698679931
+      },
+      "matcher": {
+        "reviewsToUnits": 120.58352866149858,
+        "m1": 3.061787415552589,
+        "y2": 1.8399142759479694,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "f8def89a-de29-4d92-a572-ee5d2c84df71",
+      "name": "GRID 2",
+      "observed": {
+        "reviewsToUnits": 132.55918259023355,
+        "m1": null,
+        "y2": null
+      },
+      "matcher": {
+        "reviewsToUnits": 109.238252634062,
+        "m1": 2.423354046308878,
+        "y2": 1.5219293797584816,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "68343de5-5274-4709-85fc-366a008678f2",
+      "name": "GRID Autosport",
+      "observed": {
+        "reviewsToUnits": 97.10515806988353,
+        "m1": 4.065573770491803,
+        "y2": 1.501008064516129
+      },
+      "matcher": {
+        "reviewsToUnits": 139.5313519963862,
+        "m1": 3.2357122922839747,
+        "y2": 1.601825087341723,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "e0f60200-e337-41b7-826c-3c615fc0a215",
+      "name": "Game Dev Tycoon",
+      "observed": {
+        "reviewsToUnits": 77.50861005800941,
+        "m1": 21.715877437325904,
+        "y2": 1.594663930220626
+      },
+      "matcher": {
+        "reviewsToUnits": 238.01252484127852,
+        "m1": 2.7573460338771296,
+        "y2": 1.5854171681225233,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "517e812d-fa36-446b-a8b8-44d6e4d54f30",
+      "name": "Game of Thrones - A Telltale Games Series",
+      "observed": {
+        "reviewsToUnits": 61.87654958677686,
+        "m1": 4.2623637887678125,
+        "y2": 1.4749262536873156
+      },
+      "matcher": {
+        "reviewsToUnits": 83.96542218100839,
+        "m1": 3.3743261891715193,
+        "y2": 1.5268103114616578,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "a184ce46-8050-4ded-916a-fa8f58f8bcca",
+      "name": "Gang Beasts",
+      "observed": {
+        "reviewsToUnits": 126.26612360810104,
+        "m1": 1.2228977564651482,
+        "y2": 1.1442476017085639
+      },
+      "matcher": {
+        "reviewsToUnits": 113.69409337558747,
+        "m1": 2.5344347152788584,
+        "y2": 1.5987785644576804,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "39ba4287-fb08-4fd0-83e5-b8d70ba632ee",
+      "name": "Gauntlet™ Slayer Edition",
+      "observed": {
+        "reviewsToUnits": 258.1066081569437,
+        "m1": 2.574635241301908,
+        "y2": 1.2859633827375763
+      },
+      "matcher": {
+        "reviewsToUnits": 154.50510379909306,
+        "m1": 3.8059435795348078,
+        "y2": 1.727859816169949,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "67648b04-66de-4f83-a063-95ca4ee3a377",
+      "name": "Geometry Dash",
+      "observed": {
+        "reviewsToUnits": 33.22543702545216,
+        "m1": 35.11764705882353,
+        "y2": 2.101991438674856
+      },
+      "matcher": {
+        "reviewsToUnits": 128.95153633910974,
+        "m1": 4.44075527454881,
+        "y2": 1.80073515201651,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "b0072546-3b8c-4b50-b3f2-281b89ec0da7",
+      "name": "Getting Over It with Bennett Foddy",
+      "observed": {
+        "reviewsToUnits": 105.61666109811783,
+        "m1": 2.214470284237726,
+        "y2": 1.4005250875145858
+      },
+      "matcher": {
+        "reviewsToUnits": 75.22986561123115,
+        "m1": 3.2568825646559625,
+        "y2": 1.7338374573382656,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "18fcce69-03c7-4fbb-97b9-b7133c76870c",
+      "name": "Goat Simulator",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": null,
+        "y2": null
+      },
+      "matcher": {
+        "reviewsToUnits": 121.7867251783621,
+        "m1": 3.0078881716630055,
+        "y2": 1.6237459919519344,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "a3702a8d-b029-4900-93c5-9b2920c7f1f1",
+      "name": "Golf With Your Friends",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": 1.40063233965673,
+        "y2": 1.235837901752123
+      },
+      "matcher": {
+        "reviewsToUnits": 85.16233230925145,
+        "m1": 1.8896445730764126,
+        "y2": 1.4477801002975372,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "47af8185-93cf-420b-a6df-26d0c7c12139",
+      "name": "Gone Home",
+      "observed": {
+        "reviewsToUnits": 51.2053087241937,
+        "m1": 23.760162601626018,
+        "y2": 1.3840889649272883
+      },
+      "matcher": {
+        "reviewsToUnits": 87.56520877651427,
+        "m1": 4.165830575547607,
+        "y2": 1.6105516299606264,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "cdf18988-f5ce-4c3e-8544-f8b8c14a5dc4",
+      "name": "Grim Dawn",
+      "observed": {
+        "reviewsToUnits": 77.66557046623879,
+        "m1": 1.8962870403427348,
+        "y2": 1.6304245505036241
+      },
+      "matcher": {
+        "reviewsToUnits": 106.49009491222827,
+        "m1": 3.090845081554644,
+        "y2": 1.5711677165921516,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "04ee8173-5e96-4b20-aa5e-55c89447035c",
+      "name": "Grim Fandango Remastered",
+      "observed": {
+        "reviewsToUnits": 159.88362735995048,
+        "m1": 2.997826086956522,
+        "y2": 1.6715010877447425
+      },
+      "matcher": {
+        "reviewsToUnits": 106.59800729123994,
+        "m1": 2.5176299790398713,
+        "y2": 1.4976242729007418,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "c9bd06c2-4f36-4e22-81fb-995b3578f170",
+      "name": "Guacamelee! Gold Edition",
+      "observed": {
+        "reviewsToUnits": 223.72598752598753,
+        "m1": 24.196969696969695,
+        "y2": 1.1283656856606137
+      },
+      "matcher": {
+        "reviewsToUnits": 200.7202330187004,
+        "m1": 4.760236720365495,
+        "y2": 1.9769549259851484,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "d46e683d-4748-4d58-ab0f-685fa215ef0d",
+      "name": "Gunpoint",
+      "observed": {
+        "reviewsToUnits": 94.87631650013502,
+        "m1": 7.902857142857143,
+        "y2": 1.564352856109906
+      },
+      "matcher": {
+        "reviewsToUnits": 118.12082941792363,
+        "m1": 3.867211287618296,
+        "y2": 1.696506434797944,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "092e0e5d-5e5e-427c-981f-ff360efb7a2f",
+      "name": "Guns and Robots",
+      "observed": {
+        "reviewsToUnits": 360.15889570552145,
+        "m1": 2.685279187817259,
+        "y2": 1.2939508506616257
+      },
+      "matcher": {
+        "reviewsToUnits": 136.90868839809093,
+        "m1": 1.9105749990109522,
+        "y2": 1.2953733195555,
+        "coldStart": false,
+        "neighbours": 11
+      }
+    },
+    {
+      "gameId": "067d53c3-16c2-4aeb-9352-d906422605be",
+      "name": "HELLDIVERS™ Dive Harder Edition",
+      "observed": {
+        "reviewsToUnits": 103.88083787538741,
+        "m1": 2.674525884161968,
+        "y2": 1.6318512840168646
+      },
+      "matcher": {
+        "reviewsToUnits": 113.03817337511457,
+        "m1": 3.2978781073046926,
+        "y2": 1.7366370856863527,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "890fddfb-7e8e-4c95-a2be-8618dfa62bf7",
+      "name": "HITMAN™",
+      "observed": {
+        "reviewsToUnits": 68.00584873055962,
+        "m1": 3.300333969465649,
+        "y2": 1.5001084206722082
+      },
+      "matcher": {
+        "reviewsToUnits": 145.64102965242733,
+        "m1": 3.551974032281982,
+        "y2": 1.7336727320101466,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "ed24db85-9efd-4b21-8af5-daab0e629ff5",
+      "name": "Hacknet",
+      "observed": {
+        "reviewsToUnits": 122.88161950126086,
+        "m1": 3.957983193277311,
+        "y2": 2.0152158527954707
+      },
+      "matcher": {
+        "reviewsToUnits": 220.82213975528364,
+        "m1": 2.7446871803082273,
+        "y2": 1.5626646508321644,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "08bf707a-9db3-4e84-a078-f61decf162f1",
+      "name": "Hammerwatch",
+      "observed": {
+        "reviewsToUnits": 317.94787516600263,
+        "m1": 19.21311475409836,
+        "y2": 1.7491467576791808
+      },
+      "matcher": {
+        "reviewsToUnits": 158.09814833616696,
+        "m1": 4.681338424989988,
+        "y2": 1.662159745510407,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "2ca3817e-fcee-4633-a983-fdb9a9fbdf97",
+      "name": "Hand Simulator",
+      "observed": {
+        "reviewsToUnits": 208.3054349713492,
+        "m1": 117.53061224489795,
+        "y2": 2.2180934189963537
+      },
+      "matcher": {
+        "reviewsToUnits": 204.77579816103457,
+        "m1": 2.918012554879321,
+        "y2": 1.8620594896723615,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "4cd23640-ae16-45fb-b83c-225a1142cc70",
+      "name": "Hand of Fate",
+      "observed": {
+        "reviewsToUnits": 99.88524852165574,
+        "m1": 2.354872881355932,
+        "y2": 1.7579847053531263
+      },
+      "matcher": {
+        "reviewsToUnits": 122.60407634156564,
+        "m1": 3.1526181014705266,
+        "y2": 1.641228651564699,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "c3da7253-3576-4999-8e2d-22a089df0699",
+      "name": "Hearts of Iron IV",
+      "observed": {
+        "reviewsToUnits": 74.61853281853281,
+        "m1": 4.492825607064018,
+        "y2": 2.1454366785407197
+      },
+      "matcher": {
+        "reviewsToUnits": 120.90597132386756,
+        "m1": 3.258471848345631,
+        "y2": 1.632546048917919,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "c88c8f0e-8575-423a-a140-d80f01d358a9",
+      "name": "Hero Siege",
+      "observed": {
+        "reviewsToUnits": 123.38428055190539,
+        "m1": 7.938388625592417,
+        "y2": 2.724179104477612
+      },
+      "matcher": {
+        "reviewsToUnits": 163.50741109561562,
+        "m1": 3.840381726222397,
+        "y2": 1.6478167956627998,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "5382226a-7742-4296-b66f-65b7c01d8075",
+      "name": "Heroes® of Might & Magic® III - HD Edition",
+      "observed": {
+        "reviewsToUnits": 149.68952429149797,
+        "m1": 1.9679487179487178,
+        "y2": 1.6703583061889251
+      },
+      "matcher": {
+        "reviewsToUnits": 251.5997424571036,
+        "m1": 2.8046439755242107,
+        "y2": 9.533636028688017,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "b9c7262c-bfb5-4da7-8a18-8a610a939c47",
+      "name": "Hollow Knight",
+      "observed": {
+        "reviewsToUnits": 46.19445471349353,
+        "m1": 10.693641618497109,
+        "y2": 2.0030630630630633
+      },
+      "matcher": {
+        "reviewsToUnits": 133.59599195270516,
+        "m1": 3.5269298533725215,
+        "y2": 1.632859671865238,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "4d80fa1a-35a1-4a02-8ff8-40d8df14308a",
+      "name": "Homefront®: The Revolution",
+      "observed": {
+        "reviewsToUnits": 101.27671048196832,
+        "m1": 4.373842592592593,
+        "y2": 1.5326806033342153
+      },
+      "matcher": {
+        "reviewsToUnits": 118.87972190535743,
+        "m1": 3.359935973315238,
+        "y2": 1.6697031493129684,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "e4979306-ff45-44ca-b60d-ea2534cd0d88",
+      "name": "Homeworld Remastered Collection",
+      "observed": {
+        "reviewsToUnits": 147.74573863636363,
+        "m1": 1.6802083333333333,
+        "y2": 1.296032238065716
+      },
+      "matcher": {
+        "reviewsToUnits": 220.93423043980178,
+        "m1": 2.962745468131131,
+        "y2": 1.6270827842143243,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "9f6e79c7-8cba-4655-9e9b-2155c0fa5915",
+      "name": "Hotline Miami 2: Wrong Number",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": null,
+        "y2": null
+      },
+      "matcher": {
+        "reviewsToUnits": 142.58422011305746,
+        "m1": 3.4727997866722604,
+        "y2": 1.7428667781694958,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "44b3d6d3-e632-4ef8-a402-4fa86c135a9d",
+      "name": "How to Survive",
+      "observed": {
+        "reviewsToUnits": 128.39625201390655,
+        "m1": 2.5701451278507257,
+        "y2": 1.2584027964506588
+      },
+      "matcher": {
+        "reviewsToUnits": 168.30198973327595,
+        "m1": 5.253004999760604,
+        "y2": 1.69600864199646,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "08b559fd-7bfe-452f-b184-5c96b22972b3",
+      "name": "How to Survive 2",
+      "observed": {
+        "reviewsToUnits": 357.82113144758733,
+        "m1": 1.8437613019891501,
+        "y2": 1.2010592389172225
+      },
+      "matcher": {
+        "reviewsToUnits": 149.97642076675544,
+        "m1": 4.833369656728954,
+        "y2": 1.7367680703890769,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "753c0de6-8462-4d6c-ba81-9c3ca03165ae",
+      "name": "Human Fall Flat",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": null,
+        "y2": null
+      },
+      "matcher": {
+        "reviewsToUnits": 110.95532115691027,
+        "m1": 2.9303497249230244,
+        "y2": 1.6810333252668124,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "51ec7b8f-2fd7-42a6-8a36-6081c2b015bf",
+      "name": "HuniePop",
+      "observed": {
+        "reviewsToUnits": 70.15075006148045,
+        "m1": 6.837950138504155,
+        "y2": 1.5975288636823983
+      },
+      "matcher": {
+        "reviewsToUnits": 132.85250967411238,
+        "m1": 3.163235291384188,
+        "y2": 1.599351532744486,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "d36ae917-cc91-4cbf-8e49-1ae108fa3f28",
+      "name": "Hyper Light Drifter",
+      "observed": {
+        "reviewsToUnits": 71.9055099081682,
+        "m1": 2.910994764397906,
+        "y2": 1.5235811350919264
+      },
+      "matcher": {
+        "reviewsToUnits": 108.06636512840997,
+        "m1": 3.409522349307372,
+        "y2": 1.6506123255995127,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "b73c24b1-609c-48ba-b586-6a7c20557773",
+      "name": "I Am Bread",
+      "observed": {
+        "reviewsToUnits": 151.92969569779643,
+        "m1": 1.8455935906773488,
+        "y2": 1.2419100236779794
+      },
+      "matcher": {
+        "reviewsToUnits": 124.068788374757,
+        "m1": 3.83493582207492,
+        "y2": 1.7134333278538432,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "ecb1d371-fd30-4619-a6f6-11efeed493ba",
+      "name": "INSIDE",
+      "observed": {
+        "reviewsToUnits": 44.51485148514851,
+        "m1": 2.916824708751016,
+        "y2": 1.3978264908043843
+      },
+      "matcher": {
+        "reviewsToUnits": 130.81754202868885,
+        "m1": 4.447555464548839,
+        "y2": 1.8829150679952331,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "3ffe03ce-26d5-4a59-824e-2a03836ebb34",
+      "name": "Injustice: Gods Among Us Ultimate Edition",
+      "observed": {
+        "reviewsToUnits": 198.907790390297,
+        "m1": 67.62068965517241,
+        "y2": 1.7623661397246302
+      },
+      "matcher": {
+        "reviewsToUnits": 114.39108380161098,
+        "m1": 3.38967450367996,
+        "y2": 1.7694455974319696,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "17a27181-c002-4da5-b030-80d7fc69ddbf",
+      "name": "Insurgency",
+      "observed": {
+        "reviewsToUnits": 99.09680824742269,
+        "m1": 7.858815875081327,
+        "y2": 1.852471231062174
+      },
+      "matcher": {
+        "reviewsToUnits": 117.71861014638942,
+        "m1": 3.867996575617477,
+        "y2": 1.6751761149052518,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "545bfbcf-6582-4499-8228-489d93e659d3",
+      "name": "Interstellar Marines",
+      "observed": {
+        "reviewsToUnits": 319.7195737521032,
+        "m1": 14.725806451612904,
+        "y2": 2.276013143483023
+      },
+      "matcher": {
+        "reviewsToUnits": 221.14411941461933,
+        "m1": 5.442681509042523,
+        "y2": 2.0324062086709183,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "525ff30e-498e-44e2-99df-1dca08714a8d",
+      "name": "Jotun: Valhalla Edition",
+      "observed": {
+        "reviewsToUnits": 796.3831775700935,
+        "m1": 4.5,
+        "y2": 1.8169934640522876
+      },
+      "matcher": {
+        "reviewsToUnits": 108.81732213301476,
+        "m1": 4.300282794287786,
+        "y2": 1.856155156698458,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "68f89837-4435-4719-8f5e-89acc2a8f0a4",
+      "name": "Just Cause™ 3",
+      "observed": {
+        "reviewsToUnits": 88.06872465074358,
+        "m1": 2.6854577201297083,
+        "y2": 1.8550065019505853
+      },
+      "matcher": {
+        "reviewsToUnits": 130.3966148273883,
+        "m1": 4.187114016477119,
+        "y2": 1.878728120533814,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "81e109aa-b8c1-4120-90d0-dde248effbb1",
+      "name": "Just Survive",
+      "observed": {
+        "reviewsToUnits": 45.849464907097364,
+        "m1": 4.472258287890591,
+        "y2": 1.2861151970271736
+      },
+      "matcher": {
+        "reviewsToUnits": 167.23248291769823,
+        "m1": 1.858470992130976,
+        "y2": 1.2965550108788053,
+        "coldStart": false,
+        "neighbours": 11
+      }
+    },
+    {
+      "gameId": "435dad7b-00c3-4638-a986-aec1dacf38e1",
+      "name": "Keep Talking and Nobody Explodes",
+      "observed": {
+        "reviewsToUnits": 217.0932225396001,
+        "m1": 2.7349726775956285,
+        "y2": 1.5479520479520479
+      },
+      "matcher": {
+        "reviewsToUnits": 125.84408518083927,
+        "m1": 2.7490424871881873,
+        "y2": 1.627705470344169,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "830552f5-5755-401d-b8e0-5e2ab94823f1",
+      "name": "Killer is Dead - Nightmare Edition",
+      "observed": {
+        "reviewsToUnits": 219.67108433734938,
+        "m1": 6.112,
+        "y2": 1.8979057591623036
+      },
+      "matcher": {
+        "reviewsToUnits": 183.38203372093776,
+        "m1": 3.2614418055071965,
+        "y2": 1.6064476970202253,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "da2f5588-ca4d-4f4c-9a8a-b1b0c0a82d57",
+      "name": "Killing Floor 2",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": null,
+        "y2": null
+      },
+      "matcher": {
+        "reviewsToUnits": 116.02236779343392,
+        "m1": 3.303147844861052,
+        "y2": 1.7644590917387588,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "7d4a1e81-8646-4820-bbab-6c14c8b5e114",
+      "name": "Kingdom Come: Deliverance",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": null,
+        "y2": null
+      },
+      "matcher": {
+        "reviewsToUnits": 163.57539660025017,
+        "m1": 3.181705057810201,
+        "y2": 1.8615015220428128,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "b5c38207-dc05-42ba-a410-5f82b265cfa4",
+      "name": "Kingdom: New Lands",
+      "observed": {
+        "reviewsToUnits": 158.86061739943872,
+        "m1": 3.543388429752066,
+        "y2": 1.900874635568513
+      },
+      "matcher": {
+        "reviewsToUnits": 100.06151229238984,
+        "m1": 2.08905752871875,
+        "y2": 1.4818607357610827,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "17eea204-e3f1-4637-a6f4-6be0ba7f0574",
+      "name": "Kingdoms and Castles",
+      "observed": {
+        "reviewsToUnits": 104.06811888499169,
+        "m1": 5.249031007751938,
+        "y2": 1.548089348347794
+      },
+      "matcher": {
+        "reviewsToUnits": 99.32768822416452,
+        "m1": 2.92598284297389,
+        "y2": 1.846101529210739,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "07dcda48-3bc1-49ea-ab90-7c054bfb3e37",
+      "name": "Kingdoms of Amalur: Reckoning™",
+      "observed": {
+        "reviewsToUnits": 118.03798554098762,
+        "m1": null,
+        "y2": null
+      },
+      "matcher": {
+        "reviewsToUnits": 109.59602252626676,
+        "m1": 3.220511873385586,
+        "y2": 1.6193769838331418,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "4ad1d417-0e35-4e1e-9b40-113d9a2c0dbf",
+      "name": "LEGO® Marvel™ Super Heroes",
+      "observed": {
+        "reviewsToUnits": 174.29980657640232,
+        "m1": 19.75531914893617,
+        "y2": 1.764135702746365
+      },
+      "matcher": {
+        "reviewsToUnits": 121.18915166494173,
+        "m1": 3.6992115547127007,
+        "y2": 1.7121836457982835,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "86bd6c3d-191a-4f44-995c-bef7cf4cd78f",
+      "name": "LEGO® Worlds",
+      "observed": {
+        "reviewsToUnits": 83.3273572377158,
+        "m1": 1.1961236107346165,
+        "y2": 1.0603966005665721
+      },
+      "matcher": {
+        "reviewsToUnits": 110.13184714420608,
+        "m1": 3.3963481955273744,
+        "y2": 1.6758625436102694,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "31374b3f-b341-4c55-8943-e33bb284dcc3",
+      "name": "Layers of Fear (2016)",
+      "observed": {
+        "reviewsToUnits": 185.08857450407504,
+        "m1": 1.5961061946902655,
+        "y2": 1.3743623863384342
+      },
+      "matcher": {
+        "reviewsToUnits": 102.89340024133988,
+        "m1": 3.1771856285164146,
+        "y2": 1.5225748083831407,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "006527dd-af7f-44f4-a489-3cac137da254",
+      "name": "Lethal League",
+      "observed": {
+        "reviewsToUnits": 288.02218636546996,
+        "m1": 4.220689655172414,
+        "y2": 1.4673202614379084
+      },
+      "matcher": {
+        "reviewsToUnits": 124.24509315849987,
+        "m1": 4.522808452635239,
+        "y2": 1.7329962419026277,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "715f6c79-ae12-4396-926e-7fe7572280c8",
+      "name": "Life is Feudal: Your Own",
+      "observed": {
+        "reviewsToUnits": 81.75661618479425,
+        "m1": 1.5154387037603179,
+        "y2": 1.2344159774056889
+      },
+      "matcher": {
+        "reviewsToUnits": 142.08003489771752,
+        "m1": 2.625375806678854,
+        "y2": 1.4930223762334676,
+        "coldStart": false,
+        "neighbours": 12
+      }
+    },
+    {
+      "gameId": "6138c971-72ca-44f7-bf24-32bc84176032",
+      "name": "Loadout",
+      "observed": {
+        "reviewsToUnits": 137.09943055081743,
+        "m1": 1.8721414387291013,
+        "y2": 1.1400123177992199
+      },
+      "matcher": {
+        "reviewsToUnits": 140.0940731542164,
+        "m1": 2.490372349845039,
+        "y2": 1.4855682118229192,
+        "coldStart": false,
+        "neighbours": 12
+      }
+    },
+    {
+      "gameId": "5f683009-3de5-4f5a-af07-41ee48c05abb",
+      "name": "Lords Of The Fallen™ 2014",
+      "observed": {
+        "reviewsToUnits": 121.24983670803397,
+        "m1": 2.3384615384615386,
+        "y2": 1.4407894736842106
+      },
+      "matcher": {
+        "reviewsToUnits": 133.3619840160747,
+        "m1": 3.4274790550111063,
+        "y2": 1.6494447133597672,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "490cdfc1-b9e6-40d2-a7df-baf306a18628",
+      "name": "Lost Castle / 失落城堡",
+      "observed": {
+        "reviewsToUnits": 95.35708769994484,
+        "m1": 2.655314371257485,
+        "y2": 1.2858350951374207
+      },
+      "matcher": {
+        "reviewsToUnits": 167.0048667705538,
+        "m1": 3.143760993174449,
+        "y2": 1.5932768309621994,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "ce538ba1-2536-4d34-be63-fadaf767cecc",
+      "name": "METAL GEAR RISING: REVENGEANCE",
+      "observed": {
+        "reviewsToUnits": 62.557596597592976,
+        "m1": 2.4230132450331126,
+        "y2": 1.283566791937137
+      },
+      "matcher": {
+        "reviewsToUnits": 110.48399167121023,
+        "m1": 6.3600553714962125,
+        "y2": 1.8258157480436485,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "5cd2d144-2186-4d24-95da-0f3359394ac4",
+      "name": "METAL GEAR SOLID V: GROUND ZEROES",
+      "observed": {
+        "reviewsToUnits": 127.63982808022922,
+        "m1": 2.371971496437055,
+        "y2": 1.1724414179851792
+      },
+      "matcher": {
+        "reviewsToUnits": 114.64921671590568,
+        "m1": 5.725269834372296,
+        "y2": 1.905950196958187,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "412a8a70-ec1d-41f0-930f-3afce9e0cdc0",
+      "name": "METAL GEAR SOLID V: THE PHANTOM PAIN",
+      "observed": {
+        "reviewsToUnits": 74.27208315655494,
+        "m1": 1.89933062081638,
+        "y2": 1.3842167092806301
+      },
+      "matcher": {
+        "reviewsToUnits": 120.45795736826109,
+        "m1": 3.8980029918603036,
+        "y2": 1.6844570139483872,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "01099a66-4e83-4f6e-af2c-72f05f0fbc6d",
+      "name": "METAL SLUG 3",
+      "observed": {
+        "reviewsToUnits": 171.12739690044654,
+        "m1": 3.178519593613933,
+        "y2": 1.269406392694064
+      },
+      "matcher": {
+        "reviewsToUnits": 177.65334787524327,
+        "m1": 2.8454990605131076,
+        "y2": 1.6517771883296946,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "73b8716c-a42f-4b62-9cac-eda7723bfbca",
+      "name": "MOBIUS FINAL FANTASY™",
+      "observed": {
+        "reviewsToUnits": 251.47783888709156,
+        "m1": 2.0783608914450036,
+        "y2": 1.1667243168453822
+      },
+      "matcher": {
+        "reviewsToUnits": 191.1301041415057,
+        "m1": 3.4710483582389453,
+        "y2": 1.6887692510829557,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "ac91912e-283f-4c39-bb0b-5ede5429ddaa",
+      "name": "Mad Max",
+      "observed": {
+        "reviewsToUnits": 95.91722051115794,
+        "m1": 2.5618853848762293,
+        "y2": 1.7692918596955658
+      },
+      "matcher": {
+        "reviewsToUnits": 124.5609837160525,
+        "m1": 4.508357969135172,
+        "y2": 1.8592004603191343,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "08b9588a-03a9-4ba2-ba7a-2fd2eba2e869",
+      "name": "Mafia III: Definitive Edition",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": 1.1796067977340887,
+        "y2": 1.1515065913370999
+      },
+      "matcher": {
+        "reviewsToUnits": 146.654428149923,
+        "m1": 4.835745273764146,
+        "y2": 2.129186164761745,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "7a0520c5-5b62-4244-a4ff-9f72bc6066e5",
+      "name": "Magic 2014 — Duels of the Planeswalkers",
+      "observed": {
+        "reviewsToUnits": 220.96097218976396,
+        "m1": 23.206349206349206,
+        "y2": 1.274623803009576
+      },
+      "matcher": {
+        "reviewsToUnits": 169.79308779979615,
+        "m1": 4.263768031503389,
+        "y2": 1.7151750568093347,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "b45feac5-9b8d-4693-878f-684aa1e05664",
+      "name": "Magic Duels",
+      "observed": {
+        "reviewsToUnits": 182.6976971636881,
+        "m1": 3.5797603195739014,
+        "y2": 1.5700788573128999
+      },
+      "matcher": {
+        "reviewsToUnits": 271.5858651176664,
+        "m1": 2.8107974462371503,
+        "y2": 1.556653960529549,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "90d4c9dc-4dc9-486f-854e-e93b12ea893d",
+      "name": "Magicka 2",
+      "observed": {
+        "reviewsToUnits": 266.06981073533973,
+        "m1": 1.834720570749108,
+        "y2": 1.4724562540505508
+      },
+      "matcher": {
+        "reviewsToUnits": 115.0209934061929,
+        "m1": 3.302960237203154,
+        "y2": 1.6481578548965856,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "e127cbb2-b47a-45eb-b923-ae7ada61e4a0",
+      "name": "Mark of the Ninja",
+      "observed": {
+        "reviewsToUnits": 147.77823039029934,
+        "m1": null,
+        "y2": null
+      },
+      "matcher": {
+        "reviewsToUnits": 97.8942627759137,
+        "m1": 3.5720782564137474,
+        "y2": 1.8641005602769634,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "c429eb82-837f-44f1-af69-aeae1f21f36a",
+      "name": "Men of War: Assault Squad 2",
+      "observed": {
+        "reviewsToUnits": 120.95194589463692,
+        "m1": 3.8347386172006743,
+        "y2": 1.6789797713280563
+      },
+      "matcher": {
+        "reviewsToUnits": 214.88962800492087,
+        "m1": 3.716697443965242,
+        "y2": 1.9286254660279813,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "fc6dd42d-e7d2-41f4-9510-3f029d764657",
+      "name": "Metro 2033 Redux",
+      "observed": {
+        "reviewsToUnits": 107.53559483994266,
+        "m1": 9.249084249084248,
+        "y2": 2.3485148514851484
+      },
+      "matcher": {
+        "reviewsToUnits": 107.25550273777866,
+        "m1": 4.628173394496383,
+        "y2": 1.7158568874654876,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "17601892-b5a4-4cde-aeb3-99695c097223",
+      "name": "Metro: Last Light Redux",
+      "observed": {
+        "reviewsToUnits": 100.59342362374502,
+        "m1": 36.26086956521739,
+        "y2": 2.815347721822542
+      },
+      "matcher": {
+        "reviewsToUnits": 107.7785801430518,
+        "m1": 4.505732344756941,
+        "y2": 1.681824131340359,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "d9a0aff8-260a-4904-a923-c79e28d4d646",
+      "name": "Middle-earth™: Shadow of Mordor™",
+      "observed": {
+        "reviewsToUnits": 140.2679014283472,
+        "m1": 2.1461800302571863,
+        "y2": 1.4926425235703586
+      },
+      "matcher": {
+        "reviewsToUnits": 102.29433751671161,
+        "m1": 4.659316510921578,
+        "y2": 1.5974264615146228,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "41ba651d-d374-4cf9-af40-3e0810a18a8d",
+      "name": "Middle-earth™: Shadow of War™",
+      "observed": {
+        "reviewsToUnits": 83.6437417654809,
+        "m1": 2.435704646230962,
+        "y2": 1.4521924964381827
+      },
+      "matcher": {
+        "reviewsToUnits": 134.03680227179535,
+        "m1": 3.3574548224508107,
+        "y2": 1.6452546197459588,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "3c1b7907-55df-4c69-b5cc-36d4f46b49a1",
+      "name": "Mini Metro",
+      "observed": {
+        "reviewsToUnits": 121.75022222222222,
+        "m1": 1.7853035143769969,
+        "y2": 1.416249105225483
+      },
+      "matcher": {
+        "reviewsToUnits": 119.27601176650981,
+        "m1": 2.862194795790989,
+        "y2": 1.701139108055546,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "6c5b5063-6629-47de-ac5f-9b2f45ff105d",
+      "name": "Miscreated",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": 1.1416299436604005,
+        "y2": 1.1006058829277827
+      },
+      "matcher": {
+        "reviewsToUnits": 147.22947610119357,
+        "m1": 2.0979849547214844,
+        "y2": 1.3127360289038297,
+        "coldStart": false,
+        "neighbours": 11
+      }
+    },
+    {
+      "gameId": "2aa16f60-7cfd-4a67-85b4-3ac1d5a08f19",
+      "name": "Modern Combat Versus",
+      "observed": {
+        "reviewsToUnits": 247.12848232848233,
+        "m1": 4.7974068071312805,
+        "y2": 1.4179054054054054
+      },
+      "matcher": {
+        "reviewsToUnits": 180.46952823996415,
+        "m1": 3.7040036421686895,
+        "y2": 1.5472767044834725,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "f3e1a11d-96e0-4006-b6fa-7ff6f61054bd",
+      "name": "Monaco: What's Yours Is Mine",
+      "observed": {
+        "reviewsToUnits": 666.6294117647059,
+        "m1": 25.571428571428573,
+        "y2": 1.8411811652035115
+      },
+      "matcher": {
+        "reviewsToUnits": 208.75340536296605,
+        "m1": 3.772067802856227,
+        "y2": 1.7723244213528953,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "94fca90c-c467-4762-b221-0682b6e81f64",
+      "name": "Mortal Kombat Komplete Edition",
+      "observed": {
+        "reviewsToUnits": 97.56897402170338,
+        "m1": null,
+        "y2": null
+      },
+      "matcher": {
+        "reviewsToUnits": 93.24594173192108,
+        "m1": 3.1274630309344817,
+        "y2": 1.7107391318580762,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "3a189677-af22-4815-85b4-525b6a7b06c8",
+      "name": "Mortal Kombat X",
+      "observed": {
+        "reviewsToUnits": 120.13408697087219,
+        "m1": 2.2929006085192696,
+        "y2": 1.3908351026185422
+      },
+      "matcher": {
+        "reviewsToUnits": 114.08934429162689,
+        "m1": 3.458819191992805,
+        "y2": 1.7851035510521576,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "a213f47d-6c9c-4b78-a535-e21f7378a590",
+      "name": "Mount Your Friends",
+      "observed": {
+        "reviewsToUnits": 236.29298245614035,
+        "m1": 3.26232741617357,
+        "y2": 1.5423216444981862
+      },
+      "matcher": {
+        "reviewsToUnits": 196.60691146331789,
+        "m1": 3.6600255662294097,
+        "y2": 1.639073154959438,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "63ea3783-3ffe-4fe2-b483-1e0c83abd378",
+      "name": "Move or Die",
+      "observed": {
+        "reviewsToUnits": 182.926267281106,
+        "m1": 12.502702702702702,
+        "y2": 1.9706009511456983
+      },
+      "matcher": {
+        "reviewsToUnits": 162.49563742396384,
+        "m1": 2.5103269903373637,
+        "y2": 1.4975555219628351,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "ff8e43ac-e80b-4073-a77b-e47eea3d1420",
+      "name": "Murdered: Soul Suspect",
+      "observed": {
+        "reviewsToUnits": 115.79068197164078,
+        "m1": 4.610315186246418,
+        "y2": 1.5929148539465507
+      },
+      "matcher": {
+        "reviewsToUnits": 105.41046712668819,
+        "m1": 3.738724416522099,
+        "y2": 1.640395522823658,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "68ea4666-af09-4eb0-8b68-2c02ef227919",
+      "name": "NARUTO SHIPPUDEN: Ultimate Ninja STORM 3 Full Burst HD",
+      "observed": {
+        "reviewsToUnits": 115.4645128028871,
+        "m1": 28.860759493670887,
+        "y2": 1.6429824561403508
+      },
+      "matcher": {
+        "reviewsToUnits": 155.562237936711,
+        "m1": 4.570512655005928,
+        "y2": 1.7809581729003543,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "fc979b02-a48e-466e-bcec-516140141fc6",
+      "name": "NARUTO SHIPPUDEN: Ultimate Ninja STORM 4",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": null,
+        "y2": null
+      },
+      "matcher": {
+        "reviewsToUnits": 131.9011122727566,
+        "m1": 3.4596607345129278,
+        "y2": 1.6828420565790698,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "2fc65ffb-c096-4451-b536-20072b8f84e2",
+      "name": "NBA 2K17",
+      "observed": {
+        "reviewsToUnits": 64.93562176165803,
+        "m1": 4.362987012987013,
+        "y2": 1.155380264920375
+      },
+      "matcher": {
+        "reviewsToUnits": 94.23025752631426,
+        "m1": 2.7994627518890853,
+        "y2": 1.5756297343911596,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "ea6f28b7-b506-47d2-aa71-f191f07f35c5",
+      "name": "NBA 2K18",
+      "observed": {
+        "reviewsToUnits": 36.74306599262194,
+        "m1": null,
+        "y2": null
+      },
+      "matcher": {
+        "reviewsToUnits": 109.12601925687827,
+        "m1": 3.138012859782212,
+        "y2": 1.5325922606498026,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "2381c5f2-e762-4ceb-8cdd-5be04185270f",
+      "name": "NEKOPARA Vol. 0",
+      "observed": {
+        "reviewsToUnits": 66.03493806964244,
+        "m1": 4.327664399092971,
+        "y2": 1.7215090385119203
+      },
+      "matcher": {
+        "reviewsToUnits": 172.9579414227976,
+        "m1": 3.487007415644367,
+        "y2": 1.5444800846405249,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "8d15cedb-e702-4db8-9bc8-2d9f194431ee",
+      "name": "NEKOPARA Vol. 1",
+      "observed": {
+        "reviewsToUnits": 48.650563878134996,
+        "m1": 3.1949910554561716,
+        "y2": 2.08454647256439
+      },
+      "matcher": {
+        "reviewsToUnits": 141.45204493492355,
+        "m1": 4.660556062158105,
+        "y2": 1.5260226590346853,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "e51dba95-073a-44f4-9082-61c342f8a39f",
+      "name": "Nidhogg",
+      "observed": {
+        "reviewsToUnits": 190.61030478955007,
+        "m1": 3.4096638655462184,
+        "y2": 1.7726432532347505
+      },
+      "matcher": {
+        "reviewsToUnits": 148.1964915205152,
+        "m1": 3.137203178860291,
+        "y2": 1.6505014684160713,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "f725120d-c319-461b-9280-f8e74372638a",
+      "name": "NieR:Automata™",
+      "observed": {
+        "reviewsToUnits": 49.29827578973864,
+        "m1": 5.1435173923619555,
+        "y2": 1.4323480728304563
+      },
+      "matcher": {
+        "reviewsToUnits": 97.24248882781605,
+        "m1": 3.5170194048838215,
+        "y2": 1.5168332227581938,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "5c2207cf-eeae-42d2-b9ab-22f39a081d14",
+      "name": "No Man's Sky",
+      "observed": {
+        "reviewsToUnits": 16.787597216045004,
+        "m1": 1.5078098399727613,
+        "y2": 1.251965281208101
+      },
+      "matcher": {
+        "reviewsToUnits": 153.62467972733,
+        "m1": 3.9599321890486845,
+        "y2": 1.7813708652127196,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "20bbab5f-b284-481f-b47c-3e41b1370a5f",
+      "name": "Northgard: Definitive Edition",
+      "observed": {
+        "reviewsToUnits": 82.78590956887487,
+        "m1": 1.424620982413584,
+        "y2": 1.6093989443214711
+      },
+      "matcher": {
+        "reviewsToUnits": 93.15339763703538,
+        "m1": 1.9512032146236624,
+        "y2": 1.4604130717292285,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "c90b06e8-41c7-4084-97df-57365f63f7c2",
+      "name": "ORION: Prelude",
+      "observed": {
+        "reviewsToUnits": 240.14094762008258,
+        "m1": 24.86466165413534,
+        "y2": 2.8802540066525553
+      },
+      "matcher": {
+        "reviewsToUnits": 196.96939512488404,
+        "m1": 5.593257474229576,
+        "y2": 1.8458952170082301,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "6c5d5f70-1ffe-4458-b553-fc018d59bf98",
+      "name": "Octodad: Dadliest Catch",
+      "observed": {
+        "reviewsToUnits": 114.54099329917226,
+        "m1": 2.4293193717277486,
+        "y2": 1.3002873563218391
+      },
+      "matcher": {
+        "reviewsToUnits": 124.81255189386039,
+        "m1": 4.132915461510494,
+        "y2": 1.7486316720423145,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "85ed8868-0a8c-43c1-84d4-6f2ce54e5075",
+      "name": "One Finger Death Punch",
+      "observed": {
+        "reviewsToUnits": 67.05257916749652,
+        "m1": 3.1027346637102733,
+        "y2": 1.5955216769890423
+      },
+      "matcher": {
+        "reviewsToUnits": 97.16440326990791,
+        "m1": 3.5696141277339266,
+        "y2": 1.5947952244079382,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "4aef3864-f988-4e79-a058-2fa69a571fa4",
+      "name": "Orcs Must Die! Unchained",
+      "observed": {
+        "reviewsToUnits": 7485.604026845637,
+        "m1": 1.0888888888888888,
+        "y2": 1.054421768707483
+      },
+      "matcher": {
+        "reviewsToUnits": 189.52690454402827,
+        "m1": 2.836651427881753,
+        "y2": 1.5566445893931664,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "15d26172-4ced-4e9f-9c83-6d8ab9f92d48",
+      "name": "Ori and the Blind Forest",
+      "observed": {
+        "reviewsToUnits": 44.60489963789173,
+        "m1": 4.262235649546827,
+        "y2": 1.3019563368301672
+      },
+      "matcher": {
+        "reviewsToUnits": 93.44022490729192,
+        "m1": 3.063212720349614,
+        "y2": 1.58310849088473,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "9030fdad-48b0-48bc-b67c-0417d20e6aff",
+      "name": "Ori and the Blind Forest: Definitive Edition",
+      "observed": {
+        "reviewsToUnits": 67.54623333038947,
+        "m1": 6.402046783625731,
+        "y2": 2.269011189769354
+      },
+      "matcher": {
+        "reviewsToUnits": 90.39606086505479,
+        "m1": 3.0027356773658265,
+        "y2": 1.502025781221299,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "49062a5c-aad8-4db8-842e-60366b3a8aa2",
+      "name": "Out There Somewhere",
+      "observed": {
+        "reviewsToUnits": 95.08599016214247,
+        "m1": 1.4877666248431618,
+        "y2": 1.1283997469955724
+      },
+      "matcher": {
+        "reviewsToUnits": 250.85319085232808,
+        "m1": 3.0457407750674217,
+        "y2": 1.6651978232807911,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "287cbbda-d8b4-44bc-942f-dee2d88ac350",
+      "name": "Outland",
+      "observed": {
+        "reviewsToUnits": 201.73433115060806,
+        "m1": 10.666666666666666,
+        "y2": 2.0260416666666665
+      },
+      "matcher": {
+        "reviewsToUnits": 149.83421382786952,
+        "m1": 4.655056184677712,
+        "y2": 1.7552031159179846,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "47a47a4e-7617-4692-b8cc-fdd242822a21",
+      "name": "Outlast",
+      "observed": {
+        "reviewsToUnits": 107.04276203157694,
+        "m1": 11.988522238163558,
+        "y2": 1.5217807563427477
+      },
+      "matcher": {
+        "reviewsToUnits": 132.63243527390233,
+        "m1": 4.1652486817299454,
+        "y2": 1.8662110685979414,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "8a1e51ad-6aee-4d96-bc17-f18d3d840a05",
+      "name": "Overcooked",
+      "observed": {
+        "reviewsToUnits": 133.33481448566985,
+        "m1": 5.4475,
+        "y2": 2.1450206516750803
+      },
+      "matcher": {
+        "reviewsToUnits": 110.14356560332358,
+        "m1": 2.423850279117244,
+        "y2": 1.542273440370603,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "bf14f37b-f10a-4b2d-81dd-a681b3c0f1a1",
+      "name": "PAC-MAN™ Championship Edition DX+",
+      "observed": {
+        "reviewsToUnits": 369.8648558014755,
+        "m1": 21.708333333333332,
+        "y2": 1.944337811900192
+      },
+      "matcher": {
+        "reviewsToUnits": 97.3845069218244,
+        "m1": 5.456434595934058,
+        "y2": 1.7788887511151565,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "fa942d56-44f4-42d0-af35-d773ec06df48",
+      "name": "PAYDAY 2",
+      "observed": {
+        "reviewsToUnits": 100.28458546923495,
+        "m1": 38.13085234093637,
+        "y2": 2.307653559172622
+      },
+      "matcher": {
+        "reviewsToUnits": 138.65602263270233,
+        "m1": 4.231166678613836,
+        "y2": 1.6614203515043207,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "6ef24932-9906-4079-8689-8d0ae93a1a88",
+      "name": "Papers, Please",
+      "observed": {
+        "reviewsToUnits": 116.48025651383558,
+        "m1": 14.84037558685446,
+        "y2": 1.4308763049667828
+      },
+      "matcher": {
+        "reviewsToUnits": 82.8101747673215,
+        "m1": 4.209506953009923,
+        "y2": 1.6056675268599567,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "9d4375e4-9350-443e-ba8d-dfc981c7d4fe",
+      "name": "Pillars of Eternity",
+      "observed": {
+        "reviewsToUnits": 177.82378363306844,
+        "m1": 2.1197707736389684,
+        "y2": 1.456609894566099
+      },
+      "matcher": {
+        "reviewsToUnits": 97.37575282133764,
+        "m1": 2.666268038281944,
+        "y2": 1.581917474674788,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "3e705de8-38da-43b3-9509-bed6d8231d63",
+      "name": "Pixel Piracy",
+      "observed": {
+        "reviewsToUnits": 125.98063595597228,
+        "m1": 1.794481981981982,
+        "y2": 1.275180420458111
+      },
+      "matcher": {
+        "reviewsToUnits": 105.4619484755371,
+        "m1": 7.046962075749887,
+        "y2": 1.668534754992539,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "0af4aa7d-aeb4-48fb-8b62-eedbcd0635a4",
+      "name": "Plague Inc: Evolved",
+      "observed": {
+        "reviewsToUnits": 125.53403535163595,
+        "m1": 1.3625128733264675,
+        "y2": 1.253212396069539
+      },
+      "matcher": {
+        "reviewsToUnits": 134.3984816639554,
+        "m1": 3.263199763926549,
+        "y2": 1.6094249735615953,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "f4e04eba-87d7-4652-b317-423c094eb9c0",
+      "name": "Planet Coaster",
+      "observed": {
+        "reviewsToUnits": 98.46883960442389,
+        "m1": 2.668917576961271,
+        "y2": 1.370218782556928
+      },
+      "matcher": {
+        "reviewsToUnits": 113.81939597339166,
+        "m1": 3.4041600896714415,
+        "y2": 1.7280648922285942,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "a64b3346-774c-41d2-8a18-104a3fb75f72",
+      "name": "Planetary Annihilation: TITANS",
+      "observed": {
+        "reviewsToUnits": 131.11185270425776,
+        "m1": 3.1747404844290656,
+        "y2": 1.7961852861035423
+      },
+      "matcher": {
+        "reviewsToUnits": 243.568560505469,
+        "m1": 2.9536009068040863,
+        "y2": 1.5058085448057628,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "5d798439-aec4-4cd4-b030-f71f07adee5c",
+      "name": "Poker Night 2",
+      "observed": {
+        "reviewsToUnits": 164.19070904645477,
+        "m1": 5.221789883268483,
+        "y2": 1.6222056631892698
+      },
+      "matcher": {
+        "reviewsToUnits": 87.7908712841321,
+        "m1": 6.523623144375742,
+        "y2": 1.7685198026856037,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "99c48916-c9c4-47ac-8466-ea9de7d79d31",
+      "name": "Poly Bridge",
+      "observed": {
+        "reviewsToUnits": 297.7695716395864,
+        "m1": 1.8848641655886158,
+        "y2": 1.8586135895676046
+      },
+      "matcher": {
+        "reviewsToUnits": 204.6017108499254,
+        "m1": 2.9326890654704485,
+        "y2": 1.575826930988437,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "3ab1be00-463c-4753-8b65-e1d831242cdb",
+      "name": "Portal Knights",
+      "observed": {
+        "reviewsToUnits": 101.51221679253665,
+        "m1": 1.4042382404880398,
+        "y2": 1.1490796844632445
+      },
+      "matcher": {
+        "reviewsToUnits": 170.53954699135548,
+        "m1": 4.353185463307462,
+        "y2": 1.6858990637450282,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "41a43500-b05f-4645-9b24-e63243d04a9a",
+      "name": "Prey",
+      "observed": {
+        "reviewsToUnits": 79.78461364151372,
+        "m1": 2.5153821757056773,
+        "y2": 1.4317236161896356
+      },
+      "matcher": {
+        "reviewsToUnits": 115.45821007620917,
+        "m1": 2.6075365316278605,
+        "y2": 1.560967268480605,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "c4bdd3cb-0560-4ea2-aa0c-087bffe10d11",
+      "name": "Prison Architect Playtest",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": null,
+        "y2": null
+      },
+      "matcher": {
+        "reviewsToUnits": 142.20115275810466,
+        "m1": 3.182632136435166,
+        "y2": 1.8381906844510127,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "cb97f869-a15d-43ee-9465-d4c8109a1d77",
+      "name": "Project CARS",
+      "observed": {
+        "reviewsToUnits": 93.08514094601051,
+        "m1": 2.8643141153081513,
+        "y2": 1.5150095436404651
+      },
+      "matcher": {
+        "reviewsToUnits": 111.78530506238043,
+        "m1": 1.9246188510837605,
+        "y2": 1.5301238152778327,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "c8bbd5d5-9333-4af5-9ed3-9960d9d59e8a",
+      "name": "Punch Club",
+      "observed": {
+        "reviewsToUnits": 100.89893716203618,
+        "m1": 3.1940298507462686,
+        "y2": 1.2515986227250369
+      },
+      "matcher": {
+        "reviewsToUnits": 131.50409427941526,
+        "m1": 2.7498282265809832,
+        "y2": 1.5889633306905855,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "1d34ea6f-38a3-423e-9403-0ab83873512d",
+      "name": "Quake Live",
+      "observed": {
+        "reviewsToUnits": 1211.5092281879195,
+        "m1": 1,
+        "y2": 123.33333333333333
+      },
+      "matcher": {
+        "reviewsToUnits": 182.15663133493436,
+        "m1": 4.559966830893382,
+        "y2": 2.033887507468514,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "d77a717a-8559-4b1e-bdc8-46c8c928d861",
+      "name": "Raft",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": 1.4829198152551446,
+        "y2": 1.1798880946284582
+      },
+      "matcher": {
+        "reviewsToUnits": 78.71488448387272,
+        "m1": 1.8387849731387844,
+        "y2": 1.4109110937208555,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "b19b7e06-0bbc-4275-a7cf-30695fea9e22",
+      "name": "Remember Me",
+      "observed": {
+        "reviewsToUnits": 90.47966101694915,
+        "m1": 9.50354609929078,
+        "y2": 2.256716417910448
+      },
+      "matcher": {
+        "reviewsToUnits": 126.89495989512433,
+        "m1": 3.7588730420955856,
+        "y2": 1.6734779029148703,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "84971e3c-469e-4ed8-94dd-82f3a4667e48",
+      "name": "Resident Evil 4 (2005)",
+      "observed": {
+        "reviewsToUnits": 90.52947219725183,
+        "m1": 2.411985018726592,
+        "y2": 1.6097308488612836
+      },
+      "matcher": {
+        "reviewsToUnits": 141.58874263198274,
+        "m1": 4.288372632951676,
+        "y2": 1.8849218158722907,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "82bac5fc-3b02-4811-a3c6-c9874e10e2bc",
+      "name": "Resident Evil 6",
+      "observed": {
+        "reviewsToUnits": 127.60124006975393,
+        "m1": 9.012345679012345,
+        "y2": 2.18013698630137
+      },
+      "matcher": {
+        "reviewsToUnits": 153.78849345254628,
+        "m1": 4.699300216638725,
+        "y2": 1.7481861121667606,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "c519bad9-1160-4190-8e0a-12d92102aaa3",
+      "name": "Resident Evil 7 Biohazard",
+      "observed": {
+        "reviewsToUnits": 66.90297089126739,
+        "m1": 2.3667973856209152,
+        "y2": 1.231083618689937
+      },
+      "matcher": {
+        "reviewsToUnits": 142.76353773294065,
+        "m1": 4.461080273017641,
+        "y2": 2.1479079853626666,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "3f84264f-fbfa-4908-8fd3-d61d49cf942b",
+      "name": "Resident Evil Revelations",
+      "observed": {
+        "reviewsToUnits": 162.88996763754045,
+        "m1": 9.583333333333334,
+        "y2": 2.7617391304347825
+      },
+      "matcher": {
+        "reviewsToUnits": 176.43315124796004,
+        "m1": 5.800309586706527,
+        "y2": 1.7413879904857439,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "47486d2f-72d7-4b09-ae34-01cbfbff9655",
+      "name": "Resident Evil Revelations 2",
+      "observed": {
+        "reviewsToUnits": 85.73680781758958,
+        "m1": 1.8852631578947368,
+        "y2": 1.599106644332775
+      },
+      "matcher": {
+        "reviewsToUnits": 117.21880501916732,
+        "m1": 3.4149658428890985,
+        "y2": 1.6535556727222565,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "8f0efe2b-731c-4c91-b524-0de9e9946014",
+      "name": "Reus",
+      "observed": {
+        "reviewsToUnits": 271.09365558912384,
+        "m1": 10.140350877192983,
+        "y2": 1.5951557093425606
+      },
+      "matcher": {
+        "reviewsToUnits": 111.26735690246761,
+        "m1": 3.2571354410354854,
+        "y2": 1.8896450431411336,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "79214ef3-8715-4c6b-9ecb-f49bb4c268a0",
+      "name": "Rise of Nations: Extended Edition",
+      "observed": {
+        "reviewsToUnits": 211.71477832512315,
+        "m1": 3.727034120734908,
+        "y2": 1.5471830985915493
+      },
+      "matcher": {
+        "reviewsToUnits": 216.43273448888647,
+        "m1": 2.6450278143079338,
+        "y2": 9.388228671822715,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "dd2a7c88-09d3-44eb-9b1f-436b88fb63ca",
+      "name": "Rise of the Tomb Raider™",
+      "observed": {
+        "reviewsToUnits": 88.40034065505128,
+        "m1": 3.2949640287769784,
+        "y2": 1.6050019849146486
+      },
+      "matcher": {
+        "reviewsToUnits": 128.87131453762126,
+        "m1": 3.9034163004735216,
+        "y2": 1.6784942829723335,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "440ca16a-a6ff-4069-b55c-689bcea50199",
+      "name": "Rising Storm 2: Vietnam",
+      "observed": {
+        "reviewsToUnits": 90.56970330924305,
+        "m1": 1.9692021496486152,
+        "y2": 1.539834155557888
+      },
+      "matcher": {
+        "reviewsToUnits": 142.0147806379569,
+        "m1": 2.488872876789208,
+        "y2": 1.4544394302948855,
+        "coldStart": false,
+        "neighbours": 12
+      }
+    },
+    {
+      "gameId": "80011c53-b6c5-4c62-9be7-3a44307b5cb7",
+      "name": "Risk of Rain (2013)",
+      "observed": {
+        "reviewsToUnits": 122.352787456446,
+        "m1": 9.935483870967742,
+        "y2": 1.4134199134199135
+      },
+      "matcher": {
+        "reviewsToUnits": 137.02110424050025,
+        "m1": 3.2515789429515354,
+        "y2": 1.6788291145174161,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "aa41b15f-85d4-4e43-98bd-0e5e722a253a",
+      "name": "Robocraft",
+      "observed": {
+        "reviewsToUnits": 102.71212642747226,
+        "m1": 1.1691198098666948,
+        "y2": 1.059043746917991
+      },
+      "matcher": {
+        "reviewsToUnits": 158.2607501024338,
+        "m1": 2.119625407821572,
+        "y2": 1.318324311799553,
+        "coldStart": false,
+        "neighbours": 11
+      }
+    },
+    {
+      "gameId": "b8535121-961b-4215-900f-9243d983d4b0",
+      "name": "Rocket League®",
+      "observed": {
+        "reviewsToUnits": 69.3957897193375,
+        "m1": 8.548617003224164,
+        "y2": 2.0610000595509854
+      },
+      "matcher": {
+        "reviewsToUnits": 121.03465272387605,
+        "m1": 2.6476507825299738,
+        "y2": 1.5642829721401361,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "26bbe5b2-d524-4daf-937d-c858540eba6c",
+      "name": "Rogue Legacy",
+      "observed": {
+        "reviewsToUnits": 128.1577306193157,
+        "m1": 10.040665434380776,
+        "y2": 1.4679675994108983
+      },
+      "matcher": {
+        "reviewsToUnits": 134.81257899785493,
+        "m1": 4.275882635089296,
+        "y2": 1.865066614464141,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "447eaa1c-7c97-483c-b9a2-22109f7f07fe",
+      "name": "Rust",
+      "observed": {
+        "reviewsToUnits": 54.37794264517049,
+        "m1": 1.2020469159247764,
+        "y2": 1.5704947408601238
+      },
+      "matcher": {
+        "reviewsToUnits": 164.4092181583288,
+        "m1": 2.1058168902971315,
+        "y2": 1.2660317082646197,
+        "coldStart": false,
+        "neighbours": 11
+      }
+    },
+    {
+      "gameId": "486ac6ee-d500-4284-8335-be2ed8a69c9e",
+      "name": "Ryse: Son of Rome",
+      "observed": {
+        "reviewsToUnits": 86.507119001582,
+        "m1": 5.332023575638507,
+        "y2": 2.616801768607222
+      },
+      "matcher": {
+        "reviewsToUnits": 201.38352850034596,
+        "m1": 2.879404076605093,
+        "y2": 1.572525617260485,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "332610cc-47d1-44b3-9da3-d01f0c1bcf6f",
+      "name": "SNOW - The Ultimate Edition",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": 1.1226103493143829,
+        "y2": 1.0750713266761769
+      },
+      "matcher": {
+        "reviewsToUnits": 213.7634993600246,
+        "m1": 3.0446629502413267,
+        "y2": 1.6112874349699013,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "ca508a47-87c3-4f93-a720-bb8a27716adf",
+      "name": "SUNLESS SEA",
+      "observed": {
+        "reviewsToUnits": 164.03675819309123,
+        "m1": 2.335907335907336,
+        "y2": 1.9162534435261709
+      },
+      "matcher": {
+        "reviewsToUnits": 119.27367762495273,
+        "m1": 3.2699766472211307,
+        "y2": 1.7599214042234699,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "2873b8a9-bc5f-4354-8d4d-6f01e27d5969",
+      "name": "SUPERHOT",
+      "observed": {
+        "reviewsToUnits": 103.03707329010156,
+        "m1": 1.9025334271639691,
+        "y2": 1.3538006288144997
+      },
+      "matcher": {
+        "reviewsToUnits": 141.40318811125456,
+        "m1": 3.7634713812745915,
+        "y2": 1.7440709511250891,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "170c0164-4ce5-4b79-bc81-8150a1e211c8",
+      "name": "Saints Row IV: Re-Elected",
+      "observed": {
+        "reviewsToUnits": 144.5772772114436,
+        "m1": 21.422279792746114,
+        "y2": 2.0041117426532833
+      },
+      "matcher": {
+        "reviewsToUnits": 152.4931032242001,
+        "m1": 4.596870628153341,
+        "y2": 1.7547143546539783,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "ac4b0e1d-29fa-45c2-a00d-53a134bf6ceb",
+      "name": "Saints Row: Gat out of Hell",
+      "observed": {
+        "reviewsToUnits": 113.14065795023197,
+        "m1": 2.3015717092337917,
+        "y2": 1.4669227486128895
+      },
+      "matcher": {
+        "reviewsToUnits": 132.83325950732785,
+        "m1": 3.1721467111363757,
+        "y2": 1.704630044132733,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "7da40a27-7d5c-450f-b976-3b0f166226ac",
+      "name": "Sanctum 2",
+      "observed": {
+        "reviewsToUnits": 421.76531604538087,
+        "m1": 29.82716049382716,
+        "y2": 1.7193708609271523
+      },
+      "matcher": {
+        "reviewsToUnits": 188.75989014234648,
+        "m1": 3.947631136729471,
+        "y2": 1.6514730145445826,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "d703f18c-eef6-4f3b-ad3b-8c263d078e07",
+      "name": "Satellite Reign",
+      "observed": {
+        "reviewsToUnits": 337.69533029612757,
+        "m1": 2.143162393162393,
+        "y2": 1.4835493519441676
+      },
+      "matcher": {
+        "reviewsToUnits": 227.05651056020162,
+        "m1": 3.055113088872272,
+        "y2": 1.5290059364065314,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "8c993abe-c5c1-4e56-a150-bed75a0905f4",
+      "name": "School of Dragons",
+      "observed": {
+        "reviewsToUnits": 250.44166666666666,
+        "m1": 2.148936170212766,
+        "y2": 1.3294829482948294
+      },
+      "matcher": {
+        "reviewsToUnits": 145.45045321494723,
+        "m1": 1.9597588751862778,
+        "y2": 1.2899519127017203,
+        "coldStart": false,
+        "neighbours": 11
+      }
+    },
+    {
+      "gameId": "3f47b231-0e58-4b11-987c-8048703692ec",
+      "name": "Scribblenauts Unlimited",
+      "observed": {
+        "reviewsToUnits": 335.27928626842515,
+        "m1": 13.862068965517242,
+        "y2": 2.1106965174129355
+      },
+      "matcher": {
+        "reviewsToUnits": 119.76185921260286,
+        "m1": 3.8829041204152013,
+        "y2": 1.683716459610279,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "6567b326-4cd5-49e1-8463-d4381fc4b4c1",
+      "name": "Shadow Warrior",
+      "observed": {
+        "reviewsToUnits": 152.10141182984222,
+        "m1": 12.232067510548523,
+        "y2": 1.8751293549499828
+      },
+      "matcher": {
+        "reviewsToUnits": 122.35317974745581,
+        "m1": 3.7329936114450657,
+        "y2": 1.7034620462073349,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "4dba993c-b183-45ad-8717-509a06797acb",
+      "name": "Shadowrun: Dragonfall - Director's Cut",
+      "observed": {
+        "reviewsToUnits": 182.96793103448275,
+        "m1": 10.357142857142858,
+        "y2": 1.4117241379310346
+      },
+      "matcher": {
+        "reviewsToUnits": 125.63027192371918,
+        "m1": 4.972047821134416,
+        "y2": 1.9175976964296848,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "c58d7c89-d7f1-4f1a-a328-bc95a143f8f2",
+      "name": "ShellShock Live",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": 1.3805979563517095,
+        "y2": 1.1482547514619883
+      },
+      "matcher": {
+        "reviewsToUnits": 131.70057445671384,
+        "m1": 2.2989904188612718,
+        "y2": 1.5286689939733729,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "c6512056-29d3-4a5d-9609-bb1ed4d9d1a8",
+      "name": "Shovel Knight: Treasure Trove",
+      "observed": {
+        "reviewsToUnits": 83.37455376267314,
+        "m1": 2.8115653040877366,
+        "y2": 1.475531914893617
+      },
+      "matcher": {
+        "reviewsToUnits": 159.0055364509843,
+        "m1": 5.070744853320109,
+        "y2": 1.7922167410616907,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "d8cbdd57-0ced-436a-add6-be532009ab53",
+      "name": "Sid Meier's Civilization®: Beyond Earth™",
+      "observed": {
+        "reviewsToUnits": 263.0778159063383,
+        "m1": 3.319740500463392,
+        "y2": 1.2216638749302067
+      },
+      "matcher": {
+        "reviewsToUnits": 114.31419779043239,
+        "m1": 4.853443108391282,
+        "y2": 1.75824017946344,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "338687a5-00f3-4b93-a3e3-fcd701d9d582",
+      "name": "Sid Meier’s Civilization® VI",
+      "observed": {
+        "reviewsToUnits": 128.01140869565216,
+        "m1": 3.5107561929595827,
+        "y2": 1.3863151053755454
+      },
+      "matcher": {
+        "reviewsToUnits": 190.78574400779516,
+        "m1": 3.1640638656098945,
+        "y2": 1.6106717366661825,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "3575c8ab-3d56-4ff8-92ac-0cae702affa5",
+      "name": "Skullgirls 2nd Encore",
+      "observed": {
+        "reviewsToUnits": 190.9790390956194,
+        "m1": 16.428571428571427,
+        "y2": 2.3380434782608694
+      },
+      "matcher": {
+        "reviewsToUnits": 113.43261114102206,
+        "m1": 3.9472410798274646,
+        "y2": 1.6211411728420362,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "eee59368-aec6-4db7-9d8a-feefe95ad2ac",
+      "name": "Slay the Spire",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": 2.2366994313924273,
+        "y2": 1.4421409427715592
+      },
+      "matcher": {
+        "reviewsToUnits": 91.0745517529076,
+        "m1": 3.0960105606804897,
+        "y2": 1.8728238530215375,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "240afeed-db2f-4ea0-8ff8-82ab03a5c8f4",
+      "name": "Sleeping Dogs",
+      "observed": {
+        "reviewsToUnits": 159.24563743470046,
+        "m1": 6.551440329218107,
+        "y2": 4.099246231155779
+      },
+      "matcher": {
+        "reviewsToUnits": 122.67821583556315,
+        "m1": 3.845980853757493,
+        "y2": 1.6503505218100054,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "758497f5-ad5a-4da0-9065-f5e84e1665e7",
+      "name": "Sleeping Dogs: Definitive Edition",
+      "observed": {
+        "reviewsToUnits": 84.66075327510917,
+        "m1": 13.198529411764707,
+        "y2": 1.9348189415041783
+      },
+      "matcher": {
+        "reviewsToUnits": 138.1904355417218,
+        "m1": 3.9996248598188937,
+        "y2": 1.8651178997495728,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "f4c6d0dc-6cc1-4934-8777-b4ab5e2dcf4c",
+      "name": "Slime Rancher",
+      "observed": {
+        "reviewsToUnits": 79.18521410907198,
+        "m1": 1.6266112266112267,
+        "y2": 1.508435582822086
+      },
+      "matcher": {
+        "reviewsToUnits": 100.61396259108002,
+        "m1": 2.3926127732210873,
+        "y2": 1.5573737086028612,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "c58e8737-bc2b-4242-b2ce-cb7bfa6eb8ce",
+      "name": "Sniper Elite 3",
+      "observed": {
+        "reviewsToUnits": 192.23460067969413,
+        "m1": 3.23613595706619,
+        "y2": 2.212824765063571
+      },
+      "matcher": {
+        "reviewsToUnits": 115.65545144030474,
+        "m1": 4.0163151688196645,
+        "y2": 1.6791799448685363,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "e7bb4708-7ae9-486a-a6ed-fefc13d7fcbe",
+      "name": "Sniper Elite 4",
+      "observed": {
+        "reviewsToUnits": 110.17444187836797,
+        "m1": 4.877587758775878,
+        "y2": 1.8163867872301163
+      },
+      "matcher": {
+        "reviewsToUnits": 114.07183058875277,
+        "m1": 2.91295577851201,
+        "y2": 1.618126563427792,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "da92da43-c753-4769-b81c-54703751f992",
+      "name": "Sniper Elite V2",
+      "observed": {
+        "reviewsToUnits": 714.414303030303,
+        "m1": null,
+        "y2": null
+      },
+      "matcher": {
+        "reviewsToUnits": 101.90322673628367,
+        "m1": 3.38031519956427,
+        "y2": 1.7285800380770064,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "42feee63-9a2a-4704-a197-cb83ea16b07f",
+      "name": "Sniper Elite: Nazi Zombie Army",
+      "observed": {
+        "reviewsToUnits": 226.93865513173418,
+        "m1": 4.7607361963190185,
+        "y2": 2.064432989690722
+      },
+      "matcher": {
+        "reviewsToUnits": 223.82942727450785,
+        "m1": 3.9608673952632882,
+        "y2": 10.285114349120938,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "2ec6e53c-4ba9-4d17-88e3-c2fd49b2dc83",
+      "name": "Sniper: Ghost Warrior 2",
+      "observed": {
+        "reviewsToUnits": 218.29625175385848,
+        "m1": 13.764705882352942,
+        "y2": 1.735042735042735
+      },
+      "matcher": {
+        "reviewsToUnits": 115.053807524284,
+        "m1": 4.532966001102807,
+        "y2": 1.714218354048412,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "5a84e9ee-789e-4264-999b-5608de63a98c",
+      "name": "Soldier Front 2",
+      "observed": {
+        "reviewsToUnits": 278.8028240040343,
+        "m1": 11.890243902439025,
+        "y2": 1.6205128205128205
+      },
+      "matcher": {
+        "reviewsToUnits": 125.04810900541618,
+        "m1": 2.284774203532737,
+        "y2": 1.4473994361083775,
+        "coldStart": false,
+        "neighbours": 12
+      }
+    },
+    {
+      "gameId": "c6b0f6ea-a5b4-4b2c-b9bf-927853ade7ec",
+      "name": "Sonic & All-Stars Racing Transformed Collection",
+      "observed": {
+        "reviewsToUnits": 212.96889580093313,
+        "m1": 20.674157303370787,
+        "y2": 1.6092391304347826
+      },
+      "matcher": {
+        "reviewsToUnits": 242.03240582842813,
+        "m1": 7.3691050956283375,
+        "y2": 2.0501187490159034,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "cdcadeb5-d37e-43d6-ab4a-6d0c66bf4586",
+      "name": "South Park™: The Stick of Truth™",
+      "observed": {
+        "reviewsToUnits": 103.42425603135078,
+        "m1": 2.317924760265552,
+        "y2": 1.5696403946112232
+      },
+      "matcher": {
+        "reviewsToUnits": 93.62766876767854,
+        "m1": 3.625075267849217,
+        "y2": 1.6279587952864567,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "70fa27ad-e61d-4287-a878-da318d7de354",
+      "name": "Space Engineers",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": 1.26160754748074,
+        "y2": 1.209189171537733
+      },
+      "matcher": {
+        "reviewsToUnits": 105.24322966598172,
+        "m1": 2.6565062547450937,
+        "y2": 1.5350057047771204,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "b613fa0e-03f3-4362-8c6e-5aad56a6f408",
+      "name": "SpeedRunners",
+      "observed": {
+        "reviewsToUnits": 235.74931506849316,
+        "m1": 1.3781064186613814,
+        "y2": 1.2437216506250692
+      },
+      "matcher": {
+        "reviewsToUnits": 104.43672200555376,
+        "m1": 2.241482978099432,
+        "y2": 1.5337590486405626,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "1f5242b2-139d-4125-bcc7-9ae6dc3d2965",
+      "name": "Spelunky",
+      "observed": {
+        "reviewsToUnits": 123.51028470235663,
+        "m1": 16.602272727272727,
+        "y2": 1.3603696098562628
+      },
+      "matcher": {
+        "reviewsToUnits": 155.14112693569024,
+        "m1": 5.213211449447165,
+        "y2": 1.7460637973976496,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "41ad5877-a21b-4b83-a716-989124a4390c",
+      "name": "Squad",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": 1.6019478027250047,
+        "y2": 1.3037045910574705
+      },
+      "matcher": {
+        "reviewsToUnits": 104.62411130803545,
+        "m1": 3.5512182815813023,
+        "y2": 1.6609613282449918,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "4bc8b246-d78a-4f57-b3e5-1b1dc12aa677",
+      "name": "Starbound",
+      "observed": {
+        "reviewsToUnits": 86.9312918583071,
+        "m1": 1.3996727005544052,
+        "y2": 1.1828485528168173
+      },
+      "matcher": {
+        "reviewsToUnits": 107.32793245444982,
+        "m1": 2.9096601932023005,
+        "y2": 1.6143196271608322,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "32593fb0-6758-4e5b-9d39-73ab79991a96",
+      "name": "Stardew Valley",
+      "observed": {
+        "reviewsToUnits": 62.52597220808307,
+        "m1": 3.327024537308433,
+        "y2": 1.7442106322996376
+      },
+      "matcher": {
+        "reviewsToUnits": 120.37088106854199,
+        "m1": 3.66649671937625,
+        "y2": 1.7227033500443762,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "737c421d-ae40-4187-8a31-31df4e8b488b",
+      "name": "Starpoint Gemini 2",
+      "observed": {
+        "reviewsToUnits": 221.48244620611553,
+        "m1": 1.3373493975903614,
+        "y2": 1.2899774774774775
+      },
+      "matcher": {
+        "reviewsToUnits": 119.27518492428197,
+        "m1": 4.158626036676586,
+        "y2": 1.6341592355669448,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "d81f9f54-0150-4f10-aec6-08f25a3da74d",
+      "name": "State of Decay",
+      "observed": {
+        "reviewsToUnits": 72.01342549514821,
+        "m1": 7.257142857142857,
+        "y2": 1.2636835029767621
+      },
+      "matcher": {
+        "reviewsToUnits": 137.24658535496255,
+        "m1": 2.976809873677406,
+        "y2": 1.5687140115075944,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "1ef3830a-134b-47e4-a157-5c20de914f6f",
+      "name": "Steel Ocean",
+      "observed": {
+        "reviewsToUnits": 176.29592108770996,
+        "m1": 3.352861035422343,
+        "y2": 1.4022754977651362
+      },
+      "matcher": {
+        "reviewsToUnits": 151.29449723544147,
+        "m1": 1.8868435082316424,
+        "y2": 1.2797246602544874,
+        "coldStart": false,
+        "neighbours": 11
+      }
+    },
+    {
+      "gameId": "12735143-16d1-42be-bdff-a9f5a1268d76",
+      "name": "Stellaris",
+      "observed": {
+        "reviewsToUnits": 79.52998018841224,
+        "m1": 2.773850773850774,
+        "y2": 1.9541139240506329
+      },
+      "matcher": {
+        "reviewsToUnits": 104.74759526065542,
+        "m1": 2.23106893826183,
+        "y2": 1.5194215237968143,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "a6701456-8ced-40c7-88d6-4b13a12bf1a1",
+      "name": "Stick Fight: The Game",
+      "observed": {
+        "reviewsToUnits": 138.34426907436765,
+        "m1": 4.385851183765502,
+        "y2": 1.631514684146263
+      },
+      "matcher": {
+        "reviewsToUnits": 113.75678460178727,
+        "m1": 2.3439159412656436,
+        "y2": 1.5667808285680742,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "66248bbd-909f-4d5d-b39b-dc49007a18f6",
+      "name": "Stories: The Path of Destinies",
+      "observed": {
+        "reviewsToUnits": 531.6304347826087,
+        "m1": 3.2526315789473683,
+        "y2": 1.8705501618122977
+      },
+      "matcher": {
+        "reviewsToUnits": 93.53735437435141,
+        "m1": 3.377786167922627,
+        "y2": 1.6241132137872536,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "a82421e9-dcbe-471b-8855-c1dfd373f11a",
+      "name": "Stranded Deep",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": 1.1335513369602963,
+        "y2": 1.0849352837558397
+      },
+      "matcher": {
+        "reviewsToUnits": 137.47967733827196,
+        "m1": 3.9481745704867306,
+        "y2": 1.7629722367907905,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "e6d61c25-8478-4a3d-a2e9-052379b52dfe",
+      "name": "Stronghold Crusader 2",
+      "observed": {
+        "reviewsToUnits": 239.935960591133,
+        "m1": 2.9625,
+        "y2": 1.7333333333333334
+      },
+      "matcher": {
+        "reviewsToUnits": 244.47422357565017,
+        "m1": 3.578999922219109,
+        "y2": 1.9598496011194386,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "898c6905-0539-4635-869b-27237215dd2b",
+      "name": "Subnautica",
+      "observed": {
+        "reviewsToUnits": 44.17788017012883,
+        "m1": 1.7034548117515294,
+        "y2": 1.2632637062512644
+      },
+      "matcher": {
+        "reviewsToUnits": 116.01640420599084,
+        "m1": 2.7807420383815145,
+        "y2": 1.5290504846564006,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "f72029a1-cfda-473d-adaa-2b01080861ee",
+      "name": "Surgeon Simulator",
+      "observed": {
+        "reviewsToUnits": 191.0481903212688,
+        "m1": 17.017341040462426,
+        "y2": 1.8790760869565217
+      },
+      "matcher": {
+        "reviewsToUnits": 216.6322163129821,
+        "m1": 2.4894837013472735,
+        "y2": 1.5516628787367752,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "dc3a9f59-77af-4b4f-bf9a-fd69ab1791e7",
+      "name": "Survarium",
+      "observed": {
+        "reviewsToUnits": 141.0683724579084,
+        "m1": 2.687855470056875,
+        "y2": 1.4858103061986556
+      },
+      "matcher": {
+        "reviewsToUnits": 154.1125622160082,
+        "m1": 1.916012879957147,
+        "y2": 1.2732317248268894,
+        "coldStart": false,
+        "neighbours": 11
+      }
+    },
+    {
+      "gameId": "ac773b14-9ca6-4e5d-8a08-e75043acb2a5",
+      "name": "TEKKEN 7",
+      "observed": {
+        "reviewsToUnits": 62.23272392779119,
+        "m1": 2.1929208322075113,
+        "y2": 1.4871858058156728
+      },
+      "matcher": {
+        "reviewsToUnits": 105.88267066562683,
+        "m1": 2.749958499406702,
+        "y2": 1.6154250373234373,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "74071501-7677-46f9-b083-aaebf174a071",
+      "name": "Tabletop Simulator",
+      "observed": {
+        "reviewsToUnits": 343.54799641148327,
+        "m1": 2.104501607717042,
+        "y2": 1.823911382734912
+      },
+      "matcher": {
+        "reviewsToUnits": 128.06842592325913,
+        "m1": 3.6017184545456615,
+        "y2": 1.6348716756242299,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "9196b3f7-d434-40ea-9757-8b5d4750df6d",
+      "name": "Tales from the Borderlands",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": 1.0423219431864965,
+        "y2": 1.0305711351607552
+      },
+      "matcher": {
+        "reviewsToUnits": 75.68037914573732,
+        "m1": 3.031412768651383,
+        "y2": 1.4976081478239875,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "56f9ceee-8ac2-4b0f-bf2e-6bc253457c8e",
+      "name": "Talisman: Digital Classic Edition",
+      "observed": {
+        "reviewsToUnits": 307.282575370465,
+        "m1": 4.716312056737588,
+        "y2": 1.8120300751879699
+      },
+      "matcher": {
+        "reviewsToUnits": 180.88181399935914,
+        "m1": 5.875501574895241,
+        "y2": 1.6452933911310152,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "9eaf3fc8-b696-4d2d-aa46-1e0ff6c71ac6",
+      "name": "The Banner Saga",
+      "observed": {
+        "reviewsToUnits": 90.0992890709724,
+        "m1": 3.767231638418079,
+        "y2": 1.5662867426514697
+      },
+      "matcher": {
+        "reviewsToUnits": 136.07275810597207,
+        "m1": 2.808559670560394,
+        "y2": 1.5366402265272687,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "ecdb5d24-19a2-4add-8cc6-c8428dc95c40",
+      "name": "The Binding of Isaac: Rebirth",
+      "observed": {
+        "reviewsToUnits": 51.558226096064644,
+        "m1": 3.5258260539308774,
+        "y2": 1.8763397425539936
+      },
+      "matcher": {
+        "reviewsToUnits": 130.16513240217387,
+        "m1": 3.716576744119152,
+        "y2": 1.7054686235449363,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "8e781694-e753-4ae1-9105-024c58dff777",
+      "name": "The Culling",
+      "observed": {
+        "reviewsToUnits": 52.637226140690345,
+        "m1": 1.1638143483023,
+        "y2": 1.0385271454620317
+      },
+      "matcher": {
+        "reviewsToUnits": 146.72380900729158,
+        "m1": 2.7290625119807372,
+        "y2": 1.495911523052445,
+        "coldStart": false,
+        "neighbours": 12
+      }
+    },
+    {
+      "gameId": "11b7f30d-7fe2-4542-a67d-be3088d08533",
+      "name": "The Descendant",
+      "observed": {
+        "reviewsToUnits": 3441.353260869565,
+        "m1": 4.0344827586206895,
+        "y2": 1.435897435897436
+      },
+      "matcher": {
+        "reviewsToUnits": 167.11527039033038,
+        "m1": 2.7458506864869214,
+        "y2": 1.590036231096182,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "b6836ade-b305-4e3c-989a-e37812c8aa9e",
+      "name": "The Elder Scrolls V: Skyrim Special Edition",
+      "observed": {
+        "reviewsToUnits": 486.54982855878774,
+        "m1": 8.55574912891986,
+        "y2": 2.0317654245571166
+      },
+      "matcher": {
+        "reviewsToUnits": 87.17389549162583,
+        "m1": 2.5064282366585076,
+        "y2": 1.534338746592495,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "6741d130-0a38-426b-8e9f-102027affe28",
+      "name": "The Escapists",
+      "observed": {
+        "reviewsToUnits": 130.17958241317004,
+        "m1": 2.3700041203131437,
+        "y2": 1.3584840055632823
+      },
+      "matcher": {
+        "reviewsToUnits": 112.37582890993095,
+        "m1": 2.0981579240015527,
+        "y2": 1.5719258127131341,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "b9b3cec9-b086-4092-907e-ce22835ca221",
+      "name": "The Evil Within",
+      "observed": {
+        "reviewsToUnits": 111.44364183596689,
+        "m1": 4.397459165154265,
+        "y2": 1.491126702434998
+      },
+      "matcher": {
+        "reviewsToUnits": 94.28845583724525,
+        "m1": 3.431438331209117,
+        "y2": 1.6931993018923441,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "df80c132-3f3e-4e73-8f1e-1d89171b94b2",
+      "name": "The Flame in the Flood",
+      "observed": {
+        "reviewsToUnits": 390.0805555555556,
+        "m1": 2.150537634408602,
+        "y2": 1.69375
+      },
+      "matcher": {
+        "reviewsToUnits": 127.00412960626954,
+        "m1": 4.120919749522003,
+        "y2": 1.6680856319184525,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "2e38e42c-b231-4c2f-b7fa-f39d83fbb2e0",
+      "name": "The Forest",
+      "observed": {
+        "reviewsToUnits": 69.64719016557953,
+        "m1": 1.2516869721997588,
+        "y2": 1.5465599051008303
+      },
+      "matcher": {
+        "reviewsToUnits": 195.62416206381772,
+        "m1": 3.414040010410264,
+        "y2": 1.6822902275247202,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "53c3153a-03c4-43a9-ab0d-c59a57f64d00",
+      "name": "The Incredible Adventures of Van Helsing",
+      "observed": {
+        "reviewsToUnits": 185.0384517443341,
+        "m1": 16.758333333333333,
+        "y2": 1.3560417702635505
+      },
+      "matcher": {
+        "reviewsToUnits": 164.11274415211201,
+        "m1": 4.692891146279959,
+        "y2": 1.6892740272508737,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "e7c58413-5753-4418-a48d-7f7a52caa46e",
+      "name": "The Long Dark",
+      "observed": {
+        "reviewsToUnits": 55.21760758226879,
+        "m1": 1.4130989626214392,
+        "y2": 1.3270311999300841
+      },
+      "matcher": {
+        "reviewsToUnits": 95.932804060211,
+        "m1": 1.9527864233338248,
+        "y2": 1.4825544627194995,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "96642e88-81de-4305-831b-dfe7fd083ec7",
+      "name": "The Red Solstice",
+      "observed": {
+        "reviewsToUnits": 939.5533707865169,
+        "m1": 1.3896103896103895,
+        "y2": 1.2186915887850467
+      },
+      "matcher": {
+        "reviewsToUnits": 198.24266989149922,
+        "m1": 3.8358324835316298,
+        "y2": 1.6725932697496635,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "8c194b5c-82eb-4abc-a9c8-283ac6fcef3f",
+      "name": "The Talos Principle",
+      "observed": {
+        "reviewsToUnits": 67.53508005822417,
+        "m1": 9.470225872689939,
+        "y2": 2.0600607111882048
+      },
+      "matcher": {
+        "reviewsToUnits": 136.63753837579907,
+        "m1": 4.190254654944739,
+        "y2": 1.831442263294946,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "693478bb-ad7e-4f7e-9b0b-450ac201c869",
+      "name": "The Walking Dead: Season Two",
+      "observed": {
+        "reviewsToUnits": 63.887872546644054,
+        "m1": 6.260144927536232,
+        "y2": 1.3463363815256395
+      },
+      "matcher": {
+        "reviewsToUnits": 83.76123954747071,
+        "m1": 3.3142440818133556,
+        "y2": 1.5360374568159563,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "2b5c3d50-d8bf-4bbe-a07d-c98aa424dfeb",
+      "name": "The Witcher 3: Wild Hunt",
+      "observed": {
+        "reviewsToUnits": 39.42687542271661,
+        "m1": 4.391310481026943,
+        "y2": 2.500321233536781
+      },
+      "matcher": {
+        "reviewsToUnits": 110.95584443943656,
+        "m1": 2.994903803409662,
+        "y2": 1.550135271542017,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "4302a5b2-7b17-4f70-98e9-cb252c807094",
+      "name": "The Wolf Among Us",
+      "observed": {
+        "reviewsToUnits": 62.010792911019806,
+        "m1": 24.54121863799283,
+        "y2": 1.51803709653863
+      },
+      "matcher": {
+        "reviewsToUnits": 131.80743583951295,
+        "m1": 5.040909081181183,
+        "y2": 1.8919284790487192,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "bd1b32a6-3c6f-45c9-a3d9-90d703c5664b",
+      "name": "They Are Billions",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": 1.6896431315035967,
+        "y2": 1.256220550549723
+      },
+      "matcher": {
+        "reviewsToUnits": 91.0745517529076,
+        "m1": 3.1860663756728425,
+        "y2": 1.8854565996775245,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "36d4b616-2e6f-41c5-b328-414dc7b59111",
+      "name": "Thief",
+      "observed": {
+        "reviewsToUnits": 166.16331435800126,
+        "m1": 2.4825543120473994,
+        "y2": 1.3701935826040839
+      },
+      "matcher": {
+        "reviewsToUnits": 128.9181375855104,
+        "m1": 4.556825355926435,
+        "y2": 1.876002451098269,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "d374f88b-dbe6-4d54-9db1-2e645673c369",
+      "name": "This War of Mine",
+      "observed": {
+        "reviewsToUnits": 78.42900083495687,
+        "m1": 4.92806484295846,
+        "y2": 1.9624794407894737
+      },
+      "matcher": {
+        "reviewsToUnits": 110.02493102651339,
+        "m1": 4.368245067438256,
+        "y2": 1.5794431965293,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "d78dcf45-0dc3-490d-8984-7f23f4fd1bd1",
+      "name": "Titan Quest Anniversary Edition",
+      "observed": {
+        "reviewsToUnits": 133.48257750448374,
+        "m1": 2.8507462686567164,
+        "y2": 1.887434554973822
+      },
+      "matcher": {
+        "reviewsToUnits": 136.26770178033044,
+        "m1": 3.3462915236304682,
+        "y2": 1.5083768868129281,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "40a2744a-cef7-4380-bea3-ef07bac13462",
+      "name": "Tomb Raider Game of the Year",
+      "observed": {
+        "reviewsToUnits": 87.30728165366466,
+        "m1": 11.010498687664041,
+        "y2": 2.57222884386174
+      },
+      "matcher": {
+        "reviewsToUnits": 155.87445839739692,
+        "m1": 4.616748115887703,
+        "y2": 1.7075798381118168,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "5554d340-61c1-4a55-89ca-d30424e04767",
+      "name": "Total War: ATTILA",
+      "observed": {
+        "reviewsToUnits": 138.2708398214471,
+        "m1": 3.555636896046852,
+        "y2": 1.474366893143916
+      },
+      "matcher": {
+        "reviewsToUnits": 133.69040393888037,
+        "m1": 3.357282629611222,
+        "y2": 1.6181994613546145,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "c4029bef-3bc0-4924-96ae-5042248c2a07",
+      "name": "Total War: ROME II - Emperor Edition",
+      "observed": {
+        "reviewsToUnits": 171.11373850868233,
+        "m1": 19.683646112600535,
+        "y2": 1.630073549441569
+      },
+      "matcher": {
+        "reviewsToUnits": 212.0483309028326,
+        "m1": 3.0969322760591838,
+        "y2": 1.6515957658489309,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "9de5c28d-e7d7-48c2-8d78-c0aa1d55ed90",
+      "name": "Total War: WARHAMMER",
+      "observed": {
+        "reviewsToUnits": 97.88355939362651,
+        "m1": 3.2072518327719437,
+        "y2": 1.2867733366281584
+      },
+      "matcher": {
+        "reviewsToUnits": 109.89434408362806,
+        "m1": 3.719835973263587,
+        "y2": 1.7103196881615945,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "8bfbe59b-359c-4142-a371-a3c5ac550310",
+      "name": "Total War: WARHAMMER II",
+      "observed": {
+        "reviewsToUnits": 107.10870783368821,
+        "m1": 2.212555842934399,
+        "y2": 2.108607863974495
+      },
+      "matcher": {
+        "reviewsToUnits": 102.38214274810555,
+        "m1": 3.5681751488242743,
+        "y2": 1.6479991383452586,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "c151647b-aab2-4677-89ec-0558c916c371",
+      "name": "Town of Salem",
+      "observed": {
+        "reviewsToUnits": 86.60110350464902,
+        "m1": 11.41340782122905,
+        "y2": 2.352422907488987
+      },
+      "matcher": {
+        "reviewsToUnits": 142.69570603025934,
+        "m1": 2.2738328902782814,
+        "y2": 1.375805407053205,
+        "coldStart": false,
+        "neighbours": 12
+      }
+    },
+    {
+      "gameId": "8a7eceef-b49d-4b71-9144-3cc28a3ecd40",
+      "name": "Transistor",
+      "observed": {
+        "reviewsToUnits": 70.7916489135066,
+        "m1": 4.55831608005521,
+        "y2": 1.4890234670704012
+      },
+      "matcher": {
+        "reviewsToUnits": 107.52554269539071,
+        "m1": 4.94786640838197,
+        "y2": 1.6509137356663708,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "887d08fc-9952-49bf-a9ba-5713081c1e0f",
+      "name": "Trine 2: Complete Story",
+      "observed": {
+        "reviewsToUnits": 268.97138452644765,
+        "m1": 3.6701923076923078,
+        "y2": 1.5441446161907257
+      },
+      "matcher": {
+        "reviewsToUnits": 146.42092036638715,
+        "m1": 4.9319261363068945,
+        "y2": 1.784821514567597,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "d6a133be-34f8-459c-b1a8-74c955ce9d64",
+      "name": "Tropico 5",
+      "observed": {
+        "reviewsToUnits": 282.19244663382597,
+        "m1": 4.359281437125748,
+        "y2": 1.5283882783882783
+      },
+      "matcher": {
+        "reviewsToUnits": 99.29613911077813,
+        "m1": 2.2108757468486866,
+        "y2": 1.5285338869309488,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "055cd590-d50f-41ab-bdc0-0c83f753ffb8",
+      "name": "Turbo Pug DX",
+      "observed": {
+        "reviewsToUnits": 1800.3299663299663,
+        "m1": 7.655172413793103,
+        "y2": 1.3783783783783783
+      },
+      "matcher": {
+        "reviewsToUnits": 162.83374809591385,
+        "m1": 2.7317754858756795,
+        "y2": 1.6444715889299304,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "3bc33555-7ba1-4d86-869a-ae50fe3c5315",
+      "name": "Tyranny",
+      "observed": {
+        "reviewsToUnits": 126.09390407888839,
+        "m1": 1.8774583963691376,
+        "y2": 1.321246306741875
+      },
+      "matcher": {
+        "reviewsToUnits": 115.93664514732257,
+        "m1": 3.289220846598567,
+        "y2": 1.7455799998476105,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "2cd1651c-f320-4617-b531-8b33658128ca",
+      "name": "Ultimate Chicken Horse",
+      "observed": {
+        "reviewsToUnits": 174.43581616481774,
+        "m1": 26.556962025316455,
+        "y2": 1.9175405147759772
+      },
+      "matcher": {
+        "reviewsToUnits": 123.26683299463778,
+        "m1": 2.5107156835819078,
+        "y2": 1.5868610229816826,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "7761d4f5-177f-4551-bb27-f49f97eec7bb",
+      "name": "Ultra Street Fighter® IV",
+      "observed": {
+        "reviewsToUnits": 253.2851327776701,
+        "m1": 1.7831384015594542,
+        "y2": 1.198688166165619
+      },
+      "matcher": {
+        "reviewsToUnits": 124.5427345073756,
+        "m1": 4.0763353434851535,
+        "y2": 1.7523463917594397,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "6da0de94-faf3-4f2f-b962-be316c776e47",
+      "name": "Undertale",
+      "observed": {
+        "reviewsToUnits": 49.63563033595742,
+        "m1": 22.983762597984324,
+        "y2": 1.4922409802918464
+      },
+      "matcher": {
+        "reviewsToUnits": 129.32129311867504,
+        "m1": 3.143034289117696,
+        "y2": 1.6552780089281978,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "f3d27d4f-55f4-4dd9-92c1-a8b8bb56f7aa",
+      "name": "Valkyria Chronicles™",
+      "observed": {
+        "reviewsToUnits": 110.88762097356637,
+        "m1": 3.70771001150748,
+        "y2": 1.6641837368094352
+      },
+      "matcher": {
+        "reviewsToUnits": 106.35735229824185,
+        "m1": 4.574523645060348,
+        "y2": 1.6377062940254639,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "c90a5c5f-75a3-4f43-8cd5-419df64fc7d2",
+      "name": "Verdun",
+      "observed": {
+        "reviewsToUnits": 62.78766187640019,
+        "m1": 2.1335781501032822,
+        "y2": 1.5608864027538727
+      },
+      "matcher": {
+        "reviewsToUnits": 130.85931533802338,
+        "m1": 2.6254429934456502,
+        "y2": 1.6151845624570373,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "3d6243e2-ce41-4f5f-b947-990602bc5049",
+      "name": "Viscera Cleanup Detail",
+      "observed": {
+        "reviewsToUnits": 156.81623071763917,
+        "m1": 1.3846153846153846,
+        "y2": 1.3482905982905984
+      },
+      "matcher": {
+        "reviewsToUnits": 188.02763435234016,
+        "m1": 3.2823903838127384,
+        "y2": 1.9338258873737386,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "4fb50ae9-88aa-4016-9b02-98a5d931fe6a",
+      "name": "Viscera Cleanup Detail: Santa's Rampage",
+      "observed": {
+        "reviewsToUnits": 204.12568908489527,
+        "m1": 2.5454545454545454,
+        "y2": 1.3803986710963456
+      },
+      "matcher": {
+        "reviewsToUnits": 196.41626779606895,
+        "m1": 3.7848380400097574,
+        "y2": 2.0481046150303834,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "a4de488a-3a6a-4fcb-9e60-f546c114c956",
+      "name": "Viscera Cleanup Detail: Shadow Warrior",
+      "observed": {
+        "reviewsToUnits": 1751.5213613323679,
+        "m1": 13.095238095238095,
+        "y2": 2.3781818181818184
+      },
+      "matcher": {
+        "reviewsToUnits": 167.12935509076118,
+        "m1": 3.7143801353880606,
+        "y2": 1.9944202768165993,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "33cea7f1-89fd-423b-adce-bc073f55bc98",
+      "name": "Wallpaper Engine",
+      "observed": {
+        "reviewsToUnits": null,
+        "m1": 1.9020631117248101,
+        "y2": 2.521698747718028
+      },
+      "matcher": {
+        "reviewsToUnits": 128.6366848269542,
+        "m1": 2.8770888710375617,
+        "y2": 1.696205771068253,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "8f45e1c0-765d-4470-808b-79f1423347ee",
+      "name": "Warface: Clutch",
+      "observed": {
+        "reviewsToUnits": 174.77901480936876,
+        "m1": 2.6761651131824236,
+        "y2": 1.824161608120211
+      },
+      "matcher": {
+        "reviewsToUnits": 77.01455015817672,
+        "m1": 2.341973827591465,
+        "y2": 1.290958048265802,
+        "coldStart": false,
+        "neighbours": 3
+      }
+    },
+    {
+      "gameId": "8e27f131-700a-4bbf-8d07-184dd66a11a7",
+      "name": "Warhammer 40,000: Dawn of War III",
+      "observed": {
+        "reviewsToUnits": 96.28919071873231,
+        "m1": 1.7047522750252782,
+        "y2": 1.1451660735468565
+      },
+      "matcher": {
+        "reviewsToUnits": 190.739648280579,
+        "m1": 2.7536643860726344,
+        "y2": 1.8436667924399168,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "781c519b-69c3-4668-ab8b-5402b1a54501",
+      "name": "Warhammer 40,000: Eternal Crusade",
+      "observed": {
+        "reviewsToUnits": 49.99124639411121,
+        "m1": 2.7089390658830808,
+        "y2": 1.1651061886275405
+      },
+      "matcher": {
+        "reviewsToUnits": 156.95733419579244,
+        "m1": 2.0101866778701454,
+        "y2": 1.3540285014778202,
+        "coldStart": false,
+        "neighbours": 12
+      }
+    },
+    {
+      "gameId": "326a8aef-087e-4ee3-bcba-d450dd6d5146",
+      "name": "Warhammer: End Times - Vermintide",
+      "observed": {
+        "reviewsToUnits": 173.98206870517177,
+        "m1": 2.2319569120287253,
+        "y2": 1.4554375804375805
+      },
+      "matcher": {
+        "reviewsToUnits": 129.44548581637736,
+        "m1": 3.0706513458193734,
+        "y2": 1.667717112861169,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "c950da02-bfe1-4db8-a8eb-2c237157a2e5",
+      "name": "Warhammer: Vermintide 2",
+      "observed": {
+        "reviewsToUnits": 81.53245654013934,
+        "m1": 1.9607549990655952,
+        "y2": 1.619329012581014
+      },
+      "matcher": {
+        "reviewsToUnits": 117.54718612679578,
+        "m1": 2.6333334900290315,
+        "y2": 1.5615075031499976,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "3e15cd5c-2aec-44c4-a4b9-41e017eb5302",
+      "name": "Wasteland 2: Director's Cut",
+      "observed": {
+        "reviewsToUnits": 152.88073170731707,
+        "m1": 2.528838342810723,
+        "y2": 1.1657565049791199
+      },
+      "matcher": {
+        "reviewsToUnits": 127.36821055206872,
+        "m1": 2.8170635359266756,
+        "y2": 1.5312967387034702,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "6a688e7c-ddb8-4b67-8759-995267f44dd8",
+      "name": "Who's Your Daddy?!",
+      "observed": {
+        "reviewsToUnits": 146.04990488978405,
+        "m1": 1.681564245810056,
+        "y2": 1.2592806586739853
+      },
+      "matcher": {
+        "reviewsToUnits": 133.37432318695073,
+        "m1": 2.496770829560453,
+        "y2": 1.474848257079628,
+        "coldStart": false,
+        "neighbours": 12
+      }
+    },
+    {
+      "gameId": "a2a83b78-dd71-4134-8e8b-e0b4c9d02a40",
+      "name": "WildStar",
+      "observed": {
+        "reviewsToUnits": 6748.889763779527,
+        "m1": null,
+        "y2": 1
+      },
+      "matcher": {
+        "reviewsToUnits": 114.68522769124333,
+        "m1": 1.9777509069931527,
+        "y2": 1.3152172997309923,
+        "coldStart": false,
+        "neighbours": 11
+      }
+    },
+    {
+      "gameId": "5cc5158c-4bbc-4251-b1e0-ed5e48a13f1a",
+      "name": "Wolfenstein II: The New Colossus",
+      "observed": {
+        "reviewsToUnits": 76.08100249238439,
+        "m1": 1.722662440570523,
+        "y2": 1.3071362859771323
+      },
+      "matcher": {
+        "reviewsToUnits": 96.53712171726112,
+        "m1": 3.7245042461929563,
+        "y2": 1.7043380853977996,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "7dab1922-aff6-471d-bb60-bfd8986a29e2",
+      "name": "Wolfenstein: The New Order",
+      "observed": {
+        "reviewsToUnits": 99.005984114895,
+        "m1": 4.67167543200601,
+        "y2": 1.6873592795110968
+      },
+      "matcher": {
+        "reviewsToUnits": 95.10927140817552,
+        "m1": 3.419964901131259,
+        "y2": 1.678826289605556,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "44f57690-05a8-44e1-8214-35ade8d6f9db",
+      "name": "Wolfenstein: The Old Blood",
+      "observed": {
+        "reviewsToUnits": 140.92210229938996,
+        "m1": 2.7223796033994336,
+        "y2": 1.5036420395421437
+      },
+      "matcher": {
+        "reviewsToUnits": 92.30922757712904,
+        "m1": 3.523015683067757,
+        "y2": 1.6901019373566866,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "36680822-c917-41be-8700-0cc68bf34137",
+      "name": "Woodle Tree Adventures",
+      "observed": {
+        "reviewsToUnits": 462.7361963190184,
+        "m1": 1.1572815533980583,
+        "y2": 1.0729865771812082
+      },
+      "matcher": {
+        "reviewsToUnits": 171.5013336691024,
+        "m1": 3.8362962816023325,
+        "y2": 1.8566759319671633,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "2a4c448b-3975-4503-a977-9d151e3af579",
+      "name": "Worms Clan Wars",
+      "observed": {
+        "reviewsToUnits": 666.2202852614897,
+        "m1": 29.4,
+        "y2": 1.9285714285714286
+      },
+      "matcher": {
+        "reviewsToUnits": 191.46285412082273,
+        "m1": 3.0850054897788453,
+        "y2": 1.6291448616668975,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "031e7f1f-97b7-4fa3-8d7d-acff2204d7d2",
+      "name": "XCOM® 2",
+      "observed": {
+        "reviewsToUnits": 117.47938471297178,
+        "m1": 1.9713156990724836,
+        "y2": 1.5165984142197437
+      },
+      "matcher": {
+        "reviewsToUnits": 144.11873484502414,
+        "m1": 3.1032652050376965,
+        "y2": 1.822954380544455,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "b8617462-3cfa-4732-86b2-63f9171616f8",
+      "name": "Youtubers Life",
+      "observed": {
+        "reviewsToUnits": 104.59938524590164,
+        "m1": 1.3011974832555306,
+        "y2": 1.143503353610981
+      },
+      "matcher": {
+        "reviewsToUnits": 209.85609089174355,
+        "m1": 3.2884910568585743,
+        "y2": 1.617199461318485,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "55d9bf9e-8df7-4e8a-b135-3ab15ae54940",
+      "name": "Zombie Army Trilogy",
+      "observed": {
+        "reviewsToUnits": 139.91602144133412,
+        "m1": 5.7535816618911175,
+        "y2": 2.0139442231075697
+      },
+      "matcher": {
+        "reviewsToUnits": 130.95093926326598,
+        "m1": 3.004287331571336,
+        "y2": 1.667723926234344,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    },
+    {
+      "gameId": "9f4abd24-c218-4815-9e89-3834874ef2bf",
+      "name": "theHunter: Call of the Wild™",
+      "observed": {
+        "reviewsToUnits": 64.22193334909005,
+        "m1": 7.912162162162162,
+        "y2": 1.4862890217288167
+      },
+      "matcher": {
+        "reviewsToUnits": 81.08272592571406,
+        "m1": 2.0254876748240984,
+        "y2": 1.5104824682982005,
+        "coldStart": false,
+        "neighbours": 15
+      }
+    }
+  ]
+}

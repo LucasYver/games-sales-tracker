@@ -9,6 +9,7 @@ import { SchedulerModule } from './scheduler/scheduler.module';
 import { SourcesModule } from './sources/sources.module';
 import { PublishersModule } from './publishers/publishers.module';
 import { GenresModule } from './genres/genres.module';
+import { ReferenceProfilesModule } from './reference-profiles/reference-profiles.module';
 import { AdminModule } from './admin/admin.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -25,6 +26,7 @@ import { AppService } from './app.service';
     SourcesModule,
     PublishersModule,
     GenresModule,
+    ReferenceProfilesModule,
     AdminModule,
   ],
   controllers: [AppController],

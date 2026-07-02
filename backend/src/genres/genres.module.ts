@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Genre, GenreProfile } from '../entities';
+import { Genre } from '../entities';
 import { GenresService } from './genres.service';
 import { IgdbClient } from '../ingestion/igdb.client';
 
@@ -13,7 +13,7 @@ import { IgdbClient } from '../ingestion/igdb.client';
  * second instance is harmless.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([GenreProfile, Genre])],
+  imports: [TypeOrmModule.forFeature([Genre])],
   providers: [GenresService, IgdbClient],
   exports: [GenresService],
 })

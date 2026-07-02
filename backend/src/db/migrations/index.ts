@@ -30,6 +30,11 @@ import { AddSteamPlayersLeakMetric1782660000000 } from './1782660000000-AddSteam
 import { AddSteamLeakSalesSource1782661000000 } from './1782661000000-AddSteamLeakSalesSource';
 import { BackfillSteamLeakMilestones1782662000000 } from './1782662000000-BackfillSteamLeakMilestones';
 import { AddSteamLeakToCalibrationSourceEnums1782663000000 } from './1782663000000-AddSteamLeakToCalibrationSourceEnums';
+import { AddReferenceProfile1782670000000 } from './1782670000000-AddReferenceProfile';
+import { AddGameFranchiseAndLiveService1782680000000 } from './1782680000000-AddGameFranchiseAndLiveService';
+import { AddReferenceProfilePeakCcuRatio1782690000000 } from './1782690000000-AddReferenceProfilePeakCcuRatio';
+import { DropGenreProfile1782700000000 } from './1782700000000-DropGenreProfile';
+import { AddGameSteamTags1782710000000 } from './1782710000000-AddGameSteamTags';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -71,4 +76,9 @@ export const migrations: MixedList<Function | string> = [
   AddSteamLeakSalesSource1782661000000,
   BackfillSteamLeakMilestones1782662000000,
   AddSteamLeakToCalibrationSourceEnums1782663000000,
+  AddReferenceProfile1782670000000,
+  AddGameFranchiseAndLiveService1782680000000,
+  AddReferenceProfilePeakCcuRatio1782690000000,
+  DropGenreProfile1782700000000,
+  AddGameSteamTags1782710000000,
 ];

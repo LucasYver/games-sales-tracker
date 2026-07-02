@@ -4,6 +4,7 @@ import {
   type BoxleiterBreakdownEntry,
   type FirstWeekBreakdownEntry,
   type PlatformBreakdownResult,
+  type SplitBreakdownEntry,
 } from '@/lib/admin';
 import {
   Card,
@@ -29,6 +30,27 @@ function fmtMultiplierRange(low: number, high: number): string {
   return `×${low.toFixed(1)}–${high.toFixed(1)}`;
 }
 
+function fmtShare(share: number): string {
+  return `${(share * 100).toFixed(0)}%`;
+}
+
+const MULTIPLIER_SOURCE_LABEL: Record<
+  BoxleiterBreakdownEntry['multiplierSource'],
+  string
+> = {
+  matcher: 'matcher',
+  global: 'global fallback',
+  calibrated: 'calibrated',
+};
+
+function ProvenanceTag({ label }: { label: string }) {
+  return (
+    <span className="bg-muted text-muted-foreground rounded px-1 py-0.5 font-mono text-[10px] tracking-wide uppercase">
+      {label}
+    </span>
+  );
+}
+
 function BoxleiterRow({ entry }: { entry: BoxleiterBreakdownEntry }) {
   return (
     <div className="border-border bg-background space-y-1.5 rounded border p-3 text-xs">
@@ -49,13 +71,45 @@ function BoxleiterRow({ entry }: { entry: BoxleiterBreakdownEntry }) {
         <span>×</span>
         <span className="font-mono font-medium text-amber-700 dark:text-amber-400">
           {fmtMultiplierRange(entry.multiplierLow, entry.multiplierHigh)}
-          {' (default)'}
         </span>
+        <ProvenanceTag label={MULTIPLIER_SOURCE_LABEL[entry.multiplierSource]} />
         {entry.calibratedValue != null && (
           <span className="text-muted-foreground/60 font-mono text-[10px]">
             calibrated ×{entry.calibratedValue.toFixed(2)}
           </span>
         )}
+        <span>=</span>
+        <span className="text-foreground font-mono tabular-nums">
+          {fmtRange(entry.finalLow, entry.finalHigh)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function SplitRow({ entry }: { entry: SplitBreakdownEntry }) {
+  return (
+    <div className="border-border bg-background space-y-1.5 rounded border border-dashed p-3 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-muted-foreground font-mono text-[11px]">
+          {entry.method}
+        </span>
+        <span className="font-semibold tabular-nums">
+          {fmtRange(entry.finalLow, entry.finalHigh)}
+        </span>
+      </div>
+
+      <div className="text-muted-foreground flex flex-wrap items-center gap-1.5">
+        <span>{entry.sourcePlatform} aggregate</span>
+        <span className="text-foreground font-mono tabular-nums">
+          {fmtRange(entry.sourceLow, entry.sourceHigh)}
+        </span>
+        <span>×</span>
+        <span className="font-mono font-medium text-sky-700 dark:text-sky-400">
+          {fmtShare(entry.targetShare)}/{fmtShare(entry.sourceShare)} = ×
+          {entry.ratio.toFixed(2)}
+        </span>
+        <ProvenanceTag label="matcher share" />
         <span>=</span>
         <span className="text-foreground font-mono tabular-nums">
           {fmtRange(entry.finalLow, entry.finalHigh)}
@@ -100,6 +154,9 @@ function FirstWeekRow({ entry }: { entry: FirstWeekBreakdownEntry }) {
         {entry.m1 != null && (
           <span className="text-[10px]">(m1={entry.m1.toFixed(2)})</span>
         )}
+        <ProvenanceTag
+          label={entry.profileSource === 'matcher' ? 'matcher curve' : 'bucket'}
+        />
         <span>=</span>
         <span className="text-foreground font-mono tabular-nums">
           {fmtRange(entry.finalLow, entry.finalHigh)}
@@ -134,13 +191,15 @@ function PlatformSection({ p }: { p: PlatformBreakdownResult }) {
       </div>
 
       <div className="space-y-2 pl-2">
-        {p.entries.map((entry, i) =>
-          entry.type === 'boxleiter' ? (
-            <BoxleiterRow key={i} entry={entry} />
-          ) : (
-            <FirstWeekRow key={i} entry={entry} />
-          ),
-        )}
+        {p.entries.map((entry, i) => {
+          if (entry.type === 'boxleiter') {
+            return <BoxleiterRow key={i} entry={entry} />;
+          }
+          if (entry.type === 'split') {
+            return <SplitRow key={i} entry={entry} />;
+          }
+          return <FirstWeekRow key={i} entry={entry} />;
+        })}
       </div>
 
       <div
@@ -192,7 +251,9 @@ export async function EstimateBreakdownPanel({ gameId }: { gameId: string }) {
           Pure algo breakdown
         </CardTitle>
         <p className="text-muted-foreground text-xs">
-          Default multipliers only · no declared figures · re-computed on demand
+          Matcher-derived multipliers &amp; shares · no declared figures ·
+          re-computed on demand. Console bands are ventilated from PC/PS via the
+          matcher platform split.
         </p>
       </CardHeader>
       <CardContent className="space-y-6">

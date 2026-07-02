@@ -10,7 +10,7 @@ import {
 } from '../entities';
 import { EstimationMethodService } from './estimation-method.service';
 import { EstimationService } from './estimation.service';
-import { GenresModule } from '../genres/genres.module';
+import { ReferenceProfilesModule } from '../reference-profiles/reference-profiles.module';
 
 @Module({
   imports: [
@@ -22,7 +22,9 @@ import { GenresModule } from '../genres/genres.module';
       AchievementSnapshot,
       EstimationMethod,
     ]),
-    GenresModule,
+    // Resolver facade — transitively re-exports GenresService via
+    // GenresModule for the baseline path.
+    ReferenceProfilesModule,
   ],
   providers: [EstimationService, EstimationMethodService],
   exports: [EstimationService, EstimationMethodService],

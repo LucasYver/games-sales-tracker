@@ -6,7 +6,6 @@ import {
   EstimationDiscrepancy,
   Game,
   GameSource,
-  GenreProfile,
   Milestone,
   PriceSnapshot,
   ProcessedArticle,
@@ -21,6 +20,7 @@ import { GamesModule } from '../games/games.module';
 import { PublishersModule } from '../publishers/publishers.module';
 import { GenresModule } from '../genres/genres.module';
 import { EstimationModule } from '../estimation/estimation.module';
+import { ReferenceProfilesModule } from '../reference-profiles/reference-profiles.module';
 
 @Module({
   imports: [
@@ -36,13 +36,13 @@ import { EstimationModule } from '../estimation/estimation.module';
       AchievementSnapshot,
       EstimateSnapshot,
       EstimationDiscrepancy,
-      GenreProfile,
     ]),
     IngestionModule,
     GamesModule,
     PublishersModule,
     GenresModule,
     EstimationModule,
+    ReferenceProfilesModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

@@ -1,0 +1,734 @@
+{
+  "generatedAt": "2026-07-01T16:53:44.049Z",
+  "opts": {
+    "leakDate": "2018-07-01",
+    "minGroupSize": 3
+  },
+  "coverage": {
+    "reviewsToUnits": 320,
+    "m1": 328,
+    "y2": 329
+  },
+  "report": [
+    {
+      "partition": "platforms × playMode × scaleBucket",
+      "combined": 0.1466976792137644,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "platforms × playMode × scaleBucket",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 48,
+          "bucketsOverThreshold": 26,
+          "r2": 0.19302011140516018
+        },
+        "m1": {
+          "partition": "platforms × playMode × scaleBucket",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 48,
+          "bucketsOverThreshold": 25,
+          "r2": 0.12041663668577773
+        },
+        "y2": {
+          "partition": "platforms × playMode × scaleBucket",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 48,
+          "bucketsOverThreshold": 25,
+          "r2": 0.12665628955035524
+        }
+      }
+    },
+    {
+      "partition": "releaseEra",
+      "combined": 0.126895972594833,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "releaseEra",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 5,
+          "bucketsOverThreshold": 4,
+          "r2": 0.021027042180179922
+        },
+        "m1": {
+          "partition": "releaseEra",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 4,
+          "bucketsOverThreshold": 3,
+          "r2": 0.2776376860952612
+        },
+        "y2": {
+          "partition": "releaseEra",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 4,
+          "bucketsOverThreshold": 3,
+          "r2": 0.08202318950905796
+        }
+      }
+    },
+    {
+      "partition": "platforms × playMode × liveService",
+      "combined": 0.09446844141811817,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "platforms × playMode × liveService",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 21,
+          "bucketsOverThreshold": 15,
+          "r2": 0.17213333363708638
+        },
+        "m1": {
+          "partition": "platforms × playMode × liveService",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 21,
+          "bucketsOverThreshold": 15,
+          "r2": 0.05832752210583825
+        },
+        "y2": {
+          "partition": "platforms × playMode × liveService",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 21,
+          "bucketsOverThreshold": 15,
+          "r2": 0.052944468511429865
+        }
+      }
+    },
+    {
+      "partition": "platforms × playMode",
+      "combined": 0.09359230713255622,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "platforms × playMode",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 20,
+          "bucketsOverThreshold": 15,
+          "r2": 0.17158999849190626
+        },
+        "m1": {
+          "partition": "platforms × playMode",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 20,
+          "bucketsOverThreshold": 15,
+          "r2": 0.05537078317339472
+        },
+        "y2": {
+          "partition": "platforms × playMode",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 20,
+          "bucketsOverThreshold": 15,
+          "r2": 0.05381613973236765
+        }
+      }
+    },
+    {
+      "partition": "playMode × priceTier",
+      "combined": 0.0899832324681159,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "playMode × priceTier",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 12,
+          "bucketsOverThreshold": 10,
+          "r2": 0.163850402830227
+        },
+        "m1": {
+          "partition": "playMode × priceTier",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 12,
+          "bucketsOverThreshold": 10,
+          "r2": 0.05940506379627852
+        },
+        "y2": {
+          "partition": "playMode × priceTier",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 12,
+          "bucketsOverThreshold": 10,
+          "r2": 0.04669423077784218
+        }
+      }
+    },
+    {
+      "partition": "genresSet",
+      "combined": 0.08744956560654497,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "genresSet",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 106,
+          "bucketsOverThreshold": 27,
+          "r2": 0.09964073588547606
+        },
+        "m1": {
+          "partition": "genresSet",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 112,
+          "bucketsOverThreshold": 28,
+          "r2": 0.09684484930457093
+        },
+        "y2": {
+          "partition": "genresSet",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 113,
+          "bucketsOverThreshold": 28,
+          "r2": 0.06586311162958791
+        }
+      }
+    },
+    {
+      "partition": "firstGenre × platforms",
+      "combined": 0.07133183309453262,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "firstGenre × platforms",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 33,
+          "bucketsOverThreshold": 18,
+          "r2": 0.1234833614522598
+        },
+        "m1": {
+          "partition": "firstGenre × platforms",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 33,
+          "bucketsOverThreshold": 18,
+          "r2": 0.040082498060354244
+        },
+        "y2": {
+          "partition": "firstGenre × platforms",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 33,
+          "bucketsOverThreshold": 18,
+          "r2": 0.0504296397709838
+        }
+      }
+    },
+    {
+      "partition": "platforms × priceTier",
+      "combined": 0.06521876440573608,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "platforms × priceTier",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 12,
+          "bucketsOverThreshold": 8,
+          "r2": 0.14136642028290392
+        },
+        "m1": {
+          "partition": "platforms × priceTier",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 12,
+          "bucketsOverThreshold": 8,
+          "r2": 0.02867610584771374
+        },
+        "y2": {
+          "partition": "platforms × priceTier",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 12,
+          "bucketsOverThreshold": 8,
+          "r2": 0.025613767086590578
+        }
+      }
+    },
+    {
+      "partition": "playMode × scaleBucket",
+      "combined": 0.06446347812179871,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "playMode × scaleBucket",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 17,
+          "bucketsOverThreshold": 14,
+          "r2": 0.09796034249563201
+        },
+        "m1": {
+          "partition": "playMode × scaleBucket",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 17,
+          "bucketsOverThreshold": 15,
+          "r2": 0.05385017162735528
+        },
+        "y2": {
+          "partition": "playMode × scaleBucket",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 17,
+          "bucketsOverThreshold": 15,
+          "r2": 0.04157992024240886
+        }
+      }
+    },
+    {
+      "partition": "firstGenre × playMode",
+      "combined": 0.0638773561499854,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "firstGenre × playMode",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 35,
+          "bucketsOverThreshold": 20,
+          "r2": 0.07838978442033273
+        },
+        "m1": {
+          "partition": "firstGenre × playMode",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 35,
+          "bucketsOverThreshold": 21,
+          "r2": 0.07181305103038382
+        },
+        "y2": {
+          "partition": "firstGenre × playMode",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 35,
+          "bucketsOverThreshold": 21,
+          "r2": 0.04142923299923962
+        }
+      }
+    },
+    {
+      "partition": "priceTier",
+      "combined": 0.049619626849770206,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "priceTier",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 4,
+          "bucketsOverThreshold": 4,
+          "r2": 0.11261821485642443
+        },
+        "m1": {
+          "partition": "priceTier",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 4,
+          "bucketsOverThreshold": 4,
+          "r2": 0.021460675959306674
+        },
+        "y2": {
+          "partition": "priceTier",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 4,
+          "bucketsOverThreshold": 4,
+          "r2": 0.014779989733579524
+        }
+      }
+    },
+    {
+      "partition": "liveService × playMode",
+      "combined": 0.04378855340701212,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "liveService × playMode",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 6,
+          "bucketsOverThreshold": 5,
+          "r2": 0.07649566139030473
+        },
+        "m1": {
+          "partition": "liveService × playMode",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 6,
+          "bucketsOverThreshold": 5,
+          "r2": 0.034026992621700725
+        },
+        "y2": {
+          "partition": "liveService × playMode",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 6,
+          "bucketsOverThreshold": 5,
+          "r2": 0.0208430062090309
+        }
+      }
+    },
+    {
+      "partition": "annual × platforms",
+      "combined": 0.039213552831662314,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "annual × platforms",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 6,
+          "bucketsOverThreshold": 5,
+          "r2": 0.07173963580595977
+        },
+        "m1": {
+          "partition": "annual × platforms",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 6,
+          "bucketsOverThreshold": 5,
+          "r2": 0.01799166102973726
+        },
+        "y2": {
+          "partition": "annual × platforms",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 6,
+          "bucketsOverThreshold": 5,
+          "r2": 0.027909361659289922
+        }
+      }
+    },
+    {
+      "partition": "genreProfile × scaleBucket",
+      "combined": 0.03861211912477169,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "genreProfile × scaleBucket",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 24,
+          "bucketsOverThreshold": 16,
+          "r2": 0.04998730852832933
+        },
+        "m1": {
+          "partition": "genreProfile × scaleBucket",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 25,
+          "bucketsOverThreshold": 16,
+          "r2": 0.03750268875738505
+        },
+        "y2": {
+          "partition": "genreProfile × scaleBucket",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 25,
+          "bucketsOverThreshold": 16,
+          "r2": 0.028346360088600697
+        }
+      }
+    },
+    {
+      "partition": "playMode",
+      "combined": 0.03119467911251746,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "playMode",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 5,
+          "bucketsOverThreshold": 5,
+          "r2": 0.04213495892779395
+        },
+        "m1": {
+          "partition": "playMode",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 5,
+          "bucketsOverThreshold": 5,
+          "r2": 0.030649071496054336
+        },
+        "y2": {
+          "partition": "playMode",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 5,
+          "bucketsOverThreshold": 5,
+          "r2": 0.020800006913704094
+        }
+      }
+    },
+    {
+      "partition": "firstGenre",
+      "combined": 0.02990697292797569,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "firstGenre",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 14,
+          "bucketsOverThreshold": 9,
+          "r2": 0.045767075882246266
+        },
+        "m1": {
+          "partition": "firstGenre",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 14,
+          "bucketsOverThreshold": 9,
+          "r2": 0.018242993786804718
+        },
+        "y2": {
+          "partition": "firstGenre",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 14,
+          "bucketsOverThreshold": 9,
+          "r2": 0.02571084911487609
+        }
+      }
+    },
+    {
+      "partition": "platforms",
+      "combined": 0.02929303417262315,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "platforms",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 5,
+          "bucketsOverThreshold": 4,
+          "r2": 0.06943622160517093
+        },
+        "m1": {
+          "partition": "platforms",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 5,
+          "bucketsOverThreshold": 4,
+          "r2": 0.00942657899528232
+        },
+        "y2": {
+          "partition": "platforms",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 5,
+          "bucketsOverThreshold": 4,
+          "r2": 0.009016301917416203
+        }
+      }
+    },
+    {
+      "partition": "annual × scaleBucket",
+      "combined": 0.025651393566233582,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "annual × scaleBucket",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 7,
+          "bucketsOverThreshold": 6,
+          "r2": 0.027066325508000477
+        },
+        "m1": {
+          "partition": "annual × scaleBucket",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 7,
+          "bucketsOverThreshold": 6,
+          "r2": 0.01786952041834622
+        },
+        "y2": {
+          "partition": "annual × scaleBucket",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 7,
+          "bucketsOverThreshold": 6,
+          "r2": 0.03201833477235405
+        }
+      }
+    },
+    {
+      "partition": "franchise",
+      "combined": 0.013882409307322726,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "franchise",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 57,
+          "bucketsOverThreshold": 6,
+          "r2": 0.009247194969855821
+        },
+        "m1": {
+          "partition": "franchise",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 57,
+          "bucketsOverThreshold": 6,
+          "r2": 0.013053270620217106
+        },
+        "y2": {
+          "partition": "franchise",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 57,
+          "bucketsOverThreshold": 6,
+          "r2": 0.01934676233189525
+        }
+      }
+    },
+    {
+      "partition": "genreProfile",
+      "combined": 0.013024240785293073,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "genreProfile",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 12,
+          "bucketsOverThreshold": 6,
+          "r2": 0.019303398703868768
+        },
+        "m1": {
+          "partition": "genreProfile",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 12,
+          "bucketsOverThreshold": 6,
+          "r2": 0.009919944542191694
+        },
+        "y2": {
+          "partition": "genreProfile",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 12,
+          "bucketsOverThreshold": 6,
+          "r2": 0.009849379109818757
+        }
+      }
+    },
+    {
+      "partition": "annual",
+      "combined": 0.011982855377720073,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "annual",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 2,
+          "bucketsOverThreshold": 2,
+          "r2": 0.006771241896233571
+        },
+        "m1": {
+          "partition": "annual",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 2,
+          "bucketsOverThreshold": 2,
+          "r2": 0.00855414460071291
+        },
+        "y2": {
+          "partition": "annual",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 2,
+          "bucketsOverThreshold": 2,
+          "r2": 0.02062317963621374
+        }
+      }
+    },
+    {
+      "partition": "scaleBucket",
+      "combined": 0.01118239711507755,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "scaleBucket",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 4,
+          "bucketsOverThreshold": 4,
+          "r2": 0.015412964043625355
+        },
+        "m1": {
+          "partition": "scaleBucket",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 4,
+          "bucketsOverThreshold": 4,
+          "r2": 0.00735632766657357
+        },
+        "y2": {
+          "partition": "scaleBucket",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 4,
+          "bucketsOverThreshold": 4,
+          "r2": 0.010777899635033727
+        }
+      }
+    },
+    {
+      "partition": "liveService",
+      "combined": 0.008868373910432418,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "liveService",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 2,
+          "bucketsOverThreshold": 2,
+          "r2": 0.00048004007069535337
+        },
+        "m1": {
+          "partition": "liveService",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 2,
+          "bucketsOverThreshold": 2,
+          "r2": 0.014461399977425682
+        },
+        "y2": {
+          "partition": "liveService",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 2,
+          "bucketsOverThreshold": 2,
+          "r2": 0.011663681683176219
+        }
+      }
+    },
+    {
+      "partition": "publisherTier",
+      "combined": 0.006671156897848436,
+      "perTarget": {
+        "reviewsToUnits": {
+          "partition": "publisherTier",
+          "target": "reviewsToUnits",
+          "n": 320,
+          "totalBuckets": 2,
+          "bucketsOverThreshold": 2,
+          "r2": 0.0030995835162601626
+        },
+        "m1": {
+          "partition": "publisherTier",
+          "target": "m1",
+          "n": 328,
+          "totalBuckets": 2,
+          "bucketsOverThreshold": 2,
+          "r2": 0.005092652042367973
+        },
+        "y2": {
+          "partition": "publisherTier",
+          "target": "y2",
+          "n": 329,
+          "totalBuckets": 2,
+          "bucketsOverThreshold": 2,
+          "r2": 0.011821235134917174
+        }
+      }
+    }
+  ]
+}

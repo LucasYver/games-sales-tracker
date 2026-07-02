@@ -6,7 +6,6 @@ import {
   IsOptional,
   IsPositive,
   IsString,
-  IsUUID,
   MinLength,
   ValidateIf,
 } from 'class-validator';
@@ -61,9 +60,4 @@ export class UpdateGameDto {
   @ValidateIf((_, value) => value !== null)
   @IsEnum(SalesSource)
   calibrationSourceXbox?: SalesSource | null;
-
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null && value !== '')
-  @IsUUID()
-  genreProfileId?: string | null;
 }

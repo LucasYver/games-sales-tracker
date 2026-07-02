@@ -16,18 +16,10 @@ import {
   AGGREGATED_METHOD_CODE,
   EstimationMethodService,
 } from './estimation-method.service';
-import {
-  GenresService,
-  type ResolvedGenreProfile,
-} from '../genres/genres.service';
+import { type ResolvedGenreProfile } from '../reference-profiles/sales-profile-resolver.service';
+import { SalesProfileResolverService } from '../reference-profiles/sales-profile-resolver.service';
 import {
   CALIBRATED_MULTIPLIER_SPREAD,
-  EXOPHASE_COVERAGE_PC_HIGH,
-  EXOPHASE_COVERAGE_PC_LOW,
-  EXOPHASE_COVERAGE_PS_HIGH,
-  EXOPHASE_COVERAGE_PS_LOW,
-  EXOPHASE_COVERAGE_XBOX_HIGH,
-  EXOPHASE_COVERAGE_XBOX_LOW,
   FIRST_WEEK_BUCKET_LARGE_YEAR1_RATIO,
   FIRST_WEEK_BUCKET_SMALL_YEAR1_RATIO,
   FIRST_WEEK_BUCKET_THRESHOLD,
@@ -57,7 +49,6 @@ import {
   genreProjectionMultiplier,
 } from '../games/sales-modeling.constants';
 
-
 /**
  * Steam-share range for a game, falling back to the neutral default when
  * the game has no curated publisher record.
@@ -68,26 +59,6 @@ function steamShareForGame(game: Game): SteamShareRange {
     high: game.publisherRecord?.steamSharePctHigh ?? DEFAULT_STEAM_SHARE_PCT,
   };
 }
-
-const ACHIEVEMENT_COVERAGE: Record<
-  Platform.PC | Platform.PLAYSTATION | Platform.XBOX,
-  { low: number; high: number }
-> = {
-  [Platform.PC]: {
-    low: EXOPHASE_COVERAGE_PC_LOW,
-    high: EXOPHASE_COVERAGE_PC_HIGH,
-  },
-  [Platform.PLAYSTATION]: {
-    low: EXOPHASE_COVERAGE_PS_LOW,
-    high: EXOPHASE_COVERAGE_PS_HIGH,
-  },
-  [Platform.XBOX]: {
-    low: EXOPHASE_COVERAGE_XBOX_LOW,
-    high: EXOPHASE_COVERAGE_XBOX_HIGH,
-  },
-};
-
-const RECENT_RELEASE_DAYS = 14;
 
 // Calibration only trusts a milestone when a signal snapshot exists
 // within this window of the milestone's reported date — otherwise
@@ -109,7 +80,6 @@ const GLOBAL_SPLIT_MIN_PLATFORM_SHARE = 0.05;
 // conservatively at 0.5 until we have multiple active methods to
 // observe and tune against.
 const AGGREGATION_DISAGREEMENT_ALPHA = 0.5;
-
 
 /**
  * Knobs to flip estimation into "pure algo" mode. When set,
@@ -133,6 +103,10 @@ export interface BoxleiterBreakdownEntry {
   signal: { metric: SignalMetric; value: number; capturedAt: string };
   calibratedValue: number | null;
   isCalibrated: boolean;
+  // Where the default multiplier band comes from: the data-driven
+  // matcher (reviewsToUnits → Boxleiter), the global constant fallback
+  // (cold-start, no matched anchors), or a per-game calibrated figure.
+  multiplierSource: 'matcher' | 'global' | 'calibrated';
   multiplierLow: number;
   multiplierHigh: number;
   finalLow: number;
@@ -151,6 +125,30 @@ export interface FirstWeekBreakdownEntry {
   ageDays: number;
   projectionMultiplier: number;
   m1: number | null;
+  // Whether the CCU→week-1 ratio and the projection curve came from the
+  // matcher profile or from the global size-bucket fallback.
+  profileSource: 'matcher' | 'global';
+  finalLow: number;
+  finalHigh: number;
+}
+
+/**
+ * Console ventilation step: a console platform's band is not measured
+ * from a signal but derived from an already-aggregated source platform
+ * (PC or PS) scaled by the matcher's platform-share ratio.
+ *
+ *   targetUnits = sourceUnits × (targetShare / sourceShare)
+ */
+export interface SplitBreakdownEntry {
+  type: 'split';
+  platform: Platform;
+  method: string;
+  sourcePlatform: Platform;
+  sourceLow: number;
+  sourceHigh: number;
+  sourceShare: number;
+  targetShare: number;
+  ratio: number;
   finalLow: number;
   finalHigh: number;
 }
@@ -162,7 +160,11 @@ export interface WeightedEntry {
 
 export interface PlatformBreakdownResult {
   platform: Platform;
-  entries: (BoxleiterBreakdownEntry | FirstWeekBreakdownEntry)[];
+  entries: (
+    | BoxleiterBreakdownEntry
+    | FirstWeekBreakdownEntry
+    | SplitBreakdownEntry
+  )[];
   weightedEntries: WeightedEntry[];
   totalWeight: number;
   weightedLow: number;
@@ -205,11 +207,12 @@ interface AggregateTrace {
 export interface EstimateTrace {
   boxleiter: BoxleiterBreakdownEntry[];
   firstWeek: FirstWeekBreakdownEntry[];
+  split: SplitBreakdownEntry[];
   aggregates: Map<Platform, AggregateTrace>;
 }
 
 function createEstimateTrace(): EstimateTrace {
-  return { boxleiter: [], firstWeek: [], aggregates: new Map() };
+  return { boxleiter: [], firstWeek: [], split: [], aggregates: new Map() };
 }
 
 interface PlatformConfig {
@@ -224,11 +227,7 @@ interface PlatformConfig {
   // `write` for traceability but is not read back at estimate time —
   // the spread is uniform across sources.
   read: (game: Game) => number | null;
-  write: (
-    gameId: string,
-    value: number,
-    source: SalesSource,
-  ) => Promise<void>;
+  write: (gameId: string, value: number, source: SalesSource) => Promise<void>;
   methodPrefix: 'boxleiter' | 'ps-ratings-boxleiter' | 'xbox-ratings-boxleiter';
 }
 
@@ -256,7 +255,7 @@ export class EstimationService {
     @InjectRepository(AchievementSnapshot)
     private readonly achievements: Repository<AchievementSnapshot>,
     private readonly methods: EstimationMethodService,
-    private readonly genres: GenresService,
+    private readonly salesProfile: SalesProfileResolverService,
   ) {
     this.platforms = [
       {
@@ -363,7 +362,6 @@ export class EstimationService {
 
     return results;
   }
-
 
   /**
    * Persist estimates as if we had run `computeAndStore` at `asOf`. Unlike
@@ -498,6 +496,7 @@ export class EstimationService {
         Platform.PC,
         Platform.PLAYSTATION,
         'genre-console-split-from-pc-playstation',
+        trace,
       );
       addSplit(pcToPs);
     }
@@ -523,6 +522,7 @@ export class EstimationService {
         Platform.PLAYSTATION,
         Platform.XBOX,
         'genre-console-split-from-ps-xbox',
+        trace,
       );
     }
     if (!xboxSplit && pcAggregate) {
@@ -532,6 +532,7 @@ export class EstimationService {
         Platform.PC,
         Platform.XBOX,
         'genre-console-split-from-pc-xbox',
+        trace,
       );
     }
     addSplit(xboxSplit);
@@ -540,10 +541,7 @@ export class EstimationService {
     // sees the genre-split row; any disabled boxleiter Xbox row from
     // a stale signal is filtered out by `aggregateMethodsForPlatform`.
     for (const [platform, perPlatform] of byPlatform) {
-      if (
-        platform === Platform.PC ||
-        platform === Platform.PLAYSTATION
-      ) {
+      if (platform === Platform.PC || platform === Platform.PLAYSTATION) {
         continue;
       }
       const aggregate = this.aggregateMethodsForPlatform(perPlatform, trace);
@@ -574,7 +572,10 @@ export class EstimationService {
     });
     if (results.length === 0) return new Map();
 
-    const { aggregates } = await this.aggregateResultsByPlatform(gameId, results);
+    const { aggregates } = await this.aggregateResultsByPlatform(
+      gameId,
+      results,
+    );
     return aggregates;
   }
 
@@ -618,14 +619,23 @@ export class EstimationService {
     sourcePlatform: Platform,
     targetPlatform: Platform,
     methodCode: string,
+    trace?: EstimateTrace,
   ): Promise<EstimateResult | null> {
     const game = await this.games.findOne({
       where: { id: gameId },
       select: {
         id: true,
-        genres: true,
         platforms: true,
-        genreProfileId: true,
+        // Fields consumed by the matcher (`SalesProfileResolverService`).
+        categories: true,
+        genres: true,
+        steamTags: true,
+        publisherId: true,
+        releaseDate: true,
+        developer: true,
+        franchiseSlug: true,
+        isAnnualIteration: true,
+        liveService: true,
       },
     });
     if (!game) return null;
@@ -633,7 +643,7 @@ export class EstimationService {
     const releasedPlatforms = new Set(game.platforms ?? []);
     if (!releasedPlatforms.has(targetPlatform)) return null;
 
-    const profile = await this.genres.resolveProfileForGame(game);
+    const profile = await this.salesProfile.resolveForGame(game);
     if (!profile) return null;
 
     const sourceShare = this.profileShare(profile, sourcePlatform);
@@ -644,6 +654,22 @@ export class EstimationService {
     const low = Math.round(sourceAggregate.estimatedLow * ratio);
     const high = Math.round(sourceAggregate.estimatedHigh * ratio);
     if (high <= 0 || low > high) return null;
+
+    if (trace) {
+      trace.split.push({
+        type: 'split',
+        platform: targetPlatform,
+        method: methodCode,
+        sourcePlatform,
+        sourceLow: sourceAggregate.estimatedLow,
+        sourceHigh: sourceAggregate.estimatedHigh,
+        sourceShare,
+        targetShare,
+        ratio,
+        finalLow: low,
+        finalHigh: high,
+      });
+    }
 
     return {
       platform: targetPlatform,
@@ -725,7 +751,9 @@ export class EstimationService {
         return method ? { result: r, method } : null;
       })
       .filter(
-        (entry): entry is { result: EstimateResult; method: EstimationMethod } =>
+        (
+          entry,
+        ): entry is { result: EstimateResult; method: EstimationMethod } =>
           entry !== null &&
           entry.method.isEnabled &&
           !entry.method.isAggregate &&
@@ -761,8 +789,7 @@ export class EstimationService {
     weightedHigh /= totalWeight;
 
     const weightedMid = (weightedLow + weightedHigh) / 2;
-    const disagreement =
-      weightedMid > 0 ? (maxMid - minMid) / weightedMid : 0;
+    const disagreement = weightedMid > 0 ? (maxMid - minMid) / weightedMid : 0;
     const inflate = AGGREGATION_DISAGREEMENT_ALPHA * disagreement;
 
     const aggLow = Math.max(0, weightedLow * (1 - inflate));
@@ -824,7 +851,7 @@ export class EstimationService {
     if (!latestSignal || latestSignal.value <= 0) return null;
 
     const signalValue = latestSignal.value;
-    const profile = await this.genres.resolveProfileForGame(game);
+    const profile = await this.salesProfile.resolveForGame(game);
     const profileDefaults = this.resolveProfileDefaults(cfg.platform, profile);
     const { low, high, method, isCalibrated } = this.resolveMultiplier(
       game,
@@ -871,6 +898,11 @@ export class EstimationService {
         },
         calibratedValue: cfg.read(game) ?? null,
         isCalibrated,
+        multiplierSource: isCalibrated
+          ? 'calibrated'
+          : profileDefaults
+            ? 'matcher'
+            : 'global',
         multiplierLow: low,
         multiplierHigh: high,
         finalLow: Math.round(estimatedLow),
@@ -942,7 +974,7 @@ export class EstimationService {
     // high-engagement genres like grand strategy / MMO whose peak CCU
     // is large relative to sales); otherwise the genre-blind global
     // [LOW, HIGH] band is the fallback.
-    const genreProfile = await this.genres.resolveProfileForGame(game);
+    const genreProfile = await this.salesProfile.resolveForGame(game);
     const ccuRatioLow = genreProfile
       ? genreProfile.peakCcuToWeekOneLow
       : FIRST_WEEK_PEAK_CCU_LOW;
@@ -1011,6 +1043,7 @@ export class EstimationService {
         ageDays: Math.round(age),
         projectionMultiplier: projection,
         m1: genreProfile?.firstWeekToYearOneMultiplier ?? null,
+        profileSource: genreProfile ? 'matcher' : 'global',
         finalLow: projectedLow,
         finalHigh: projectedHigh,
       });
@@ -1291,7 +1324,6 @@ export class EstimationService {
     );
   }
 
-
   // ───── estimate breakdown (diagnostic) ──────────────────────────────────
 
   /**
@@ -1322,7 +1354,12 @@ export class EstimationService {
     );
 
     const milestones = await this.milestones.find({
-      where: { gameId, rejectedAt: IsNull(), isEngagement: false, region: 'GLOBAL' },
+      where: {
+        gameId,
+        rejectedAt: IsNull(),
+        isEngagement: false,
+        region: 'GLOBAL',
+      },
       order: { units: 'DESC' },
     });
     const bestDeclared = milestones.length > 0 ? milestones[0] : null;
@@ -1336,12 +1373,18 @@ export class EstimationService {
       }
     };
     for (const e of trace.boxleiter) pushPlatform(e.platform);
+    for (const e of trace.split) pushPlatform(e.platform);
     for (const p of aggregates.keys()) pushPlatform(p);
 
     const platforms: PlatformBreakdownResult[] = platformOrder.map(
       (platform) => {
-        const entries: (BoxleiterBreakdownEntry | FirstWeekBreakdownEntry)[] = [
+        const entries: (
+          | BoxleiterBreakdownEntry
+          | FirstWeekBreakdownEntry
+          | SplitBreakdownEntry
+        )[] = [
           ...trace.boxleiter.filter((e) => e.platform === platform),
+          ...trace.split.filter((e) => e.platform === platform),
           ...(platform === Platform.PC ? trace.firstWeek : []),
         ];
         const agg = trace.aggregates.get(platform);

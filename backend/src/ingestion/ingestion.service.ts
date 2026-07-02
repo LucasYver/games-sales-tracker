@@ -23,7 +23,7 @@ import {
 } from '../entities';
 import { EstimationService } from '../estimation/estimation.service';
 import { GamesService } from '../games/games.service';
-import { GenresService } from '../genres/genres.service';
+import { deriveFranchise, deriveLiveService } from '../games/game-features';
 import { slugify } from '../common/slug';
 import { SteamAppDetails, SteamClient } from './steam.client';
 import { SteamChartsClient } from './steamcharts.client';
@@ -153,7 +153,6 @@ export class IngestionService {
     private readonly achievements: Repository<AchievementSnapshot>,
     private readonly estimation: EstimationService,
     private readonly gamesService: GamesService,
-    private readonly genres: GenresService,
     private readonly steam: SteamClient,
     private readonly steamCharts: SteamChartsClient,
     private readonly igdb: IgdbClient,
@@ -278,7 +277,10 @@ export class IngestionService {
    * needed, to avoid one HTTP call per long-tail candidate).
    */
   private async admitCandidate(candidate: IgdbGame): Promise<boolean> {
-    if (candidate.releaseDate && candidate.releaseDate < DISCOVERY_RELEASE_FLOOR) {
+    if (
+      candidate.releaseDate &&
+      candidate.releaseDate < DISCOVERY_RELEASE_FLOOR
+    ) {
       // Pre-floor classics are already filtered in-query by their high rating
       // bar; anything reaching here below the floor is a popular landmark.
       return candidate.totalRatingCount >= IGDB_MIN_RATING_COUNT;
@@ -312,9 +314,7 @@ export class IngestionService {
 
     const candidate = await this.igdb.findBySlug(slug);
     if (!candidate) {
-      throw new NotFoundException(
-        `No IGDB game found for slug "${slug}".`,
-      );
+      throw new NotFoundException(`No IGDB game found for slug "${slug}".`);
     }
 
     const existing = await this.games.findOne({
@@ -426,7 +426,6 @@ export class IngestionService {
       publisher: candidate.publisher,
       genres: candidate.genres.length > 0 ? candidate.genres : null,
     });
-    await this.genres.applyAutoGenreProfile(entity);
     const game = await this.games.save(entity);
     await this.publishers.resolveAndLink(game.id, game.publisher);
     return game;
@@ -452,9 +451,7 @@ export class IngestionService {
     // not a proxy for sales — so we never track them. We skip both during the
     // bulk discovery cron and on any explicit ingestion call.
     if (details.isFree) {
-      this.logger.log(
-        `Skipping free-to-play app ${appId} (${details.name}).`,
-      );
+      this.logger.log(`Skipping free-to-play app ${appId} (${details.name}).`);
       return null;
     }
 
@@ -480,6 +477,31 @@ export class IngestionService {
     await this.gamesService.rebuildEstimateHistory(game.id);
 
     return game.id;
+  }
+
+  /**
+   * Re-fetch a game's Steam store details and upsert every Steam-derived
+   * column on the `Game` row (name, genres, categories, steamTags, dlc,
+   * developer, publisher, release date, cover, summary, isFree) plus the
+   * re-derived franchise / live-service features (via `applyDerivedFeatures`
+   * inside the upsert). IGDB genre fallback is applied by the upsert itself.
+   *
+   * Metadata only: unlike `ingestSteamApp`, it does NOT poll reviews / CCU,
+   * scrape ratings / achievements, or rebuild the estimate history — those
+   * are separate, heavier flows. This is the single entry point for the
+   * catalog-wide Steam metadata backfill.
+   *
+   * Returns the game id, or null when Steam has no usable details or the
+   * game is soft-deleted (upsert skips it).
+   */
+  async refreshSteamMetadata(appId: number): Promise<string | null> {
+    const details = await this.steam.getAppDetails(appId);
+    if (!details) {
+      this.logger.warn(`No Steam details for app ${appId}`);
+      return null;
+    }
+    const game = await this.upsertGameFromSteam(appId, details);
+    return game?.id ?? null;
   }
 
   /**
@@ -550,16 +572,15 @@ export class IngestionService {
     const year = steamYear ?? game.releaseDate?.getFullYear() ?? null;
     if (year !== null && year < opts.minReleaseYear) return 'skipped-old';
 
-    // Steam genres map poorly to our IGDB-keyed genre profiles; when no
-    // profile resolved, retry with the IGDB genres so the game is usable for
-    // per-genre analysis.
-    if (game.genreProfileId == null) {
+    // Steam genres are sparse; enrich the taxonomy with the IGDB genres
+    // when the game carries none yet (classification/display metadata —
+    // genres no longer feed the estimation model).
+    if (!game.genres || game.genres.length === 0) {
       const igdb = await this.igdb.findBySteamAppId(appId);
       if (igdb && igdb.genres.length > 0) {
         game.genres = Array.from(
           new Set([...(game.genres ?? []), ...igdb.genres]),
         );
-        await this.genres.applyAutoGenreProfile(game);
         await this.games.save(game);
       }
     }
@@ -695,7 +716,9 @@ export class IngestionService {
       if (sales.pc) {
         if (!sales.pc.reportedAt) {
           undatedSkipped += 1;
-        } else if (this.isReportedAfterRelease(sales.pc.reportedAt, releaseDate)) {
+        } else if (
+          this.isReportedAfterRelease(sales.pc.reportedAt, releaseDate)
+        ) {
           rows.push(
             this.milestones.create({
               gameId,
@@ -765,7 +788,11 @@ export class IngestionService {
    * Look up console store rating counts, store them as signals, and turn each
    * into a per-platform sales estimate. Best-effort: failures are logged.
    */
-  async scrapeStoreRatings(gameId: string, name: string, platforms: Platform[]): Promise<void> {
+  async scrapeStoreRatings(
+    gameId: string,
+    name: string,
+    platforms: Platform[],
+  ): Promise<void> {
     if (!this.hasConsolePlatform(platforms)) {
       this.logger.log(`[stores] "${name}" — skipping store ratings (PC-only)`);
       return;
@@ -999,7 +1026,9 @@ export class IngestionService {
         polled++;
       } catch (error) {
         failed++;
-        this.logger.warn(`[ccu] poll failed for game ${source.gameId}: ${error}`);
+        this.logger.warn(
+          `[ccu] poll failed for game ${source.gameId}: ${error}`,
+        );
       }
     }
 
@@ -1071,7 +1100,10 @@ export class IngestionService {
           game.dlc = details.dlc;
           metadataChanged = true;
         }
-        if (metadataChanged) await this.games.save(game);
+        if (metadataChanged) {
+          this.applyDerivedFeatures(game);
+          await this.games.save(game);
+        }
 
         if (!details.price) {
           skipped++;
@@ -1090,7 +1122,9 @@ export class IngestionService {
         captured++;
       } catch (error) {
         failed++;
-        this.logger.warn(`[price] capture failed for game ${source.gameId}: ${error}`);
+        this.logger.warn(
+          `[price] capture failed for game ${source.gameId}: ${error}`,
+        );
       }
     }
 
@@ -1561,7 +1595,7 @@ export class IngestionService {
     let skippedPreRelease = 0;
     const rows: SignalSnapshot[] = [];
     const emittedDays: string[] = [];
-    for (const bucket of hist!.buckets) {
+    for (const bucket of hist.buckets) {
       cumulativePositive += bucket.positive;
       cumulativeNegative += bucket.negative;
       if (releaseMonthStart && bucket.day < releaseMonthStart) {
@@ -1587,7 +1621,7 @@ export class IngestionService {
       const api = await this.backfillReviewsFromApi(gameId);
       return {
         method: 'enumeration',
-        rollupType: hist!.rollupType,
+        rollupType: hist.rollupType,
         pointsImported: api.daysImported,
         rangeStart: api.rangeStart,
         rangeEnd: api.rangeEnd,
@@ -1627,7 +1661,7 @@ export class IngestionService {
 
     return {
       method: 'histogram',
-      rollupType: hist!.rollupType,
+      rollupType: hist.rollupType,
       pointsImported: rows.length,
       rangeStart: emittedDays[0],
       rangeEnd: emittedDays[emittedDays.length - 1],
@@ -1770,6 +1804,22 @@ export class IngestionService {
     return `${d.toISOString().slice(0, 7)}-01`;
   }
 
+  /**
+   * Recompute the matcher's derived per-game features (franchise
+   * identity + live-service flag) from the game's current name and
+   * categories, mutating the entity in place. Idempotent and pure —
+   * safe to call before every save. Kept here (not in the entity) so
+   * the derivation lives in one place shared with the backfill scripts
+   * (`game-features.ts`).
+   */
+  private applyDerivedFeatures(game: Game): void {
+    const franchise = deriveFranchise(game.name);
+    game.franchiseSlug = franchise.franchiseSlug;
+    game.isAnnualIteration = franchise.isAnnualIteration;
+    game.iterationNumber = franchise.iterationNumber;
+    game.liveService = deriveLiveService(game.name, game.categories);
+  }
+
   async scrapeAchievements(
     gameId: string,
     name: string,
@@ -1873,14 +1923,20 @@ export class IngestionService {
       }
 
       for (const result of results) {
-        if (await this.processedArticles.findOne({ where: { url: result.url } })) {
-          this.logger.debug(`[backlog] "${name}" — skip (already processed): ${result.url}`);
+        if (
+          await this.processedArticles.findOne({ where: { url: result.url } })
+        ) {
+          this.logger.debug(
+            `[backlog] "${name}" — skip (already processed): ${result.url}`,
+          );
           continue;
         }
         checked += 1;
 
-        const pubDate = result.publishedDate ? new Date(result.publishedDate) : null;
-   
+        const pubDate = result.publishedDate
+          ? new Date(result.publishedDate)
+          : null;
+
         const stored = await this.ingestArticleFromText(
           gameId,
           name,
@@ -1900,9 +1956,13 @@ export class IngestionService {
         if (stored > 0) {
           ingested += 1;
           records += stored;
-          this.logger.log(`[backlog] "${name}" — ${stored} record(s) from ${result.url}`);
+          this.logger.log(
+            `[backlog] "${name}" — ${stored} record(s) from ${result.url}`,
+          );
         } else {
-          this.logger.log(`[backlog] "${name}" — no figure extracted from ${result.url}`);
+          this.logger.log(
+            `[backlog] "${name}" — no figure extracted from ${result.url}`,
+          );
         }
         await new Promise((r) => setTimeout(r, 200));
       }
@@ -2004,9 +2064,7 @@ export class IngestionService {
       );
     }
 
-    return [...merged.values()]
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 24);
+    return [...merged.values()].sort((a, b) => b.score - a.score).slice(0, 24);
   }
 
   /**
@@ -2027,14 +2085,15 @@ export class IngestionService {
     // only once we know the URL produced a usable record (in
     // `storeArticleSales`), so unknown hosts that yield nothing never pollute
     // the registry.
-    const trusted = await this.sources.findByUrl(url); 
+    const trusted = await this.sources.findByUrl(url);
     const tier = trusted?.salesSource ?? SalesSource.MEDIA;
-    const confidenceScore =
-      trusted?.weight ?? DEFAULT_CONFIDENCE_SCORE[tier];
+    const confidenceScore = trusted?.weight ?? DEFAULT_CONFIDENCE_SCORE[tier];
 
     let sales =
       text && text.length >= 200
-        ? await this.article.extractFromText(text, url, gameName, { fallbackDate })
+        ? await this.article.extractFromText(text, url, gameName, {
+            fallbackDate,
+          })
         : null;
     if (!sales) sales = await this.article.extract(url, gameName);
     if (!sales) return 0;
@@ -2155,12 +2214,15 @@ export class IngestionService {
     // know the article produced at least one accepted milestone.
     const trusted = await this.sources.findByUrl(url);
     const tier = trusted?.salesSource ?? SalesSource.MEDIA;
-    const confidenceScore =
-      trusted?.weight ?? DEFAULT_CONFIDENCE_SCORE[tier];
+    const confidenceScore = trusted?.weight ?? DEFAULT_CONFIDENCE_SCORE[tier];
 
     const sales = await this.article.extract(url, game.name);
     if (!sales) {
-      return { matchedSource: trusted?.name ?? null, tier, milestonesStored: 0 };
+      return {
+        matchedSource: trusted?.name ?? null,
+        tier,
+        milestonesStored: 0,
+      };
     }
 
     const milestonesStored = await this.storeArticleSales(
@@ -2194,7 +2256,9 @@ export class IngestionService {
       if (!source.feedUrl) continue;
       const articles = await this.rss.fetchArticles(source.feedUrl);
       for (const item of articles) {
-        if (await this.processedArticles.findOne({ where: { url: item.url } })) {
+        if (
+          await this.processedArticles.findOne({ where: { url: item.url } })
+        ) {
           continue;
         }
         seen += 1;
@@ -2230,17 +2294,26 @@ export class IngestionService {
   }
 
   private async processFeedArticle(
-    item: { title: string; url: string; contentHtml: string; publishedAt?: Date | null },
+    item: {
+      title: string;
+      url: string;
+      contentHtml: string;
+      publishedAt?: Date | null;
+    },
     source: TrustedSource,
   ): Promise<{ gameId: string | null; records: number }> {
     const game = await this.gamesService.matchByTitle(item.title);
     if (!game) return { gameId: null, records: 0 };
 
     const fallbackDate = item.publishedAt ?? null;
-    const text = item.contentHtml ? this.article.htmlToText(item.contentHtml) : '';
+    const text = item.contentHtml
+      ? this.article.htmlToText(item.contentHtml)
+      : '';
     let sales =
       text.length >= 200
-        ? await this.article.extractFromText(text, item.url, game.name, { fallbackDate })
+        ? await this.article.extractFromText(text, item.url, game.name, {
+            fallbackDate,
+          })
         : null;
     // Feeds that only carry a short summary: fall back to fetching the page.
     if (!sales) sales = await this.article.extract(item.url, game.name);
@@ -2304,7 +2377,9 @@ export class IngestionService {
     if (sales.pc) {
       if (!sales.pc.reportedAt) {
         undatedSkipped += 1;
-      } else if (this.isReportedAfterRelease(sales.pc.reportedAt, releaseDate)) {
+      } else if (
+        this.isReportedAfterRelease(sales.pc.reportedAt, releaseDate)
+      ) {
         rows.push(
           this.milestones.create({
             gameId,
@@ -2373,9 +2448,7 @@ export class IngestionService {
    *   (gameId, source, sourceUrl, units, reportedAt).
    * `null` values are compared as equal (both null = same fingerprint).
    */
-  private async filterOutRejected(
-    rows: Milestone[],
-  ): Promise<Milestone[]> {
+  private async filterOutRejected(rows: Milestone[]): Promise<Milestone[]> {
     if (rows.length === 0) return rows;
     const gameIds = [...new Set(rows.map((r) => r.gameId))];
     const rejected = await this.milestones.find({
@@ -2455,7 +2528,6 @@ export class IngestionService {
         if (g.developer) existing.developer = g.developer;
         if (g.publisher) existing.publisher = g.publisher;
         if (g.genres.length > 0) existing.genres = g.genres;
-        await this.genres.applyAutoGenreProfile(existing);
         const saved = await this.games.save(existing);
         await this.publishers.resolveAndLink(saved.id, saved.publisher);
       } else {
@@ -2471,7 +2543,6 @@ export class IngestionService {
           publisher: g.publisher,
           genres: g.genres.length > 0 ? g.genres : null,
         });
-        await this.genres.applyAutoGenreProfile(entity);
         const saved = await this.games.save(entity);
         await this.publishers.resolveAndLink(saved.id, saved.publisher);
       }
@@ -2537,6 +2608,11 @@ export class IngestionService {
     // Steam payload is missing publisher / developer / cover.
     const igdb = await this.igdb.findBySteamAppId(appId);
 
+    // Community tags scraped from the store page — the matcher's richest
+    // gameplay-type axis. Best-effort (null on failure); only overwrite when
+    // we actually got tags so a transient scrape failure never wipes them.
+    const steamTags = await this.steam.getStoreTags(appId);
+
     if (existingGame) {
       if (existingGame.deletedAt) {
         if (!restoreDeleted) {
@@ -2550,8 +2626,7 @@ export class IngestionService {
       }
       const game = existingGame;
       game.releaseDate = details.releaseDate ?? game.releaseDate;
-      game.coverUrl =
-        details.headerImage ?? igdb?.coverUrl ?? game.coverUrl;
+      game.coverUrl = details.headerImage ?? igdb?.coverUrl ?? game.coverUrl;
       game.summary = details.shortDescription ?? game.summary;
       game.isFree = details.isFree;
       if (details.developers.length > 0) {
@@ -2567,12 +2642,13 @@ export class IngestionService {
       if (details.genres.length > 0) game.genres = details.genres;
       else if (igdb?.genres.length) game.genres = igdb.genres;
       if (details.categories.length > 0) game.categories = details.categories;
+      if (steamTags) game.steamTags = steamTags;
       if (details.dlc.length > 0) game.dlc = details.dlc;
       if (igdb) {
         if (game.igdbId == null) game.igdbId = igdb.igdbId;
         if (igdb.platforms.length > 0) game.platforms = igdb.platforms;
       }
-      await this.genres.applyAutoGenreProfile(game);
+      this.applyDerivedFeatures(game);
       const saved = await this.games.save(game);
       await this.publishers.resolveAndLink(saved.id, saved.publisher);
       return saved;
@@ -2628,8 +2704,9 @@ export class IngestionService {
         if (details.categories.length > 0) {
           existingByIgdb.categories = details.categories;
         }
+        if (steamTags) existingByIgdb.steamTags = steamTags;
         if (details.dlc.length > 0) existingByIgdb.dlc = details.dlc;
-        await this.genres.applyAutoGenreProfile(existingByIgdb);
+        this.applyDerivedFeatures(existingByIgdb);
         const saved = await this.games.save(existingByIgdb);
         await this.publishers.resolveAndLink(saved.id, saved.publisher);
         return saved;
@@ -2657,9 +2734,10 @@ export class IngestionService {
             ? igdb.genres
             : null,
       categories: details.categories.length > 0 ? details.categories : null,
+      steamTags,
       dlc: details.dlc.length > 0 ? details.dlc : null,
     });
-    await this.genres.applyAutoGenreProfile(entity);
+    this.applyDerivedFeatures(entity);
     const game = await this.games.save(entity);
 
     await this.gameSources.save(
@@ -2692,7 +2770,9 @@ export class IngestionService {
     }
     return candidate;
   }
-  private hasConsolePlatform(platforms: Platform[] | null | undefined): boolean {
+  private hasConsolePlatform(
+    platforms: Platform[] | null | undefined,
+  ): boolean {
     return (
       platforms?.some(
         (p) => p === Platform.PLAYSTATION || p === Platform.XBOX,

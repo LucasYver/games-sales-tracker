@@ -8,6 +8,7 @@ import {
   Globe,
   Building2,
   Tags,
+  Boxes,
   AlertTriangle,
   LogOut,
 } from 'lucide-react';
@@ -56,9 +57,15 @@ const NAV_ITEMS = [
     exact: false,
   },
   {
-    href: '/admin/genre-profiles',
-    label: 'Genre profiles',
+    href: '/admin/genres',
+    label: 'Genres',
     icon: Tags,
+    exact: false,
+  },
+  {
+    href: '/admin/reference-profiles',
+    label: 'Reference profiles',
+    icon: Boxes,
     exact: false,
   },
   {

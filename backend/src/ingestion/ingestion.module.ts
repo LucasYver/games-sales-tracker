@@ -11,7 +11,6 @@ import {
 } from '../entities';
 import { EstimationModule } from '../estimation/estimation.module';
 import { GamesModule } from '../games/games.module';
-import { GenresModule } from '../genres/genres.module';
 import { LlmModule } from '../llm/llm.module';
 import { SourcesModule } from '../sources/sources.module';
 import { PublishersModule } from '../publishers/publishers.module';
@@ -41,7 +40,6 @@ import { ExophaseClient } from './exophase.client';
     ]),
     EstimationModule,
     GamesModule,
-    GenresModule,
     LlmModule,
     SourcesModule,
     PublishersModule,
