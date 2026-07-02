@@ -12,13 +12,15 @@ export interface ArticleFigure {
 
 export interface ArticleSales {
   global: ArticleFigure | null;
-  // PC-only cumulative copies-sold figure (e.g. "X copies sold on Steam",
-  // "X million on PC"). Captured separately from `global` because it is a
-  // single-platform total, not a worldwide one: it gives a direct,
-  // assumption-free PC signal (no GLOBAL→platform split needed) for
-  // calibrating the PC Boxleiter multiplier. Only PC is captured — PS / Xbox
-  // / Switch / mobile single-platform figures are still ignored.
+  // Single-platform cumulative copies-sold figures (e.g. "X copies sold on
+  // Steam", "X million on PS5"). Captured separately from `global` because
+  // they are single-platform totals, not worldwide ones: they give a direct,
+  // assumption-free per-platform signal used to learn the PC-vs-console split
+  // and calibrate the per-platform Boxleiter multipliers.
   pc: ArticleFigure | null;
+  ps: ArticleFigure | null;
+  xbox: ArticleFigure | null;
+  switch: ArticleFigure | null;
   // Engagement milestone (e.g. "X million players reached", "X downloads").
   // Reported separately from `global` because it conflates copies sold with
   // subscription users (Ubisoft+/Game Pass) and free-trial play, so it cannot
@@ -38,6 +40,9 @@ interface LlmResult {
   attribution: string | null;
   global: LlmFigure | null;
   pc: LlmFigure | null;
+  ps: LlmFigure | null;
+  xbox: LlmFigure | null;
+  switch: LlmFigure | null;
   engagement: LlmFigure | null;
 }
 interface LlmDateResult {
@@ -70,19 +75,33 @@ CUMULATIVE UNITS ONLY for "global" — this is critical. ONLY extract a figure t
   - Fiscal-period figures: "in FY2024", "during fiscal year ended…", "fiscal Q3" — these are PERIODIC, not lifetime
   - "X players" / "X downloads" / "X concurrent users" / "X subscribers" — these are engagement metrics; see the "engagement" field below
   - MONETARY figures: any number with $/€/£/¥ or words like "revenue", "earnings", "turnover". In English finance, "sales" often means revenue: "$3.9 million in sales" is REVENUE, NOT 3.9M units. If a currency sign appears, REJECT.
-  - DLC, expansions, bundles, remasters, the franchise/series, or other games
+  - DLC, expansions, bundles, remasters, or other games
+
+SINGLE TARGET GAME ONLY — this is critical. Every figure MUST be the total for the ONE specific target game, NEVER a franchise / series / saga / collection total that sums several games together. Reject (set null) whenever the number describes the brand/series rather than the target title. Traps to watch for:
+  - "the franchise/series has sold X", "the series' installments have sold X", "X across the franchise/series/saga", "the franchise is now up to X"
+  - "the [Brand] franchise that has sold over X units to date" — this counts ALL games in the brand, not the target game
+  - a combined total for several distinct games ("Game A and Game B combined sold X")
+  When a SINGLE sentence gives BOTH the target game's own number AND a franchise/series total (e.g. "Horizon Zero Dawn contributed 24.3 million of the over 32.7 million copies the franchise has sold"), extract ONLY the target game's number (24.3M) and NEVER the franchise number (32.7M). If the text states only a franchise/series total with no number specific to the target game, return null.
 
 EXAMPLES OF FIGURES TO REJECT for "global" (return null):
   - "Payday 2 brought in $3.9 million in sales in FY2024" → revenue + fiscal period
   - "moved 200,000 copies in the first week" → periodic
   - "earned $50M in Q1" → revenue + periodic
+  - "the God of War franchise has sold an estimated 66 million games worldwide" → franchise total, not the target game
+  - "the series' installments have sold 88.7 million copies worldwide" → series total, not the target game
+  - "Mortal Kombat 1 has sold 5 million copies, with the franchise now up to 100 million" → keep 5M (the target game) in "global", NEVER the 100M franchise total
 
 If the article only reports periodic, fiscal or monetary figures with no cumulative unit total, set "global" to null. Do NOT try to infer a cumulative unit total from such data.
 
-- "global": the cumulative WORLDWIDE (all-platforms combined) sales total in UNITS. Convert to an integer (e.g. "5 million" -> 5000000). This MUST be an all-platforms total — NEVER report a single-platform figure here. If only a single-platform PC figure is stated, set "global" to null and put it in "pc" instead; if only a single-platform PS/Xbox/Switch/mobile figure is stated, set "global" to null and ignore that figure entirely.
+- "global": the cumulative WORLDWIDE (all-platforms combined) sales total in UNITS. Convert to an integer (e.g. "5 million" -> 5000000). This MUST be an all-platforms total — NEVER report a single-platform figure here. If only a single-platform figure is stated, set "global" to null and put it in the matching per-platform field ("pc"/"ps"/"xbox"/"switch") instead.
   For "date": look EVERYWHERE in the provided text for a date associated with this figure — the article byline, publication metadata, introductory sentence, phrases like "as of [date]", "by [date]", "in fiscal Q… [year]", "announced [date]", etc. Use the most specific date you can find that is plausibly associated with the figure. Format as "YYYY-MM-DD", "YYYY-MM", or "YYYY". Only set null when no date can be inferred at all from the text.
   Put the verbatim sentence containing the figure in "quote".
-- "pc": the cumulative LIFETIME copies-sold total for the target game ON PC SPECIFICALLY — and ONLY the PC platform. Capture figures phrased as "X copies sold on Steam", "X million on PC", "X copies on Steam/Epic/PC". Treat a Steam-only number as PC. This is a single-platform PC total and is DISTINCT from the worldwide "global" total — never put the same number in both. Same rules as "global": cumulative lifetime only (no first-week/periodic/fiscal), units only (no $/€/£/¥ or revenue), target base game only (no DLC/series). Do NOT capture PS, Xbox, Switch or mobile single-platform figures here — only PC. Same "date" and "quote" rules as "global". Set null when no PC-specific figure exists.
+- "pc" / "ps" / "xbox" / "switch": the cumulative LIFETIME copies-sold total for the target base game ON THAT ONE PLATFORM ONLY. Route each single-platform figure to its field:
+  - "pc": "X copies sold on Steam", "X million on PC", "X copies on Steam/Epic/PC". Treat a Steam-only number as PC.
+  - "ps": "X on PlayStation", "X copies on PS5/PS4", "X on the PlayStation Store".
+  - "xbox": "X on Xbox", "X copies on Xbox Series/Xbox One".
+  - "switch": "X on Nintendo Switch", "X copies on Switch".
+  Each is a single-platform total, DISTINCT from the worldwide "global" total — never put the same number in both, and never put a single number in more than one platform field. Same rules as "global": cumulative lifetime only (no first-week/periodic/fiscal), units only (no $/€/£/¥ or revenue), target base game only (no DLC/series). Every per-platform figure MUST be less than or equal to the "global" total when both are present. Same "date" and "quote" rules as "global". Set a field to null when no figure for that specific platform exists.
 - "engagement": cumulative ENGAGEMENT milestones that are NOT copies sold but are still publisher-reported headline numbers about the target game. Examples to capture here (not in "global"):
     - "X million players have played the game"
     - "X million players reached" (especially when subscription users like Ubisoft+ / Xbox Game Pass / PS Plus are explicitly included)
@@ -118,6 +137,36 @@ const SCHEMA: Record<string, unknown> = {
       },
       required: ['units', 'date', 'quote'],
     },
+    ps: {
+      type: ['object', 'null'],
+      additionalProperties: false,
+      properties: {
+        units: { type: 'integer' },
+        date: { type: ['string', 'null'] },
+        quote: { type: 'string' },
+      },
+      required: ['units', 'date', 'quote'],
+    },
+    xbox: {
+      type: ['object', 'null'],
+      additionalProperties: false,
+      properties: {
+        units: { type: 'integer' },
+        date: { type: ['string', 'null'] },
+        quote: { type: 'string' },
+      },
+      required: ['units', 'date', 'quote'],
+    },
+    switch: {
+      type: ['object', 'null'],
+      additionalProperties: false,
+      properties: {
+        units: { type: 'integer' },
+        date: { type: ['string', 'null'] },
+        quote: { type: 'string' },
+      },
+      required: ['units', 'date', 'quote'],
+    },
     engagement: {
       type: ['object', 'null'],
       additionalProperties: false,
@@ -129,7 +178,16 @@ const SCHEMA: Record<string, unknown> = {
       required: ['units', 'date', 'quote'],
     },
   },
-  required: ['matchesGame', 'attribution', 'global', 'pc', 'engagement'],
+  required: [
+    'matchesGame',
+    'attribution',
+    'global',
+    'pc',
+    'ps',
+    'xbox',
+    'switch',
+    'engagement',
+  ],
 };
 
 @Injectable()
@@ -190,11 +248,17 @@ export class ArticleClient {
 
       // Run the dedicated date extractor only when needed (at least one figure
       // has no date and we have no other fallback). One call covers all figures.
+      const rawFigures = [
+        result.global,
+        result.pc,
+        result.ps,
+        result.xbox,
+        result.switch,
+        result.engagement,
+      ];
       const needsDedicatedDatePass =
         !knownFallback &&
-        ((result.global?.date == null && result.global != null) ||
-          (result.pc?.date == null && result.pc != null) ||
-          (result.engagement?.date == null && result.engagement != null));
+        rawFigures.some((figure) => figure != null && figure.date == null);
 
       const dedicatedDate = needsDedicatedDatePass
         ? await this.resolveArticleDate(text)
@@ -202,46 +266,59 @@ export class ArticleClient {
 
       const effectiveFallback = knownFallback ?? dedicatedDate ?? null;
 
-      const globalCandidate =
-        result.global &&
-        isGrounded(result.global.quote) &&
-        !isPeriodicQuote(result.global.quote)
-          ? this.toFigure(result.global, effectiveFallback)
-          : null;
       // A sales figure without a date is essentially useless: it can't be
-      // placed on the timeline, can't be tie-broken against newer figures,
-      // and can't drive the calibrated multiplier. Drop it.
-      const global =
-        globalCandidate && globalCandidate.reportedAt ? globalCandidate : null;
+      // placed on the timeline, tie-broken against newer figures, or drive the
+      // calibrated multiplier. `requirePositive` additionally drops zero-unit
+      // single-platform / engagement figures.
+      const accept = (
+        raw: LlmFigure | null,
+        requirePositive: boolean,
+      ): ArticleFigure | null => {
+        if (!raw || !isGrounded(raw.quote) || isPeriodicQuote(raw.quote)) {
+          return null;
+        }
+        const figure = this.toFigure(raw, effectiveFallback);
+        if (!figure.reportedAt) return null;
+        if (requirePositive && !(figure.units > 0)) return null;
+        return figure;
+      };
 
-      const pcCandidate =
-        result.pc &&
-        isGrounded(result.pc.quote) &&
-        !isPeriodicQuote(result.pc.quote)
-          ? this.toFigure(result.pc, effectiveFallback)
-          : null;
-      const pc =
-        pcCandidate && pcCandidate.reportedAt && pcCandidate.units > 0
-          ? pcCandidate
-          : null;
+      const global = accept(result.global, false);
+      // A single-platform figure larger than the worldwide total is a
+      // misclassification (the model mislabeled a global number as
+      // platform-specific, or vice versa) — reject it.
+      const capToGlobal = (
+        figure: ArticleFigure | null,
+      ): ArticleFigure | null =>
+        figure && global && figure.units > global.units * 1.15 ? null : figure;
 
-      const engagementCandidate =
-        result.engagement &&
-        isGrounded(result.engagement.quote) &&
-        !isPeriodicQuote(result.engagement.quote)
-          ? this.toFigure(result.engagement, effectiveFallback)
-          : null;
-      const engagement =
-        engagementCandidate &&
-        engagementCandidate.reportedAt &&
-        engagementCandidate.units > 0
-          ? engagementCandidate
-          : null;
+      const pc = capToGlobal(accept(result.pc, true));
+      const ps = capToGlobal(accept(result.ps, true));
+      const xbox = capToGlobal(accept(result.xbox, true));
+      const switchFigure = capToGlobal(accept(result.switch, true));
+      const engagement = accept(result.engagement, true);
 
-      if (!global && !pc && !engagement) return null;
+      // Cross-platform consistency: the single-platform figures must not sum
+      // to more than the worldwide total (15% slack for timing/rounding). A
+      // breakdown that overshoots is internally inconsistent (likely a
+      // mislabeled figure), so drop the per-platform figures and keep only the
+      // worldwide / engagement numbers, which are trustworthy on their own.
+      const platformSum =
+        (pc?.units ?? 0) +
+        (ps?.units ?? 0) +
+        (xbox?.units ?? 0) +
+        (switchFigure?.units ?? 0);
+      const platformsConsistent = !global || platformSum <= global.units * 1.15;
+
+      if (!global && !pc && !ps && !xbox && !switchFigure && !engagement) {
+        return null;
+      }
       return {
         global,
-        pc,
+        pc: platformsConsistent ? pc : null,
+        ps: platformsConsistent ? ps : null,
+        xbox: platformsConsistent ? xbox : null,
+        switch: platformsConsistent ? switchFigure : null,
         engagement,
         attribution: result.attribution,
       };

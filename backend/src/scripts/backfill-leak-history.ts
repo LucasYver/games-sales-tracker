@@ -26,7 +26,13 @@ import { IngestionService } from '../ingestion/ingestion.service';
  * Usage (from backend/):
  *   npx ts-node src/scripts/backfill-leak-history.ts \
  *     [--scope leak|non-leak|all] \
- *     [--limit <n>] [--delay <ms>] [--reviews-only] [--ccu-only] [--no-resume]
+ *     [--limit <n>] [--delay <ms>] [--reviews-only] [--ccu-only] [--no-resume] \
+ *     [--max-points <n>]
+ *
+ * `--max-points <n>` (default 20): per metric, skip games that already have
+ * more than n points — i.e. only backfill titles still lacking launch history.
+ * Games are processed fewest-points-first so an interrupted run covers the
+ * neediest ones first.
  */
 
 type Scope = 'leak' | 'non-leak' | 'all';
@@ -38,6 +44,7 @@ interface CliOptions {
   doReviews: boolean;
   doCcu: boolean;
   resume: boolean;
+  maxPoints: number;
 }
 
 function parseArgs(): CliOptions {
@@ -63,14 +70,20 @@ function parseArgs(): CliOptions {
     doReviews: !ccuOnly,
     doCcu: !reviewsOnly,
     resume: !args.includes('--no-resume'),
+    maxPoints: get('--max-points')
+      ? Number(get('--max-points'))
+      : DEFAULT_MAX_POINTS,
   };
 }
 
 // The histogram + SteamCharts backfills DELETE existing rows in the covered
-// window before reinserting one point per month. To avoid downgrading the
-// daily-resolution history collected by the regular cron on long-tracked
-// games, we skip each metric whose existing row count is above this cap.
-const PRESERVE_EXISTING_SNAPSHOTS = 200;
+// window before reinserting one point per month. A metric is skipped once its
+// existing row count exceeds `--max-points` (default below): games with real
+// history — long-tracked daily-cron titles or an earlier backfill — are left
+// untouched, so we only spend scrape budget on the ones that still lack it.
+// Two weeks of cron already yields a handful of points, so the default is set
+// well above that (a game with ≤20 points has essentially no launch history).
+const DEFAULT_MAX_POINTS = 20;
 
 const SCOPE_FILTERS: Record<Scope, string> = {
   leak: `EXISTS (
@@ -97,7 +110,10 @@ function buildScopeQuery(scope: Scope): string {
             AND g."deletedAt" IS NULL
             AND ${SCOPE_FILTERS[scope]}
           GROUP BY gs."gameId", g.name
-          ORDER BY g.name ASC`;
+          ORDER BY
+            (COALESCE(SUM(CASE WHEN s.metric = 'STEAM_REVIEWS' THEN 1 ELSE 0 END), 0)
+             + COALESCE(SUM(CASE WHEN s.metric = 'STEAM_CONCURRENT' THEN 1 ELSE 0 END), 0)) ASC,
+            g.name ASC`;
 }
 
 function loadCheckpoint(path: string): Set<string> {
@@ -144,7 +160,7 @@ async function main(): Promise<void> {
     `Scope=${opts.scope}: found ${games.length} game(s) ` +
       `(reviews=${opts.doReviews}, ccu=${opts.doCcu}, delay=${opts.delayMs}ms` +
       `${opts.limit ? `, limit=${opts.limit}` : ''}, ` +
-      `preserve>${PRESERVE_EXISTING_SNAPSHOTS} existing snapshots). ` +
+      `skip metric when existing points > ${opts.maxPoints}). ` +
       `${done.size} already done.`,
   );
 
@@ -167,7 +183,7 @@ async function main(): Promise<void> {
       let ccuLabel = 'skip';
 
       if (opts.doReviews) {
-        if (reviewsCount > PRESERVE_EXISTING_SNAPSHOTS) {
+        if (reviewsCount > opts.maxPoints) {
           reviewsLabel = `skip(${reviewsCount})`;
           counts.reviewsSkipped++;
         } else {
@@ -184,7 +200,7 @@ async function main(): Promise<void> {
       }
 
       if (opts.doCcu) {
-        if (ccuCount > PRESERVE_EXISTING_SNAPSHOTS) {
+        if (ccuCount > opts.maxPoints) {
           ccuLabel = `skip(${ccuCount})`;
           counts.ccuSkipped++;
         } else {

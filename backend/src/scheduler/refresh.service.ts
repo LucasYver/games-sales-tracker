@@ -30,7 +30,21 @@ export class RefreshService {
    * titles, for which we don't compute sales estimates.
    */
   async refreshAllGames() {
-    const games = await this.games.find({ where: { isFree: false } });
+    // Wall-clock cap per invocation, with headroom under the 800s Vercel
+    // `maxDuration` so the in-flight game can finish (and stamp
+    // `lastRefreshedAt`) before the function is killed mid-run.
+    const RUN_BUDGET_MS = 11 * 60 * 1000;
+    const startedAt = Date.now();
+
+    // Stalest first: never-refreshed games (`lastRefreshedAt IS NULL`) sort
+    // ahead of everything else. Combined with the always-on stamp in
+    // `refreshGame`, this guarantees forward progress — the large backlog of
+    // never-refreshed (often old) titles drains before we re-refresh recent
+    // ones, instead of starving at the tail of an unordered scan.
+    const games = await this.games.find({
+      where: { isFree: false },
+      order: { lastRefreshedAt: { direction: 'ASC', nulls: 'FIRST' } },
+    });
 
     const now = new Date();
     const eligible = games.filter((game) =>
@@ -38,18 +52,28 @@ export class RefreshService {
     );
 
     this.logger.log(
-      `Refreshing ${eligible.length} of ${games.length} game(s) (others not yet due).`,
+      `Refreshing up to ${eligible.length} due game(s) of ${games.length} ` +
+        `(stalest first), budget ${RUN_BUDGET_MS / 1000}s.`,
     );
 
+    let processed = 0;
     for (const game of eligible) {
+      if (Date.now() - startedAt >= RUN_BUDGET_MS) {
+        this.logger.log(
+          `Run budget reached after ${processed} game(s); ` +
+            `${eligible.length - processed} left for the next run.`,
+        );
+        break;
+      }
       try {
         await this.ingestion.refreshGame(game.id);
       } catch (error) {
         this.logger.warn(`Refresh failed for game ${game.id}: ${error}`);
       }
+      processed += 1;
     }
 
-    this.logger.log('Refresh complete.');
+    this.logger.log(`Refresh complete: ${processed} game(s) processed.`);
   }
 
   /**

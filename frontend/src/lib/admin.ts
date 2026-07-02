@@ -114,7 +114,7 @@ export interface AdminMilestone {
   gameId: string;
   source: SalesSource;
   units: number;
-  region: string;
+  platform: string;
   confidenceScore: number | null;
   publisher: string | null;
   sourceUrl: string | null;
@@ -122,6 +122,7 @@ export interface AdminMilestone {
   reportedAt: string | null;
   capturedAt: string;
   isEngagement: boolean;
+  isEstimate: boolean;
 }
 
 export interface AdminMilestoneWithGame extends AdminMilestone {

@@ -1163,10 +1163,11 @@ export class EstimationService {
         gameId,
         rejectedAt: IsNull(),
         isEngagement: false,
-        // Worldwide totals only. PC-specific milestones (region='PC') are not
-        // (yet) consumed by the GLOBAL→platform split — feeding one here would
-        // be mistaken for a worldwide figure and split across platforms.
-        region: 'GLOBAL',
+        // Worldwide totals only. Single-platform milestones (platform='PC',
+        // 'PLAYSTATION', …) are not consumed by the GLOBAL→platform split —
+        // feeding one here would be mistaken for a worldwide figure and split
+        // across platforms.
+        platform: Platform.GLOBAL,
       },
     });
     if (candidates.length === 0) return;
@@ -1246,9 +1247,9 @@ export class EstimationService {
   }
 
   /**
-   * Calibrate the PC multiplier directly from a `region='PC'` milestone
+   * Calibrate the PC multiplier directly from a `platform='PC'` milestone
    * (e.g. `STEAM_LEAK`: 2018 Steam-leak owner counts, treated as paid
-   * buyers on Steam). Skipped when a more recent `region='GLOBAL'`
+   * buyers on Steam). Skipped when a more recent `platform='GLOBAL'`
    * milestone exists — that figure would already have set the PC
    * multiplier via `recalibrateFromGlobal` and is presumed more current.
    *
@@ -1271,7 +1272,7 @@ export class EstimationService {
         gameId,
         rejectedAt: IsNull(),
         isEngagement: false,
-        region: 'PC',
+        platform: Platform.PC,
       },
     });
     if (pcCandidates.length === 0) return;
@@ -1290,7 +1291,7 @@ export class EstimationService {
         gameId,
         rejectedAt: IsNull(),
         isEngagement: false,
-        region: 'GLOBAL',
+        platform: Platform.GLOBAL,
       },
       order: { reportedAt: 'DESC' },
     });
@@ -1373,7 +1374,7 @@ export class EstimationService {
         gameId,
         rejectedAt: IsNull(),
         isEngagement: false,
-        region: 'GLOBAL',
+        platform: Platform.GLOBAL,
       },
       order: { units: 'DESC' },
     });

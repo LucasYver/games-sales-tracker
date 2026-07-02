@@ -7,21 +7,23 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { SalesSource } from './enums';
+import { Platform, SalesSource } from './enums';
 import { Game } from './game.entity';
 
-// A dated worldwide sales-related figure for a game, coming from a single
-// source. Officially-declared totals, press announcements, Wikipedia
-// citations all share this row — the only thing that differs is the source
-// (kept for traceability) and the `confidenceScore` (derived from the
-// trusted source's weight, purely informational). Milestones are always
-// worldwide totals; per-platform figures are no longer tracked.
+// A dated sales-related figure for a game, coming from a single source.
+// Officially-declared totals, press announcements, Wikipedia citations all
+// share this row — the source is kept for traceability and the
+// `confidenceScore` (derived from the trusted source's weight) is purely
+// informational. `platform` scopes the figure: `GLOBAL` is a worldwide,
+// all-platforms-combined total; `PC`/`PLAYSTATION`/`XBOX`/`SWITCH` are
+// single-platform totals used to learn the PC-vs-console split.
 //
 // Calibration always picks the most recent milestone (by `reportedAt`),
 // regardless of source. `confidenceScore` does NOT influence the
 // calibration — it is exposed verbatim so the operator can judge.
 @Entity('milestone')
 @Index(['gameId', 'source'])
+@Index(['gameId', 'platform'])
 export class Milestone {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -35,8 +37,17 @@ export class Milestone {
   @Column('int')
   units: number;
 
-  @Column({ type: 'varchar', default: 'GLOBAL' })
-  region: string;
+  // Platform the figure is scoped to. `GLOBAL` = worldwide all-platforms
+  // total (the historical default); the single-platform values feed the
+  // learned PC-vs-console split. Calibration paths filter on this.
+  @Column({ type: 'enum', enum: Platform, default: Platform.GLOBAL })
+  platform: Platform;
+
+  // Marks a modeled/estimated figure (e.g. a third-party estimate source)
+  // rather than a sourced actual, so low-trust numbers can be down-weighted
+  // or excluded from the split-learning corpus. Sourced actuals are false.
+  @Column({ type: 'boolean', default: false })
+  isEstimate: boolean;
 
   // 0–100 numeric score derived from the trusted source's weight. Purely
   // informational: never used to weight calibration, spread, or aggregation.

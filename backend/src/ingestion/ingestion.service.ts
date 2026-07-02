@@ -25,7 +25,11 @@ import { EstimationService } from '../estimation/estimation.service';
 import { GamesService } from '../games/games.service';
 import { deriveFranchise, deriveLiveService } from '../games/game-features';
 import { slugify } from '../common/slug';
-import { SteamAppDetails, SteamClient } from './steam.client';
+import {
+  SteamAppDetails,
+  SteamClient,
+  SteamReviewDailyCount,
+} from './steam.client';
 import { SteamChartsClient } from './steamcharts.client';
 import { IgdbClient, IgdbGame } from './igdb.client';
 import { StoreRatingsClient } from './store-ratings.client';
@@ -97,6 +101,37 @@ const TAVILY_EXCLUDED_DOMAINS = [
   'tiktok.com',
 ];
 
+// One persisted milestone candidate: a figure extracted by the article /
+// Wikipedia clients (both expose the same global/pc/ps/xbox/switch/engagement
+// shape), tagged with the `platform` it belongs to. `engagement` is a GLOBAL
+// figure flagged as engagement so it stays out of the calibration math.
+interface PlatformFigureSpec {
+  figure: { units: number; reportedAt: Date | null; quote: string } | null;
+  platform: Platform;
+  isEngagement: boolean;
+}
+
+// Fan a per-platform extraction result out into the list of milestone
+// candidates, in a stable persistence order (worldwide first, then PC,
+// consoles, engagement).
+function toPlatformFigures(sales: {
+  global: PlatformFigureSpec['figure'];
+  pc: PlatformFigureSpec['figure'];
+  ps: PlatformFigureSpec['figure'];
+  xbox: PlatformFigureSpec['figure'];
+  switch: PlatformFigureSpec['figure'];
+  engagement: PlatformFigureSpec['figure'];
+}): PlatformFigureSpec[] {
+  return [
+    { figure: sales.global, platform: Platform.GLOBAL, isEngagement: false },
+    { figure: sales.pc, platform: Platform.PC, isEngagement: false },
+    { figure: sales.ps, platform: Platform.PLAYSTATION, isEngagement: false },
+    { figure: sales.xbox, platform: Platform.XBOX, isEngagement: false },
+    { figure: sales.switch, platform: Platform.SWITCH, isEngagement: false },
+    { figure: sales.engagement, platform: Platform.GLOBAL, isEngagement: true },
+  ];
+}
+
 export interface ManualSalesInput {
   gameId: string;
   units: number;
@@ -104,7 +139,7 @@ export interface ManualSalesInput {
   publisher?: string;
   sourceUrl?: string;
   reportedAt?: string;
-  region?: string;
+  platform?: Platform;
 }
 
 export interface ArticleIngestResult {
@@ -628,13 +663,13 @@ export class IngestionService {
   }
 
   /**
-   * Mirror the leak player count into the milestone table as a PC-region sales
-   * figure. We only import paid games, so a Steam player is necessarily a
-   * buyer — the count is effectively PC copies sold (owners), NOT an
-   * engagement metric. It is tagged `region='PC'` (Steam-only, not worldwide),
-   * which keeps it out of the GLOBAL calibration / breakdown headline /
-   * discrepancy paths (all filter to region='GLOBAL'). Idempotent and
-   * rejection-aware: a single active leak milestone per game, never
+   * Mirror the leak player count into the milestone table as a PC-platform
+   * sales figure. We only import paid games, so a Steam player is necessarily
+   * a buyer — the count is effectively PC copies sold (owners), NOT an
+   * engagement metric. It is tagged `platform='PC'` (Steam-only, not
+   * worldwide), which keeps it out of the GLOBAL calibration / breakdown
+   * headline / discrepancy paths (all filter to platform='GLOBAL'). Idempotent
+   * and rejection-aware: a single active leak milestone per game, never
    * resurrected after an admin rejects it.
    */
   private async storeLeakMilestone(
@@ -646,7 +681,7 @@ export class IngestionService {
       gameId,
       source: SalesSource.STEAM_LEAK,
       units: players,
-      region: 'PC',
+      platform: Platform.PC,
       isEngagement: false,
       confidenceScore: DEFAULT_CONFIDENCE_SCORE[SalesSource.STEAM_LEAK],
       sourceUrl: null,
@@ -691,84 +726,47 @@ export class IngestionService {
         rejectedAt: IsNull(),
       });
 
+      const figures = toPlatformFigures(sales);
+
       const rows: Milestone[] = [];
       let undatedSkipped = 0;
-      if (sales.global) {
-        if (!sales.global.reportedAt) {
+      for (const { figure, platform, isEngagement } of figures) {
+        if (!figure) continue;
+        if (!figure.reportedAt) {
           undatedSkipped += 1;
-        } else if (
-          this.isReportedAfterRelease(sales.global.reportedAt, releaseDate)
-        ) {
-          rows.push(
-            this.milestones.create({
-              gameId,
-              source: SalesSource.WIKIPEDIA,
-              units: sales.global.units,
-              confidenceScore: wikipediaScore,
-              sourceUrl: sales.sourceUrl,
-              note: sales.global.quote,
-              reportedAt: sales.global.reportedAt,
-              region: 'GLOBAL',
-            }),
-          );
+          continue;
         }
-      }
-      if (sales.pc) {
-        if (!sales.pc.reportedAt) {
-          undatedSkipped += 1;
-        } else if (
-          this.isReportedAfterRelease(sales.pc.reportedAt, releaseDate)
-        ) {
-          rows.push(
-            this.milestones.create({
-              gameId,
-              source: SalesSource.WIKIPEDIA,
-              units: sales.pc.units,
-              confidenceScore: wikipediaScore,
-              sourceUrl: sales.sourceUrl,
-              note: sales.pc.quote,
-              reportedAt: sales.pc.reportedAt,
-              region: 'PC',
-            }),
-          );
+        if (!this.isReportedAfterRelease(figure.reportedAt, releaseDate)) {
+          continue;
         }
-      }
-      if (sales.engagement) {
-        if (!sales.engagement.reportedAt) {
-          undatedSkipped += 1;
-        } else if (
-          this.isReportedAfterRelease(sales.engagement.reportedAt, releaseDate)
-        ) {
-          rows.push(
-            this.milestones.create({
-              gameId,
-              source: SalesSource.WIKIPEDIA,
-              units: sales.engagement.units,
-              confidenceScore: wikipediaScore,
-              sourceUrl: sales.sourceUrl,
-              note: sales.engagement.quote,
-              reportedAt: sales.engagement.reportedAt,
-              region: 'GLOBAL',
-              isEngagement: true,
-            }),
-          );
-        }
+        rows.push(
+          this.milestones.create({
+            gameId,
+            source: SalesSource.WIKIPEDIA,
+            units: figure.units,
+            confidenceScore: wikipediaScore,
+            sourceUrl: sales.sourceUrl,
+            note: figure.quote,
+            reportedAt: figure.reportedAt,
+            platform,
+            isEngagement,
+          }),
+        );
       }
 
       const accepted = await this.filterOutRejected(rows);
       if (accepted.length > 0) {
         await this.milestones.save(accepted);
-        const globalLog = sales.global
-          ? `global=${sales.global.units} (${sales.global.reportedAt?.toISOString().slice(0, 10) ?? 'no-date'})`
-          : 'no global';
-        const pcLog = sales.pc
-          ? `, pc=${sales.pc.units} (${sales.pc.reportedAt?.toISOString().slice(0, 10) ?? 'no-date'})`
-          : '';
-        const engagementLog = sales.engagement
-          ? `, engagement=${sales.engagement.units} (${sales.engagement.reportedAt?.toISOString().slice(0, 10) ?? 'no-date'})`
-          : '';
+        const summary =
+          figures
+            .filter((f) => f.figure)
+            .map(
+              (f) =>
+                `${f.isEngagement ? 'engagement' : f.platform}=${f.figure!.units} (${f.figure!.reportedAt?.toISOString().slice(0, 10) ?? 'no-date'})`,
+            )
+            .join(', ') || 'no figure';
         this.logger.log(
-          `[wikipedia] "${name}" — stored ${accepted.length} milestone(s) (${rows.length - accepted.length} rejected-fingerprint skip, ${undatedSkipped} undated skip): ${globalLog}${pcLog}${engagementLog}`,
+          `[wikipedia] "${name}" — stored ${accepted.length} milestone(s) (${rows.length - accepted.length} rejected-fingerprint skip, ${undatedSkipped} undated skip): ${summary}`,
         );
       } else if (rows.length > 0) {
         this.logger.log(
@@ -1612,20 +1610,17 @@ export class IngestionService {
 
     const hist = await this.steam.fetchReviewHistogram(appId);
 
-    // The histogram is only trustworthy as a full series when it's a monthly
-    // rollup that reaches back to (around) the release month. Otherwise fall
-    // back to the per-review enumeration.
-    const reachesRelease =
-      hist !== null &&
-      hist.rollupType === 'month' &&
-      (releaseMonthStart === null ||
-        hist.buckets[0].day <= this.addMonths(releaseMonthStart, 2));
-
-    if (!reachesRelease) {
+    // Always use the histogram when Steam returns one — a single request,
+    // exactly like the leak backfill. Weekly/daily rollups are aggregated into
+    // one point per calendar month before persisting, so the series stays at a
+    // consistent monthly granularity regardless of the rollup type. The
+    // per-review pagination path (700 ms/page × N pages) is far too slow at
+    // scale, so it's kept only as a last resort when no histogram exists.
+    if (hist === null) {
       const api = await this.backfillReviewsFromApi(gameId);
       return {
         method: 'enumeration',
-        rollupType: hist?.rollupType ?? null,
+        rollupType: null,
         pointsImported: api.daysImported,
         rangeStart: api.rangeStart,
         rangeEnd: api.rangeEnd,
@@ -1634,12 +1629,17 @@ export class IngestionService {
       };
     }
 
+    const processedBuckets =
+      hist.rollupType === 'month'
+        ? hist.buckets
+        : this.aggregateBucketsToMonthly(hist.buckets);
+
     let cumulativePositive = 0;
     let cumulativeNegative = 0;
     let skippedPreRelease = 0;
     const rows: SignalSnapshot[] = [];
     const emittedDays: string[] = [];
-    for (const bucket of hist.buckets) {
+    for (const bucket of processedBuckets) {
       cumulativePositive += bucket.positive;
       cumulativeNegative += bucket.negative;
       if (releaseMonthStart && bucket.day < releaseMonthStart) {
@@ -1694,7 +1694,8 @@ export class IngestionService {
     const latestRating = rawLatest > 0 ? cumulativePositive / rawLatest : null;
 
     this.logger.log(
-      `[reviews-histogram] "${game.name}" — ${rows.length} months ` +
+      `[reviews-histogram] "${game.name}" (${hist.rollupType}→month) — ` +
+        `${rows.length} months ` +
         `(${emittedDays[0]} → ${emittedDays[emittedDays.length - 1]}), ` +
         `latest ${latestTotal.toLocaleString()} reviews` +
         (latestRating !== null
@@ -1843,11 +1844,25 @@ export class IngestionService {
     };
   }
 
-  /** Add `count` months to a `YYYY-MM-01` key, returning the same format. */
-  private addMonths(monthStart: string, count: number): string {
-    const [y, m] = monthStart.split('-').map(Number);
-    const d = new Date(Date.UTC(y, m - 1 + count, 1));
-    return `${d.toISOString().slice(0, 7)}-01`;
+  /**
+   * Collapse weekly/daily histogram buckets into one entry per calendar month
+   * by summing their positive/negative counts. The returned array is sorted
+   * ascending with `day` set to the first of each month (`YYYY-MM-01`).
+   */
+  private aggregateBucketsToMonthly(
+    buckets: SteamReviewDailyCount[],
+  ): SteamReviewDailyCount[] {
+    const monthly = new Map<string, { positive: number; negative: number }>();
+    for (const b of buckets) {
+      const key = `${b.day.slice(0, 7)}-01`;
+      const entry = monthly.get(key) ?? { positive: 0, negative: 0 };
+      entry.positive += b.positive;
+      entry.negative += b.negative;
+      monthly.set(key, entry);
+    }
+    return Array.from(monthly.entries())
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([day, { positive, negative }]) => ({ day, positive, negative }));
   }
 
   /**
@@ -1955,12 +1970,18 @@ export class IngestionService {
       //   - "X million players reached" → engagement milestones (often the only
       //     public number for subscription-led launches like Ubisoft+/Game Pass)
       //   - "sales milestone / announcement" → PR-style coverage with vague titles
+      //   - per-platform phrasings → the single-platform figures we now capture
+      //     (PC/PS/Xbox/Switch) to learn the PC-vs-console split
       const queries = [
         `${name} total copies sold lifetime`,
         `${name} million players reached milestone`,
         `${name} units shipped sold to date`,
         `${name} sales figures announcement`,
         `${name} total copies sold reached milestone`,
+        `${name} PlayStation PS5 copies sold`,
+        `${name} Xbox copies sold`,
+        `${name} Nintendo Switch copies sold`,
+        `${name} Steam PC copies sold`,
       ];
 
       const results = await this.runBacklogSearch(engine, name, queries);
@@ -2166,7 +2187,7 @@ export class IngestionService {
         confidenceScore: DEFAULT_CONFIDENCE_SCORE[input.source],
         publisher: input.publisher ?? null,
         sourceUrl: input.sourceUrl ?? null,
-        region: input.region ?? 'GLOBAL',
+        platform: input.platform ?? Platform.GLOBAL,
         reportedAt: new Date(input.reportedAt),
       }),
     );
@@ -2190,56 +2211,63 @@ export class IngestionService {
     const startedAt = Date.now();
     this.logger.log(`[refresh] "${game.name}" (${gameId}) — starting`);
 
-    await this.ensureSteamSource(game);
+    try {
+      await this.ensureSteamSource(game);
 
-    this.logger.log(`[refresh] "${game.name}" — Wikipedia LLM extraction…`);
-    await this.scrapeWikipedia(game.id, game.name);
+      this.logger.log(`[refresh] "${game.name}" — Wikipedia LLM extraction…`);
+      await this.scrapeWikipedia(game.id, game.name);
 
-    this.logger.log(`[refresh] "${game.name}" — store ratings (PS/Xbox)…`);
-    await this.scrapeStoreRatings(game.id, game.name, game.platforms);
+      this.logger.log(`[refresh] "${game.name}" — store ratings (PS/Xbox)…`);
+      await this.scrapeStoreRatings(game.id, game.name, game.platforms);
 
-    this.logger.log(
-      `[refresh] "${game.name}" — achievements (Exophase Steam / PSN / Xbox + Steam official %)…`,
-    );
-    const steamSource = await this.gameSources.findOne({
-      where: { gameId: game.id, source: SourceType.STEAM },
-    });
-    const steamAppId = steamSource ? Number(steamSource.externalId) : NaN;
-    await Promise.all([
-      this.scrapeAchievements(game.id, game.name, Platform.PC),
-      this.scrapeAchievements(game.id, game.name, Platform.PLAYSTATION),
-      this.scrapeAchievements(game.id, game.name, Platform.XBOX),
-      Number.isFinite(steamAppId)
-        ? this.scrapeSteamOfficialAchievements(game.id, game.name, steamAppId)
-        : Promise.resolve(),
-      // CCU is intentionally excluded here: live concurrent players are polled
-      // on a short cadence by the dedicated CCU cron (`pollAllSteamCcu`), not
-      // during the nightly full refresh. Reviews remain on the refresh chain.
-      Number.isFinite(steamAppId)
-        ? this.pollSteamReviews(game.id, steamAppId)
-        : Promise.resolve(),
-    ]);
+      this.logger.log(
+        `[refresh] "${game.name}" — achievements (Exophase Steam / PSN / Xbox + Steam official %)…`,
+      );
+      const steamSource = await this.gameSources.findOne({
+        where: { gameId: game.id, source: SourceType.STEAM },
+      });
+      const steamAppId = steamSource ? Number(steamSource.externalId) : NaN;
+      await Promise.all([
+        this.scrapeAchievements(game.id, game.name, Platform.PC),
+        this.scrapeAchievements(game.id, game.name, Platform.PLAYSTATION),
+        this.scrapeAchievements(game.id, game.name, Platform.XBOX),
+        Number.isFinite(steamAppId)
+          ? this.scrapeSteamOfficialAchievements(game.id, game.name, steamAppId)
+          : Promise.resolve(),
+        // CCU is intentionally excluded here: live concurrent players are
+        // polled on a short cadence by the dedicated CCU cron
+        // (`pollAllSteamCcu`), not during the nightly full refresh. Reviews
+        // remain on the refresh chain.
+        Number.isFinite(steamAppId)
+          ? this.pollSteamReviews(game.id, steamAppId)
+          : Promise.resolve(),
+      ]);
 
-    this.logger.log(`[refresh] "${game.name}" — running backlog discovery…`);
-    const backlog = await this.discoverBacklog(game.id, game.name);
-    this.logger.log(
-      `[refresh] "${game.name}" — backlog checked=${backlog.checked} ingested=${backlog.ingested} records=${backlog.records}`,
-    );
+      this.logger.log(`[refresh] "${game.name}" — running backlog discovery…`);
+      const backlog = await this.discoverBacklog(game.id, game.name);
+      this.logger.log(
+        `[refresh] "${game.name}" — backlog checked=${backlog.checked} ingested=${backlog.ingested} records=${backlog.records}`,
+      );
 
-    this.logger.log(`[refresh] "${game.name}" — rebuilding estimate history…`);
-    const rebuild = await this.gamesService.rebuildEstimateHistory(game.id);
-    this.logger.log(
-      `[refresh] "${game.name}" — rebuilt ${rebuild.points} point(s): ${rebuild.estimates} estimates, ${rebuild.snapshots} snapshots`,
-    );
+      this.logger.log(
+        `[refresh] "${game.name}" — rebuilding estimate history…`,
+      );
+      const rebuild = await this.gamesService.rebuildEstimateHistory(game.id);
+      this.logger.log(
+        `[refresh] "${game.name}" — rebuilt ${rebuild.points} point(s): ${rebuild.estimates} estimates, ${rebuild.snapshots} snapshots`,
+      );
 
-    await this.games.update(game.id, { lastRefreshedAt: new Date() });
+      this.logger.log(
+        `[refresh] "${game.name}" — done in ${Date.now() - startedAt}ms, ${backlog.ingested} article(s) ingested with figures`,
+      );
 
-    const totalIngested = backlog.ingested;
-    this.logger.log(
-      `[refresh] "${game.name}" — done in ${Date.now() - startedAt}ms, ${totalIngested} article(s) ingested with figures`,
-    );
-
-    return { found: true, articlesIngested: 0 };
+      return { found: true, articlesIngested: 0 };
+    } finally {
+      // Always stamp lastRefreshedAt — even when a source threw — so a
+      // persistently failing game cannot stay perpetually "due" and starve the
+      // rest of the catalog by re-consuming every run's time budget.
+      await this.games.update(game.id, { lastRefreshedAt: new Date() });
+    }
   }
 
   /**
@@ -2399,69 +2427,29 @@ export class IngestionService {
 
     const rows: Milestone[] = [];
     let undatedSkipped = 0;
-    if (sales.global) {
-      if (!sales.global.reportedAt) {
+    for (const { figure, platform, isEngagement } of toPlatformFigures(sales)) {
+      if (!figure) continue;
+      if (!figure.reportedAt) {
         undatedSkipped += 1;
-      } else if (
-        this.isReportedAfterRelease(sales.global.reportedAt, releaseDate)
-      ) {
-        rows.push(
-          this.milestones.create({
-            gameId,
-            source: tier,
-            units: sales.global.units,
-            confidenceScore,
-            publisher: sales.attribution,
-            sourceUrl: url,
-            note: sales.global.quote,
-            reportedAt: sales.global.reportedAt,
-            region: 'GLOBAL',
-          }),
-        );
+        continue;
       }
-    }
-    if (sales.pc) {
-      if (!sales.pc.reportedAt) {
-        undatedSkipped += 1;
-      } else if (
-        this.isReportedAfterRelease(sales.pc.reportedAt, releaseDate)
-      ) {
-        rows.push(
-          this.milestones.create({
-            gameId,
-            source: tier,
-            units: sales.pc.units,
-            confidenceScore,
-            publisher: sales.attribution,
-            sourceUrl: url,
-            note: sales.pc.quote,
-            reportedAt: sales.pc.reportedAt,
-            region: 'PC',
-          }),
-        );
+      if (!this.isReportedAfterRelease(figure.reportedAt, releaseDate)) {
+        continue;
       }
-    }
-    if (sales.engagement) {
-      if (!sales.engagement.reportedAt) {
-        undatedSkipped += 1;
-      } else if (
-        this.isReportedAfterRelease(sales.engagement.reportedAt, releaseDate)
-      ) {
-        rows.push(
-          this.milestones.create({
-            gameId,
-            source: tier,
-            units: sales.engagement.units,
-            confidenceScore,
-            publisher: sales.attribution,
-            sourceUrl: url,
-            note: sales.engagement.quote,
-            reportedAt: sales.engagement.reportedAt,
-            region: 'GLOBAL',
-            isEngagement: true,
-          }),
-        );
-      }
+      rows.push(
+        this.milestones.create({
+          gameId,
+          source: tier,
+          units: figure.units,
+          confidenceScore,
+          publisher: sales.attribution,
+          sourceUrl: url,
+          note: figure.quote,
+          reportedAt: figure.reportedAt,
+          platform,
+          isEngagement,
+        }),
+      );
     }
 
     const accepted = await this.filterOutRejected(rows);

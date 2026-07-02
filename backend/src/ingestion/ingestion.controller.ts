@@ -8,7 +8,7 @@ import {
   IsUrl,
   IsUUID,
 } from 'class-validator';
-import { SalesSource } from '../entities';
+import { Platform, SalesSource } from '../entities';
 import { IngestionService } from './ingestion.service';
 
 class AddSalesDto {
@@ -35,8 +35,8 @@ class AddSalesDto {
   reportedAt?: string;
 
   @IsOptional()
-  @IsString()
-  region?: string;
+  @IsEnum(Platform)
+  platform?: Platform;
 }
 
 class IngestArticleDto {
