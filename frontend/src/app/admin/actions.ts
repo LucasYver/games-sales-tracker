@@ -162,6 +162,33 @@ export async function importReviewsCsv(
   return result;
 }
 
+export interface UpdateMilestonePayload {
+  source?: SalesSource;
+  platform?: string;
+  units?: number;
+  publisher?: string | null;
+  sourceUrl?: string | null;
+  note?: string | null;
+  reportedAt?: string | null;
+  isEngagement?: boolean;
+  isEstimate?: boolean;
+  confidenceScore?: number | null;
+}
+
+export async function updateMilestone(
+  id: string,
+  gameId: string,
+  payload: UpdateMilestonePayload,
+): Promise<void> {
+  await adminFetch(`/milestones/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+  revalidatePath('/admin/milestones');
+  revalidatePath('/admin/issues');
+  revalidatePath(`/admin/games/${gameId}`);
+}
+
 export async function deleteMilestone(id: string): Promise<void> {
   await adminFetch(`/milestones/${id}`, { method: 'DELETE' });
   revalidatePath('/admin/milestones');

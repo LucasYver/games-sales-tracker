@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { ExternalLink } from 'lucide-react';
 import {
   adminFetch,
   type AdminMilestoneWithGame,
@@ -14,30 +13,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { DeleteButton } from '../_components/DeleteButton';
-import { deleteMilestone } from '../actions';
+import { MilestoneRow } from '../_components/MilestoneRow';
 
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 50;
 const SOURCES = ['OFFICIAL', 'WIKIPEDIA', 'ANNOUNCEMENT', 'MEDIA'];
-
-function formatDate(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
-function formatScore(score: number | null): string {
-  if (score == null) return '—';
-  return `${Math.round(score)}`;
-}
 
 export default async function AdminMilestonesPage({
   searchParams,
@@ -128,81 +111,24 @@ export default async function AdminMilestonesPage({
           <TableHeader>
             <TableRow>
               <TableHead>Game</TableHead>
-              <TableHead>Source</TableHead>
+              <TableHead>Source tier</TableHead>
+              <TableHead>Reported by</TableHead>
+              <TableHead>Attribution</TableHead>
               <TableHead className="text-right">Units</TableHead>
               <TableHead className="text-right">Confidence</TableHead>
               <TableHead>Reported</TableHead>
-              <TableHead>URL</TableHead>
-              <TableHead>Quote</TableHead>
+              <TableHead>Note</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.map((m) => (
-              <TableRow key={m.id}>
-                <TableCell>
-                  <Link
-                    href={`/admin/games/${m.gameId}`}
-                    className="hover:text-primary hover:underline"
-                  >
-                    {m.gameName}
-                  </Link>
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap items-center gap-1">
-                    <Badge variant="outline">{m.source}</Badge>
-                    {m.platform !== 'GLOBAL' && (
-                      <Badge
-                        variant="secondary"
-                        className="border-sky-300 bg-sky-100 text-[10px] tracking-wide text-sky-800 uppercase dark:border-sky-700 dark:bg-sky-900/40 dark:text-sky-200"
-                        title="Single-platform sales figure (e.g. copies sold on Steam / PlayStation). Stored to learn the PC-vs-console split."
-                      >
-                        {m.platform}
-                      </Badge>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {m.units.toLocaleString()}
-                </TableCell>
-                <TableCell className="text-muted-foreground text-right text-sm tabular-nums">
-                  {formatScore(m.confidenceScore)}
-                </TableCell>
-                <TableCell className="text-muted-foreground text-sm">
-                  {formatDate(m.reportedAt)}
-                </TableCell>
-                <TableCell>
-                  {m.sourceUrl ? (
-                    <a
-                      href={m.sourceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary inline-flex items-center gap-1 text-xs hover:underline"
-                    >
-                      link
-                      <ExternalLink aria-hidden="true" className="size-3" />
-                    </a>
-                  ) : (
-                    '—'
-                  )}
-                </TableCell>
-                <TableCell className="text-muted-foreground max-w-md truncate text-xs">
-                  {m.note ?? '—'}
-                </TableCell>
-                <TableCell className="text-right">
-                  <DeleteButton
-                    action={deleteMilestone.bind(null, m.id)}
-                    confirmMessage={`Delete this ${m.source} milestone for ${m.gameName}?`}
-                    iconOnly
-                    label="Delete milestone"
-                  />
-                </TableCell>
-              </TableRow>
+              <MilestoneRow key={m.id} milestone={m} gameName={m.gameName} />
             ))}
             {items.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={8}
+                  colSpan={9}
                   className="text-muted-foreground py-12 text-center"
                 >
                   No milestones match these filters.

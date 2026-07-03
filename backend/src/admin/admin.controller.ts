@@ -23,6 +23,7 @@ import { AddGameDto } from './dto/add-game.dto';
 import { ImportCcuCsvDto } from './dto/import-ccu-csv.dto';
 import { ImportReviewsCsvDto } from './dto/import-reviews-csv.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
+import { UpdateMilestoneDto } from './dto/update-milestone.dto';
 import { UpdatePublisherDto } from './dto/update-publisher.dto';
 @Controller('admin')
 @UseGuards(AdminTokenGuard)
@@ -170,6 +171,15 @@ export class AdminController {
       offset: offset ? Number(offset) : undefined,
       limit: limit ? Number(limit) : undefined,
     });
+  }
+
+  @Patch('milestones/:id')
+  @HttpCode(200)
+  updateMilestone(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateMilestoneDto,
+  ) {
+    return this.admin.updateMilestone(id, body);
   }
 
   @Delete('milestones/:id')

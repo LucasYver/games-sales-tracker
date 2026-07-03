@@ -38,12 +38,13 @@ import { RebuildEstimatesButton } from '../../_components/RebuildEstimatesButton
 import { ImportCcuCsvButton } from '../../_components/ImportCcuCsvButton';
 import { ImportReviewsCsvButton } from '../../_components/ImportReviewsCsvButton';
 import { EditGameForm } from '../../_components/EditGameForm';
+import { MilestoneRow } from '../../_components/MilestoneRow';
 import { EstimateHistoryChart } from '../../_components/EstimateHistoryChart';
 import { CcuHistoryChart } from '../../_components/CcuHistoryChart';
 import { ReviewHistoryChart } from '../../_components/ReviewHistoryChart';
 import { SteamShareBadge } from '../../_components/SteamShareBadge';
 import { EstimateBreakdownPanel } from '../../_components/EstimateBreakdownPanel';
-import { deleteGame, deleteMilestone, deleteSignal } from '../../actions';
+import { deleteGame, deleteSignal } from '../../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,14 +97,6 @@ function formatRange(low: number, high: number): string {
 
 // Strip leading `www.` and any path/query so a long URL collapses to a
 // recognizable outlet identifier ("cdprojekt.com", "gamesindustry.biz", …).
-function hostnameOf(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    return url;
-  }
-}
-
 // Estimates produced in a single run share the same `computedAt` (down
 // to a few ms of drift between the base / aggregate / split saves on the
 // live path). Group everything within this window of the most recent
@@ -624,83 +617,7 @@ export default async function AdminGameDetailPage({
                   </TableHeader>
                   <TableBody>
                     {game.milestones.map((m) => (
-                      <TableRow key={m.id}>
-                        <TableCell>
-                          <div className="flex flex-wrap items-center gap-1">
-                            <Badge variant="outline">{m.source}</Badge>
-                            {m.platform !== 'GLOBAL' && (
-                              <Badge
-                                variant="secondary"
-                                className="border-sky-300 bg-sky-100 text-[10px] tracking-wide text-sky-800 uppercase dark:border-sky-700 dark:bg-sky-900/40 dark:text-sky-200"
-                                title="Single-platform sales figure (e.g. copies sold on Steam / PlayStation). Stored to learn the PC-vs-console split."
-                              >
-                                {m.platform}
-                              </Badge>
-                            )}
-                            {m.isEngagement && (
-                              <Badge
-                                variant="secondary"
-                                className="border-amber-300 bg-amber-100 text-[10px] tracking-wide text-amber-800 uppercase dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
-                                title="Players-reached / engagement milestone (includes subscription users like Ubisoft+/Game Pass). Excluded from estimation."
-                              >
-                                Engagement
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {m.sourceUrl ? (
-                            <a
-                              href={m.sourceUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title={m.sourceUrl}
-                              className="text-primary inline-flex max-w-[200px] items-center gap-1 truncate text-xs hover:underline"
-                            >
-                              {hostnameOf(m.sourceUrl)}
-                              <ExternalLink
-                                aria-hidden="true"
-                                className="size-3 shrink-0"
-                              />
-                            </a>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">
-                              —
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell
-                          className="text-muted-foreground max-w-[160px] truncate text-sm"
-                          title={m.publisher ?? undefined}
-                        >
-                          {m.publisher ?? '—'}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {m.units.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-right text-sm tabular-nums">
-                          {m.confidenceScore == null
-                            ? '—'
-                            : Math.round(m.confidenceScore)}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
-                          {formatDate(m.reportedAt)}
-                        </TableCell>
-                        <TableCell
-                          className="text-muted-foreground max-w-xs truncate text-xs"
-                          title={m.note ?? undefined}
-                        >
-                          {m.note ?? '—'}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <DeleteButton
-                            action={deleteMilestone.bind(null, m.id)}
-                            confirmMessage="Delete this milestone?"
-                            iconOnly
-                            label="Delete milestone"
-                          />
-                        </TableCell>
-                      </TableRow>
+                      <MilestoneRow key={m.id} milestone={m} />
                     ))}
                   </TableBody>
                 </Table>

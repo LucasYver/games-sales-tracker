@@ -40,6 +40,19 @@ export interface UpdateGameInput {
   calibrationSourceXbox?: SalesSource | null;
 }
 
+export interface UpdateMilestoneInput {
+  source?: SalesSource;
+  platform?: Platform;
+  units?: number;
+  publisher?: string | null;
+  sourceUrl?: string | null;
+  note?: string | null;
+  reportedAt?: string | null;
+  isEngagement?: boolean;
+  isEstimate?: boolean;
+  confidenceScore?: number | null;
+}
+
 export interface AdminStats {
   games: {
     total: number;
@@ -877,6 +890,42 @@ export class AdminService {
     }
 
     return { items, total };
+  }
+
+  /**
+   * Patch a milestone's editable fields. Every field the LLM extraction
+   * pipeline can populate is editable here so an operator can correct
+   * mistakes (wrong platform, mis-scraped units, wrong date, etc.) without
+   * having to delete and re-ingest the row.
+   */
+  async updateMilestone(
+    id: string,
+    input: UpdateMilestoneInput,
+  ): Promise<Milestone> {
+    const milestone = await this.milestones.findOne({ where: { id } });
+    if (!milestone) throw new NotFoundException(`Milestone ${id} not found`);
+
+    if (input.source !== undefined) milestone.source = input.source;
+    if (input.platform !== undefined) milestone.platform = input.platform;
+    if (input.units !== undefined) milestone.units = input.units;
+    if (input.publisher !== undefined) milestone.publisher = input.publisher;
+    if (input.sourceUrl !== undefined) milestone.sourceUrl = input.sourceUrl;
+    if (input.note !== undefined) milestone.note = input.note;
+    if (input.reportedAt !== undefined) {
+      milestone.reportedAt =
+        input.reportedAt === null ? null : new Date(input.reportedAt);
+    }
+    if (input.isEngagement !== undefined) {
+      milestone.isEngagement = input.isEngagement;
+    }
+    if (input.isEstimate !== undefined) {
+      milestone.isEstimate = input.isEstimate;
+    }
+    if (input.confidenceScore !== undefined) {
+      milestone.confidenceScore = input.confidenceScore;
+    }
+
+    return this.milestones.save(milestone);
   }
 
   /**
