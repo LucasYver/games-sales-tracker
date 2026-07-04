@@ -39,6 +39,10 @@ import { RssClient } from './rss.client';
 import { TavilyClient, TavilyResult } from './tavily.client';
 import { PerplexityClient } from './perplexity.client';
 import { ExophaseClient } from './exophase.client';
+import {
+  GamesPopularityClient,
+  GamesPopularityPoint,
+} from './games-popularity.client';
 import { SourcesService } from '../sources/sources.service';
 import { PublishersService } from '../publishers/publishers.service';
 import {
@@ -198,6 +202,7 @@ export class IngestionService {
     private readonly tavily: TavilyClient,
     private readonly perplexity: PerplexityClient,
     private readonly exophase: ExophaseClient,
+    private readonly gamesPopularity: GamesPopularityClient,
     private readonly sources: SourcesService,
     private readonly publishers: PublishersService,
     private readonly config: ConfigService,
@@ -1842,6 +1847,302 @@ export class IngestionService {
       peakValue,
       peakAt: peakAt.toISOString(),
     };
+  }
+
+  // ---- games-popularity.com: followers + top-seller rank -----------------
+  // Backfill/refresh two Steam signals we don't otherwise collect, from the
+  // games-popularity.com tracker. NOTE: it is a forward-tracker (history floor
+  // ~2024-03), NOT a launch-depth archive — pre-2024 games only get recent
+  // trajectory. We deliberately do NOT source reviews/CCU here (our native
+  // backfills reach launch and must not be shadowed).
+
+  // Cron recent-sync window: a weekly run only (re)writes the last N days per
+  // game rather than the whole multi-year history.
+  private static readonly POPULARITY_RECENT_WINDOW_DAYS = 14;
+
+  /** Resolve a game's Steam appId or throw a clear 4xx. */
+  private async requireSteamAppId(gameId: string): Promise<number> {
+    const game = await this.games.findOne({ where: { id: gameId } });
+    if (!game) throw new NotFoundException(`Game ${gameId} not found.`);
+    const steamSource = await this.gameSources.findOne({
+      where: { gameId, source: SourceType.STEAM },
+    });
+    const appId = steamSource ? Number(steamSource.externalId) : NaN;
+    if (!Number.isFinite(appId)) {
+      throw new BadRequestException(
+        `Game "${game.name}" is not linked to a Steam app.`,
+      );
+    }
+    return appId;
+  }
+
+  /**
+   * Collapse raw (possibly multiple-per-day) points into one value per UTC day.
+   * `mode`: 'lastOfDay' keeps the latest reading (followers — a slowly rising
+   * running total); 'minValue' keeps the best value (top-seller rank — lower is
+   * better).
+   */
+  private bucketDaily(
+    points: GamesPopularityPoint[],
+    mode: 'lastOfDay' | 'minValue',
+  ): Map<string, number> {
+    const byDay = new Map<string, { value: number; at: number }>();
+    for (const p of points) {
+      const dayKey = p.capturedAt.toISOString().slice(0, 10);
+      const at = p.capturedAt.getTime();
+      const existing = byDay.get(dayKey);
+      if (!existing) {
+        byDay.set(dayKey, { value: p.value, at });
+      } else if (mode === 'lastOfDay') {
+        if (at >= existing.at) byDay.set(dayKey, { value: p.value, at });
+      } else if (p.value < existing.value) {
+        byDay.set(dayKey, { value: p.value, at });
+      }
+    }
+    const out = new Map<string, number>();
+    for (const [day, { value }] of byDay) out.set(day, value);
+    return out;
+  }
+
+  /**
+   * Delete-then-insert one signal row per UTC day over the covered range,
+   * mirroring {@link backfillCcuFromSteamCharts}.
+   */
+  private async persistDailySignal(
+    gameId: string,
+    metric: SignalMetric,
+    dayValues: Map<string, number>,
+  ): Promise<{
+    imported: number;
+    rangeStart: string | null;
+    rangeEnd: string | null;
+  }> {
+    const days = [...dayValues.keys()].sort();
+    if (days.length === 0) {
+      return { imported: 0, rangeStart: null, rangeEnd: null };
+    }
+    const firstDay = new Date(`${days[0]}T00:00:00.000Z`);
+    const lastDay = new Date(`${days[days.length - 1]}T00:00:00.000Z`);
+    const lastDayEnd = new Date(lastDay.getTime() + 24 * 3600 * 1000 - 1);
+
+    await this.signals.delete({
+      gameId,
+      metric,
+      capturedAt: Between(firstDay, lastDayEnd),
+    });
+
+    const rows = days.map((day) =>
+      this.signals.create({
+        gameId,
+        source: SourceType.STEAM,
+        metric,
+        value: Math.round(dayValues.get(day) as number),
+        capturedAt: new Date(`${day}T00:00:00.000Z`),
+      }),
+    );
+    await this.signals.save(rows, { chunk: 500 });
+
+    return {
+      imported: rows.length,
+      rangeStart: days[0],
+      rangeEnd: days[days.length - 1],
+    };
+  }
+
+  /** Keep only points within the recent cron window. */
+  private withinRecentWindow(
+    points: GamesPopularityPoint[],
+  ): GamesPopularityPoint[] {
+    const cutoff =
+      Date.now() -
+      IngestionService.POPULARITY_RECENT_WINDOW_DAYS * 24 * 3600 * 1000;
+    return points.filter((p) => p.capturedAt.getTime() >= cutoff);
+  }
+
+  /**
+   * Backfill / refresh Steam FOLLOWERS for one game. `fullHistory` pages back
+   * to the provider floor (~2024-03); otherwise only the recent window is
+   * (re)written. `throwIfMissing` (default true) surfaces "no data" as a 4xx
+   * for the admin path; the fan-out passes false to skip uncovered games
+   * quietly.
+   */
+  async syncFollowersFromApi(
+    gameId: string,
+    options: {
+      fullHistory?: boolean;
+      appId?: number;
+      throwIfMissing?: boolean;
+    } = {},
+  ): Promise<{
+    imported: number;
+    rangeStart: string | null;
+    rangeEnd: string | null;
+  }> {
+    const appId = options.appId ?? (await this.requireSteamAppId(gameId));
+    const fullHistory = options.fullHistory ?? true;
+    let points = await this.gamesPopularity.fetchFollowerHistory(appId, {
+      fullHistory,
+    });
+    if (points === null) {
+      if (options.throwIfMissing ?? true) {
+        throw new BadRequestException(
+          `No games-popularity follower data for app ${appId}.`,
+        );
+      }
+      return { imported: 0, rangeStart: null, rangeEnd: null };
+    }
+    if (!fullHistory) points = this.withinRecentWindow(points);
+    const summary = await this.persistDailySignal(
+      gameId,
+      SignalMetric.STEAM_FOLLOWERS,
+      this.bucketDaily(points, 'lastOfDay'),
+    );
+    this.logger.log(
+      `[followers] app ${appId}: ${summary.imported} day(s)` +
+        (summary.rangeStart
+          ? ` (${summary.rangeStart} → ${summary.rangeEnd})`
+          : ''),
+    );
+    return summary;
+  }
+
+  /**
+   * Backfill / refresh Steam TOPSELLER_RANK for one game. Rank is revenue-based
+   * (lower = better); only charted days exist. We keep the day's best (lowest)
+   * position.
+   */
+  async syncTopSellerRankFromApi(
+    gameId: string,
+    options: {
+      fullHistory?: boolean;
+      appId?: number;
+      throwIfMissing?: boolean;
+    } = {},
+  ): Promise<{
+    imported: number;
+    rangeStart: string | null;
+    rangeEnd: string | null;
+  }> {
+    const appId = options.appId ?? (await this.requireSteamAppId(gameId));
+    const fullHistory = options.fullHistory ?? true;
+    let points = await this.gamesPopularity.fetchTopSellerRankHistory(appId, {
+      fullHistory,
+    });
+    if (points === null) {
+      if (options.throwIfMissing ?? true) {
+        throw new BadRequestException(
+          `No games-popularity top-seller data for app ${appId}.`,
+        );
+      }
+      return { imported: 0, rangeStart: null, rangeEnd: null };
+    }
+    if (!fullHistory) points = this.withinRecentWindow(points);
+    const summary = await this.persistDailySignal(
+      gameId,
+      SignalMetric.STEAM_TOPSELLER_RANK,
+      this.bucketDaily(points, 'minValue'),
+    );
+    this.logger.log(
+      `[topseller-rank] app ${appId}: ${summary.imported} day(s)` +
+        (summary.rangeStart
+          ? ` (${summary.rangeStart} → ${summary.rangeEnd})`
+          : ''),
+    );
+    return summary;
+  }
+
+  /**
+   * Fan-out over every tracked (non-free) Steam game, syncing followers +
+   * top-seller rank. Games are processed stalest-followers-first so a run
+   * truncated by `budgetMs` (the Vercel cron wall-clock) still makes forward
+   * progress across invocations. Best-effort per game.
+   */
+  async syncAllGamesPopularity(
+    options: { fullHistory?: boolean; budgetMs?: number } = {},
+  ): Promise<{
+    processed: number;
+    followers: number;
+    ranks: number;
+    failed: number;
+    leftover: number;
+  }> {
+    if (!this.gamesPopularity.enabled) {
+      this.logger.warn('[games-popularity] disabled (no API key); skipping.');
+      return { processed: 0, followers: 0, ranks: 0, failed: 0, leftover: 0 };
+    }
+
+    const fullHistory = options.fullHistory ?? false;
+    const budgetMs = options.budgetMs ?? Number.POSITIVE_INFINITY;
+    const startedAt = Date.now();
+
+    // Stalest-first: games whose latest FOLLOWERS snapshot is oldest (or
+    // missing) sort ahead, guaranteeing forward progress if the run is capped.
+    const rows: Array<{ gameId: string; externalId: string }> =
+      await this.gameSources.query(
+        `SELECT gs."gameId" AS "gameId", gs."externalId" AS "externalId"
+           FROM game_source gs
+           JOIN game g
+             ON g.id = gs."gameId"
+            AND g."isFree" = false
+            AND g."deletedAt" IS NULL
+           LEFT JOIN LATERAL (
+             SELECT MAX(s."capturedAt") AS last
+               FROM signal_snapshot s
+              WHERE s."gameId" = gs."gameId"
+                AND s.metric = 'STEAM_FOLLOWERS'
+           ) l ON true
+          WHERE gs.source = 'STEAM'
+          ORDER BY l.last ASC NULLS FIRST`,
+      );
+
+    let processed = 0;
+    let followers = 0;
+    let ranks = 0;
+    let failed = 0;
+
+    for (const row of rows) {
+      if (Date.now() - startedAt >= budgetMs) break;
+      const appId = Number(row.externalId);
+      if (!Number.isFinite(appId)) continue;
+
+      try {
+        const f = await this.syncFollowersFromApi(row.gameId, {
+          fullHistory,
+          appId,
+          throwIfMissing: false,
+        });
+        if (f.imported > 0) followers += 1;
+      } catch (error) {
+        failed += 1;
+        this.logger.warn(
+          `[games-popularity] followers failed for ${row.gameId}: ${error}`,
+        );
+      }
+
+      try {
+        const r = await this.syncTopSellerRankFromApi(row.gameId, {
+          fullHistory,
+          appId,
+          throwIfMissing: false,
+        });
+        if (r.imported > 0) ranks += 1;
+      } catch (error) {
+        failed += 1;
+        this.logger.warn(
+          `[games-popularity] top-seller rank failed for ${row.gameId}: ${error}`,
+        );
+      }
+
+      processed += 1;
+    }
+
+    const leftover = rows.length - processed;
+    this.logger.log(
+      `[games-popularity] sync done: ${processed}/${rows.length} game(s), ` +
+        `${followers} with followers, ${ranks} with rank, ${failed} error(s)` +
+        (leftover > 0 ? `, ${leftover} left for next run` : ''),
+    );
+    return { processed, followers, ranks, failed, leftover };
   }
 
   /**

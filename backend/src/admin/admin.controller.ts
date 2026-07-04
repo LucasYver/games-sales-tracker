@@ -143,6 +143,18 @@ export class AdminController {
     return this.ingestion.backfillCcuFromSteamCharts(id);
   }
 
+  @Post('games/:id/backfill-followers')
+  @HttpCode(200)
+  backfillFollowers(@Param('id', ParseUUIDPipe) id: string) {
+    return this.ingestion.syncFollowersFromApi(id, { fullHistory: true });
+  }
+
+  @Post('games/:id/backfill-topseller-rank')
+  @HttpCode(200)
+  backfillTopSellerRank(@Param('id', ParseUUIDPipe) id: string) {
+    return this.ingestion.syncTopSellerRankFromApi(id, { fullHistory: true });
+  }
+
   @Post('games/:id/rebuild')
   @HttpCode(200)
   rebuildEstimates(@Param('id', ParseUUIDPipe) id: string) {

@@ -26,6 +26,7 @@ import { RssClient } from './rss.client';
 import { TavilyClient } from './tavily.client';
 import { PerplexityClient } from './perplexity.client';
 import { ExophaseClient } from './exophase.client';
+import { GamesPopularityClient } from './games-popularity.client';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { ExophaseClient } from './exophase.client';
     TavilyClient,
     PerplexityClient,
     ExophaseClient,
+    GamesPopularityClient,
   ],
   exports: [IngestionService, IgdbClient],
 })

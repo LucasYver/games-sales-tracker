@@ -6,7 +6,7 @@
  */
 export type Agreement = 'strong' | 'weak' | 'conflict';
 
- export enum SourceType {
+export enum SourceType {
   IGDB = 'IGDB',
   STEAM = 'STEAM',
   STEAMSPY = 'STEAMSPY',
@@ -50,6 +50,17 @@ export enum SignalMetric {
   PS_RATINGS = 'PS_RATINGS',
   XBOX_RATINGS = 'XBOX_RATINGS',
   SWITCH_RATINGS = 'SWITCH_RATINGS',
+  // Steam followers = member count of the game's community group, a hype /
+  // interest proxy that (unlike CCU) works for solo and multiplayer alike.
+  // Sourced from games-popularity.com; higher = more followers. One row per
+  // UTC day (latest reading of the day). History only reaches ~2024-03 (the
+  // provider's collection start), NOT launch — see ingestion notes.
+  STEAM_FOLLOWERS = 'STEAM_FOLLOWERS',
+  // Steam store top-seller chart position (revenue-ranked). LOWER is better
+  // (1 = #1 seller); only present for days a game actually charted. Sourced
+  // from games-popularity.com. One row per UTC day (best/lowest rank seen
+  // that day). Same ~2024-03 history floor as STEAM_FOLLOWERS.
+  STEAM_TOPSELLER_RANK = 'STEAM_TOPSELLER_RANK',
 }
 
 export enum ConfidenceLevel {

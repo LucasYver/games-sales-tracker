@@ -457,6 +457,19 @@ export class GamesService {
       select: { capturedAt: true, value: true },
     });
 
+    const followersHistory = await this.signals.find({
+      where: { gameId: game.id, metric: SignalMetric.STEAM_FOLLOWERS },
+      order: { capturedAt: 'ASC' },
+      select: { capturedAt: true, value: true },
+    });
+
+    // Sparse series: only days the game charted. Lower value = better rank.
+    const topSellerRankHistory = await this.signals.find({
+      where: { gameId: game.id, metric: SignalMetric.STEAM_TOPSELLER_RANK },
+      order: { capturedAt: 'ASC' },
+      select: { capturedAt: true, value: true },
+    });
+
     const storeRatings = await this.buildStoreRatings(game.id);
 
     const estimateSnapshotRows = await this.estimateSnapshots.find({
@@ -496,6 +509,8 @@ export class GamesService {
       estimatedToday,
       estimateSnapshots,
       reviewHistory,
+      followersHistory,
+      topSellerRankHistory,
       storeRatings,
     };
   }

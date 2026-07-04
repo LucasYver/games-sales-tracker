@@ -166,6 +166,12 @@ export interface AdminGameDetail extends AdminGameSummary {
   ccuHistory: { capturedAt: Date; value: number }[];
   // Full STEAM_REVIEWS series (cumulative review counts over time).
   reviewHistory: { capturedAt: Date; value: number }[];
+  // Full STEAM_FOLLOWERS series (community-group member count over time).
+  // Sourced from games-popularity.com; history only reaches ~2024-03.
+  followersHistory: { capturedAt: Date; value: number }[];
+  // Sparse STEAM_TOPSELLER_RANK series: one row per charted UTC day, value =
+  // best (lowest) top-seller position that day. Lower is better.
+  topSellerRankHistory: { capturedAt: Date; value: number }[];
   prices: PriceSnapshot[];
   achievementSnapshots: AdminAchievementSummary[];
   estimateSnapshots: AdminEstimateSnapshot[];
@@ -559,6 +565,26 @@ export class AdminService {
       value: s.value,
     }));
 
+    const followersRows = await this.signals.find({
+      where: { gameId: id, metric: SignalMetric.STEAM_FOLLOWERS },
+      order: { capturedAt: 'ASC' },
+      select: { capturedAt: true, value: true },
+    });
+    const followersHistory = followersRows.map((s) => ({
+      capturedAt: s.capturedAt,
+      value: s.value,
+    }));
+
+    const topSellerRankRows = await this.signals.find({
+      where: { gameId: id, metric: SignalMetric.STEAM_TOPSELLER_RANK },
+      order: { capturedAt: 'ASC' },
+      select: { capturedAt: true, value: true },
+    });
+    const topSellerRankHistory = topSellerRankRows.map((s) => ({
+      capturedAt: s.capturedAt,
+      value: s.value,
+    }));
+
     const prices = await this.prices.find({
       where: { gameId: id },
       order: { capturedAt: 'ASC' },
@@ -637,6 +663,8 @@ export class AdminService {
       signals,
       ccuHistory,
       reviewHistory,
+      followersHistory,
+      topSellerRankHistory,
       prices,
       achievementSnapshots,
       estimateSnapshots,

@@ -36,4 +36,10 @@ export class CronController {
   discoverGames() {
     return this.refresh.discoverNewGames();
   }
+
+  @Get('capture-popularity')
+  @HttpCode(200)
+  capturePopularity() {
+    return this.refresh.captureGamesPopularity();
+  }
 }
