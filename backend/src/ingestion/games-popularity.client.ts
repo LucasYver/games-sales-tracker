@@ -28,14 +28,13 @@ interface RawHistoryResponse {
 
 /**
  * Client for games-popularity.com — a free third-party tracker that has
- * recorded Steam followers, top-seller rank, live players, price and reviews
- * for the whole catalogue since ~2024-03. We use it as a one-stop BACKFILL
- * source for the signals we don't already collect to launch depth (followers,
- * top-seller rank; price optionally). It is a forward-tracker, NOT a
- * launch-depth archive: history bottoms out at the provider's collection start
- * (~2024-03), so pre-2024 games only get their recent trajectory, not their
- * launch ramp. Do NOT use it to replace our native review/CCU backfills, which
- * reach launch.
+ * recorded Steam followers, live players, price and reviews for the whole
+ * catalogue since ~2024-03. We use it as a BACKFILL source for followers (a
+ * signal we don't otherwise collect); price is available optionally. It is a
+ * forward-tracker, NOT a launch-depth archive: history bottoms out at the
+ * provider's collection start (~2024-03), so pre-2024 games only get their
+ * recent trajectory, not their launch ramp. Do NOT use it to replace our native
+ * review/CCU backfills, which reach launch.
  *
  * Disabled (returns null) when no API key is configured. Every call is
  * best-effort: a network/parse failure logs a warning and returns null.
@@ -49,8 +48,7 @@ export class GamesPopularityClient {
     this.apiKey = config.get<string>('GAMES_POPULARITY_API_KEY') ?? null;
     if (!this.apiKey) {
       this.logger.warn(
-        'GAMES_POPULARITY_API_KEY not set: follower / top-seller-rank ' +
-          'backfill will be skipped.',
+        'GAMES_POPULARITY_API_KEY not set: follower backfill will be skipped.',
       );
     }
   }
@@ -69,17 +67,6 @@ export class GamesPopularityClient {
     options: { fullHistory?: boolean } = {},
   ): Promise<GamesPopularityPoint[] | null> {
     return this.fetchHistory('followers', appId, 'followers', options);
-  }
-
-  /**
-   * Top-seller chart-position history (revenue-ranked; lower = better).
-   * Only the days a game actually charted are present.
-   */
-  async fetchTopSellerRankHistory(
-    appId: number,
-    options: { fullHistory?: boolean } = {},
-  ): Promise<GamesPopularityPoint[] | null> {
-    return this.fetchHistory('top-sellers', appId, 'position', options);
   }
 
   /**

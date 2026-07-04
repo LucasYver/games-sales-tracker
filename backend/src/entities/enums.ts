@@ -56,10 +56,11 @@ export enum SignalMetric {
   // UTC day (latest reading of the day). History only reaches ~2024-03 (the
   // provider's collection start), NOT launch — see ingestion notes.
   STEAM_FOLLOWERS = 'STEAM_FOLLOWERS',
-  // Steam store top-seller chart position (revenue-ranked). LOWER is better
-  // (1 = #1 seller); only present for days a game actually charted. Sourced
-  // from games-popularity.com. One row per UTC day (best/lowest rank seen
-  // that day). Same ~2024-03 history floor as STEAM_FOLLOWERS.
+  // DEPRECATED — the games-popularity top-seller-rank feature was removed (it
+  // wasn't useful). No code produces or consumes this metric anymore. The value
+  // is retained only because migration 1782730000000 already added it to the
+  // Postgres enum in prod (enum values can't be safely dropped); existing rows,
+  // if any, are harmless dead data.
   STEAM_TOPSELLER_RANK = 'STEAM_TOPSELLER_RANK',
 }
 

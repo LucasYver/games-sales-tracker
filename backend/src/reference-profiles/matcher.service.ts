@@ -81,21 +81,38 @@ function neighbourWeight(similarity: number, qualityScore: number): number {
  * low: muted on the leak population (PC paid pre-2018 hits), kept active so
  * they're ready once the corpus holds the game types they distinguish.
  *
+ * `rank` (home-grown chart fingerprint, see `homegrownRankSimilarity`) was
+ * calibrated on the leak holdout (`scripts/validate-matcher-holdout.ts`):
+ * 0.10 was the balanced optimum on the July-2018 leak (342 games) — median
+ * |log-error| improved on all three targets — reviewsToUnits 0.349→0.336,
+ * m1 0.212→0.206, y2 0.074→0.071 — while the other ten weights were scaled
+ * down by 0.9 so the total still sums to 1.0. Above 0.10, reviewsToUnits/m1
+ * regress (only y2 keeps gaining). Re-run the holdout after touching this
+ * weight and rebalance the others by hand to keep the sum at 1.0.
+ *
  * Price is intentionally absent: no reliable per-game price coverage.
  */
 const SIMILARITY_WEIGHTS = {
-  gameplayType: 0.46,
-  publisherMatch: 0.1,
-  developerMatch: 0.1,
-  releaseEra: 0.05,
-  scaleBucket: 0.04,
-  platformsOverlap: 0.06,
-  dlcTier: 0.06,
-  franchise: 0.04,
-  liveService: 0.03,
-  devTrackRecord: 0.03,
-  annualIteration: 0.03,
+  gameplayType: 0.414,
+  publisherMatch: 0.09,
+  developerMatch: 0.09,
+  releaseEra: 0.045,
+  scaleBucket: 0.036,
+  platformsOverlap: 0.054,
+  dlcTier: 0.054,
+  franchise: 0.036,
+  liveService: 0.027,
+  devTrackRecord: 0.027,
+  annualIteration: 0.027,
+  rank: 0.1,
 } as const;
+
+// Inner scales for the rank axis (see `homegrownRankSimilarity`). The peak axis
+// compares log(peakPercentile); the sustain axis compares log1p(weeksTopDecile).
+// The OUTER weight (SIMILARITY_WEIGHTS.rank) is what we calibrate; these just
+// shape how fast each sub-axis decays with distance.
+const RANK_PEAK_LOG_SCALE = 2.0;
+const RANK_SUSTAIN_LOG_SCALE = 1.5;
 
 /**
  * Genres/tags that describe production scale or a catch-all label rather
@@ -132,6 +149,16 @@ type ReleaseEra =
   | 'UNKNOWN';
 
 type ScaleBucket = 'SMALL' | 'MEDIUM' | 'LARGE' | 'HUGE' | 'UNKNOWN';
+
+/**
+ * Home-grown rank fingerprint for a game (from `game_rank`): how high it
+ * peaked (percentile, lower = better) and how long it sustained (weeks in the
+ * top decile). `null` for games that never charted / have no review history.
+ */
+interface RankAgg {
+  peakPercentile: number;
+  weeksTopDecile: number;
+}
 
 // DLC-count bucket, a proxy for how long a game keeps selling. NONE = no
 // DLC, MANY = a long-supported franchise (Paradox / Sims style). UNKNOWN
@@ -221,6 +248,8 @@ interface AnchorRow {
   developer: string | null;
   releaseDate: Date | null;
   trackRecord: TrackRecordTier;
+  // Home-grown rank fingerprint; filled from the rank index in findNeighbours.
+  rank: RankAgg | null;
   qualityScore: number;
   scaleUnits: number | null;
   curve: CurveVector;
@@ -263,10 +292,19 @@ export class MatcherService {
     opts: {
       holdoutGameId?: string;
       k?: number;
+      /**
+       * gameId of the target, used to look up its own home-grown rank
+       * fingerprint. Defaults to `holdoutGameId` (in the leak holdout the
+       * excluded anchor IS the target), so the harness needs no extra plumbing.
+       * Using the target's own rank is not leakage: rank is an observed input
+       * (review-velocity history), not the sales figure being predicted.
+       */
+      targetGameId?: string;
     } = {},
   ): Promise<MatchResult> {
     const k = opts.k ?? DEFAULT_NEIGHBOURS;
     const trackRecordIndex = await this.buildTrackRecordIndex();
+    const rankIndex = await this.buildRankIndex();
     const corpus = await this.loadCorpus(opts.holdoutGameId);
     for (const row of corpus) {
       row.trackRecord = trackRecordIndex.tierFor(
@@ -274,6 +312,7 @@ export class MatcherService {
         row.releaseDate,
         row.gameId,
       );
+      row.rank = rankIndex.get(row.gameId) ?? null;
     }
     const targetFeatures = this.featurise(target);
     targetFeatures.trackRecord = trackRecordIndex.tierFor(
@@ -281,6 +320,10 @@ export class MatcherService {
       target.releaseDate,
       undefined,
     );
+    const targetGameId = opts.targetGameId ?? opts.holdoutGameId;
+    targetFeatures.rank = targetGameId
+      ? (rankIndex.get(targetGameId) ?? null)
+      : null;
 
     const primary = this.pickCandidates(corpus, targetFeatures, {
       strict: true,
@@ -384,6 +427,7 @@ export class MatcherService {
       row.trackRecord,
       target.trackRecord,
     );
+    const rankScore = homegrownRankSimilarity(row.rank, target.rank);
 
     return (
       SIMILARITY_WEIGHTS.gameplayType * gameplayTypeScore +
@@ -396,7 +440,8 @@ export class MatcherService {
       SIMILARITY_WEIGHTS.franchise * franchiseScore +
       SIMILARITY_WEIGHTS.liveService * liveServiceScore +
       SIMILARITY_WEIGHTS.devTrackRecord * trackRecordScore +
-      SIMILARITY_WEIGHTS.annualIteration * annualScore
+      SIMILARITY_WEIGHTS.annualIteration * annualScore +
+      SIMILARITY_WEIGHTS.rank * rankScore
     );
   }
 
@@ -629,6 +674,8 @@ export class MatcherService {
         // Filled in by findNeighbours once the track-record index is
         // built; the corpus loader can't know it in isolation.
         trackRecord: 'UNKNOWN',
+        // Filled in by findNeighbours from the rank index (by gameId).
+        rank: null,
         qualityScore: Number(r.qualityScore),
         scaleUnits,
         curve: {
@@ -662,8 +709,9 @@ export class MatcherService {
       franchiseSlug: target.franchiseSlug,
       isAnnualIteration: target.isAnnualIteration,
       liveService: target.liveService,
-      // Overwritten in findNeighbours once the shared index is built.
+      // Overwritten in findNeighbours once the shared indexes are built.
       trackRecord: 'UNKNOWN',
+      rank: null,
     };
   }
 
@@ -708,6 +756,32 @@ export class MatcherService {
   }
 
   /**
+   * Load the home-grown rank fingerprints (`game_rank`) into an in-memory map
+   * keyed by gameId, used to attach a rank to the target and every anchor. One
+   * cheap query per matcher call.
+   */
+  private async buildRankIndex(): Promise<Map<string, RankAgg>> {
+    const rows = await this.anchors.manager.query<
+      Array<{
+        gameId: string;
+        peakPercentile: string | number;
+        weeksTopDecile: string | number;
+      }>
+    >(`SELECT "gameId", "peakPercentile", "weeksTopDecile" FROM game_rank`);
+    const index = new Map<string, RankAgg>();
+    for (const r of rows) {
+      const peakPercentile = Number(r.peakPercentile);
+      const weeksTopDecile = Number(r.weeksTopDecile);
+      if (!Number.isFinite(peakPercentile)) continue;
+      index.set(r.gameId, {
+        peakPercentile,
+        weeksTopDecile: Number.isFinite(weeksTopDecile) ? weeksTopDecile : 0,
+      });
+    }
+    return index;
+  }
+
+  /**
    * How many eligible anchors currently sit in the corpus. Exposed for
    * ops/monitoring dashboards — a shrinking corpus is a red flag for
    * the ETL, not for the matcher.
@@ -736,6 +810,8 @@ interface TargetInternal {
   isAnnualIteration: boolean;
   liveService: boolean;
   trackRecord: TrackRecordTier;
+  // Home-grown rank fingerprint; set in findNeighbours.
+  rank: RankAgg | null;
 }
 
 interface TrackRecordEntry {
@@ -1024,6 +1100,34 @@ function trackRecordSimilarity(a: TrackRecordTier, b: TrackRecordTier): number {
   const order: TrackRecordTier[] = ['NONE', 'MID', 'HIT'];
   const distance = Math.abs(order.indexOf(a) - order.indexOf(b));
   return distance === 1 ? 0.5 : 0.1;
+}
+
+/**
+ * Home-grown rank axis. Compares two games' chart fingerprints on two
+ * sub-axes — how high they peaked (`peakPercentile`, log space) and how long
+ * they sustained (`weeksTopDecile`, log1p space) — each decayed to a [0,1]
+ * closeness and averaged. Neutral (0.5) when either side has no rank, matching
+ * the era/dlc/franchise convention so missing rank neither rewards nor
+ * penalises.
+ */
+function homegrownRankSimilarity(a: RankAgg | null, b: RankAgg | null): number {
+  if (!a || !b) return 0.5;
+  const peakSim = expCloseness(
+    Math.log(Math.max(a.peakPercentile, 1e-4)),
+    Math.log(Math.max(b.peakPercentile, 1e-4)),
+    RANK_PEAK_LOG_SCALE,
+  );
+  const sustainSim = expCloseness(
+    Math.log1p(a.weeksTopDecile),
+    Math.log1p(b.weeksTopDecile),
+    RANK_SUSTAIN_LOG_SCALE,
+  );
+  return (peakSim + sustainSim) / 2;
+}
+
+/** Distance → similarity: 1 when equal, decaying to 0 as |x−y| grows. */
+function expCloseness(x: number, y: number, scale: number): number {
+  return Math.exp(-Math.abs(x - y) / scale);
 }
 
 /**

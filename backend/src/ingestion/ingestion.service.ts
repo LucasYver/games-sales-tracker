@@ -1849,12 +1849,12 @@ export class IngestionService {
     };
   }
 
-  // ---- games-popularity.com: followers + top-seller rank -----------------
-  // Backfill/refresh two Steam signals we don't otherwise collect, from the
-  // games-popularity.com tracker. NOTE: it is a forward-tracker (history floor
-  // ~2024-03), NOT a launch-depth archive — pre-2024 games only get recent
-  // trajectory. We deliberately do NOT source reviews/CCU here (our native
-  // backfills reach launch and must not be shadowed).
+  // ---- games-popularity.com: followers -----------------------------------
+  // Backfill/refresh Steam followers (a signal we don't otherwise collect) from
+  // the games-popularity.com tracker. NOTE: it is a forward-tracker (history
+  // floor ~2024-03), NOT a launch-depth archive — pre-2024 games only get
+  // recent trajectory. We deliberately do NOT source reviews/CCU here (our
+  // native backfills reach launch and must not be shadowed).
 
   // Cron recent-sync window: a weekly run only (re)writes the last N days per
   // game rather than the whole multi-year history.
@@ -1877,25 +1877,17 @@ export class IngestionService {
   }
 
   /**
-   * Collapse raw (possibly multiple-per-day) points into one value per UTC day.
-   * `mode`: 'lastOfDay' keeps the latest reading (followers — a slowly rising
-   * running total); 'minValue' keeps the best value (top-seller rank — lower is
-   * better).
+   * Collapse raw (possibly multiple-per-day) points into one value per UTC day,
+   * keeping the latest reading of each day (followers is a slowly-rising running
+   * total, so end-of-day is the truest value).
    */
-  private bucketDaily(
-    points: GamesPopularityPoint[],
-    mode: 'lastOfDay' | 'minValue',
-  ): Map<string, number> {
+  private bucketDaily(points: GamesPopularityPoint[]): Map<string, number> {
     const byDay = new Map<string, { value: number; at: number }>();
     for (const p of points) {
       const dayKey = p.capturedAt.toISOString().slice(0, 10);
       const at = p.capturedAt.getTime();
       const existing = byDay.get(dayKey);
-      if (!existing) {
-        byDay.set(dayKey, { value: p.value, at });
-      } else if (mode === 'lastOfDay') {
-        if (at >= existing.at) byDay.set(dayKey, { value: p.value, at });
-      } else if (p.value < existing.value) {
+      if (!existing || at >= existing.at) {
         byDay.set(dayKey, { value: p.value, at });
       }
     }
@@ -1995,7 +1987,7 @@ export class IngestionService {
     const summary = await this.persistDailySignal(
       gameId,
       SignalMetric.STEAM_FOLLOWERS,
-      this.bucketDaily(points, 'lastOfDay'),
+      this.bucketDaily(points),
     );
     this.logger.log(
       `[followers] app ${appId}: ${summary.imported} day(s)` +
@@ -2007,68 +1999,22 @@ export class IngestionService {
   }
 
   /**
-   * Backfill / refresh Steam TOPSELLER_RANK for one game. Rank is revenue-based
-   * (lower = better); only charted days exist. We keep the day's best (lowest)
-   * position.
-   */
-  async syncTopSellerRankFromApi(
-    gameId: string,
-    options: {
-      fullHistory?: boolean;
-      appId?: number;
-      throwIfMissing?: boolean;
-    } = {},
-  ): Promise<{
-    imported: number;
-    rangeStart: string | null;
-    rangeEnd: string | null;
-  }> {
-    const appId = options.appId ?? (await this.requireSteamAppId(gameId));
-    const fullHistory = options.fullHistory ?? true;
-    let points = await this.gamesPopularity.fetchTopSellerRankHistory(appId, {
-      fullHistory,
-    });
-    if (points === null) {
-      if (options.throwIfMissing ?? true) {
-        throw new BadRequestException(
-          `No games-popularity top-seller data for app ${appId}.`,
-        );
-      }
-      return { imported: 0, rangeStart: null, rangeEnd: null };
-    }
-    if (!fullHistory) points = this.withinRecentWindow(points);
-    const summary = await this.persistDailySignal(
-      gameId,
-      SignalMetric.STEAM_TOPSELLER_RANK,
-      this.bucketDaily(points, 'minValue'),
-    );
-    this.logger.log(
-      `[topseller-rank] app ${appId}: ${summary.imported} day(s)` +
-        (summary.rangeStart
-          ? ` (${summary.rangeStart} → ${summary.rangeEnd})`
-          : ''),
-    );
-    return summary;
-  }
-
-  /**
-   * Fan-out over every tracked (non-free) Steam game, syncing followers +
-   * top-seller rank. Games are processed stalest-followers-first so a run
-   * truncated by `budgetMs` (the Vercel cron wall-clock) still makes forward
-   * progress across invocations. Best-effort per game.
+   * Fan-out over every tracked (non-free) Steam game, syncing followers. Games
+   * are processed stalest-followers-first so a run truncated by `budgetMs` (the
+   * Vercel cron wall-clock) still makes forward progress across invocations.
+   * Best-effort per game.
    */
   async syncAllGamesPopularity(
     options: { fullHistory?: boolean; budgetMs?: number } = {},
   ): Promise<{
     processed: number;
     followers: number;
-    ranks: number;
     failed: number;
     leftover: number;
   }> {
     if (!this.gamesPopularity.enabled) {
       this.logger.warn('[games-popularity] disabled (no API key); skipping.');
-      return { processed: 0, followers: 0, ranks: 0, failed: 0, leftover: 0 };
+      return { processed: 0, followers: 0, failed: 0, leftover: 0 };
     }
 
     const fullHistory = options.fullHistory ?? false;
@@ -2097,7 +2043,6 @@ export class IngestionService {
 
     let processed = 0;
     let followers = 0;
-    let ranks = 0;
     let failed = 0;
 
     for (const row of rows) {
@@ -2119,30 +2064,16 @@ export class IngestionService {
         );
       }
 
-      try {
-        const r = await this.syncTopSellerRankFromApi(row.gameId, {
-          fullHistory,
-          appId,
-          throwIfMissing: false,
-        });
-        if (r.imported > 0) ranks += 1;
-      } catch (error) {
-        failed += 1;
-        this.logger.warn(
-          `[games-popularity] top-seller rank failed for ${row.gameId}: ${error}`,
-        );
-      }
-
       processed += 1;
     }
 
     const leftover = rows.length - processed;
     this.logger.log(
       `[games-popularity] sync done: ${processed}/${rows.length} game(s), ` +
-        `${followers} with followers, ${ranks} with rank, ${failed} error(s)` +
+        `${followers} with followers, ${failed} error(s)` +
         (leftover > 0 ? `, ${leftover} left for next run` : ''),
     );
-    return { processed, followers, ranks, failed, leftover };
+    return { processed, followers, failed, leftover };
   }
 
   /**

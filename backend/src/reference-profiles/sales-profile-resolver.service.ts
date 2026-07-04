@@ -155,6 +155,7 @@ export class SalesProfileResolverService {
   async resolveForGame(
     game: Pick<
       Game,
+      | 'id'
       | 'platforms'
       | 'categories'
       | 'genres'
@@ -187,7 +188,7 @@ export class SalesProfileResolverService {
         isAnnualIteration: game.isAnnualIteration ?? false,
         liveService: game.liveService ?? false,
       },
-      { holdoutGameId: opts.holdoutGameId },
+      { holdoutGameId: opts.holdoutGameId, targetGameId: game.id },
     );
 
     // Empty corpus → nothing to say; let the estimator use its globals.

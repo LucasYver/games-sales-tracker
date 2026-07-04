@@ -123,11 +123,10 @@ export class RefreshService {
   }
 
   /**
-   * Weekly refresh of Steam followers + top-seller rank from
-   * games-popularity.com. Recent-window only (the multi-year history is seeded
-   * once by the backfill script); a wall-clock budget keeps the run under the
-   * Vercel `maxDuration`, and stalest-first ordering drains any leftover on the
-   * next weekly run.
+   * Weekly refresh of Steam followers from games-popularity.com. Recent-window
+   * only (the multi-year history is seeded once by the backfill script); a
+   * wall-clock budget keeps the run under the Vercel `maxDuration`, and
+   * stalest-first ordering drains any leftover on the next weekly run.
    */
   async captureGamesPopularity() {
     const RUN_BUDGET_MS = 11 * 60 * 1000;
@@ -138,8 +137,8 @@ export class RefreshService {
       });
       this.logger.log(
         `Games-popularity capture done: ${result.processed} game(s), ` +
-          `${result.followers} followers, ${result.ranks} ranks, ` +
-          `${result.failed} failed, ${result.leftover} left.`,
+          `${result.followers} followers, ${result.failed} failed, ` +
+          `${result.leftover} left.`,
       );
     } catch (error) {
       this.logger.warn(`Games-popularity capture failed: ${error}`);
