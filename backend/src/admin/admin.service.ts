@@ -10,6 +10,7 @@ import {
   EstimateSnapshot,
   EstimationDiscrepancy,
   Game,
+  GameRank,
   GameSource,
   Milestone,
   Platform,
@@ -182,6 +183,19 @@ export interface PaginatedAdmin<T> {
   total: number;
 }
 
+export interface AdminRankRow {
+  gameId: string;
+  name: string;
+  year: number | null;
+  weeksCharted: number;
+  peakRank: number;
+  avgRank: number;
+  peakPercentile: number;
+  avgPercentile: number;
+  weeksTopDecile: number;
+  computedAt: Date;
+}
+
 export interface IssueGroup<T> {
   count: number;
   items: T[];
@@ -246,9 +260,54 @@ export class AdminService {
     private readonly estimateSnapshots: Repository<EstimateSnapshot>,
     @InjectRepository(EstimationDiscrepancy)
     private readonly discrepancies: Repository<EstimationDiscrepancy>,
+    @InjectRepository(GameRank)
+    private readonly gameRanks: Repository<GameRank>,
     private readonly gamesService: GamesService,
     private readonly referenceProfiles: ReferenceProfileService,
   ) {}
+
+  /**
+   * Home-grown review-velocity rank leaderboard (from `game_rank`), joined with
+   * game name/year, biggest first (most weeks in top decile, then best peak
+   * percentile). Cap at 500 rows for the admin table.
+   */
+  async listRanks(): Promise<AdminRankRow[]> {
+    const rows: Array<{
+      gameId: string;
+      name: string;
+      yr: string | null;
+      weeksCharted: number;
+      peakRank: number;
+      avgRank: number;
+      peakPercentile: number;
+      avgPercentile: number;
+      weeksTopDecile: number;
+      computedAt: Date;
+    }> = await this.gameRanks.query(
+      `SELECT r."gameId" AS "gameId", g.name AS name,
+              EXTRACT(YEAR FROM g."releaseDate")::text AS yr,
+              r."weeksCharted", r."peakRank", r."avgRank",
+              r."peakPercentile", r."avgPercentile", r."weeksTopDecile",
+              r."computedAt"
+         FROM game_rank r
+         JOIN game g ON g.id = r."gameId"
+        WHERE g."deletedAt" IS NULL
+        ORDER BY r."weeksTopDecile" DESC, r."peakPercentile" ASC
+        LIMIT 500`,
+    );
+    return rows.map((r) => ({
+      gameId: r.gameId,
+      name: r.name,
+      year: r.yr ? Number(r.yr) : null,
+      weeksCharted: Number(r.weeksCharted),
+      peakRank: Number(r.peakRank),
+      avgRank: Number(r.avgRank),
+      peakPercentile: Number(r.peakPercentile),
+      avgPercentile: Number(r.avgPercentile),
+      weeksTopDecile: Number(r.weeksTopDecile),
+      computedAt: r.computedAt,
+    }));
+  }
 
   async stats(): Promise<AdminStats> {
     const [

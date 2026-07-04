@@ -9,6 +9,7 @@ import {
   Building2,
   Tags,
   Boxes,
+  Trophy,
   AlertTriangle,
   LogOut,
 } from 'lucide-react';
@@ -66,6 +67,12 @@ const NAV_ITEMS = [
     href: '/admin/reference-profiles',
     label: 'Reference profiles',
     icon: Boxes,
+    exact: false,
+  },
+  {
+    href: '/admin/ranks',
+    label: 'Ranks',
+    icon: Trophy,
     exact: false,
   },
   {

@@ -145,6 +145,20 @@ export interface AdminCcuPoint {
   value: number;
 }
 
+// One row of the home-grown review-velocity rank leaderboard (game_rank).
+export interface AdminRankRow {
+  gameId: string;
+  name: string;
+  year: number | null;
+  weeksCharted: number;
+  peakRank: number;
+  avgRank: number;
+  peakPercentile: number;
+  avgPercentile: number;
+  weeksTopDecile: number;
+  computedAt: string;
+}
+
 export interface AdminSignal {
   id: string;
   gameId: string;

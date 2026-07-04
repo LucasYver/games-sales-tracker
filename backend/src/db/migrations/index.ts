@@ -37,6 +37,7 @@ import { DropGenreProfile1782700000000 } from './1782700000000-DropGenreProfile'
 import { AddGameSteamTags1782710000000 } from './1782710000000-AddGameSteamTags';
 import { ReintroduceMilestonePlatform1782720000000 } from './1782720000000-ReintroduceMilestonePlatform';
 import { AddFollowersAndTopSellerRankMetrics1782730000000 } from './1782730000000-AddFollowersAndTopSellerRankMetrics';
+import { AddGameRank1782740000000 } from './1782740000000-AddGameRank';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -85,4 +86,5 @@ export const migrations: MixedList<Function | string> = [
   AddGameSteamTags1782710000000,
   ReintroduceMilestonePlatform1782720000000,
   AddFollowersAndTopSellerRankMetrics1782730000000,
+  AddGameRank1782740000000,
 ];

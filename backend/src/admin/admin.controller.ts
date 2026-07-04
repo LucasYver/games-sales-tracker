@@ -19,6 +19,7 @@ import { PublishersService } from '../publishers/publishers.service';
 import { GenresService } from '../genres/genres.service';
 import { EstimationService } from '../estimation/estimation.service';
 import { ReferenceProfilesAdminService } from '../reference-profiles/reference-profiles-admin.service';
+import { RankService } from '../reference-profiles/rank.service';
 import { AddGameDto } from './dto/add-game.dto';
 import { ImportCcuCsvDto } from './dto/import-ccu-csv.dto';
 import { ImportReviewsCsvDto } from './dto/import-reviews-csv.dto';
@@ -35,6 +36,7 @@ export class AdminController {
     private readonly genres: GenresService,
     private readonly estimation: EstimationService,
     private readonly referenceProfiles: ReferenceProfilesAdminService,
+    private readonly rank: RankService,
   ) {}
 
   @Get('stats')
@@ -245,6 +247,17 @@ export class AdminController {
   @HttpCode(200)
   backfillPublisherLinks() {
     return this.publishers.backfillGameLinks();
+  }
+
+  @Get('ranks')
+  listRanks() {
+    return this.admin.listRanks();
+  }
+
+  @Post('ranks/recompute')
+  @HttpCode(200)
+  recomputeRanks() {
+    return this.rank.recomputeAll();
   }
 
   @Get('reference-profiles')

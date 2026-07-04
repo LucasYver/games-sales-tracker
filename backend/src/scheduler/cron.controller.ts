@@ -42,4 +42,10 @@ export class CronController {
   capturePopularity() {
     return this.refresh.captureGamesPopularity();
   }
+
+  @Get('recompute-rank')
+  @HttpCode(200)
+  recomputeRank() {
+    return this.refresh.recomputeHomegrownRank();
+  }
 }

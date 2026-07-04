@@ -54,6 +54,11 @@ export async function deleteGame(id: string): Promise<void> {
   revalidatePath('/admin');
 }
 
+export async function recomputeRanks(): Promise<void> {
+  await adminFetch('/ranks/recompute', { method: 'POST' });
+  revalidatePath('/admin/ranks');
+}
+
 export interface AddGameResult {
   gameId: string;
   name: string;

@@ -14,3 +14,4 @@ export * from './milestone.entity';
 export * from './trusted-source.entity';
 export * from './processed-article.entity';
 export * from './reference-profile.entity';
+export * from './game-rank.entity';

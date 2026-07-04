@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Game } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
+import { RankService } from '../reference-profiles/rank.service';
 import { isDueForRefresh } from './refresh-interval';
 
 @Injectable()
@@ -13,6 +14,7 @@ export class RefreshService {
     @InjectRepository(Game)
     private readonly games: Repository<Game>,
     private readonly ingestion: IngestionService,
+    private readonly rank: RankService,
   ) {}
 
   /**
@@ -141,6 +143,23 @@ export class RefreshService {
       );
     } catch (error) {
       this.logger.warn(`Games-popularity capture failed: ${error}`);
+    }
+  }
+
+  /**
+   * Weekly recompute of the home-grown review-velocity rank over the whole
+   * tracked universe → `game_rank`. Read-heavy full recompute; scheduled after
+   * the followers/rank capture so it sees fresh review data.
+   */
+  async recomputeHomegrownRank() {
+    try {
+      const result = await this.rank.recomputeAll();
+      this.logger.log(
+        `Home-grown rank recomputed: ${result.charted} charted game(s) ` +
+          `over ${result.rankedWeeks} week(s).`,
+      );
+    } catch (error) {
+      this.logger.warn(`Home-grown rank recompute failed: ${error}`);
     }
   }
 

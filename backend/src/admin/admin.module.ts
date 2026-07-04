@@ -5,6 +5,7 @@ import {
   EstimateSnapshot,
   EstimationDiscrepancy,
   Game,
+  GameRank,
   GameSource,
   Milestone,
   PriceSnapshot,
@@ -26,6 +27,7 @@ import { ReferenceProfilesModule } from '../reference-profiles/reference-profile
   imports: [
     TypeOrmModule.forFeature([
       Game,
+      GameRank,
       GameSource,
       SignalSnapshot,
       PriceSnapshot,

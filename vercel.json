@@ -23,6 +23,7 @@
         { "path": "/api/cron/capture-prices",  "schedule": "0 6 * * *" },
         { "path": "/api/cron/poll-feeds",      "schedule": "*/30 * * * *" },
         { "path": "/api/cron/discover-games",  "schedule": "0 2 * * *" },
-        { "path": "/api/cron/capture-popularity", "schedule": "0 4 * * 1" }
+        { "path": "/api/cron/capture-popularity", "schedule": "0 4 * * 1" },
+        { "path": "/api/cron/recompute-rank",     "schedule": "0 5 * * 1" }
     ]
 }
