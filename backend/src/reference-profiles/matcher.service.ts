@@ -93,7 +93,8 @@ function neighbourWeight(similarity: number, qualityScore: number): number {
  * Price is intentionally absent: no reliable per-game price coverage.
  */
 const SIMILARITY_WEIGHTS = {
-  gameplayType: 0.414,
+  gameplayType: 0.39,
+  rank: 0.124,
   publisherMatch: 0.09,
   developerMatch: 0.09,
   releaseEra: 0.045,
@@ -104,7 +105,6 @@ const SIMILARITY_WEIGHTS = {
   liveService: 0.027,
   devTrackRecord: 0.027,
   annualIteration: 0.027,
-  rank: 0.1,
 } as const;
 
 // Inner scales for the rank axis (see `homegrownRankSimilarity`). The peak axis
