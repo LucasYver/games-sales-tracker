@@ -725,10 +725,12 @@ export class GamesService {
    *     AchievementSnapshot), dedup at minute granularity.
    *  3. Wipe all existing SalesEstimate + EstimateSnapshot rows for the
    *     game (clean slate; estimates are derivatives, never primary data).
-   *  4. For each capture moment T (ascending), run
-   *     `EstimationService.computeAndStoreAt(gameId, T)` then
-   *     `snapshotReconcile(gameId, T)`. Each step uses the multipliers
-   *     **as they stand after step 1**, not whatever they were at T.
+   *  4. PERF: recompute only the latest capture moment T (was: every moment,
+   *     to rebuild the whole estimate graph — that loop is kept commented out
+   *     in the body for later). Runs `computeAndStoreAt(gameId, T)` then
+   *     `snapshotReconcile(gameId, T)` using the multipliers **as they stand
+   *     after step 1**. Leaves a single (latest) point until the full replay
+   *     is restored.
    *
    * Returns the count of (estimate, snapshot) rows produced.
    */
@@ -750,16 +752,40 @@ export class GamesService {
 
     let estimates = 0;
     let snapshots = 0;
-    for (const t of moments) {
-      const inserted = await this.estimation.computeAndStoreAt(gameId, t);
-      if (inserted.length === 0) continue;
-      estimates += inserted.length;
 
-      const before = await this.estimateSnapshots.count({ where: { gameId } });
-      await this.snapshotReconcile(gameId, t);
-      const after = await this.estimateSnapshots.count({ where: { gameId } });
-      snapshots += after - before;
+    // PERF: only recompute the most recent capture moment instead of replaying
+    // the whole history. Replaying every moment is what populates the full
+    // estimate time-series (the graph), but it costs O(moments) DB round-trips
+    // per game and dominates refresh time. We keep the clean-slate delete above
+    // so this leaves exactly one point (the latest); `persistEstimates` inserts
+    // (not upserts), so skipping the wipe would duplicate rows on re-run.
+    // The point-by-point replay is preserved (commented out) just below —
+    // restore it to bring the historical graph back.
+    const lastMoment = moments[moments.length - 1];
+    if (lastMoment) {
+      const inserted = await this.estimation.computeAndStoreAt(gameId, lastMoment);
+      estimates += inserted.length;
+      if (inserted.length > 0) {
+        const before = await this.estimateSnapshots.count({ where: { gameId } });
+        await this.snapshotReconcile(gameId, lastMoment);
+        const after = await this.estimateSnapshots.count({ where: { gameId } });
+        snapshots += after - before;
+      }
     }
+
+    // --- Full historical replay: recompute EVERY capture moment to rebuild the
+    // --- estimate time-series (graph). Disabled for performance; re-enable
+    // --- (and remove the single-point block above) to restore the graph.
+    // for (const t of moments) {
+    //   const inserted = await this.estimation.computeAndStoreAt(gameId, t);
+    //   if (inserted.length === 0) continue;
+    //   estimates += inserted.length;
+    //
+    //   const before = await this.estimateSnapshots.count({ where: { gameId } });
+    //   await this.snapshotReconcile(gameId, t);
+    //   const after = await this.estimateSnapshots.count({ where: { gameId } });
+    //   snapshots += after - before;
+    // }
 
     // After rebuilding, some records may now have a prior estimate band
     // to compare against. We never delete or rewrite existing
