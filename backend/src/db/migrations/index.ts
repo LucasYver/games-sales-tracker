@@ -41,6 +41,7 @@ import { AddGameRank1782740000000 } from './1782740000000-AddGameRank';
 import { AddGameExcludedFromReference1782750000000 } from './1782750000000-AddGameExcludedFromReference';
 import { AddPlaystationLeakSalesSource1782760000000 } from './1782760000000-AddPlaystationLeakSalesSource';
 import { BackfillPlaystationLeakMilestones1782761000000 } from './1782761000000-BackfillPlaystationLeakMilestones';
+import { AddGamePriceRefreshedAt1782770000000 } from './1782770000000-AddGamePriceRefreshedAt';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -93,4 +94,5 @@ export const migrations: MixedList<Function | string> = [
   AddGameExcludedFromReference1782750000000,
   AddPlaystationLeakSalesSource1782760000000,
   BackfillPlaystationLeakMilestones1782761000000,
+  AddGamePriceRefreshedAt1782770000000,
 ];

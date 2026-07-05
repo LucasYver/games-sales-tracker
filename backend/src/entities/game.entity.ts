@@ -186,6 +186,13 @@ export class Game {
   @Column({ type: 'timestamptz', nullable: true })
   lastRefreshedAt: Date | null;
 
+  // Timestamp of the last Steam price capture for this game. Used by the
+  // daily price-capture cron to only re-price games once a week (stalest
+  // first) instead of every tracked game every night, which was timing out
+  // as the catalog grew.
+  @Column({ type: 'timestamptz', nullable: true })
+  priceRefreshedAt: Date | null;
+
   @OneToMany(() => GameSource, (source) => source.game)
   sources: GameSource[];
 

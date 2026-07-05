@@ -1043,18 +1043,29 @@ export class IngestionService {
   }
 
   /**
-   * Capture a daily Steam price point for every tracked Steam game, building a
+   * Capture a Steam price point for tracked Steam games, building a
    * `price_snapshot` time series of regular/discounted prices. Free-to-play
    * titles are excluded (no price). Steam app details are re-fetched here, so
    * we also opportunistically refresh `categories` / `dlc` on the game (these
    * are otherwise only set on initial ingest). Each game is best-effort: a
    * failure is logged and the loop continues.
+   *
+   * Each game is only re-priced once a week (`PRICE_REFRESH_INTERVAL_DAYS`):
+   * re-fetching every tracked game every night stopped fitting inside the
+   * cron's time budget as the catalog grew. Games are processed stalest
+   * first (`priceRefreshedAt ASC NULLS FIRST`), and a wall-clock budget
+   * caps the run so a large backlog drains progressively across nights
+   * instead of timing out.
    */
   async captureAllSteamPrices(): Promise<{
     captured: number;
     skipped: number;
     failed: number;
   }> {
+    const PRICE_REFRESH_INTERVAL_DAYS = 7;
+    const RUN_BUDGET_MS = 11 * 60 * 1000;
+    const startedAt = Date.now();
+
     const steamSources = await this.gameSources.find({
       where: { source: SourceType.STEAM },
     });
@@ -1064,11 +1075,32 @@ export class IngestionService {
       this.logger.log('[price] no Steam-linked games to poll.');
       return { captured: 0, skipped: 0, failed: 0 };
     }
+    const sourceByGameId = new Map(
+      steamSources.map((source) => [source.gameId, source]),
+    );
 
+    // Stalest first: never-priced games (`priceRefreshedAt IS NULL`) sort
+    // ahead of everything else, guaranteeing forward progress through the
+    // backlog instead of starving at the tail of an unordered scan.
     const trackedGames = await this.games.find({
       where: { id: In(gameIds), isFree: false },
+      order: { priceRefreshedAt: { direction: 'ASC', nulls: 'FIRST' } },
     });
-    const gamesById = new Map(trackedGames.map((game) => [game.id, game]));
+
+    const now = new Date();
+    const isDueForPriceRefresh = (game: Game) => {
+      if (!game.priceRefreshedAt) return true;
+      const daysSince =
+        (now.getTime() - game.priceRefreshedAt.getTime()) /
+        (1000 * 60 * 60 * 24);
+      return daysSince >= PRICE_REFRESH_INTERVAL_DAYS;
+    };
+    const eligibleGames = trackedGames.filter(isDueForPriceRefresh);
+
+    this.logger.log(
+      `[price] ${eligibleGames.length} due game(s) of ${trackedGames.length} ` +
+        `tracked (stalest first), budget ${RUN_BUDGET_MS / 1000}s.`,
+    );
 
     // Steam's store appdetails endpoint is rate-limited to ~200 requests /
     // 5 min per IP. Space calls out to stay under that ceiling and avoid the
@@ -1079,10 +1111,17 @@ export class IngestionService {
     let skipped = 0;
     let failed = 0;
     let first = true;
-    for (const source of steamSources) {
-      const game = gamesById.get(source.gameId);
-      if (!game) continue;
+    for (const game of eligibleGames) {
+      if (Date.now() - startedAt >= RUN_BUDGET_MS) {
+        this.logger.log(
+          `[price] run budget reached after ${captured + skipped + failed} ` +
+            `game(s); ${eligibleGames.length - (captured + skipped + failed)} left for the next run.`,
+        );
+        break;
+      }
 
+      const source = sourceByGameId.get(game.id);
+      if (!source) continue;
       const appId = Number(source.externalId);
       if (!Number.isFinite(appId)) continue;
 
@@ -1108,7 +1147,6 @@ export class IngestionService {
         }
         if (metadataChanged) {
           this.applyDerivedFeatures(game);
-          await this.games.save(game);
         }
 
         if (!details.price) {
@@ -1129,8 +1167,14 @@ export class IngestionService {
       } catch (error) {
         failed++;
         this.logger.warn(
-          `[price] capture failed for game ${source.gameId}: ${error}`,
+          `[price] capture failed for game ${game.id}: ${error}`,
         );
+      } finally {
+        // Always stamp priceRefreshedAt — even when the fetch threw — so a
+        // persistently failing game cannot stay perpetually "due" and starve
+        // the rest of the catalog by re-consuming every run's time budget.
+        game.priceRefreshedAt = new Date();
+        await this.games.save(game);
       }
     }
 
