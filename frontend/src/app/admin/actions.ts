@@ -59,6 +59,17 @@ export async function recomputeRanks(): Promise<void> {
   revalidatePath('/admin/ranks');
 }
 
+export async function setReferenceExclusion(
+  gameId: string,
+  excluded: boolean,
+): Promise<void> {
+  await adminFetch(`/games/${gameId}/reference-exclusion`, {
+    method: 'POST',
+    body: JSON.stringify({ excluded }),
+  });
+  revalidatePath(`/admin/games/${gameId}`);
+}
+
 export interface AddGameResult {
   gameId: string;
   name: string;

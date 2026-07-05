@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import {
   Game,
   Milestone,
+  Platform,
   ReferenceProfile,
   SalesSource,
   SignalMetric,
@@ -48,6 +49,41 @@ const PLATFORM_UNIT_WEIGHT = {
  * split rather than persist junk shares.
  */
 const MIN_PLATFORM_TOTAL_UNITS = 1_000;
+
+/**
+ * PC publishers whose Steam review counts badly understate total PC sales
+ * because a large share sells on their own storefront (EA App, Battle.net,
+ * Ubisoft Connect) or via Game Pass. For these the reviews→units PC estimate
+ * is unreliable, so the residual split (`Global − PC_est`) is skipped and we
+ * fall back to the ratings proxy. Matched as case-insensitive substrings of
+ * `game.publisher`.
+ */
+const OFF_STEAM_PC_PUBLISHERS = [
+  'activision',
+  'blizzard',
+  'epic games',
+  'riot',
+  'xbox game studios',
+  'microsoft',
+] as const;
+
+/**
+ * Relative console-platform weights used to split the residual console total
+ * (`Global − PC_est`) when we cannot measure the split from ratings — the usual
+ * case, since Xbox/Switch rating coverage is near-zero. Normalised over the
+ * console platforms the game actually shipped on. Rough current-gen priors,
+ * superseded by ratings whenever every present console platform has a count.
+ */
+const CONSOLE_SPLIT_PRIOR = { ps: 0.6, xbox: 0.3, switch: 0.1 } as const;
+
+/**
+ * Residual-split guards: skip (fall back to the ratings proxy) when the PC
+ * estimate would be an implausibly large share of the global total — a small
+ * console residual there is dominated by PC-estimation noise — or when Steam
+ * review coverage at the observation date is too thin to estimate PC at all.
+ */
+const RESIDUAL_MAX_PC_SHARE = 0.85;
+const RESIDUAL_MIN_REVIEWS = 50;
 
 /**
  * Quality score decays for anchors observed this far in the past. The
@@ -119,6 +155,9 @@ interface AnchorSelection {
   scaleUnits: number;
   hasMilestone: boolean;
   source: SalesSource | 'LEAK';
+  // Platform the scale figure is scoped to. Only a GLOBAL anchor can feed the
+  // console-residual split (`Global − PC`); the leak is a PC player count.
+  platform: Platform;
 }
 
 /**
@@ -177,10 +216,7 @@ export class ReferenceProfileService {
       ? await this.computeCurve(gameId, game.releaseDate)
       : this.emptyCurve();
 
-    const platformShares = await this.computePlatformShares(
-      gameId,
-      anchor.observedAt,
-    );
+    const platformShares = await this.computePlatformShares(game, anchor);
 
     const peakCcuRatio = game.releaseDate
       ? await this.computePeakCcuRatio(
@@ -301,6 +337,7 @@ export class ReferenceProfileService {
         scaleUnits: Number(milestone.units),
         hasMilestone: true,
         source: milestone.source,
+        platform: milestone.platform,
       };
     }
 
@@ -322,6 +359,8 @@ export class ReferenceProfileService {
         scaleUnits: Number(leak.value),
         hasMilestone: false,
         source: 'LEAK',
+        // Leak is a Steam/PC player count, not a worldwide total.
+        platform: Platform.PC,
       };
     }
 
@@ -357,15 +396,22 @@ export class ReferenceProfileService {
    * `ERA_BASE_YEAR` are clamped to it to avoid extrapolating the fit outside its
    * support.
    */
+  /**
+   * Median units-per-review for a given observation calendar year (the corpus
+   * era fit). Doubles as an era-appropriate PC Boxleiter for the residual split:
+   * `PC_units@date ≈ cumReviews@date × kEra(year)`.
+   */
+  private kEra(year: number): number {
+    const clamped = Math.max(ERA_BASE_YEAR, year);
+    return (
+      ERA_AMP * Math.exp(-ERA_SLOPE * (clamped - ERA_BASE_YEAR)) + ERA_FLOOR
+    );
+  }
+
   private reviewRateEraFactor(observedAt: Date): number {
-    const kEra = (year: number): number => {
-      const clamped = Math.max(ERA_BASE_YEAR, year);
-      return (
-        ERA_AMP * Math.exp(-ERA_SLOPE * (clamped - ERA_BASE_YEAR)) + ERA_FLOOR
-      );
-    };
     const nowYear = new Date().getUTCFullYear();
-    const factor = kEra(nowYear) / kEra(observedAt.getUTCFullYear());
+    const factor =
+      this.kEra(nowYear) / this.kEra(observedAt.getUTCFullYear());
     return Number.isFinite(factor) && factor > 0 ? factor : 1;
   }
 
@@ -412,6 +458,134 @@ export class ReferenceProfileService {
   }
 
   /**
+   * Resolve the game's platform split. Preferred path — the "console residual"
+   * method: when the scale anchor is a GLOBAL total, estimate PC sales at the
+   * observation date from Steam reviews (`cumReviews × kEra`) and take
+   * `console = Global − PC`, then split the console total across the game's
+   * console platforms by ratings (only when every present console platform has a
+   * count) or fixed priors. This is grounded in a real worldwide total, unlike
+   * the ratings-only proxy. Falls back to the proxy when the anchor is not a
+   * global figure or a guard trips.
+   *
+   * IMPORTANT: this only ever writes `platformShare*`. It must NOT influence
+   * `reviewsToUnits` — the PC estimate uses the corpus era Boxleiter, never the
+   * game's own ratio, so the split never feeds back into a value it depends on.
+   */
+  private async computePlatformShares(
+    game: Game,
+    anchor: AnchorSelection,
+  ): Promise<{
+    pc: number;
+    ps: number;
+    xbox: number;
+    switch: number;
+  } | null> {
+    const residual = await this.computeResidualShares(game, anchor);
+    if (residual) return residual;
+    return this.computePlatformSharesFromRatings(game.id, anchor.observedAt);
+  }
+
+  /**
+   * Console-residual split. Returns `null` (→ caller falls back to the ratings
+   * proxy) unless the anchor is a GLOBAL total and every guard passes:
+   *   - not mobile (a GLOBAL total then includes platforms we don't model);
+   *   - publisher not in the off-Steam list (Steam reviews would undercount PC);
+   *   - enough Steam reviews at the date to estimate PC;
+   *   - the PC estimate is a plausible minority of the global total.
+   */
+  private async computeResidualShares(
+    game: Game,
+    anchor: AnchorSelection,
+  ): Promise<{
+    pc: number;
+    ps: number;
+    xbox: number;
+    switch: number;
+  } | null> {
+    if (anchor.platform !== Platform.GLOBAL || anchor.scaleUnits <= 0) {
+      return null;
+    }
+    const platforms = new Set(game.platforms ?? []);
+    if (platforms.has(Platform.MOBILE)) return null;
+    const publisher = (game.publisher ?? '').toLowerCase();
+    if (OFF_STEAM_PC_PUBLISHERS.some((p) => publisher.includes(p))) return null;
+
+    const consolePlats = (
+      [Platform.PLAYSTATION, Platform.XBOX, Platform.SWITCH] as const
+    ).filter((p) => platforms.has(p));
+    if (consolePlats.length === 0) return null;
+
+    const cumReviews = await this.cumulativeSignalAt(
+      game.id,
+      SignalMetric.STEAM_REVIEWS,
+      anchor.observedAt,
+    );
+    if (cumReviews === null || cumReviews < RESIDUAL_MIN_REVIEWS) return null;
+
+    const pcUnits = cumReviews * this.kEra(anchor.observedAt.getUTCFullYear());
+    const pcShare = pcUnits / anchor.scaleUnits;
+    if (!(pcShare > 0) || pcShare >= RESIDUAL_MAX_PC_SHARE) return null;
+
+    const consoleUnits = anchor.scaleUnits - pcUnits;
+
+    // Weight each present console platform: measured (rating × weight) only when
+    // EVERY present console platform has a count (a ratio needs both sides);
+    // fixed priors otherwise — the common case, since Xbox/Switch ratings are
+    // near-absent.
+    const metricByPlat = {
+      [Platform.PLAYSTATION]: SignalMetric.PS_RATINGS,
+      [Platform.XBOX]: SignalMetric.XBOX_RATINGS,
+      [Platform.SWITCH]: SignalMetric.SWITCH_RATINGS,
+    };
+    const weightByPlat = {
+      [Platform.PLAYSTATION]: PLATFORM_UNIT_WEIGHT.ps,
+      [Platform.XBOX]: PLATFORM_UNIT_WEIGHT.xbox,
+      [Platform.SWITCH]: PLATFORM_UNIT_WEIGHT.switch,
+    };
+    const priorByPlat = {
+      [Platform.PLAYSTATION]: CONSOLE_SPLIT_PRIOR.ps,
+      [Platform.XBOX]: CONSOLE_SPLIT_PRIOR.xbox,
+      [Platform.SWITCH]: CONSOLE_SPLIT_PRIOR.switch,
+    };
+
+    const ratings = await Promise.all(
+      consolePlats.map((p) =>
+        this.cumulativeSignalAt(game.id, metricByPlat[p], anchor.observedAt),
+      ),
+    );
+    const allRated =
+      consolePlats.length > 1 && ratings.every((r) => r !== null && r > 0);
+
+    const rawWeights = consolePlats.map((p, i) =>
+      allRated ? (ratings[i] as number) * weightByPlat[p] : priorByPlat[p],
+    );
+    const weightSum = rawWeights.reduce((a, b) => a + b, 0);
+    if (weightSum <= 0) return null;
+
+    const shares = { pc: pcUnits, ps: 0, xbox: 0, switch: 0 };
+    consolePlats.forEach((p, i) => {
+      const units = consoleUnits * (rawWeights[i] / weightSum);
+      if (p === Platform.PLAYSTATION) shares.ps = units;
+      else if (p === Platform.XBOX) shares.xbox = units;
+      else shares.switch = units;
+    });
+
+    const total = shares.pc + shares.ps + shares.xbox + shares.switch;
+    if (total <= 0) return null;
+    this.logger.debug(
+      `residual split ${game.name}: pcShare=${(shares.pc / total).toFixed(
+        2,
+      )} console=${Math.round(consoleUnits)} (${allRated ? 'ratings' : 'prior'})`,
+    );
+    return {
+      pc: shares.pc / total,
+      ps: shares.ps / total,
+      xbox: shares.xbox / total,
+      switch: shares.switch / total,
+    };
+  }
+
+  /**
    * Proxy split by platform. Ratings/reviews counters are turned into
    * unit-equivalents with fixed weights (Boxleiter midpoints) and then
    * normalised into shares that sum to 1.0. Returns `null` when we
@@ -422,7 +596,7 @@ export class ReferenceProfileService {
    * leak (which is PC-only). Consumers should treat it as noisier than
    * the curve / reviews→units fields.
    */
-  private async computePlatformShares(
+  private async computePlatformSharesFromRatings(
     gameId: string,
     at: Date,
   ): Promise<{

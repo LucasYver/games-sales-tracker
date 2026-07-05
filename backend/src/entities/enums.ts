@@ -78,6 +78,7 @@ export enum SalesSource {
   ANNOUNCEMENT = 'ANNOUNCEMENT', // social/PR announcement (X, Instagram, email)
   MEDIA = 'MEDIA', // figure reported by a trusted media outlet / analyst
   STEAM_LEAK = 'STEAM_LEAK', // July 2018 Steam leak: PC players ≈ buyers (paid games only)
+  PLAYSTATION_LEAK = 'PLAYSTATION_LEAK', // Rhysida/Insomniac breach (Dec 2023): internal SIE first-party shipments as of 2022-02-27, PlayStation-scoped
 }
 
 // Kind of trusted source in the curated registry that feeds media extraction.

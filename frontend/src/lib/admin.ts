@@ -180,6 +180,83 @@ export interface AdminPriceSnapshot {
   capturedAt: string;
 }
 
+export interface LatestSignal {
+  metric: string;
+  value: number;
+  capturedAt: string;
+}
+
+// Pinned header + Overview payload (GET /admin/games/:id/summary). Lightweight:
+// no heavy time-series (those load from the Charts tab).
+export interface AdminGamePageSummary {
+  id: string;
+  name: string;
+  slug: string;
+  coverUrl: string | null;
+  summary: string | null;
+  releaseDate: string | null;
+  platforms: Platform[];
+  isFree: boolean;
+  developer: string | null;
+  publisher: string | null;
+  publisherRecord: {
+    id: string;
+    name: string;
+    steamSharePctLow: number | null;
+    steamSharePctHigh: number | null;
+  } | null;
+  genres: string[];
+  categories: string[];
+  steamTags: string[];
+  dlc: number[];
+  franchiseSlug: string | null;
+  isAnnualIteration: boolean;
+  iterationNumber: number | null;
+  liveService: boolean;
+  excludedFromReference: boolean;
+  igdbId: number | null;
+  lastRefreshedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  calibratedMultiplier: number | null;
+  calibratedPsMultiplier: number | null;
+  calibratedXboxMultiplier: number | null;
+  calibrationSourcePc: SalesSource | null;
+  calibrationSourcePs: SalesSource | null;
+  calibrationSourceXbox: SalesSource | null;
+  sources: AdminGameSource[];
+  latestSignals: LatestSignal[];
+  peakCcu: { value: number; capturedAt: string } | null;
+  homeRank: {
+    weeksCharted: number;
+    peakRank: number;
+    avgRank: number;
+    peakPercentile: number;
+    weeksTopDecile: number;
+  } | null;
+  latestEstimate: {
+    computedAt: string;
+    estimatedTodayLow: number;
+    estimatedTodayHigh: number;
+    reconciliation: unknown;
+  } | null;
+  milestones: AdminMilestone[];
+  milestonesCount: number;
+  estimatesCount: number;
+}
+
+// Charts-tab payload (GET /admin/games/:id/charts).
+export interface AdminGameChartsData {
+  ccuHistory: AdminCcuPoint[];
+  reviewHistory: AdminCcuPoint[];
+  followersHistory: AdminCcuPoint[];
+  psRatingsHistory: AdminCcuPoint[];
+  xboxRatingsHistory: AdminCcuPoint[];
+  switchRatingsHistory: AdminCcuPoint[];
+  prices: AdminPriceSnapshot[];
+  signals: AdminSignal[];
+}
+
 export interface AdminAchievementSummary {
   platform: Platform;
   source: string;
@@ -403,12 +480,30 @@ export interface AdminCorpusStats {
   qualityBuckets: AdminCorpusBucket[];
 }
 
+export interface FeatureContribution {
+  feature: string;
+  score: number;
+  weight: number;
+  contribution: number;
+}
+
+export interface MatchSelection {
+  playMode: string;
+  k: number;
+  candidatesConsidered: number;
+  platformFiltered: boolean;
+  weights: Record<string, number>;
+}
+
 export interface AdminMatchedNeighbour {
   gameId: string;
   gameName: string;
   gameSlug: string;
   similarity: number;
   weight: number;
+  featureContributions: FeatureContribution[];
+  // The anchor's own observed reference vector (what it contributes to the aggregate).
+  profile: AdminReferenceProfile | null;
 }
 
 export interface AdminResolvedProfile {
@@ -440,6 +535,7 @@ export interface AdminMatcherInspection {
   curve: AdminReferenceCurve;
   platformShares: AdminReferencePlatformShares | null;
   neighbours: AdminMatchedNeighbour[];
+  selection: MatchSelection | null;
   resolved: AdminResolvedProfile | null;
   anchorProfile: AdminReferenceProfile | null;
 }

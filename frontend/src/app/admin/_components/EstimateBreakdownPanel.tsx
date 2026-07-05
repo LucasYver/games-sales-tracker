@@ -229,7 +229,19 @@ export async function EstimateBreakdownPanel({ gameId }: { gameId: string }) {
   } catch {
     return null;
   }
+  return <EstimateBreakdownView breakdown={breakdown} />;
+}
 
+/**
+ * Presentational breakdown view — no data fetching, so callers that already
+ * have the breakdown (e.g. the Estimates tab's pipeline) can render the detailed
+ * per-platform trace without a second request.
+ */
+export function EstimateBreakdownView({
+  breakdown,
+}: {
+  breakdown: AdminEstimateBreakdown;
+}) {
   const { platforms, pureTotal, declared } = breakdown;
   if (platforms.length === 0) return null;
 

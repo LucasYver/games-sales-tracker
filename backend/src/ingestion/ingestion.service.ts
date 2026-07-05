@@ -69,6 +69,9 @@ const DEFAULT_CONFIDENCE_SCORE: Record<SalesSource, number> = {
   // Measured ground-truth (real player counts), hence high — but it is an
   // engagement figure, so it never feeds calibration regardless of score.
   [SalesSource.STEAM_LEAK]: 90,
+  // Internal SIE shipment figures (Dec 2023 leak) — high trust, but a frozen
+  // 2022 sell-in snapshot, so slightly below the measured Steam-leak counts.
+  [SalesSource.PLAYSTATION_LEAK]: 85,
 };
 
 // Domains we never want Tavily backlog discovery to surface:

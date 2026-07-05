@@ -49,7 +49,10 @@
 }
 
 body {
-  background: #fafafa;
+  /* Theme-aware: was a hardcoded #fafafa that broke dark mode (this unlayered
+     rule beats the @layer base `bg-background`). var(--background) follows the
+     active palette — near-white on the public site, dark in admin dark mode. */
+  background: var(--background);
 }
 
 :root {
@@ -128,6 +131,58 @@ body {
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* Admin-scoped palette — the EXACT colours from the approved game-page design
+   mockup. Scoped to `.admin-scope` (set only on the admin <html>), so the
+   public site keeps its own theme. Light + dark. */
+.admin-scope {
+  --background: #f6f7f9;
+  --foreground: #191c22;
+  --card: #ffffff;
+  --card-foreground: #191c22;
+  --popover: #ffffff;
+  --popover-foreground: #191c22;
+  --primary: #4f5bd5;
+  --primary-foreground: #ffffff;
+  --secondary: #eef0f3;
+  --secondary-foreground: #191c22;
+  --muted: #eef0f3;
+  --muted-foreground: #626a76;
+  --accent: #edeffe;
+  --accent-foreground: #4f5bd5;
+  --border: #e5e8ec;
+  --input: #e5e8ec;
+  --ring: #4f5bd5;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #191c22;
+  --sidebar-border: #e5e8ec;
+  --sidebar-accent: #edeffe;
+  --sidebar-accent-foreground: #4f5bd5;
+}
+.admin-scope.dark {
+  --background: #0d0f13;
+  --foreground: #e9ebef;
+  --card: #15181e;
+  --card-foreground: #e9ebef;
+  --popover: #15181e;
+  --popover-foreground: #e9ebef;
+  --primary: #8b93ff;
+  --primary-foreground: #0d0f13;
+  --secondary: #1a1e25;
+  --secondary-foreground: #e9ebef;
+  --muted: #1a1e25;
+  --muted-foreground: #99a1ad;
+  --accent: #1c2040;
+  --accent-foreground: #e9ebef;
+  --border: #262b34;
+  --input: #262b34;
+  --ring: #8b93ff;
+  --sidebar: #15181e;
+  --sidebar-foreground: #e9ebef;
+  --sidebar-border: #262b34;
+  --sidebar-accent: #1c2040;
+  --sidebar-accent-foreground: #e9ebef;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -137,5 +192,11 @@ body {
   }
   html {
     @apply font-sans;
+    /* Light native UI (scrollbars, form controls, overscroll canvas) by
+       default; flipped to dark below so those don't stay white in dark mode. */
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
   }
 }

@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Game, Platform, ReferenceProfile } from '../entities';
 import type { ResolvedGenreProfile } from './sales-profile-resolver.service';
-import { MatcherService } from './matcher.service';
+import {
+  MatcherService,
+  type FeatureContribution,
+  type MatchSelection,
+} from './matcher.service';
 import { SalesProfileResolverService } from './sales-profile-resolver.service';
 
 /**
@@ -76,6 +80,12 @@ export interface AdminMatchedNeighbour {
   gameSlug: string;
   similarity: number;
   weight: number;
+  // Why this anchor matched: per-feature score × weight, sorted by contribution.
+  featureContributions: FeatureContribution[];
+  // The anchor's OWN observed reference vector (reviews→units, peak-CCU ratio,
+  // curve, platform split, scale, quality) — so you can see exactly what each
+  // neighbour contributes to the aggregated profile.
+  profile: AdminReferenceProfileRow | null;
 }
 
 export interface AdminMatcherInspection {
@@ -88,6 +98,8 @@ export interface AdminMatcherInspection {
   curve: AdminReferenceCurve;
   platformShares: AdminReferencePlatformShares | null;
   neighbours: AdminMatchedNeighbour[];
+  // How the neighbourhood was selected (filters, k, candidate count, weights).
+  selection: MatchSelection | null;
   resolved: ResolvedGenreProfile | null;
   /**
    * This game's OWN observed vector when it is itself an anchor (`isAnchor`).
@@ -230,34 +242,37 @@ export class ReferenceProfilesAdminService {
     const game = await this.games.findOne({ where: { id: gameId } });
     if (!game) return null;
 
-    const match = await this.matcher.findNeighbours({
-      platforms: game.platforms ?? [],
-      categories: game.categories ?? null,
-      genres: game.genres ?? null,
-      steamTags: game.steamTags ?? null,
-      publisherId: game.publisherId ?? null,
-      publisher: game.publisher ?? null,
-      dlc: game.dlc ?? null,
-      releaseDate: game.releaseDate ?? null,
-      developer: game.developer ?? null,
-      franchiseSlug: game.franchiseSlug ?? null,
-      isAnnualIteration: game.isAnnualIteration ?? false,
-      liveService: game.liveService ?? false,
-    });
+    // Run the matcher once (the inspector reuses this match for the resolved
+    // profile too — no second matcher run) in parallel with the anchor-join.
+    const [match, anchorRows] = await Promise.all([
+      this.matcher.findNeighbours(
+        {
+          platforms: game.platforms ?? [],
+          categories: game.categories ?? null,
+          genres: game.genres ?? null,
+          steamTags: game.steamTags ?? null,
+          publisherId: game.publisherId ?? null,
+          publisher: game.publisher ?? null,
+          dlc: game.dlc ?? null,
+          releaseDate: game.releaseDate ?? null,
+          developer: game.developer ?? null,
+          franchiseSlug: game.franchiseSlug ?? null,
+          isAnnualIteration: game.isAnnualIteration ?? false,
+          liveService: game.liveService ?? false,
+        },
+        { targetGameId: gameId, explain: true },
+      ),
+      this.loadAnchorJoin(gameId),
+    ]);
 
-    const resolved = await this.resolver.resolveForGame(game);
-    const anchorRows = await this.loadAnchorJoin(gameId);
+    const resolved = this.resolver.resolveFromMatch(match);
     const anchorProfile = anchorRows.length ? this.mapRow(anchorRows[0]) : null;
     const isAnchor = anchorProfile !== null;
 
     const neighbourIds = match.anchors.map((a) => a.gameId);
-    const names = neighbourIds.length
-      ? await this.games.find({
-          where: { id: In(neighbourIds) },
-          select: { id: true, name: true, slug: true },
-        })
-      : [];
-    const nameById = new Map(names.map((g) => [g.id, g]));
+    // Each neighbour IS an anchor, so its reference profile carries the observed
+    // vector it contributes to the aggregate (name + slug come from the join).
+    const profileById = await this.loadAnchorProfiles(neighbourIds);
 
     return {
       matcherEnabled: this.resolver.isMatcherEnabled(),
@@ -269,15 +284,18 @@ export class ReferenceProfilesAdminService {
       curve: match.curve,
       platformShares: match.platformShares,
       neighbours: match.anchors.map((a) => {
-        const g = nameById.get(a.gameId);
+        const p = profileById.get(a.gameId) ?? null;
         return {
           gameId: a.gameId,
-          gameName: g?.name ?? a.gameId,
-          gameSlug: g?.slug ?? '',
+          gameName: p?.gameName ?? a.gameId,
+          gameSlug: p?.gameSlug ?? '',
           similarity: a.similarity,
           weight: a.weight,
+          featureContributions: a.featureContributions ?? [],
+          profile: p,
         };
       }),
+      selection: match.selection ?? null,
       resolved,
       anchorProfile,
     };
@@ -307,9 +325,44 @@ export class ReferenceProfilesAdminService {
          FROM reference_profile r
          INNER JOIN game g ON g.id = r."gameId"
         WHERE g."deletedAt" IS NULL
+          AND g."excludedFromReference" = false
           ${gameId ? 'AND r."gameId" = $1' : ''}`,
       gameId ? [gameId] : [],
     );
+  }
+
+  /** Reference profiles for a set of anchors, keyed by gameId. */
+  private async loadAnchorProfiles(
+    gameIds: string[],
+  ): Promise<Map<string, AdminReferenceProfileRow>> {
+    if (gameIds.length === 0) return new Map();
+    const rows = await this.anchors.manager.query<AnchorJoinRow[]>(
+      `SELECT r."gameId" AS "gameId",
+              g.name AS "gameName",
+              g.slug AS "gameSlug",
+              r."scaleUnits" AS "scaleUnits",
+              r."reviewsToUnits" AS "reviewsToUnits",
+              r."peakCcuRatio" AS "peakCcuRatio",
+              r."curveS1" AS "curveS1",
+              r."curveM1" AS "curveM1",
+              r."curveM3" AS "curveM3",
+              r."curveM6" AS "curveM6",
+              r."curveA1" AS "curveA1",
+              r."curveA2" AS "curveA2",
+              r."platformSharePc" AS "platformSharePc",
+              r."platformSharePs" AS "platformSharePs",
+              r."platformShareXbox" AS "platformShareXbox",
+              r."platformShareSwitch" AS "platformShareSwitch",
+              r."qualityScore" AS "qualityScore",
+              r."observedAt" AS "observedAt",
+              g.platforms::text[] AS platforms
+         FROM reference_profile r
+         INNER JOIN game g ON g.id = r."gameId"
+        WHERE g."deletedAt" IS NULL
+          AND r."gameId" = ANY($1)`,
+      [gameIds],
+    );
+    return new Map(rows.map((r) => [r.gameId, this.mapRow(r)]));
   }
 
   private mapRow(r: AnchorJoinRow): AdminReferenceProfileRow {

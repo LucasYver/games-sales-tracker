@@ -210,10 +210,29 @@ export interface CurveVector {
   a2: number | null;
 }
 
+export interface FeatureContribution {
+  feature: string;
+  score: number; // raw feature similarity in [0,1]
+  weight: number; // its SIMILARITY_WEIGHTS weight
+  contribution: number; // score × weight (its share of the total similarity)
+}
+
 export interface MatchedAnchor {
   gameId: string;
   similarity: number;
   weight: number;
+  // Per-feature breakdown of *why* this anchor matched. Only populated when
+  // findNeighbours is called with `explain: true` (the admin matcher inspector).
+  featureContributions?: FeatureContribution[];
+}
+
+/** How the neighbourhood was selected — surfaced for the admin explainer. */
+export interface MatchSelection {
+  playMode: PlayMode;
+  k: number;
+  candidatesConsidered: number;
+  platformFiltered: boolean;
+  weights: Record<string, number>;
 }
 
 export interface MatchResult {
@@ -229,6 +248,7 @@ export interface MatchResult {
   neighboursUsed: number;
   coldStart: boolean;
   anchors: MatchedAnchor[];
+  selection?: MatchSelection;
 }
 
 interface AnchorRow {
@@ -300,6 +320,8 @@ export class MatcherService {
        * (review-velocity history), not the sales figure being predicted.
        */
       targetGameId?: string;
+      /** Attach per-feature contributions + selection metadata (admin explainer). */
+      explain?: boolean;
     } = {},
   ): Promise<MatchResult> {
     const k = opts.k ?? DEFAULT_NEIGHBOURS;
@@ -325,11 +347,16 @@ export class MatcherService {
       ? (rankIndex.get(targetGameId) ?? null)
       : null;
 
+    const explain = opts.explain ?? false;
+
     const primary = this.pickCandidates(corpus, targetFeatures, {
       strict: true,
     });
     if (primary.length >= MIN_NEIGHBOURS) {
-      return this.aggregate(primary, targetFeatures, k, /*coldStart*/ false);
+      return this.aggregate(primary, targetFeatures, k, /*coldStart*/ false, {
+        explain,
+        platformFiltered: true,
+      });
     }
 
     // Cold-start step 1: relax the platform overlap filter, keep the
@@ -339,13 +366,19 @@ export class MatcherService {
       strict: false,
     });
     if (relaxed.length >= MIN_NEIGHBOURS) {
-      return this.aggregate(relaxed, targetFeatures, k, /*coldStart*/ true);
+      return this.aggregate(relaxed, targetFeatures, k, /*coldStart*/ true, {
+        explain,
+        platformFiltered: false,
+      });
     }
 
     // Cold-start step 2: fall through to the unconditional global mean,
     // ignoring every feature. Least specific, but guarantees we always
     // return something rather than throwing on unusual games.
-    return this.aggregate(corpus, targetFeatures, k, /*coldStart*/ true);
+    return this.aggregate(corpus, targetFeatures, k, /*coldStart*/ true, {
+      explain,
+      platformFiltered: false,
+    });
   }
 
   private pickCandidates(
@@ -368,6 +401,7 @@ export class MatcherService {
     target: TargetInternal,
     k: number,
     coldStart: boolean,
+    opts: { explain?: boolean; platformFiltered?: boolean } = {},
   ): MatchResult {
     const scored = candidates.map((row) => ({
       row,
@@ -380,6 +414,9 @@ export class MatcherService {
       gameId: row.gameId,
       similarity,
       weight: neighbourWeight(similarity, row.qualityScore),
+      ...(opts.explain
+        ? { featureContributions: this.explainAnchor(row, target) }
+        : {}),
     }));
 
     return {
@@ -390,59 +427,91 @@ export class MatcherService {
       neighboursUsed: top.length,
       coldStart,
       anchors,
+      ...(opts.explain
+        ? {
+            selection: {
+              playMode: target.playMode,
+              k,
+              candidatesConsidered: candidates.length,
+              platformFiltered: opts.platformFiltered ?? false,
+              weights: { ...SIMILARITY_WEIGHTS },
+            },
+          }
+        : {}),
     };
   }
 
   // ─── Similarity ────────────────────────────────────────────────────
 
-  private similarity(row: AnchorRow, target: TargetInternal): number {
-    const platformScore = jaccard(row.platforms, target.platformSet);
-    const gameplayTypeScore = gameplayTypeSimilarity(
-      row.steamTags,
-      row.genres,
-      target.steamTags,
-      target.genres,
-    );
-    const publisherScore = publisherMatch(
-      row.publisherId,
-      row.publisher,
-      target.publisherId,
-      target.publisher,
-    );
-    const developerScore = developerMatch(row.developer, target.developer);
-    const eraScore = eraSimilarity(row.releaseEra, target.releaseEra);
-    const scaleScore =
-      target.scaleBucket === 'UNKNOWN'
-        ? 1.0
-        : matchOrZero(row.scaleBucket, target.scaleBucket);
-    const dlcScore = dlcTierSimilarity(row.dlcTier, target.dlcTier);
-    const franchiseScore = franchiseSimilarity(
-      row.franchiseSlug,
-      target.franchiseSlug,
-    );
-    const annualScore =
-      row.isAnnualIteration === target.isAnnualIteration ? 1.0 : 0.0;
-    const liveServiceScore = row.liveService === target.liveService ? 1.0 : 0.0;
-    const trackRecordScore = trackRecordSimilarity(
-      row.trackRecord,
-      target.trackRecord,
-    );
-    const rankScore = homegrownRankSimilarity(row.rank, target.rank);
+  /**
+   * Raw per-feature similarity scores (each in [0,1]), keyed exactly like
+   * {@link SIMILARITY_WEIGHTS}. Single source of truth for both the combined
+   * similarity and the admin explainer's per-feature breakdown.
+   */
+  private featureScores(
+    row: AnchorRow,
+    target: TargetInternal,
+  ): Record<keyof typeof SIMILARITY_WEIGHTS, number> {
+    return {
+      gameplayType: gameplayTypeSimilarity(
+        row.steamTags,
+        row.genres,
+        target.steamTags,
+        target.genres,
+      ),
+      rank: homegrownRankSimilarity(row.rank, target.rank),
+      publisherMatch: publisherMatch(
+        row.publisherId,
+        row.publisher,
+        target.publisherId,
+        target.publisher,
+      ),
+      developerMatch: developerMatch(row.developer, target.developer),
+      releaseEra: eraSimilarity(row.releaseEra, target.releaseEra),
+      scaleBucket:
+        target.scaleBucket === 'UNKNOWN'
+          ? 1.0
+          : matchOrZero(row.scaleBucket, target.scaleBucket),
+      platformsOverlap: jaccard(row.platforms, target.platformSet),
+      dlcTier: dlcTierSimilarity(row.dlcTier, target.dlcTier),
+      franchise: franchiseSimilarity(row.franchiseSlug, target.franchiseSlug),
+      liveService: row.liveService === target.liveService ? 1.0 : 0.0,
+      devTrackRecord: trackRecordSimilarity(
+        row.trackRecord,
+        target.trackRecord,
+      ),
+      annualIteration:
+        row.isAnnualIteration === target.isAnnualIteration ? 1.0 : 0.0,
+    };
+  }
 
+  private similarity(row: AnchorRow, target: TargetInternal): number {
+    const scores = this.featureScores(row, target);
+    let sum = 0;
+    for (const key of Object.keys(SIMILARITY_WEIGHTS) as Array<
+      keyof typeof SIMILARITY_WEIGHTS
+    >) {
+      sum += SIMILARITY_WEIGHTS[key] * scores[key];
+    }
+    return sum;
+  }
+
+  /** Per-feature contribution breakdown for one anchor (admin explainer). */
+  private explainAnchor(
+    row: AnchorRow,
+    target: TargetInternal,
+  ): FeatureContribution[] {
+    const scores = this.featureScores(row, target);
     return (
-      SIMILARITY_WEIGHTS.gameplayType * gameplayTypeScore +
-      SIMILARITY_WEIGHTS.publisherMatch * publisherScore +
-      SIMILARITY_WEIGHTS.developerMatch * developerScore +
-      SIMILARITY_WEIGHTS.scaleBucket * scaleScore +
-      SIMILARITY_WEIGHTS.platformsOverlap * platformScore +
-      SIMILARITY_WEIGHTS.dlcTier * dlcScore +
-      SIMILARITY_WEIGHTS.releaseEra * eraScore +
-      SIMILARITY_WEIGHTS.franchise * franchiseScore +
-      SIMILARITY_WEIGHTS.liveService * liveServiceScore +
-      SIMILARITY_WEIGHTS.devTrackRecord * trackRecordScore +
-      SIMILARITY_WEIGHTS.annualIteration * annualScore +
-      SIMILARITY_WEIGHTS.rank * rankScore
-    );
+      Object.keys(SIMILARITY_WEIGHTS) as Array<keyof typeof SIMILARITY_WEIGHTS>
+    )
+      .map((feature) => ({
+        feature,
+        score: scores[feature],
+        weight: SIMILARITY_WEIGHTS[feature],
+        contribution: SIMILARITY_WEIGHTS[feature] * scores[feature],
+      }))
+      .sort((a, b) => b.contribution - a.contribution);
   }
 
   // ─── Aggregation ───────────────────────────────────────────────────
@@ -633,6 +702,7 @@ export class MatcherService {
          FROM reference_profile r
          INNER JOIN game g ON g.id = r."gameId"
         WHERE g."deletedAt" IS NULL
+          AND g."excludedFromReference" = false
           ${holdoutGameId ? 'AND r."gameId" <> $1' : ''}`,
       holdoutGameId ? [holdoutGameId] : [],
     );
@@ -1057,10 +1127,20 @@ function normaliseGenres(raw: string[]): string[] {
 }
 
 /**
+ * How many leading Steam tags define the gameplay identity. Steam orders tags
+ * by community votes, so the first handful ARE the game's identity; the long
+ * tail is noise that diverges even between near-identical entries (e.g. Europa
+ * Universalis IV vs V share the same top tags but differ across dozens of
+ * tail tags — full-set Jaccard would wrongly score them far apart). Capping the
+ * comparison to the top tags keeps sequels/siblings close.
+ */
+const GAMEPLAY_TAG_TOP_N = 6;
+
+/**
  * Gameplay-type axis. Steam community tags are the finest available signal
  * (they tell a grand-strategy/4X title apart from a tower-defense
  * "Strategy" game, which the coarse store genre cannot), so we Jaccard over
- * the tag sets whenever BOTH games carry tags. Otherwise we fall back to
+ * the TOP tag sets whenever BOTH games carry tags. Otherwise we fall back to
  * the store genres, and finally to neutral (0.5) when neither side has a
  * usable label — matching the `franchiseSimilarity` convention. The
  * fallback keeps the axis discriminating before the tag backfill has run.
@@ -1072,7 +1152,10 @@ function gameplayTypeSimilarity(
   targetGenres: string[],
 ): number {
   if (rowTags.length > 0 && targetTags.length > 0) {
-    return setJaccard(rowTags, targetTags);
+    return setJaccard(
+      rowTags.slice(0, GAMEPLAY_TAG_TOP_N),
+      targetTags.slice(0, GAMEPLAY_TAG_TOP_N),
+    );
   }
   if (rowGenres.length > 0 && targetGenres.length > 0) {
     return setJaccard(rowGenres, targetGenres);

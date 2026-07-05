@@ -94,6 +94,19 @@ export class AdminController {
     return this.admin.getGameDetail(id);
   }
 
+  // Per-tab payloads for the redesigned game page: small, parallelized calls
+  // instead of one monolithic getGameDetail. Header + Overview:
+  @Get('games/:id/summary')
+  getGameSummary(@Param('id', ParseUUIDPipe) id: string) {
+    return this.admin.getGameSummary(id);
+  }
+
+  // Charts tab: time-series + recent signal table.
+  @Get('games/:id/charts')
+  getGameCharts(@Param('id', ParseUUIDPipe) id: string) {
+    return this.admin.getGameCharts(id);
+  }
+
   @Patch('games/:id')
   @HttpCode(200)
   updateGame(
@@ -143,6 +156,15 @@ export class AdminController {
   @HttpCode(200)
   backfillCcuSteamCharts(@Param('id', ParseUUIDPipe) id: string) {
     return this.ingestion.backfillCcuFromSteamCharts(id);
+  }
+
+  @Post('games/:id/reference-exclusion')
+  @HttpCode(200)
+  setReferenceExclusion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { excluded: boolean },
+  ) {
+    return this.admin.setReferenceExclusion(id, Boolean(body?.excluded));
   }
 
   @Post('games/:id/backfill-followers')

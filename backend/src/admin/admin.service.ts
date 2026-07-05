@@ -180,6 +180,87 @@ export interface PaginatedAdmin<T> {
   total: number;
 }
 
+export interface LatestSignal {
+  metric: SignalMetric;
+  value: number;
+  capturedAt: Date;
+}
+
+/**
+ * Lightweight payload for the game page's pinned header + Overview tab. Kept
+ * deliberately free of the heavy multi-year series (those load per-tab) so the
+ * first paint is one fast round-trip.
+ */
+export interface AdminGameSummary2 {
+  id: string;
+  name: string;
+  slug: string;
+  coverUrl: string | null;
+  summary: string | null;
+  releaseDate: Date | null;
+  platforms: Platform[];
+  isFree: boolean;
+  developer: string | null;
+  publisher: string | null;
+  publisherRecord: {
+    id: string;
+    name: string;
+    steamSharePctLow: number | null;
+    steamSharePctHigh: number | null;
+  } | null;
+  genres: string[];
+  categories: string[];
+  steamTags: string[];
+  dlc: number[];
+  franchiseSlug: string | null;
+  isAnnualIteration: boolean;
+  iterationNumber: number | null;
+  liveService: boolean;
+  excludedFromReference: boolean;
+  igdbId: number | null;
+  lastRefreshedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  calibratedMultiplier: number | null;
+  calibratedPsMultiplier: number | null;
+  calibratedXboxMultiplier: number | null;
+  calibrationSourcePc: SalesSource | null;
+  calibrationSourcePs: SalesSource | null;
+  calibrationSourceXbox: SalesSource | null;
+  sources: unknown[];
+  latestSignals: LatestSignal[];
+  peakCcu: { value: number; capturedAt: Date } | null;
+  homeRank: {
+    weeksCharted: number;
+    peakRank: number;
+    avgRank: number;
+    peakPercentile: number;
+    weeksTopDecile: number;
+  } | null;
+  latestEstimate: {
+    computedAt: Date;
+    estimatedTodayLow: number;
+    estimatedTodayHigh: number;
+    reconciliation: unknown;
+  } | null;
+  milestones: Milestone[];
+  milestonesCount: number;
+  estimatesCount: number;
+}
+
+export interface AdminGameCharts {
+  ccuHistory: { capturedAt: Date; value: number }[];
+  reviewHistory: { capturedAt: Date; value: number }[];
+  followersHistory: { capturedAt: Date; value: number }[];
+  // Console store-rating series (cumulative counts). Only rendered per-platform
+  // and only when the game has data, so a PC-only game shows none.
+  psRatingsHistory: { capturedAt: Date; value: number }[];
+  xboxRatingsHistory: { capturedAt: Date; value: number }[];
+  switchRatingsHistory: { capturedAt: Date; value: number }[];
+  prices: PriceSnapshot[];
+  signals: SignalSnapshot[];
+}
+
 export interface AdminRankRow {
   gameId: string;
   name: string;
@@ -717,6 +798,167 @@ export class AdminService {
   }
 
   /**
+   * Pinned header + Overview payload. Every query runs in parallel (one logical
+   * round-trip) and the heavy multi-year series are excluded — those load from
+   * {@link getGameCharts} when the Charts tab opens. All latest-per-metric
+   * values come from a single `DISTINCT ON` query instead of one query per
+   * metric.
+   */
+  async getGameSummary(id: string): Promise<AdminGameSummary2> {
+    const [game, milestones, rank, latestSignals, latestSnap, estimatesCount, peakRow] =
+      await Promise.all([
+        this.games.findOne({
+          where: { id },
+          relations: { publisherRecord: true, sources: true },
+        }),
+        this.milestones.find({
+          where: { gameId: id, rejectedAt: IsNull() },
+          order: { reportedAt: 'DESC' },
+        }),
+        this.gameRanks.findOne({ where: { gameId: id } }),
+        this.signals.query(
+          `SELECT DISTINCT ON (metric) metric, value, "capturedAt"
+             FROM signal_snapshot
+            WHERE "gameId" = $1
+            ORDER BY metric, "capturedAt" DESC`,
+          [id],
+        ) as Promise<
+          Array<{ metric: SignalMetric; value: number; capturedAt: Date }>
+        >,
+        this.estimateSnapshots.findOne({
+          where: { gameId: id },
+          order: { computedAt: 'DESC' },
+        }),
+        this.estimates.count({ where: { gameId: id } }),
+        // Peak CCU is ordered by value (not date): the SteamCharts import writes
+        // a peak row dated at the historical month, so latest-by-date is wrong.
+        this.signals.findOne({
+          where: { gameId: id, metric: SignalMetric.STEAM_PEAK_CCU },
+          order: { value: 'DESC' },
+        }),
+      ]);
+    if (!game) throw new NotFoundException(`Game ${id} not found`);
+
+    return {
+      id: game.id,
+      name: game.name,
+      slug: game.slug,
+      coverUrl: game.coverUrl,
+      summary: game.summary,
+      releaseDate: game.releaseDate,
+      platforms: game.platforms,
+      isFree: game.isFree,
+      developer: game.developer,
+      publisher: game.publisher,
+      publisherRecord: game.publisherRecord
+        ? {
+            id: game.publisherRecord.id,
+            name: game.publisherRecord.name,
+            steamSharePctLow: game.publisherRecord.steamSharePctLow,
+            steamSharePctHigh: game.publisherRecord.steamSharePctHigh,
+          }
+        : null,
+      genres: game.genres ?? [],
+      categories: game.categories ?? [],
+      steamTags: game.steamTags ?? [],
+      dlc: game.dlc ?? [],
+      franchiseSlug: game.franchiseSlug,
+      isAnnualIteration: game.isAnnualIteration,
+      iterationNumber: game.iterationNumber,
+      liveService: game.liveService,
+      excludedFromReference: game.excludedFromReference,
+      igdbId: game.igdbId,
+      lastRefreshedAt: game.lastRefreshedAt,
+      createdAt: game.createdAt,
+      updatedAt: game.updatedAt,
+      calibratedMultiplier: game.calibratedMultiplier,
+      calibratedPsMultiplier: game.calibratedPsMultiplier,
+      calibratedXboxMultiplier: game.calibratedXboxMultiplier,
+      calibrationSourcePc: game.calibrationSourcePc,
+      calibrationSourcePs: game.calibrationSourcePs,
+      calibrationSourceXbox: game.calibrationSourceXbox,
+      sources: game.sources,
+      latestSignals: latestSignals.map((s) => ({
+        metric: s.metric,
+        value: Number(s.value),
+        capturedAt: s.capturedAt,
+      })),
+      peakCcu: peakRow
+        ? { value: peakRow.value, capturedAt: peakRow.capturedAt }
+        : null,
+      homeRank: rank
+        ? {
+            weeksCharted: rank.weeksCharted,
+            peakRank: rank.peakRank,
+            avgRank: rank.avgRank,
+            peakPercentile: rank.peakPercentile,
+            weeksTopDecile: rank.weeksTopDecile,
+          }
+        : null,
+      latestEstimate: latestSnap
+        ? {
+            computedAt: latestSnap.computedAt,
+            estimatedTodayLow: latestSnap.estimatedTodayLow,
+            estimatedTodayHigh: latestSnap.estimatedTodayHigh,
+            reconciliation: latestSnap.reconciliation,
+          }
+        : null,
+      milestones,
+      milestonesCount: milestones.length,
+      estimatesCount,
+    };
+  }
+
+  /**
+   * Charts-tab payload: the time-series + the recent signal table. Each series
+   * is a single indexed query and they all run in parallel; sizes are bounded
+   * so a game with years of daily history can't return an unbounded blob.
+   */
+  async getGameCharts(id: string): Promise<AdminGameCharts> {
+    const series = (metric: SignalMetric) =>
+      this.signals.find({
+        where: { gameId: id, metric },
+        order: { capturedAt: 'ASC' },
+        select: { capturedAt: true, value: true },
+        take: 5000,
+      });
+
+    const [ccu, reviews, followers, psR, xboxR, switchR, prices, signals] =
+      await Promise.all([
+        series(SignalMetric.STEAM_CONCURRENT),
+        series(SignalMetric.STEAM_REVIEWS),
+        series(SignalMetric.STEAM_FOLLOWERS),
+        series(SignalMetric.PS_RATINGS),
+        series(SignalMetric.XBOX_RATINGS),
+        series(SignalMetric.SWITCH_RATINGS),
+        this.prices.find({
+          where: { gameId: id },
+          order: { capturedAt: 'ASC' },
+          take: 2000,
+        }),
+        this.signals.find({
+          where: { gameId: id },
+          order: { capturedAt: 'DESC' },
+          take: 200,
+        }),
+      ]);
+
+    const map = (rows: { capturedAt: Date; value: number }[]) =>
+      rows.map((s) => ({ capturedAt: s.capturedAt, value: s.value }));
+
+    return {
+      ccuHistory: map(ccu),
+      reviewHistory: map(reviews),
+      followersHistory: map(followers),
+      psRatingsHistory: map(psR),
+      xboxRatingsHistory: map(xboxR),
+      switchRatingsHistory: map(switchR),
+      prices,
+      signals,
+    };
+  }
+
+  /**
    * Collapse the achievement_snapshot rows for a game into one row per
    * (platform, source). For each group we keep the *latest* capture
    * (max capturedAt) and reduce its individual achievements to: how many
@@ -787,6 +1029,22 @@ export class AdminService {
    * and igdbId. When name changes, the slug is regenerated and de-duplicated
    * against existing games (collisions get a numeric suffix).
    */
+  /**
+   * Include/exclude a game from the reference corpus (matcher anchors). Excluded
+   * games are skipped by `MatcherService.loadCorpus`, so they no longer skew the
+   * derived reference vectors — used for titles with sparse/unreliable data.
+   */
+  async setReferenceExclusion(
+    id: string,
+    excluded: boolean,
+  ): Promise<{ id: string; excludedFromReference: boolean }> {
+    const game = await this.games.findOne({ where: { id } });
+    if (!game) throw new NotFoundException(`Game ${id} not found`);
+    game.excludedFromReference = excluded;
+    await this.games.save(game);
+    return { id, excludedFromReference: excluded };
+  }
+
   async updateGame(id: string, input: UpdateGameInput): Promise<Game> {
     const game = await this.games.findOne({ where: { id } });
     if (!game) throw new NotFoundException(`Game ${id} not found`);

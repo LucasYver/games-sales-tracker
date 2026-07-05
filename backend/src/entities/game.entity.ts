@@ -130,6 +130,12 @@ export class Game {
   @Column({ type: 'boolean', default: false })
   liveService: boolean;
 
+  // When true, this game is never used as a reference anchor by the matcher
+  // (excluded from `loadCorpus`). Set manually in the admin for titles whose
+  // data is too sparse/unreliable and would skew the derived reference vectors.
+  @Column({ type: 'boolean', default: false })
+  excludedFromReference: boolean;
+
   // Per-platform Boxleiter multipliers (signal → units) derived from this
   // game's most reliable declared figure for each platform. When set, they
   // replace the generic default ranges so per-platform estimates are

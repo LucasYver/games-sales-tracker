@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { signOut } from './actions';
 import { getAdminToken } from '@/lib/admin';
+import { ThemeToggle } from './_components/ThemeToggle';
 import '../globals.css';
 
 const sans = Inter({
@@ -93,10 +94,16 @@ export default async function AdminLayout({
   return (
     <html
       lang="en"
-      className={`${sans.variable} ${mono.variable} h-full antialiased`}
+      className={`${sans.variable} ${mono.variable} admin-scope bg-background h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="bg-background flex min-h-full">
+        <script
+          // Set the theme class before paint to avoid a flash of the wrong theme.
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme:dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}`,
+          }}
+        />
         {token ? (
           <>
             <aside className="bg-card border-border hidden w-60 shrink-0 flex-col border-r p-4 md:flex">
@@ -122,6 +129,7 @@ export default async function AdminLayout({
                 ))}
               </nav>
               <Separator className="my-4" />
+              <ThemeToggle />
               <form action={signOut}>
                 <Button
                   variant="ghost"

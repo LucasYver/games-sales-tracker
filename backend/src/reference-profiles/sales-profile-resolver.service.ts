@@ -196,6 +196,16 @@ export class SalesProfileResolverService {
 
     return overlay(match);
   }
+
+  /**
+   * Overlay an ALREADY-computed match into the resolved profile — lets callers
+   * that already ran `findNeighbours` (e.g. the admin matcher inspector) reuse
+   * it instead of running the matcher a second time.
+   */
+  resolveFromMatch(match: MatchResult): ResolvedGenreProfile | null {
+    if (match.neighboursUsed === 0) return null;
+    return overlay(match);
+  }
 }
 
 /**
