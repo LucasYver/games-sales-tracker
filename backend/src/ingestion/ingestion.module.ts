@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   AchievementSnapshot,
   Game,
+  GamePlatformReleaseDate,
   GameSource,
   Milestone,
   PriceSnapshot,
@@ -38,6 +39,7 @@ import { GamesPopularityClient } from './games-popularity.client';
       Milestone,
       ProcessedArticle,
       AchievementSnapshot,
+      GamePlatformReleaseDate,
     ]),
     EstimationModule,
     GamesModule,

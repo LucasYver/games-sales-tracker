@@ -302,6 +302,15 @@ function OverviewTab({ s }: { s: AdminGamePageSummary }) {
                 <span className="text-muted-foreground"> · iter {s.iterationNumber}</span>
               )}
             </Meta>
+            {s.platformReleaseDates.length > 0 && (
+              <Meta label="Per platform">
+                <span className="tabular-nums">
+                  {s.platformReleaseDates
+                    .map((r) => `${r.platform} ${fmtDate(r.releaseDate)}`)
+                    .join(' · ')}
+                </span>
+              </Meta>
+            )}
             {s.franchiseSlug && <Meta label="Franchise">{s.franchiseSlug}</Meta>}
             <Meta label="Genres">
               <ChipSet items={s.genres} />
@@ -737,7 +746,10 @@ async function ChartsTab({
         </ChartCard>
         {has('PLAYSTATION') && c.psRatingsHistory.length > 0 && (
           <ChartCard title="PlayStation ratings">
-            <ReviewHistoryChart reviewHistory={c.psRatingsHistory} />
+            <ReviewHistoryChart
+              reviewHistory={c.psRatingsHistory}
+              syntheticHistory={c.psRatingsSyntheticHistory}
+            />
           </ChartCard>
         )}
         {has('XBOX') && c.xboxRatingsHistory.length > 0 && (

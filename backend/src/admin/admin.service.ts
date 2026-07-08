@@ -173,6 +173,11 @@ export interface AdminGameDetail extends AdminGameSummary {
   prices: PriceSnapshot[];
   achievementSnapshots: AdminAchievementSummary[];
   estimateSnapshots: AdminEstimateSnapshot[];
+  // IGDB `release_dates` broken out per platform, e.g. a PlayStation launch
+  // a year ahead of the PC port. Empty when IGDB had no breakdown for this
+  // game; `releaseDate` above (earliest across all platforms) is then the
+  // only known date.
+  platformReleaseDates: { platform: Platform; releaseDate: Date }[];
 }
 
 export interface PaginatedAdmin<T> {
@@ -246,6 +251,8 @@ export interface AdminGameSummary2 {
   milestones: Milestone[];
   milestonesCount: number;
   estimatesCount: number;
+  // See `AdminGameDetail.platformReleaseDates`.
+  platformReleaseDates: { platform: Platform; releaseDate: Date }[];
 }
 
 export interface AdminGameCharts {
@@ -255,6 +262,9 @@ export interface AdminGameCharts {
   // Console store-rating series (cumulative counts). Only rendered per-platform
   // and only when the game has data, so a PC-only game shows none.
   psRatingsHistory: { capturedAt: Date; value: number }[];
+  // Reconstructed (synthetic) PS ratings filling the pre-measurement gap —
+  // rendered as a distinct dashed overlay, never mixed with the real series.
+  psRatingsSyntheticHistory: { capturedAt: Date; value: number }[];
   xboxRatingsHistory: { capturedAt: Date; value: number }[];
   switchRatingsHistory: { capturedAt: Date; value: number }[];
   prices: PriceSnapshot[];
@@ -655,6 +665,7 @@ export class AdminService {
         milestones: true,
         estimates: true,
         publisherRecord: true,
+        platformReleaseDates: true,
       },
     });
     if (!game) throw new NotFoundException(`Game ${id} not found`);
@@ -794,6 +805,10 @@ export class AdminService {
       prices,
       achievementSnapshots,
       estimateSnapshots,
+      platformReleaseDates: game.platformReleaseDates.map((r) => ({
+        platform: r.platform,
+        releaseDate: r.releaseDate,
+      })),
     };
   }
 
@@ -805,38 +820,49 @@ export class AdminService {
    * metric.
    */
   async getGameSummary(id: string): Promise<AdminGameSummary2> {
-    const [game, milestones, rank, latestSignals, latestSnap, estimatesCount, peakRow] =
-      await Promise.all([
-        this.games.findOne({
-          where: { id },
-          relations: { publisherRecord: true, sources: true },
-        }),
-        this.milestones.find({
-          where: { gameId: id, rejectedAt: IsNull() },
-          order: { reportedAt: 'DESC' },
-        }),
-        this.gameRanks.findOne({ where: { gameId: id } }),
-        this.signals.query(
-          `SELECT DISTINCT ON (metric) metric, value, "capturedAt"
+    const [
+      game,
+      milestones,
+      rank,
+      latestSignals,
+      latestSnap,
+      estimatesCount,
+      peakRow,
+    ] = await Promise.all([
+      this.games.findOne({
+        where: { id },
+        relations: {
+          publisherRecord: true,
+          sources: true,
+          platformReleaseDates: true,
+        },
+      }),
+      this.milestones.find({
+        where: { gameId: id, rejectedAt: IsNull() },
+        order: { reportedAt: 'DESC' },
+      }),
+      this.gameRanks.findOne({ where: { gameId: id } }),
+      this.signals.query(
+        `SELECT DISTINCT ON (metric) metric, value, "capturedAt"
              FROM signal_snapshot
             WHERE "gameId" = $1
             ORDER BY metric, "capturedAt" DESC`,
-          [id],
-        ) as Promise<
-          Array<{ metric: SignalMetric; value: number; capturedAt: Date }>
-        >,
-        this.estimateSnapshots.findOne({
-          where: { gameId: id },
-          order: { computedAt: 'DESC' },
-        }),
-        this.estimates.count({ where: { gameId: id } }),
-        // Peak CCU is ordered by value (not date): the SteamCharts import writes
-        // a peak row dated at the historical month, so latest-by-date is wrong.
-        this.signals.findOne({
-          where: { gameId: id, metric: SignalMetric.STEAM_PEAK_CCU },
-          order: { value: 'DESC' },
-        }),
-      ]);
+        [id],
+      ) as Promise<
+        Array<{ metric: SignalMetric; value: number; capturedAt: Date }>
+      >,
+      this.estimateSnapshots.findOne({
+        where: { gameId: id },
+        order: { computedAt: 'DESC' },
+      }),
+      this.estimates.count({ where: { gameId: id } }),
+      // Peak CCU is ordered by value (not date): the SteamCharts import writes
+      // a peak row dated at the historical month, so latest-by-date is wrong.
+      this.signals.findOne({
+        where: { gameId: id, metric: SignalMetric.STEAM_PEAK_CCU },
+        order: { value: 'DESC' },
+      }),
+    ]);
     if (!game) throw new NotFoundException(`Game ${id} not found`);
 
     return {
@@ -906,6 +932,10 @@ export class AdminService {
       milestones,
       milestonesCount: milestones.length,
       estimatesCount,
+      platformReleaseDates: game.platformReleaseDates.map((r) => ({
+        platform: r.platform,
+        releaseDate: r.releaseDate,
+      })),
     };
   }
 
@@ -915,33 +945,43 @@ export class AdminService {
    * so a game with years of daily history can't return an unbounded blob.
    */
   async getGameCharts(id: string): Promise<AdminGameCharts> {
-    const series = (metric: SignalMetric) =>
+    const series = (metric: SignalMetric, synthetic = false) =>
       this.signals.find({
-        where: { gameId: id, metric },
+        where: { gameId: id, metric, synthetic },
         order: { capturedAt: 'ASC' },
         select: { capturedAt: true, value: true },
         take: 5000,
       });
 
-    const [ccu, reviews, followers, psR, xboxR, switchR, prices, signals] =
-      await Promise.all([
-        series(SignalMetric.STEAM_CONCURRENT),
-        series(SignalMetric.STEAM_REVIEWS),
-        series(SignalMetric.STEAM_FOLLOWERS),
-        series(SignalMetric.PS_RATINGS),
-        series(SignalMetric.XBOX_RATINGS),
-        series(SignalMetric.SWITCH_RATINGS),
-        this.prices.find({
-          where: { gameId: id },
-          order: { capturedAt: 'ASC' },
-          take: 2000,
-        }),
-        this.signals.find({
-          where: { gameId: id },
-          order: { capturedAt: 'DESC' },
-          take: 200,
-        }),
-      ]);
+    const [
+      ccu,
+      reviews,
+      followers,
+      psR,
+      psRSynthetic,
+      xboxR,
+      switchR,
+      prices,
+      signals,
+    ] = await Promise.all([
+      series(SignalMetric.STEAM_CONCURRENT),
+      series(SignalMetric.STEAM_REVIEWS),
+      series(SignalMetric.STEAM_FOLLOWERS),
+      series(SignalMetric.PS_RATINGS),
+      series(SignalMetric.PS_RATINGS, true),
+      series(SignalMetric.XBOX_RATINGS),
+      series(SignalMetric.SWITCH_RATINGS),
+      this.prices.find({
+        where: { gameId: id },
+        order: { capturedAt: 'ASC' },
+        take: 2000,
+      }),
+      this.signals.find({
+        where: { gameId: id },
+        order: { capturedAt: 'DESC' },
+        take: 200,
+      }),
+    ]);
 
     const map = (rows: { capturedAt: Date; value: number }[]) =>
       rows.map((s) => ({ capturedAt: s.capturedAt, value: s.value }));
@@ -951,6 +991,7 @@ export class AdminService {
       reviewHistory: map(reviews),
       followersHistory: map(followers),
       psRatingsHistory: map(psR),
+      psRatingsSyntheticHistory: map(psRSynthetic),
       xboxRatingsHistory: map(xboxR),
       switchRatingsHistory: map(switchR),
       prices,

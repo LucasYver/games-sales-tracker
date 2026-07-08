@@ -25,6 +25,11 @@ export interface IgdbGame {
   publisher: string | null;
   genres: string[];
   totalRatingCount: number;
+  // Earliest launch date per our Platform bucket, e.g. a PlayStation launch
+  // a year ahead of the PC port. Distinct from `releaseDate` above (the
+  // earliest date across ALL platforms). Empty when IGDB has no
+  // `release_dates` breakdown for this game.
+  platformReleaseDates: Map<Platform, Date>;
 }
 
 interface CachedToken {
@@ -41,6 +46,9 @@ const IGDB_FIELDS = [
   'total_rating_count',
   'cover.image_id',
   'platforms.name',
+  'release_dates.date',
+  'release_dates.platform.name',
+  'release_dates.status.name',
   'external_games.external_game_source',
   'external_games.uid',
   'involved_companies.company.name',
@@ -66,6 +74,14 @@ const PLATFORM_TOKENS: ReadonlyArray<[string, Platform]> = [
   ['xbox', Platform.XBOX],
 ];
 
+// IGDB `release_dates.status.name` values that are never a real release —
+// skipped outright when bucketing per-platform dates.
+const RELEASE_STATUS_EXCLUDE = new Set(['Cancelled', 'Rumored', 'Delisted']);
+
+// Pre-release statuses: used only when a platform has no "Full Release" (or
+// unstatused, which IGDB treats the same) entry to prefer instead.
+const RELEASE_STATUS_PRERELEASE = new Set(['Early Access', 'Alpha', 'Beta']);
+
 @Injectable()
 export class IgdbClient {
   private readonly logger = new Logger(IgdbClient.name);
@@ -76,7 +92,7 @@ export class IgdbClient {
   isConfigured(): boolean {
     return Boolean(
       this.config.get<string>('IGDB_CLIENT_ID') &&
-        this.config.get<string>('IGDB_CLIENT_SECRET'),
+      this.config.get<string>('IGDB_CLIENT_SECRET'),
     );
   }
 
@@ -356,6 +372,11 @@ export class IgdbClient {
       total_rating_count?: number;
       cover?: { image_id?: string };
       platforms?: { name?: string }[];
+      release_dates?: {
+        date?: number;
+        platform?: { name?: string };
+        status?: { name?: string };
+      }[];
       external_games?: { external_game_source?: number; uid?: string }[];
       involved_companies?: {
         company?: { name?: string };
@@ -372,6 +393,7 @@ export class IgdbClient {
     );
 
     const platforms = this.mapPlatforms(g.platforms);
+    const platformReleaseDates = this.mapReleaseDates(g.release_dates);
 
     const companies = g.involved_companies ?? [];
     const developer =
@@ -402,25 +424,73 @@ export class IgdbClient {
       genres,
       totalRatingCount:
         typeof g.total_rating_count === 'number' ? g.total_rating_count : 0,
+      platformReleaseDates,
     };
   }
 
-  private mapPlatforms(
-    raw: { name?: string }[] | undefined,
-  ): Platform[] {
+  private mapPlatforms(raw: { name?: string }[] | undefined): Platform[] {
     if (!raw || raw.length === 0) return [];
     const set = new Set<Platform>();
     for (const entry of raw) {
-      const name = entry.name?.toLowerCase();
-      if (!name) continue;
-      for (const [token, platform] of PLATFORM_TOKENS) {
-        if (name.includes(token)) {
-          set.add(platform);
-          break;
-        }
-      }
+      const platform = this.resolvePlatform(entry.name);
+      if (platform) set.add(platform);
     }
     return [...set];
+  }
+
+  // Buckets IGDB's per-release-date-entry platform (e.g. "PS4", "PS5") into
+  // our coarser Platform enum. Within a bucket, prefers a "Full Release" (or
+  // unstatused, which IGDB uses for the same thing) entry over an Early
+  // Access / Alpha / Beta one — e.g. Baldur's Gate 3 has a PC "Early Access"
+  // row dated 2020-10-06 *and* a PC "Full Release" row dated 2023-08-03; we
+  // want the latter, matching what a console "Full Release" date represents.
+  // Only falls back to a pre-release entry when no full release exists yet.
+  // Cancelled / rumored / delisted entries are never real releases and are
+  // skipped outright. Ties within a tier keep the earliest date (regions).
+  private mapReleaseDates(
+    raw:
+      | {
+          date?: number;
+          platform?: { name?: string };
+          status?: { name?: string };
+        }[]
+      | undefined,
+  ): Map<Platform, Date> {
+    const best = new Map<Platform, { date: Date; tier: number }>();
+    if (!raw || raw.length === 0) return new Map();
+
+    for (const entry of raw) {
+      if (!entry.date) continue;
+      const platform = this.resolvePlatform(entry.platform?.name);
+      if (!platform) continue;
+
+      const status = entry.status?.name;
+      if (status && RELEASE_STATUS_EXCLUDE.has(status)) continue;
+      const tier = status && RELEASE_STATUS_PRERELEASE.has(status) ? 1 : 0;
+
+      const date = new Date(entry.date * 1000);
+      const existing = best.get(platform);
+      if (
+        !existing ||
+        tier < existing.tier ||
+        (tier === existing.tier && date < existing.date)
+      ) {
+        best.set(platform, { date, tier });
+      }
+    }
+
+    const result = new Map<Platform, Date>();
+    for (const [platform, { date }] of best) result.set(platform, date);
+    return result;
+  }
+
+  private resolvePlatform(name: string | undefined): Platform | null {
+    const lower = name?.toLowerCase();
+    if (!lower) return null;
+    for (const [token, platform] of PLATFORM_TOKENS) {
+      if (lower.includes(token)) return platform;
+    }
+    return null;
   }
 
   private normalize(value: string): string {

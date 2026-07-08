@@ -6,10 +6,18 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, In, IsNull, Not, Repository } from 'typeorm';
+import {
+  Between,
+  In,
+  IsNull,
+  MoreThanOrEqual,
+  Not,
+  Repository,
+} from 'typeorm';
 import {
   AchievementSnapshot,
   Game,
+  GamePlatformReleaseDate,
   GameSource,
   Milestone,
   Platform,
@@ -55,6 +63,32 @@ const STORE_SOURCE_BY_PLATFORM: Partial<Record<Platform, SourceType>> = {
   [Platform.PLAYSTATION]: SourceType.PS_STORE,
   [Platform.XBOX]: SourceType.XBOX_STORE,
 };
+
+// A game whose only CCU/reviews snapshots are newer than this cutoff has no
+// real backfilled history (just a few daily-cron points) and is treated as
+// "missing" by the incremental Steam/PS backfill.
+const BACKFILL_HISTORY_STALE_DAYS = 7;
+
+// Per-metric counts for the incremental Steam/PS backfill.
+export interface BackfillTaskCounts {
+  ccu: number;
+  reviews: number;
+  followers: number;
+  ratings: number;
+}
+
+// One game to (partially) backfill: only the flags that are true still need
+// their history fetched.
+interface BackfillWorkItem {
+  gameId: string;
+  name: string;
+  platforms: Platform[];
+  appId: number | null;
+  ccu: boolean;
+  reviews: boolean;
+  followers: boolean;
+  ratings: boolean;
+}
 
 // Default `confidenceScore` (0–100) assigned to milestones when no
 // TrustedSource weight is available (manual inputs, Wikipedia, or unknown
@@ -178,6 +212,10 @@ function parseIgdbSlug(rawUrl: string): string | null {
 export class IngestionService {
   private readonly logger = new Logger(IngestionService.name);
 
+  // Guards the catalog-wide incremental Steam/PS backfill so a second click
+  // (or cron overlap) can't launch a concurrent run.
+  private backfillAllRunning = false;
+
   constructor(
     @InjectRepository(Game)
     private readonly games: Repository<Game>,
@@ -193,6 +231,8 @@ export class IngestionService {
     private readonly processedArticles: Repository<ProcessedArticle>,
     @InjectRepository(AchievementSnapshot)
     private readonly achievements: Repository<AchievementSnapshot>,
+    @InjectRepository(GamePlatformReleaseDate)
+    private readonly platformReleaseDates: Repository<GamePlatformReleaseDate>,
     private readonly estimation: EstimationService,
     private readonly gamesService: GamesService,
     private readonly steam: SteamClient,
@@ -451,6 +491,10 @@ export class IngestionService {
         await this.games.restore(existing.id);
         existing.deletedAt = null;
       }
+      await this.syncPlatformReleaseDates(
+        existing.id,
+        candidate.platformReleaseDates,
+      );
       return existing;
     }
 
@@ -471,6 +515,10 @@ export class IngestionService {
     });
     const game = await this.games.save(entity);
     await this.publishers.resolveAndLink(game.id, game.publisher);
+    await this.syncPlatformReleaseDates(
+      game.id,
+      candidate.platformReleaseDates,
+    );
     return game;
   }
 
@@ -2124,6 +2172,250 @@ export class IngestionService {
   }
 
   /**
+   * Kick off the catalog-wide incremental Steam/PS backfill in the background
+   * and return immediately. Fetching CCU (SteamCharts), reviews (histogram),
+   * followers and console store ratings for the whole catalog is far too slow
+   * to await inside a request, so the run is fire-and-forget: progress lands in
+   * the server logs and a re-launch is refused while one is in flight.
+   *
+   * The worklist is built synchronously (a handful of aggregate queries) so the
+   * caller still learns how many games / tasks were queued.
+   */
+  async startBackfillMissing(
+    options: { createdAfter?: Date } = {},
+  ): Promise<{
+    started: boolean;
+    alreadyRunning: boolean;
+    games: number;
+    tasks: BackfillTaskCounts;
+  }> {
+    if (this.backfillAllRunning) {
+      return {
+        started: false,
+        alreadyRunning: true,
+        games: 0,
+        tasks: { ccu: 0, reviews: 0, followers: 0, ratings: 0 },
+      };
+    }
+
+    const worklist = await this.buildBackfillWorklist(options);
+    const tasks = this.countBackfillTasks(worklist);
+    if (worklist.length === 0) {
+      return { started: false, alreadyRunning: false, games: 0, tasks };
+    }
+
+    this.backfillAllRunning = true;
+    void this.processBackfillWorklist(worklist)
+      .catch((error) =>
+        this.logger.error(`[backfill-all] fatal: ${String(error)}`),
+      )
+      .finally(() => {
+        this.backfillAllRunning = false;
+      });
+
+    return { started: true, alreadyRunning: false, games: worklist.length, tasks };
+  }
+
+  /**
+   * Synchronous variant used by the one-off script: builds the worklist and
+   * processes it to completion, returning the run summary. Not guarded by the
+   * in-flight flag — the script owns its own process.
+   */
+  async runBackfillMissing(
+    options: { createdAfter?: Date } = {},
+  ): Promise<{ games: number; tasks: BackfillTaskCounts }> {
+    const worklist = await this.buildBackfillWorklist(options);
+    const tasks = this.countBackfillTasks(worklist);
+    if (worklist.length > 0) {
+      await this.processBackfillWorklist(worklist);
+    }
+    return { games: worklist.length, tasks };
+  }
+
+  private countBackfillTasks(worklist: BackfillWorkItem[]): BackfillTaskCounts {
+    return worklist.reduce<BackfillTaskCounts>(
+      (acc, item) => ({
+        ccu: acc.ccu + (item.ccu ? 1 : 0),
+        reviews: acc.reviews + (item.reviews ? 1 : 0),
+        followers: acc.followers + (item.followers ? 1 : 0),
+        ratings: acc.ratings + (item.ratings ? 1 : 0),
+      }),
+      { ccu: 0, reviews: 0, followers: 0, ratings: 0 },
+    );
+  }
+
+  /**
+   * Compute which non-free games still miss each backfillable series. A Steam
+   * link (appId) gates CCU/reviews/followers; a console platform gates store
+   * ratings. "Missing history" for CCU/reviews means no snapshot older than
+   * {@link BACKFILL_HISTORY_STALE_DAYS} (so daily-cron-only games still count
+   * as needing the historical backfill); followers and ratings just need any
+   * snapshot to be considered done.
+   */
+  private async buildBackfillWorklist(
+    options: { createdAfter?: Date } = {},
+  ): Promise<BackfillWorkItem[]> {
+    const staleCutoff = new Date(
+      Date.now() - BACKFILL_HISTORY_STALE_DAYS * 24 * 3600 * 1000,
+    );
+
+    const games = await this.games.find({
+      where: {
+        deletedAt: IsNull(),
+        isFree: false,
+        ...(options.createdAfter
+          ? { createdAt: MoreThanOrEqual(options.createdAfter) }
+          : {}),
+      },
+      select: { id: true, name: true, platforms: true },
+    });
+
+    const steamRows = await this.gameSources.find({
+      where: { source: SourceType.STEAM },
+      select: { gameId: true, externalId: true },
+    });
+    const appIdByGame = new Map<string, number>();
+    for (const row of steamRows) {
+      const appId = Number(row.externalId);
+      if (Number.isFinite(appId)) appIdByGame.set(row.gameId, appId);
+    }
+
+    const idSet = async (sql: string, params: unknown[]): Promise<Set<string>> =>
+      new Set(
+        (await this.signals.query(sql, params)).map(
+          (r: { gameId: string }) => r.gameId,
+        ),
+      );
+
+    const [ccuDone, reviewsDone, followersDone, ratingsDone] = await Promise.all(
+      [
+        idSet(
+          `SELECT DISTINCT "gameId" FROM signal_snapshot WHERE metric = $1 AND "capturedAt" < $2`,
+          [SignalMetric.STEAM_CONCURRENT, staleCutoff.toISOString()],
+        ),
+        idSet(
+          `SELECT DISTINCT "gameId" FROM signal_snapshot WHERE metric = $1 AND "capturedAt" < $2`,
+          [SignalMetric.STEAM_REVIEWS, staleCutoff.toISOString()],
+        ),
+        idSet(
+          `SELECT DISTINCT "gameId" FROM signal_snapshot WHERE metric = $1`,
+          [SignalMetric.STEAM_FOLLOWERS],
+        ),
+        idSet(
+          `SELECT DISTINCT "gameId" FROM signal_snapshot WHERE metric IN ($1, $2, $3) AND synthetic = false`,
+          [
+            SignalMetric.PS_RATINGS,
+            SignalMetric.XBOX_RATINGS,
+            SignalMetric.SWITCH_RATINGS,
+          ],
+        ),
+      ],
+    );
+
+    const items: BackfillWorkItem[] = [];
+    for (const game of games) {
+      const appId = appIdByGame.get(game.id) ?? null;
+      const hasSteam = appId !== null;
+      const ccu = hasSteam && !ccuDone.has(game.id);
+      const reviews = hasSteam && !reviewsDone.has(game.id);
+      const followers = hasSteam && !followersDone.has(game.id);
+      const ratings =
+        this.hasConsolePlatform(game.platforms) && !ratingsDone.has(game.id);
+      if (ccu || reviews || followers || ratings) {
+        items.push({
+          gameId: game.id,
+          name: game.name,
+          platforms: game.platforms,
+          appId,
+          ccu,
+          reviews,
+          followers,
+          ratings,
+        });
+      }
+    }
+    return items;
+  }
+
+  /**
+   * Run each game's outstanding backfills sequentially, best-effort: one failing
+   * source (or game) is logged and never aborts the run.
+   */
+  private async processBackfillWorklist(
+    worklist: BackfillWorkItem[],
+  ): Promise<void> {
+    const startedAt = Date.now();
+    const done: BackfillTaskCounts = {
+      ccu: 0,
+      reviews: 0,
+      followers: 0,
+      ratings: 0,
+    };
+    const failed: BackfillTaskCounts = {
+      ccu: 0,
+      reviews: 0,
+      followers: 0,
+      ratings: 0,
+    };
+    this.logger.log(
+      `[backfill-all] starting: ${worklist.length} game(s) queued`,
+    );
+
+    for (const item of worklist) {
+      if (item.ccu) {
+        try {
+          await this.backfillCcuFromSteamCharts(item.gameId);
+          done.ccu += 1;
+        } catch (error) {
+          failed.ccu += 1;
+          this.logger.warn(
+            `[backfill-all] ccu failed for "${item.name}": ${String(error)}`,
+          );
+        }
+      }
+      if (item.reviews) {
+        try {
+          await this.backfillReviewsFromHistogram(item.gameId);
+          done.reviews += 1;
+        } catch (error) {
+          failed.reviews += 1;
+          this.logger.warn(
+            `[backfill-all] reviews failed for "${item.name}": ${String(error)}`,
+          );
+        }
+      }
+      if (item.followers) {
+        try {
+          const result = await this.syncFollowersFromApi(item.gameId, {
+            fullHistory: true,
+            appId: item.appId ?? undefined,
+            throwIfMissing: false,
+          });
+          if (result.imported > 0) done.followers += 1;
+        } catch (error) {
+          failed.followers += 1;
+          this.logger.warn(
+            `[backfill-all] followers failed for "${item.name}": ${String(error)}`,
+          );
+        }
+      }
+      if (item.ratings) {
+        // scrapeStoreRatings never throws (best-effort, logs internally).
+        await this.scrapeStoreRatings(item.gameId, item.name, item.platforms);
+        done.ratings += 1;
+      }
+    }
+
+    this.logger.log(
+      `[backfill-all] done in ${Date.now() - startedAt}ms — ` +
+        `ccu ${done.ccu}/${done.ccu + failed.ccu}, ` +
+        `reviews ${done.reviews}/${done.reviews + failed.reviews}, ` +
+        `followers ${done.followers}/${done.followers + failed.followers}, ` +
+        `ratings ${done.ratings}/${done.ratings + failed.ratings}`,
+    );
+  }
+
+  /**
    * Collapse weekly/daily histogram buckets into one entry per calendar month
    * by summing their positive/negative counts. The returned array is sorted
    * ascending with `day` set to the first of each month (`YYYY-MM-01`).
@@ -2814,6 +3106,55 @@ export class IngestionService {
   }
 
   /**
+   * Rewrites this game's per-platform IGDB release dates wholesale (drops
+   * rows for platforms no longer present, upserts the rest). A no-op when
+   * IGDB has no `release_dates` breakdown for this record — a transient
+   * miss (or a Steam-only ingest with no IGDB match) must never wipe
+   * previously-known dates.
+   */
+  private async syncPlatformReleaseDates(
+    gameId: string,
+    platformReleaseDates: Map<Platform, Date> | undefined,
+  ): Promise<void> {
+    if (!platformReleaseDates || platformReleaseDates.size === 0) return;
+
+    const platforms = [...platformReleaseDates.keys()];
+    await this.platformReleaseDates.delete({
+      gameId,
+      platform: Not(In(platforms)),
+    });
+    await this.platformReleaseDates.upsert(
+      platforms.map((platform) => ({
+        gameId,
+        platform,
+        releaseDate: platformReleaseDates.get(platform)!,
+      })),
+      ['gameId', 'platform'],
+    );
+  }
+
+  /**
+   * Re-fetches this game's IGDB record and rewrites its per-platform release
+   * dates. Used by the one-off catalog-wide backfill
+   * (`backfill:platform-release-dates`) for games ingested before this
+   * feature existed.
+   */
+  async refreshPlatformReleaseDates(
+    gameId: string,
+  ): Promise<'ok' | 'no-igdb-id' | 'no-release-dates'> {
+    const game = await this.games.findOne({ where: { id: gameId } });
+    if (!game?.igdbId) return 'no-igdb-id';
+
+    const record = await this.igdb.findById(game.igdbId);
+    if (!record || record.platformReleaseDates.size === 0) {
+      return 'no-release-dates';
+    }
+
+    await this.syncPlatformReleaseDates(gameId, record.platformReleaseDates);
+    return 'ok';
+  }
+
+  /**
    * Search IGDB and upsert the resulting games. When a Steam app id is linked,
    * trigger a full Steam ingestion to attach live signals.
    */
@@ -2844,6 +3185,7 @@ export class IngestionService {
         if (g.genres.length > 0) existing.genres = g.genres;
         const saved = await this.games.save(existing);
         await this.publishers.resolveAndLink(saved.id, saved.publisher);
+        await this.syncPlatformReleaseDates(saved.id, g.platformReleaseDates);
       } else {
         const entity = this.games.create({
           igdbId: g.igdbId,
@@ -2859,6 +3201,7 @@ export class IngestionService {
         });
         const saved = await this.games.save(entity);
         await this.publishers.resolveAndLink(saved.id, saved.publisher);
+        await this.syncPlatformReleaseDates(saved.id, g.platformReleaseDates);
       }
 
       if (g.steamAppId) {
@@ -2965,6 +3308,7 @@ export class IngestionService {
       this.applyDerivedFeatures(game);
       const saved = await this.games.save(game);
       await this.publishers.resolveAndLink(saved.id, saved.publisher);
+      await this.syncPlatformReleaseDates(saved.id, igdb?.platformReleaseDates);
       return saved;
     }
 
@@ -3023,6 +3367,10 @@ export class IngestionService {
         this.applyDerivedFeatures(existingByIgdb);
         const saved = await this.games.save(existingByIgdb);
         await this.publishers.resolveAndLink(saved.id, saved.publisher);
+        await this.syncPlatformReleaseDates(
+          saved.id,
+          igdb.platformReleaseDates,
+        );
         return saved;
       }
     }
@@ -3064,6 +3412,7 @@ export class IngestionService {
     );
 
     await this.publishers.resolveAndLink(game.id, game.publisher);
+    await this.syncPlatformReleaseDates(game.id, igdb?.platformReleaseDates);
     return game;
   }
 

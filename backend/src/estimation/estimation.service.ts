@@ -11,6 +11,7 @@ import {
   SalesSource,
   SignalMetric,
   SignalSnapshot,
+  SourceType,
 } from '../entities';
 import {
   AGGREGATED_METHOD_CODE,
@@ -18,6 +19,10 @@ import {
 } from './estimation-method.service';
 import { type ResolvedGenreProfile } from '../reference-profiles/sales-profile-resolver.service';
 import { SalesProfileResolverService } from '../reference-profiles/sales-profile-resolver.service';
+import {
+  reconstructPsCurveMonthly,
+  reconstructPsRatingAt,
+} from './ps-curve-reconstruction';
 import {
   CALIBRATED_MULTIPLIER_SPREAD,
   FIRST_WEEK_BUCKET_LARGE_YEAR1_RATIO,
@@ -48,6 +53,7 @@ import {
   firstWeekProjectionMultiplier,
   genreProjectionMultiplier,
 } from '../games/sales-modeling.constants';
+import { platformReleaseDate } from '../games/platform-release-date';
 
 /**
  * Steam-share range for a game, falling back to the neutral default when
@@ -331,7 +337,7 @@ export class EstimationService {
   ): Promise<EstimateResult[]> {
     const game = await this.games.findOne({
       where: { id: gameId },
-      relations: { publisherRecord: true },
+      relations: { publisherRecord: true, platformReleaseDates: true },
     });
     if (!game || game.isFree) return [];
 
@@ -846,6 +852,8 @@ export class EstimationService {
       where: {
         gameId: game.id,
         metric: cfg.signalMetric,
+        // Reconstructed rows never feed the estimate — only real measurements.
+        synthetic: false,
         ...(asOf ? { capturedAt: LessThanOrEqual(asOf) } : {}),
       },
       order: { capturedAt: 'DESC' },
@@ -925,7 +933,8 @@ export class EstimationService {
    * Steam peak CCU, then project to "today" via a degressive curve
    *
    * Eligibility:
-   *   - Game has a `releaseDate` and is past day 1.
+   *   - Game has a PC release date (per-platform if known, else the
+   *     game-wide `releaseDate`) and is past day 1.
    *   - We have at least one `STEAM_PEAK_CCU` snapshot (ordered by
    *     `value DESC` because the historical-import path writes peaks
    *     with the SteamCharts month of the peak as `capturedAt`).
@@ -939,10 +948,11 @@ export class EstimationService {
     asOf?: Date,
     trace?: EstimateTrace,
   ): Promise<EstimateResult | null> {
-    if (!game.releaseDate) return null;
+    const pcReleaseDate = platformReleaseDate(game, Platform.PC);
+    if (!pcReleaseDate) return null;
 
     const referenceDate = asOf ?? new Date();
-    const age = ageInDays(game.releaseDate, referenceDate);
+    const age = ageInDays(pcReleaseDate, referenceDate);
     if (age <= 0) return null;
 
     const steamShare = steamShareForGame(game);
@@ -959,16 +969,12 @@ export class EstimationService {
     // the same way. The window is capped at `asOf` so historical rebuilds
     // never see a future peak.
     const releaseMonthStart = new Date(
-      Date.UTC(
-        game.releaseDate.getUTCFullYear(),
-        game.releaseDate.getUTCMonth(),
-        1,
-      ),
+      Date.UTC(pcReleaseDate.getUTCFullYear(), pcReleaseDate.getUTCMonth(), 1),
     );
     const launchWindowEnd = new Date(
       Date.UTC(
-        game.releaseDate.getUTCFullYear(),
-        game.releaseDate.getUTCMonth() + LAUNCH_PEAK_CCU_WINDOW_MONTHS,
+        pcReleaseDate.getUTCFullYear(),
+        pcReleaseDate.getUTCMonth() + LAUNCH_PEAK_CCU_WINDOW_MONTHS,
         1,
       ),
     );
@@ -1189,32 +1195,58 @@ export class EstimationService {
       cfg: PlatformConfig;
       signalValue: number;
       proxy: number;
+      reconstructed: boolean;
     };
+    const windowMs = CALIBRATION_WINDOW_DAYS * 24 * 3600 * 1000;
     const slots: Slot[] = [];
     for (const cfg of this.platforms) {
+      // Only real measurements anchor a slot; synthetic rows never do.
       const snapshots = await this.signals.find({
-        where: { gameId, metric: cfg.signalMetric },
+        where: { gameId, metric: cfg.signalMetric, synthetic: false },
       });
-      if (snapshots.length === 0) continue;
-      const closest = snapshots.reduce((acc, r) =>
-        Math.abs(r.capturedAt.getTime() - target) <
-        Math.abs(acc.capturedAt.getTime() - target)
-          ? r
-          : acc,
-      );
-      if (
-        Math.abs(closest.capturedAt.getTime() - target) >
-        CALIBRATION_WINDOW_DAYS * 24 * 3600 * 1000
-      ) {
-        continue;
+      let signalValue: number | null = null;
+      let reconstructed = false;
+      if (snapshots.length > 0) {
+        const closest = snapshots.reduce((acc, r) =>
+          Math.abs(r.capturedAt.getTime() - target) <
+          Math.abs(acc.capturedAt.getTime() - target)
+            ? r
+            : acc,
+        );
+        if (
+          Math.abs(closest.capturedAt.getTime() - target) <= windowMs &&
+          closest.value > 0
+        ) {
+          signalValue = closest.value;
+        }
       }
-      if (closest.value <= 0) continue;
+
+      // PlayStation fallback: when no real rating exists near the milestone
+      // date (the common case for pre-2024 figures), reconstruct one from the
+      // game's Steam-review curve shape instead of skipping the platform.
+      if (
+        signalValue === null &&
+        cfg.platform === Platform.PLAYSTATION &&
+        best.reportedAt
+      ) {
+        const rebuilt = await this.reconstructPsRatingValueAt(
+          gameId,
+          best.reportedAt,
+        );
+        if (rebuilt !== null && rebuilt > 0) {
+          signalValue = rebuilt;
+          reconstructed = true;
+        }
+      }
+
+      if (signalValue === null) continue;
 
       const defaultMid = (cfg.defaultLow + cfg.defaultHigh) / 2;
       slots.push({
         cfg,
-        signalValue: closest.value,
-        proxy: closest.value * defaultMid,
+        signalValue,
+        proxy: signalValue * defaultMid,
+        reconstructed,
       });
     }
 
@@ -1238,12 +1270,162 @@ export class EstimationService {
       }
 
       await slot.cfg.write(gameId, multiplier, best.source);
+      if (slot.cfg.platform === Platform.PLAYSTATION) {
+        await this.games.update(gameId, {
+          psCalibrationReconstructed: slot.reconstructed,
+        });
+      }
       this.logger.log(
         `[calibration:global-split] ${gameId} ${slot.cfg.platform}: ` +
           `share=${(share * 100).toFixed(1)}% multiplier=${multiplier.toFixed(2)} ` +
-          `(from ${best.source} ${best.units.toLocaleString()} units)`,
+          `(from ${best.source} ${best.units.toLocaleString()} units` +
+          `${slot.reconstructed ? ', PS signal reconstructed' : ''})`,
       );
     }
+  }
+
+  /**
+   * Reconstruct the PS rating count at `target` from the game's latest real PS
+   * anchor and its Steam-review curve shape (see `ps-curve-reconstruction.ts`).
+   * Returns `null` when any guardrail trips, so the caller abstains rather than
+   * calibrate on a fabricated number.
+   */
+  private async reconstructPsRatingValueAt(
+    gameId: string,
+    target: Date,
+  ): Promise<number | null> {
+    const anchor = await this.signals.findOne({
+      where: {
+        gameId,
+        metric: SignalMetric.PS_RATINGS,
+        synthetic: false,
+      },
+      order: { capturedAt: 'DESC' },
+    });
+    if (!anchor || anchor.value <= 0) return null;
+
+    const steamRows = await this.signals.find({
+      where: {
+        gameId,
+        metric: SignalMetric.STEAM_REVIEWS,
+        synthetic: false,
+      },
+      order: { capturedAt: 'ASC' },
+      select: { capturedAt: true, value: true },
+    });
+    if (steamRows.length === 0) return null;
+
+    const game = await this.games.findOne({
+      where: { id: gameId },
+      relations: { platformReleaseDates: true },
+    });
+    const psReleaseDate = game
+      ? platformReleaseDate(game, Platform.PLAYSTATION)
+      : null;
+
+    const outcome = reconstructPsRatingAt(target, {
+      anchor: { capturedAt: anchor.capturedAt, value: anchor.value },
+      psReleaseDate,
+      steamReviews: steamRows.map((r) => ({
+        capturedAt: r.capturedAt,
+        value: r.value,
+      })),
+    });
+    if (outcome.value === null) {
+      this.logger.debug(
+        `[calibration:ps-reconstruct] ${gameId} abstained: ${outcome.reason}`,
+      );
+      return null;
+    }
+    return outcome.value;
+  }
+
+  /**
+   * Materialise the reconstructed PS ratings curve for display: a monthly
+   * synthetic series filling the gap between the game's PS launch and its
+   * earliest REAL PS snapshot ("day one → first measurement"). Rows are
+   * written to `signal_snapshot` with `synthetic = true` so they never leak
+   * into any live read. Idempotent: drops prior synthetic PS rows first.
+   */
+  async reconstructPsCurve(gameId: string): Promise<{
+    pointsWritten: number;
+    skipped?: string;
+  }> {
+    const realPoints = await this.signals.find({
+      where: {
+        gameId,
+        metric: SignalMetric.PS_RATINGS,
+        synthetic: false,
+      },
+      order: { capturedAt: 'ASC' },
+    });
+    if (realPoints.length === 0) return { pointsWritten: 0, skipped: 'no-anchor' };
+    const earliestReal = realPoints[0];
+    const anchor = realPoints[realPoints.length - 1];
+    if (anchor.value <= 0) return { pointsWritten: 0, skipped: 'no-anchor' };
+
+    const steamRows = await this.signals.find({
+      where: {
+        gameId,
+        metric: SignalMetric.STEAM_REVIEWS,
+        synthetic: false,
+      },
+      order: { capturedAt: 'ASC' },
+      select: { capturedAt: true, value: true },
+    });
+    if (steamRows.length === 0) return { pointsWritten: 0, skipped: 'no-steam' };
+
+    const game = await this.games.findOne({
+      where: { id: gameId },
+      relations: { platformReleaseDates: true },
+    });
+    const psReleaseDate = game
+      ? platformReleaseDate(game, Platform.PLAYSTATION)
+      : null;
+
+    // Fill from PS launch (or the Steam start when no PS date) up to the day
+    // before the first real PS snapshot — we only reconstruct the unobserved
+    // early stretch, never overwrite a real point.
+    const fromDate = psReleaseDate ?? steamRows[0].capturedAt;
+    const toDate = new Date(earliestReal.capturedAt.getTime() - 24 * 3600 * 1000);
+    if (fromDate.getTime() > toDate.getTime()) {
+      return { pointsWritten: 0, skipped: 'no-gap' };
+    }
+
+    const curve = reconstructPsCurveMonthly(fromDate, toDate, {
+      anchor: { capturedAt: anchor.capturedAt, value: anchor.value },
+      psReleaseDate,
+      steamReviews: steamRows.map((r) => ({
+        capturedAt: r.capturedAt,
+        value: r.value,
+      })),
+    });
+
+    await this.signals.delete({
+      gameId,
+      metric: SignalMetric.PS_RATINGS,
+      synthetic: true,
+    });
+    if (curve.length === 0) return { pointsWritten: 0, skipped: 'abstained' };
+
+    await this.signals.save(
+      curve.map((p) =>
+        this.signals.create({
+          gameId,
+          source: SourceType.PS_STORE,
+          metric: SignalMetric.PS_RATINGS,
+          value: p.value,
+          synthetic: true,
+          capturedAt: p.capturedAt,
+        }),
+      ),
+      { chunk: 500 },
+    );
+    this.logger.log(
+      `[ps-reconstruct] ${gameId}: wrote ${curve.length} synthetic PS point(s) ` +
+        `${fromDate.toISOString().slice(0, 10)}→${toDate.toISOString().slice(0, 10)}`,
+    );
+    return { pointsWritten: curve.length };
   }
 
   /**

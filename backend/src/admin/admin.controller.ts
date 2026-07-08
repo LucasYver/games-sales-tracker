@@ -167,6 +167,12 @@ export class AdminController {
     return this.admin.setReferenceExclusion(id, Boolean(body?.excluded));
   }
 
+  @Post('games/:id/backfill-ps-reconstruction')
+  @HttpCode(200)
+  backfillPsReconstruction(@Param('id', ParseUUIDPipe) id: string) {
+    return this.estimation.reconstructPsCurve(id);
+  }
+
   @Post('games/:id/backfill-followers')
   @HttpCode(200)
   backfillFollowers(@Param('id', ParseUUIDPipe) id: string) {
@@ -300,5 +306,14 @@ export class AdminController {
   @HttpCode(200)
   syncGenresFromIgdb() {
     return this.genres.syncFromIgdb();
+  }
+
+  // Catalog-wide incremental Steam/PS backfill (CCU + reviews + followers +
+  // console store ratings). Fire-and-forget: returns immediately with the
+  // queued counts; progress is in the server logs.
+  @Post('backfill-steam-ps')
+  @HttpCode(200)
+  backfillSteamPs() {
+    return this.ingestion.startBackfillMissing();
   }
 }

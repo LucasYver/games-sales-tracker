@@ -9,6 +9,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { SteamPsBackfillButton } from './_components/SteamPsBackfillButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,11 +62,14 @@ export default async function AdminDashboard() {
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-8 px-6 py-8">
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground text-sm">
-          Health overview of the tracker.
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground text-sm">
+            Health overview of the tracker.
+          </p>
+        </div>
+        <SteamPsBackfillButton />
       </header>
 
       <section className="grid grid-cols-2 gap-4 md:grid-cols-4">

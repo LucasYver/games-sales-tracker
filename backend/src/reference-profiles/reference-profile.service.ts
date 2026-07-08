@@ -10,6 +10,7 @@ import {
   SignalMetric,
   SignalSnapshot,
 } from '../entities';
+import { platformReleaseDate } from '../games/platform-release-date';
 /**
  * Curve checkpoints (days from release) at which we sample the observed
  * cumulative-units fraction. Normalised to `a1` (= 1.0). Ordered chronologically
@@ -190,7 +191,10 @@ export class ReferenceProfileService {
    * consumers never see stale anchors.
    */
   async rebuildOne(gameId: string): Promise<ReferenceProfile | null> {
-    const game = await this.games.findOne({ where: { id: gameId } });
+    const game = await this.games.findOne({
+      where: { id: gameId },
+      relations: { platformReleaseDates: true },
+    });
     if (!game || game.isFree) {
       await this.anchors.delete({ gameId });
       return null;
@@ -212,18 +216,16 @@ export class ReferenceProfileService {
         ? rawReviewsToUnits * this.reviewRateEraFactor(anchor.observedAt)
         : null;
 
-    const curve = game.releaseDate
-      ? await this.computeCurve(gameId, game.releaseDate)
+    const pcReleaseDate = platformReleaseDate(game, Platform.PC);
+
+    const curve = pcReleaseDate
+      ? await this.computeCurve(gameId, pcReleaseDate)
       : this.emptyCurve();
 
     const platformShares = await this.computePlatformShares(game, anchor);
 
-    const peakCcuRatio = game.releaseDate
-      ? await this.computePeakCcuRatio(
-          gameId,
-          game.releaseDate,
-          rawReviewsToUnits,
-        )
+    const peakCcuRatio = pcReleaseDate
+      ? await this.computePeakCcuRatio(gameId, pcReleaseDate, rawReviewsToUnits)
       : null;
 
     const qualityScore = this.computeQuality(anchor, curve, reviewsToUnits);
@@ -410,8 +412,7 @@ export class ReferenceProfileService {
 
   private reviewRateEraFactor(observedAt: Date): number {
     const nowYear = new Date().getUTCFullYear();
-    const factor =
-      this.kEra(nowYear) / this.kEra(observedAt.getUTCFullYear());
+    const factor = this.kEra(nowYear) / this.kEra(observedAt.getUTCFullYear());
     return Number.isFinite(factor) && factor > 0 ? factor : 1;
   }
 
@@ -809,6 +810,8 @@ export class ReferenceProfileService {
       .where('s."gameId" = :gameId', { gameId })
       .andWhere('s.metric = :metric', { metric })
       .andWhere('s."capturedAt" <= :cutoff', { cutoff })
+      // Reconstructed rows never feed platform-share computation.
+      .andWhere('s.synthetic = false')
       .orderBy('s."capturedAt"', 'DESC')
       .limit(1)
       .getRawOne<{ value: string }>();

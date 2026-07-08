@@ -42,6 +42,7 @@ import {
   ageInYears,
   lifetimeSalesPct,
 } from './sales-modeling.constants';
+import { platformReleaseDate } from './platform-release-date';
 
 export interface PopularGame {
   id: string;
@@ -445,11 +446,7 @@ export class GamesService {
     const latestEstimates = await this.latestEstimatesByPlatform(game.id);
 
     const { breakdown, total, reconciliation, estimatedToday } =
-      this.aggregateSales(
-        visibleMilestones,
-        latestEstimates,
-        game.releaseDate,
-      );
+      this.aggregateSales(visibleMilestones, latestEstimates, game.releaseDate);
 
     const reviewHistory = await this.signals.find({
       where: { gameId: game.id, metric: SignalMetric.STEAM_REVIEWS },
@@ -515,7 +512,7 @@ export class GamesService {
     ];
 
     const snapshots = await this.signals.find({
-      where: { gameId, metric: In(metrics) },
+      where: { gameId, metric: In(metrics), synthetic: false },
       order: { capturedAt: 'DESC' },
       select: { metric: true, value: true, averageRating: true },
     });
@@ -572,10 +569,8 @@ export class GamesService {
     // and sum the per-platform aggregates without any declared-figure
     // floor / cap. Lets us measure how strong the model is without
     // any help from declared sales records.
-    const pureAggregates = await this.estimation.computePureAggregatesByPlatform(
-      gameId,
-      asOf,
-    );
+    const pureAggregates =
+      await this.estimation.computePureAggregatesByPlatform(gameId, asOf);
     const pureToday = sumPureAggregates(pureAggregates);
 
     // aggregateSales returns floats (freshness cap multiplies by a real
@@ -585,12 +580,8 @@ export class GamesService {
         gameId,
         estimatedTodayLow: Math.round(estimatedToday.low),
         estimatedTodayHigh: Math.round(estimatedToday.high),
-        pureEstimatedTodayLow: pureToday
-          ? Math.round(pureToday.low)
-          : null,
-        pureEstimatedTodayHigh: pureToday
-          ? Math.round(pureToday.high)
-          : null,
+        pureEstimatedTodayLow: pureToday ? Math.round(pureToday.low) : null,
+        pureEstimatedTodayHigh: pureToday ? Math.round(pureToday.high) : null,
         reconciliation: reconciliation.map(serializeReconciliationEntry),
         computedAt: asOf ?? new Date(),
       }),
@@ -737,12 +728,18 @@ export class GamesService {
   async rebuildEstimateHistory(
     gameId: string,
   ): Promise<{ points: number; estimates: number; snapshots: number }> {
-    const game = await this.games.findOne({ where: { id: gameId } });
+    const game = await this.games.findOne({
+      where: { id: gameId },
+      relations: { platformReleaseDates: true },
+    });
     if (!game) throw new NotFoundException(`Game ${gameId} not found`);
 
     await this.estimation.recalibrateAll(gameId);
 
-    const moments = await this.collectCaptureMoments(gameId, game.releaseDate);
+    const moments = await this.collectCaptureMoments(
+      gameId,
+      platformReleaseDate(game, Platform.PC),
+    );
     this.logger.log(
       `[rebuild] "${game.name}" — ${moments.length} historical capture moments`,
     );
@@ -763,10 +760,15 @@ export class GamesService {
     // restore it to bring the historical graph back.
     const lastMoment = moments[moments.length - 1];
     if (lastMoment) {
-      const inserted = await this.estimation.computeAndStoreAt(gameId, lastMoment);
+      const inserted = await this.estimation.computeAndStoreAt(
+        gameId,
+        lastMoment,
+      );
       estimates += inserted.length;
       if (inserted.length > 0) {
-        const before = await this.estimateSnapshots.count({ where: { gameId } });
+        const before = await this.estimateSnapshots.count({
+          where: { gameId },
+        });
         await this.snapshotReconcile(gameId, lastMoment);
         const after = await this.estimateSnapshots.count({ where: { gameId } });
         snapshots += after - before;
@@ -831,6 +833,9 @@ export class GamesService {
    */
   private async collectCaptureMoments(
     gameId: string,
+    // The windows below gate STEAM_CONCURRENT / STEAM_REVIEWS only, so the
+    // caller passes the PC-scoped release date (falls back to the game-wide
+    // `releaseDate` when no per-platform date is known).
     releaseDate: Date | null,
   ): Promise<Date[]> {
     const signals = await this.signals.find({
@@ -1398,8 +1403,9 @@ export class GamesService {
     gameId: string,
     asOf?: Date,
   ): Promise<Map<Platform, SalesEstimate>> {
-    const aggregateMethod =
-      this.estimationMethods.findByCode(AGGREGATED_METHOD_CODE);
+    const aggregateMethod = this.estimationMethods.findByCode(
+      AGGREGATED_METHOD_CODE,
+    );
 
     const estimates = await this.estimates.find({
       where: {

@@ -256,3 +256,23 @@ export async function syncGenresFromIgdb(): Promise<AdminGenreIgdbSyncResult> {
   revalidatePath('/admin/genres');
   return result;
 }
+
+export interface SteamPsBackfillResult {
+  started: boolean;
+  alreadyRunning: boolean;
+  games: number;
+  tasks: {
+    ccu: number;
+    reviews: number;
+    followers: number;
+    ratings: number;
+  };
+}
+
+export async function runSteamPsBackfill(): Promise<SteamPsBackfillResult> {
+  const result = await adminFetch<SteamPsBackfillResult>('/backfill-steam-ps', {
+    method: 'POST',
+  });
+  revalidatePath('/admin');
+  return result;
+}

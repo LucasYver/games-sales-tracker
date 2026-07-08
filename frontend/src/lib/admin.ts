@@ -102,6 +102,14 @@ export interface AdminGameSummary {
   updatedAt: string;
 }
 
+// IGDB `release_dates` broken out per platform, e.g. a PlayStation launch a
+// year ahead of the PC port. Empty when IGDB had no breakdown for this game;
+// `releaseDate` (earliest across all platforms) is then the only known date.
+export interface AdminPlatformReleaseDate {
+  platform: Platform;
+  releaseDate: string;
+}
+
 export interface AdminGameSource {
   id: string;
   source: string;
@@ -243,6 +251,7 @@ export interface AdminGamePageSummary {
   milestones: AdminMilestone[];
   milestonesCount: number;
   estimatesCount: number;
+  platformReleaseDates: AdminPlatformReleaseDate[];
 }
 
 // Charts-tab payload (GET /admin/games/:id/charts).
@@ -251,6 +260,7 @@ export interface AdminGameChartsData {
   reviewHistory: AdminCcuPoint[];
   followersHistory: AdminCcuPoint[];
   psRatingsHistory: AdminCcuPoint[];
+  psRatingsSyntheticHistory: AdminCcuPoint[];
   xboxRatingsHistory: AdminCcuPoint[];
   switchRatingsHistory: AdminCcuPoint[];
   prices: AdminPriceSnapshot[];
@@ -351,6 +361,7 @@ export interface AdminGameDetail extends AdminGameSummary {
   prices: AdminPriceSnapshot[];
   achievementSnapshots: AdminAchievementSummary[];
   estimateSnapshots: AdminEstimateSnapshot[];
+  platformReleaseDates: AdminPlatformReleaseDate[];
 }
 
 export interface AdminTrustedSource {

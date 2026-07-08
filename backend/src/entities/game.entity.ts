@@ -16,6 +16,7 @@ import { SignalSnapshot } from './signal-snapshot.entity';
 import { SalesEstimate } from './sales-estimate.entity';
 import { Milestone } from './milestone.entity';
 import { Publisher } from './publisher.entity';
+import { GamePlatformReleaseDate } from './game-platform-release-date.entity';
 
 @Entity('game')
 // GIN trigram index for fuzzy game-name search. Created (and refreshed)
@@ -167,6 +168,13 @@ export class Game {
   @Column({ type: 'enum', enum: SalesSource, nullable: true })
   calibrationSourceXbox: SalesSource | null;
 
+  // True when `calibratedPsMultiplier` was derived using a reconstructed
+  // (synthetic) PS rating at the milestone date rather than a real snapshot in
+  // the calibration window — see `EstimationService.recalibrateFromGlobal`.
+  // Traceability only; does not affect the estimate.
+  @Column({ type: 'boolean', default: false })
+  psCalibrationReconstructed: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -204,4 +212,11 @@ export class Game {
 
   @OneToMany(() => Milestone, (milestone) => milestone.game)
   milestones: Milestone[];
+
+  // IGDB `release_dates` broken out per platform (e.g. PlayStation launch a
+  // year ahead of the PC port). `releaseDate` above stays the earliest date
+  // across all platforms and is what platform-agnostic logic keys off; this
+  // relation lets platform-scoped estimation anchor on the right launch date.
+  @OneToMany(() => GamePlatformReleaseDate, (r) => r.game)
+  platformReleaseDates: GamePlatformReleaseDate[];
 }
