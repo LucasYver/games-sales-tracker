@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
@@ -16,8 +15,6 @@ import {
 export interface PublisherWithCount {
   id: string;
   name: string;
-  steamSharePctLow: number;
-  steamSharePctHigh: number;
   gameCount: number;
   createdAt: Date;
   updatedAt: Date;
@@ -55,8 +52,7 @@ export class PublishersService implements OnApplicationBootstrap {
   /**
    * Insert a curated `Publisher` row for every heuristic in
    * `publishers.seed.ts` that is missing from the table. Existing rows
-   * are left untouched — in particular, admin-edited Steam-share values
-   * are never overwritten by re-seeding.
+   * are left untouched.
    */
   async seedCanonical(): Promise<void> {
     const existing = await this.publishers.find();
@@ -67,13 +63,7 @@ export class PublishersService implements OnApplicationBootstrap {
     );
     if (missing.length === 0) return;
 
-    const rows = missing.map((h) =>
-      this.publishers.create({
-        name: h.name,
-        steamSharePctLow: h.defaultSteamSharePctLow,
-        steamSharePctHigh: h.defaultSteamSharePctHigh,
-      }),
-    );
+    const rows = missing.map((h) => this.publishers.create({ name: h.name }));
     await this.publishers.save(rows);
     this.logger.log(`Seeded ${rows.length} curated publisher(s).`);
   }
@@ -173,8 +163,6 @@ export class PublishersService implements OnApplicationBootstrap {
     return publishers.map((p) => ({
       id: p.id,
       name: p.name,
-      steamSharePctLow: p.steamSharePctLow,
-      steamSharePctHigh: p.steamSharePctHigh,
       gameCount: byId.get(p.id) ?? 0,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
@@ -194,8 +182,6 @@ export class PublishersService implements OnApplicationBootstrap {
     return {
       id: row.id,
       name: row.name,
-      steamSharePctLow: row.steamSharePctLow,
-      steamSharePctHigh: row.steamSharePctHigh,
       gameCount: games.length,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -207,37 +193,6 @@ export class PublishersService implements OnApplicationBootstrap {
         coverUrl: g.coverUrl,
       })),
     };
-  }
-
-  async update(
-    id: string,
-    patch: { steamSharePctLow?: number; steamSharePctHigh?: number },
-  ): Promise<Publisher> {
-    const row = await this.publishers.findOne({ where: { id } });
-    if (!row) throw new NotFoundException(`Publisher ${id} not found`);
-
-    let changed = false;
-    if (
-      patch.steamSharePctLow !== undefined &&
-      patch.steamSharePctLow !== row.steamSharePctLow
-    ) {
-      row.steamSharePctLow = patch.steamSharePctLow;
-      changed = true;
-    }
-    if (
-      patch.steamSharePctHigh !== undefined &&
-      patch.steamSharePctHigh !== row.steamSharePctHigh
-    ) {
-      row.steamSharePctHigh = patch.steamSharePctHigh;
-      changed = true;
-    }
-    if (row.steamSharePctLow > row.steamSharePctHigh) {
-      throw new BadRequestException(
-        'steamSharePctLow must be lower than or equal to steamSharePctHigh',
-      );
-    }
-    if (changed) await this.publishers.save(row);
-    return row;
   }
 
   async findByIds(ids: string[]): Promise<Map<string, Publisher>> {

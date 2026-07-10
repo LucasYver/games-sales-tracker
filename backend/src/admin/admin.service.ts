@@ -154,8 +154,6 @@ export interface AdminGameDetail extends AdminGameSummary {
   publisherRecord: {
     id: string;
     name: string;
-    steamSharePctLow: number;
-    steamSharePctHigh: number;
   } | null;
   sources: GameSource[];
   milestones: Milestone[];
@@ -210,8 +208,6 @@ export interface AdminGameSummary2 {
   publisherRecord: {
     id: string;
     name: string;
-    steamSharePctLow: number | null;
-    steamSharePctHigh: number | null;
   } | null;
   genres: string[];
   categories: string[];
@@ -788,8 +784,6 @@ export class AdminService {
         ? {
             id: game.publisherRecord.id,
             name: game.publisherRecord.name,
-            steamSharePctLow: game.publisherRecord.steamSharePctLow,
-            steamSharePctHigh: game.publisherRecord.steamSharePctHigh,
           }
         : null,
       sources: game.sources,
@@ -880,8 +874,6 @@ export class AdminService {
         ? {
             id: game.publisherRecord.id,
             name: game.publisherRecord.name,
-            steamSharePctLow: game.publisherRecord.steamSharePctLow,
-            steamSharePctHigh: game.publisherRecord.steamSharePctHigh,
           }
         : null,
       genres: game.genres ?? [],

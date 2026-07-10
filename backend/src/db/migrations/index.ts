@@ -44,6 +44,7 @@ import { BackfillPlaystationLeakMilestones1782761000000 } from './1782761000000-
 import { AddGamePriceRefreshedAt1782770000000 } from './1782770000000-AddGamePriceRefreshedAt';
 import { AddGamePlatformReleaseDate1782780000000 } from './1782780000000-AddGamePlatformReleaseDate';
 import { AddPsReconstructionSupport1783456310205 } from './1783456310205-AddPsReconstructionSupport';
+import { DropPublisherSteamShare1783500000000 } from './1783500000000-DropPublisherSteamShare';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -99,4 +100,5 @@ export const migrations: MixedList<Function | string> = [
   AddGamePriceRefreshedAt1782770000000,
   AddGamePlatformReleaseDate1782780000000,
   AddPsReconstructionSupport1783456310205,
+  DropPublisherSteamShare1783500000000,
 ];

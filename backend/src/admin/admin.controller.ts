@@ -25,7 +25,6 @@ import { ImportCcuCsvDto } from './dto/import-ccu-csv.dto';
 import { ImportReviewsCsvDto } from './dto/import-reviews-csv.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
 import { UpdateMilestoneDto } from './dto/update-milestone.dto';
-import { UpdatePublisherDto } from './dto/update-publisher.dto';
 @Controller('admin')
 @UseGuards(AdminTokenGuard)
 export class AdminController {
@@ -254,15 +253,6 @@ export class AdminController {
   @Get('publishers/:id')
   getPublisher(@Param('id', ParseUUIDPipe) id: string) {
     return this.publishers.getDetail(id);
-  }
-
-  @Patch('publishers/:id')
-  @HttpCode(200)
-  updatePublisher(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: UpdatePublisherDto,
-  ) {
-    return this.publishers.update(id, body);
   }
 
   @Post('publishers/backfill')

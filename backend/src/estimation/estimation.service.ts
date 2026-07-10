@@ -30,13 +30,9 @@ import {
   FIRST_WEEK_BUCKET_THRESHOLD,
   FIRST_WEEK_ESTIMATE_MAX_UNITS,
   FIRST_WEEK_ESTIMATE_MIN_UNITS,
-  DEFAULT_STEAM_SHARE_PCT,
   FIRST_WEEK_PEAK_CCU_HIGH,
   FIRST_WEEK_PEAK_CCU_LOW,
   LAUNCH_PEAK_CCU_WINDOW_MONTHS,
-  launcherFactorFromSteamShare,
-  launcherMethodTagFromShare,
-  type SteamShareRange,
   PC_BOXLEITER_DEFAULT_HIGH,
   PC_BOXLEITER_DEFAULT_LOW,
   PC_BOXLEITER_PLAUSIBLE_MAX,
@@ -54,17 +50,6 @@ import {
   genreProjectionMultiplier,
 } from '../games/sales-modeling.constants';
 import { platformReleaseDate } from '../games/platform-release-date';
-
-/**
- * Steam-share range for a game, falling back to the neutral default when
- * the game has no curated publisher record.
- */
-function steamShareForGame(game: Game): SteamShareRange {
-  return {
-    low: game.publisherRecord?.steamSharePctLow ?? DEFAULT_STEAM_SHARE_PCT,
-    high: game.publisherRecord?.steamSharePctHigh ?? DEFAULT_STEAM_SHARE_PCT,
-  };
-}
 
 // Calibration only trusts a milestone when a signal snapshot exists
 // within this window of the milestone's reported date — otherwise
@@ -337,7 +322,7 @@ export class EstimationService {
   ): Promise<EstimateResult[]> {
     const game = await this.games.findOne({
       where: { id: gameId },
-      relations: { publisherRecord: true, platformReleaseDates: true },
+      relations: { platformReleaseDates: true },
     });
     if (!game || game.isFree) return [];
 
@@ -870,31 +855,9 @@ export class EstimationService {
       profileDefaults,
     );
 
-    // The publisher's Steam share only modulates the *PC* estimation today
-    // (the Steam-vs-rest-of-PC fragmentation problem). PS / Xbox keep their
-    // native multipliers untouched.
-    const steamShare =
-      cfg.platform === Platform.PC
-        ? steamShareForGame(game)
-        : { low: DEFAULT_STEAM_SHARE_PCT, high: DEFAULT_STEAM_SHARE_PCT };
-
-    // Per-game calibration (from a declared OFFICIAL/MEDIA figure) has
-    // already absorbed the launcher effect empirically — applying the
-    // share scaling on top would double-count it. Only scale when we
-    // fall back on the static default multiplier range.
-    const reviewsScale =
-      !isCalibrated && cfg.platform === Platform.PC
-        ? launcherFactorFromSteamShare(steamShare)
-        : { low: 1, high: 1 };
-
-    const estimatedLow = signalValue * low * reviewsScale.low;
-    const estimatedHigh = signalValue * high * reviewsScale.high;
-    let finalMethod = method;
-
-    if (cfg.platform === Platform.PC) {
-      const profileTag = launcherMethodTagFromShare(steamShare);
-      if (profileTag) finalMethod = `${finalMethod}${profileTag}`;
-    }
+    const estimatedLow = signalValue * low;
+    const estimatedHigh = signalValue * high;
+    const finalMethod = method;
 
     if (trace) {
       trace.boxleiter.push({
@@ -938,10 +901,6 @@ export class EstimationService {
    *   - We have at least one `STEAM_PEAK_CCU` snapshot (ordered by
    *     `value DESC` because the historical-import path writes peaks
    *     with the SteamCharts month of the peak as `capturedAt`).
-   *
-   * Launcher profile scaling (multi-store / launcher-primary) is applied
-   * to the CCU input since the peak is Steam-captured — it shares the
-   * same "Steam → total PC" correction as the Boxleiter reviews signal.
    */
   private async estimateFirstWeekExtrapolationForPc(
     game: Game,
@@ -954,9 +913,6 @@ export class EstimationService {
     const referenceDate = asOf ?? new Date();
     const age = ageInDays(pcReleaseDate, referenceDate);
     if (age <= 0) return null;
-
-    const steamShare = steamShareForGame(game);
-    const ccuScale = launcherFactorFromSteamShare(steamShare);
 
     // Launch peak CCU: the largest STEAM_CONCURRENT value over the release
     // month plus the following one. A later all-time peak (sale, DLC, F2P
@@ -1003,8 +959,8 @@ export class EstimationService {
       ? genreProfile.peakCcuToWeekOneHigh
       : FIRST_WEEK_PEAK_CCU_HIGH;
 
-    const weekOneLow = peak.value * ccuRatioLow * ccuScale.low;
-    const weekOneHigh = peak.value * ccuRatioHigh * ccuScale.high;
+    const weekOneLow = peak.value * ccuRatioLow;
+    const weekOneHigh = peak.value * ccuRatioHigh;
 
     const weekOneMid = (weekOneLow + weekOneHigh) / 2;
 
@@ -1048,8 +1004,7 @@ export class EstimationService {
       return null;
     }
 
-    const launcherTag = launcherMethodTagFromShare(steamShare);
-    const method = `first-week-extrapolation-pc${launcherTag}`;
+    const method = 'first-week-extrapolation-pc';
 
     if (trace) {
       trace.firstWeek.push({

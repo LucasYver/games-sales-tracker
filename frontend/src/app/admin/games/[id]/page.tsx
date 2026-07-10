@@ -33,7 +33,6 @@ import { ImportCcuCsvButton } from '../../_components/ImportCcuCsvButton';
 import { ImportReviewsCsvButton } from '../../_components/ImportReviewsCsvButton';
 import { EditGameForm } from '../../_components/EditGameForm';
 import { MilestoneRow } from '../../_components/MilestoneRow';
-import { SteamShareBadge } from '../../_components/SteamShareBadge';
 import { CcuHistoryChart } from '../../_components/CcuHistoryChart';
 import { ReviewHistoryChart } from '../../_components/ReviewHistoryChart';
 import { FollowersHistoryChart } from '../../_components/FollowersHistoryChart';
@@ -281,20 +280,7 @@ function OverviewTab({ s }: { s: AdminGamePageSummary }) {
           <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-2.5 text-sm">
             <Meta label="Developer">{s.developer ?? '—'}</Meta>
             <Meta label="Publisher">
-              {s.publisherRecord ? (
-                <span className="flex items-center gap-2">
-                  {s.publisherRecord.name}
-                  {s.publisherRecord.steamSharePctLow != null &&
-                    s.publisherRecord.steamSharePctHigh != null && (
-                      <SteamShareBadge
-                        low={s.publisherRecord.steamSharePctLow}
-                        high={s.publisherRecord.steamSharePctHigh}
-                      />
-                    )}
-                </span>
-              ) : (
-                (s.publisher ?? '—')
-              )}
+              {s.publisherRecord ? s.publisherRecord.name : (s.publisher ?? '—')}
             </Meta>
             <Meta label="Released">
               {fmtDate(s.releaseDate)}

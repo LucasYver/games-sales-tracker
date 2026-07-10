@@ -8,8 +8,6 @@
  * stay traceable.
  */
 
-import { ConfidenceLevel } from '../entities';
-
 const DAY_MS = 24 * 3600 * 1000;
 const YEAR_MS = 365 * DAY_MS;
 
@@ -144,105 +142,6 @@ export const XBOX_BOXLEITER_PLAUSIBLE_MAX = 600;
 //   Hogwarts Leg.  879K peak → ~15M    (~17×)
 //   Palworld       2.1M peak → ~15M+   (~7× short term, climbs with age)
 //   Stardew Valley  95K peak → ~30M+   (~315× long tail)
-
-// ─── Launcher / Steam-share scaling (Steam → total PC) ──────────────────────
-//
-// The Boxleiter reviews multiplier and the peak-CCU multiplier above both
-// implicitly assume Steam captures ~100% of the PC market for a game —
-// true for most indie titles and many AAA, but not for titles whose
-// publisher pushes players to a competing storefront (Epic, GOG) or a
-// proprietary launcher (Ubisoft Connect, EA App, Battle.net, Microsoft
-// Store). Without correction, Boxleiter on Steam under-shoots total PC
-// units for those games.
-//
-// Each `Publisher` stores an editable estimate of Steam's share of its PC
-// sales as a percentage range (`steamSharePctLow/High`). The scaling
-// factor applied to the *default* reviews and CCU ranges is the inverse
-// of that share: a publisher selling 50% of PC on Steam needs a ×2 boost
-// to recover total PC. There is no longer a fixed set of preset profiles
-// — the share is curated per publisher in the admin.
-//
-// When a game has a per-game calibrated multiplier (`calibratedMultiplier`,
-// derived from a declared OFFICIAL/MEDIA figure), scaling is intentionally
-// skipped: the empirical calibration has already absorbed the launcher
-// effect.
-//
-// The factor fourchette widens as the share drops because per-game
-// variance grows with launcher fragmentation: confidence is also capped
-// (see `launcherConfidenceCapFromShare`) so callers don't mistake a wide
-// low-share estimate for a HIGH-confidence one.
-
-// Default Steam share for unmatched publishers and games without a
-// publisher record: Steam captures ~all PC sales (neutral ×1.0 factor).
-export const DEFAULT_STEAM_SHARE_PCT = 100;
-
-// Steam share (midpoint) at or above which no confidence cap applies —
-// Steam is representative enough of total PC to keep the natural
-// signal-density confidence. Below it, the Steam-only signal can never be
-// HIGH-confidence on a fragmented title.
-export const STEAM_SHARE_FULL_CONFIDENCE_PCT = 85;
-
-// Steam share (midpoint) at or above which the cap is MEDIUM (multi-store
-// regime); below it the cap drops to LOW (the launcher, not Steam, is the
-// dominant PC entry point).
-export const STEAM_SHARE_MEDIUM_CONFIDENCE_PCT = 35;
-
-export interface SteamShareRange {
-  low: number;
-  high: number;
-}
-
-function clampSharePct(value: number): number {
-  if (!Number.isFinite(value)) return DEFAULT_STEAM_SHARE_PCT;
-  return Math.min(100, Math.max(1, value));
-}
-
-/**
- * Steam→total-PC scaling factor range derived from a publisher's Steam
- * share. `factor = 100 / steamShare`, so the *higher* share yields the
- * *lower* factor and vice-versa. A 100/100 share returns the neutral
- * { low: 1, high: 1 }.
- */
-export function launcherFactorFromSteamShare(share: SteamShareRange): {
-  low: number;
-  high: number;
-} {
-  const lowShare = clampSharePct(share.low);
-  const highShare = clampSharePct(share.high);
-  const minShare = Math.min(lowShare, highShare);
-  const maxShare = Math.max(lowShare, highShare);
-  return {
-    low: 100 / maxShare,
-    high: 100 / minShare,
-  };
-}
-
-/**
- * Maximum confidence the estimation engine may return for a PC estimate
- * given the publisher's Steam share (midpoint of the range). Mirrors the
- * old per-profile cap: full share → no cap, mid share → MEDIUM, low share
- * → LOW.
- */
-export function launcherConfidenceCapFromShare(
-  share: SteamShareRange,
-): ConfidenceLevel | null {
-  const mid = (clampSharePct(share.low) + clampSharePct(share.high)) / 2;
-  if (mid >= STEAM_SHARE_FULL_CONFIDENCE_PCT) return null;
-  if (mid >= STEAM_SHARE_MEDIUM_CONFIDENCE_PCT) return ConfidenceLevel.MEDIUM;
-  return ConfidenceLevel.LOW;
-}
-
-/**
- * Suffix appended to the estimation method label so the launcher
- * correction regime is traceable on the persisted estimate. Derived from
- * the same share thresholds as the confidence cap.
- */
-export function launcherMethodTagFromShare(share: SteamShareRange): string {
-  const cap = launcherConfidenceCapFromShare(share);
-  if (cap === null) return '';
-  if (cap === ConfidenceLevel.MEDIUM) return '+multi-store';
-  return '+launcher-primary';
-}
 
 // Tightening factor applied around a calibrated multiplier when computing the
 // per-platform Boxleiter range: low = m * (1 - X), high = m * (1 + X).

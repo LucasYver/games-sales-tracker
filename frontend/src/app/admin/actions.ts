@@ -221,19 +221,6 @@ export async function deleteTrustedSource(id: string): Promise<void> {
   revalidatePath('/admin/trusted-sources');
 }
 
-export async function updatePublisherSteamShare(
-  id: string,
-  steamSharePctLow: number,
-  steamSharePctHigh: number,
-): Promise<void> {
-  await adminFetch(`/publishers/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ steamSharePctLow, steamSharePctHigh }),
-  });
-  revalidatePath('/admin/publishers');
-  revalidatePath(`/admin/publishers/${id}`);
-}
-
 export async function runPublisherBackfill(): Promise<{
   linked: number;
   alreadyLinked: number;

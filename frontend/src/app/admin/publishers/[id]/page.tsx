@@ -11,8 +11,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { SteamShareEditor } from '../../_components/SteamShareEditor';
-import { SteamShareBadge } from '../../_components/SteamShareBadge';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,35 +48,8 @@ export default async function AdminPublisherDetailPage({
           <p className="text-muted-foreground mt-1 font-mono text-xs">
             {publisher.id}
           </p>
-          <div className="mt-2">
-            <SteamShareBadge
-              low={publisher.steamSharePctLow}
-              high={publisher.steamSharePctHigh}
-            />
-          </div>
         </div>
       </header>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-            Steam share of PC sales
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <p className="text-muted-foreground text-sm">
-            Estimated percentage range of this publisher&apos;s PC sales that
-            go through Steam. The estimation engine derives a Steam→total-PC
-            scaling factor from it (factor = 100 / share). Changes persist in
-            DB and are inherited by every game linked via the publisher FK.
-          </p>
-          <SteamShareEditor
-            publisherId={publisher.id}
-            low={publisher.steamSharePctLow}
-            high={publisher.steamSharePctHigh}
-          />
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>

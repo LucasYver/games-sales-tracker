@@ -215,11 +215,31 @@ export class StoreRatingsClient {
   private extractPsTitle(page: string): string | null {
     const match = page.match(/<title>([^<]+)<\/title>/);
     if (!match) return null;
-    return match[1]
-      .replace(/&amp;/g, '&')
+    return this.decodeHtmlEntities(match[1])
       .replace(/\b(PS4 & PS5|PS4|PS5)\b/g, '')
       .replace(/[™®]/g, '')
       .trim();
+  }
+
+  // PSN encodes apostrophes and other punctuation as numeric HTML entities in
+  // the <title> (e.g. `Assassin&#x27;s Creed`). Left undecoded, the literal
+  // `x27` leaks into the normalized title and breaks the `titleMatches` prefix
+  // check, dropping valid ratings for any title with an apostrophe.
+  private decodeHtmlEntities(value: string): string {
+    const named: Record<string, string> = {
+      '&amp;': '&',
+      '&lt;': '<',
+      '&gt;': '>',
+      '&quot;': '"',
+      '&apos;': "'",
+      '&nbsp;': ' ',
+    };
+    return value
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) =>
+        String.fromCodePoint(parseInt(hex, 16)),
+      )
+      .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)))
+      .replace(/&[a-zA-Z]+;/g, (entity) => named[entity] ?? entity);
   }
 
   // Accept when one normalized title is a prefix of the other (store titles

@@ -210,8 +210,6 @@ export interface AdminGamePageSummary {
   publisherRecord: {
     id: string;
     name: string;
-    steamSharePctLow: number | null;
-    steamSharePctHigh: number | null;
   } | null;
   genres: string[];
   categories: string[];
@@ -307,8 +305,6 @@ export interface AdminEstimateSnapshot {
 export interface AdminPublisherSummary {
   id: string;
   name: string;
-  steamSharePctLow: number;
-  steamSharePctHigh: number;
   gameCount: number;
   createdAt: string;
   updatedAt: string;
@@ -348,8 +344,6 @@ export interface AdminGameDetail extends AdminGameSummary {
   publisherRecord: {
     id: string;
     name: string;
-    steamSharePctLow: number;
-    steamSharePctHigh: number;
   } | null;
   sources: AdminGameSource[];
   milestones: AdminMilestone[];
