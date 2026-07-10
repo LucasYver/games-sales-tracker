@@ -42,6 +42,7 @@ export interface AdminReferenceProfileRow {
   gameSlug: string;
   scaleUnits: number | null;
   reviewsToUnits: number | null;
+  globalReviewsToUnits: number | null;
   peakCcuRatio: number | null;
   curve: AdminReferenceCurve;
   platformShares: AdminReferencePlatformShares | null;
@@ -61,6 +62,7 @@ export interface AdminCorpusStats {
   coverage: {
     curve: number;
     reviewsToUnits: number;
+    globalReviewsToUnits: number;
     platformShares: number;
   };
   quality: {
@@ -94,6 +96,7 @@ export interface AdminMatcherInspection {
   coldStart: boolean;
   neighboursUsed: number;
   reviewsToUnits: number | null;
+  globalReviewsToUnits: number | null;
   peakCcuRatio: number | null;
   curve: AdminReferenceCurve;
   platformShares: AdminReferencePlatformShares | null;
@@ -115,6 +118,7 @@ interface AnchorJoinRow {
   gameSlug: string;
   scaleUnits: string | null;
   reviewsToUnits: string | null;
+  globalReviewsToUnits: string | null;
   peakCcuRatio: string | null;
   curveS1: string | null;
   curveM1: string | null;
@@ -183,6 +187,7 @@ export class ReferenceProfilesAdminService {
 
     let withCurve = 0;
     let withReviewsToUnits = 0;
+    let withGlobalReviewsToUnits = 0;
     let withPlatformShares = 0;
 
     for (const r of rows) {
@@ -190,6 +195,7 @@ export class ReferenceProfilesAdminService {
 
       if (r.curveA1 !== null) withCurve += 1;
       if (r.reviewsToUnits !== null) withReviewsToUnits += 1;
+      if (r.globalReviewsToUnits !== null) withGlobalReviewsToUnits += 1;
       if (r.platformSharePc !== null) withPlatformShares += 1;
 
       const scale = r.scaleUnits !== null ? Number(r.scaleUnits) : null;
@@ -211,6 +217,7 @@ export class ReferenceProfilesAdminService {
       coverage: {
         curve: withCurve,
         reviewsToUnits: withReviewsToUnits,
+        globalReviewsToUnits: withGlobalReviewsToUnits,
         platformShares: withPlatformShares,
       },
       quality: {
@@ -280,6 +287,7 @@ export class ReferenceProfilesAdminService {
       coldStart: match.coldStart,
       neighboursUsed: match.neighboursUsed,
       reviewsToUnits: match.reviewsToUnits,
+      globalReviewsToUnits: match.globalReviewsToUnits,
       peakCcuRatio: match.peakCcuRatio,
       curve: match.curve,
       platformShares: match.platformShares,
@@ -308,6 +316,7 @@ export class ReferenceProfilesAdminService {
               g.slug AS "gameSlug",
               r."scaleUnits" AS "scaleUnits",
               r."reviewsToUnits" AS "reviewsToUnits",
+              r."globalReviewsToUnits" AS "globalReviewsToUnits",
               r."peakCcuRatio" AS "peakCcuRatio",
               r."curveS1" AS "curveS1",
               r."curveM1" AS "curveM1",
@@ -342,6 +351,7 @@ export class ReferenceProfilesAdminService {
               g.slug AS "gameSlug",
               r."scaleUnits" AS "scaleUnits",
               r."reviewsToUnits" AS "reviewsToUnits",
+              r."globalReviewsToUnits" AS "globalReviewsToUnits",
               r."peakCcuRatio" AS "peakCcuRatio",
               r."curveS1" AS "curveS1",
               r."curveM1" AS "curveM1",
@@ -386,6 +396,7 @@ export class ReferenceProfilesAdminService {
       scaleUnits: r.scaleUnits !== null ? Number(r.scaleUnits) : null,
       reviewsToUnits:
         r.reviewsToUnits !== null ? Number(r.reviewsToUnits) : null,
+      globalReviewsToUnits: nullableNumber(r.globalReviewsToUnits),
       peakCcuRatio: nullableNumber(r.peakCcuRatio),
       curve: {
         s1: nullableNumber(r.curveS1),

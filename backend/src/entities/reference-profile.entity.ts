@@ -77,6 +77,20 @@ export class ReferenceProfile {
   reviewsToUnits: number | null;
 
   /**
+   * Steam-reviews → WORLDWIDE units ratio, era-normalised like
+   * {@link reviewsToUnits}. Unlike the PC Boxleiter this maps Steam reviews
+   * to the game's all-platforms total, so it bakes in the platform mix
+   * (`globalReviewsToUnits ≈ reviewsToUnits / platformSharePc`). It is the
+   * only sales signal a "global-only" game (a worldwide milestone, no
+   * per-platform figure) can measure, and is kept as its OWN feature so it
+   * never contaminates the strictly-PC `reviewsToUnits`. Consumed as an
+   * independent worldwide anchor (blended with the PC path at resolution).
+   * `null` when no GLOBAL milestone coexists with review coverage.
+   */
+  @Column({ type: 'float', nullable: true })
+  globalReviewsToUnits: number | null;
+
+  /**
    * Per-platform proxy shares derived from cross-platform ratings
    * counters × ratings→units factors. Sums to ≈ 1.0 when defined.
    * Populated only when at least PC + one console signal are available;

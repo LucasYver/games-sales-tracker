@@ -453,6 +453,7 @@ export interface AdminReferenceProfile {
   gameSlug: string;
   scaleUnits: number | null;
   reviewsToUnits: number | null;
+  globalReviewsToUnits: number | null;
   peakCcuRatio: number | null;
   curve: AdminReferenceCurve;
   platformShares: AdminReferencePlatformShares | null;
@@ -472,6 +473,7 @@ export interface AdminCorpusStats {
   coverage: {
     curve: number;
     reviewsToUnits: number;
+    globalReviewsToUnits: number;
     platformShares: number;
   };
   quality: {
@@ -536,6 +538,7 @@ export interface AdminMatcherInspection {
   coldStart: boolean;
   neighboursUsed: number;
   reviewsToUnits: number | null;
+  globalReviewsToUnits: number | null;
   peakCcuRatio: number | null;
   curve: AdminReferenceCurve;
   platformShares: AdminReferencePlatformShares | null;

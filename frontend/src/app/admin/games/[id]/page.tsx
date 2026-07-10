@@ -877,10 +877,18 @@ async function MatcherTab({
       )}
 
       {/* resolved profile stats */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <Kpi
           label="Reviews→units"
           value={m.reviewsToUnits != null ? `×${m.reviewsToUnits.toFixed(1)}` : '—'}
+        />
+        <Kpi
+          label="Global reviews→units"
+          value={
+            m.globalReviewsToUnits != null
+              ? `×${m.globalReviewsToUnits.toFixed(1)}`
+              : '—'
+          }
         />
         <Kpi
           label="m1 (×Y1)"
@@ -1026,6 +1034,14 @@ async function MatcherTab({
                       <span className="text-foreground">
                         {n.profile.reviewsToUnits != null
                           ? `×${n.profile.reviewsToUnits.toFixed(1)}`
+                          : '—'}
+                      </span>
+                    </span>
+                    <span>
+                      G→U{' '}
+                      <span className="text-foreground">
+                        {n.profile.globalReviewsToUnits != null
+                          ? `×${n.profile.globalReviewsToUnits.toFixed(1)}`
                           : '—'}
                       </span>
                     </span>

@@ -238,6 +238,7 @@ export interface MatchSelection {
 export interface MatchResult {
   curve: CurveVector;
   reviewsToUnits: number | null;
+  globalReviewsToUnits: number | null;
   peakCcuRatio: number | null;
   platformShares: {
     pc: number;
@@ -274,6 +275,7 @@ interface AnchorRow {
   scaleUnits: number | null;
   curve: CurveVector;
   reviewsToUnits: number | null;
+  globalReviewsToUnits: number | null;
   peakCcuRatio: number | null;
   platformShares: {
     pc: number;
@@ -422,6 +424,7 @@ export class MatcherService {
     return {
       curve: this.aggregateCurve(top),
       reviewsToUnits: this.aggregateReviewsToUnits(top),
+      globalReviewsToUnits: this.aggregateGlobalReviewsToUnits(top),
       peakCcuRatio: this.aggregatePeakCcuRatio(top),
       platformShares: this.aggregatePlatformShares(top),
       neighboursUsed: top.length,
@@ -548,12 +551,37 @@ export class MatcherService {
   private aggregateReviewsToUnits(
     top: { row: AnchorRow; similarity: number }[],
   ): number | null {
-    // reviewsToUnits spans ~two orders of magnitude across genres
-    // (indie ~15, AAA ~150). Aggregate in log-10 space to avoid the
-    // mean being dragged by the largest outliers.
     const raw = top
       .map(({ row, similarity }) => ({
         value: row.reviewsToUnits,
+        weight: neighbourWeight(similarity, row.qualityScore),
+      }))
+      .filter(
+        (e): e is { value: number; weight: number } =>
+          e.value !== null && e.value > 0,
+      );
+    const kept = rejectHighOutliers(raw, REVIEWS_TO_UNITS_OUTLIER_FACTOR);
+    const entries = kept.map((e) => ({
+      value: Math.log10(e.value),
+      weight: e.weight,
+    }));
+    const meanLog = weightedMean(entries);
+    if (meanLog === null) return null;
+    return Math.pow(10, meanLog);
+  }
+
+  /**
+   * Worldwide reviews→units ratio, aggregated in log-10 space like
+   * {@link aggregateReviewsToUnits}. Lets global-only anchors (which have no
+   * PC Boxleiter) contribute a sales ratio to the match; consumed by the
+   * resolver as a worldwide anchor, blended with the PC path.
+   */
+  private aggregateGlobalReviewsToUnits(
+    top: { row: AnchorRow; similarity: number }[],
+  ): number | null {
+    const raw = top
+      .map(({ row, similarity }) => ({
+        value: row.globalReviewsToUnits,
         weight: neighbourWeight(similarity, row.qualityScore),
       }))
       .filter(
@@ -653,6 +681,7 @@ export class MatcherService {
         curveA1: string | null;
         curveA2: string | null;
         reviewsToUnits: string | null;
+        globalReviewsToUnits: string | null;
         peakCcuRatio: string | null;
         platformSharePc: string | null;
         platformSharePs: string | null;
@@ -682,6 +711,7 @@ export class MatcherService {
               r."curveA1" AS "curveA1",
               r."curveA2" AS "curveA2",
               r."reviewsToUnits" AS "reviewsToUnits",
+              r."globalReviewsToUnits" AS "globalReviewsToUnits",
               r."peakCcuRatio" AS "peakCcuRatio",
               r."platformSharePc" AS "platformSharePc",
               r."platformSharePs" AS "platformSharePs",
@@ -757,6 +787,7 @@ export class MatcherService {
           a2: nullableNumber(r.curveA2),
         },
         reviewsToUnits: nullableNumber(r.reviewsToUnits),
+        globalReviewsToUnits: nullableNumber(r.globalReviewsToUnits),
         peakCcuRatio: nullableNumber(r.peakCcuRatio),
         platformShares: shares,
       };

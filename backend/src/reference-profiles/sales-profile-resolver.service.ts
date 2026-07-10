@@ -216,7 +216,6 @@ function overlay(match: MatchResult): ResolvedGenreProfile {
   const shares = match.platformShares;
   const s1 = match.curve.s1;
   const a2 = match.curve.a2;
-  const reviewsToUnits = match.reviewsToUnits;
 
   const m1 = s1 !== null && s1 > 0 ? 1 / s1 : 2.5;
   const tailY2 = a2 ?? 1.25;
@@ -226,23 +225,31 @@ function overlay(match: MatchResult): ResolvedGenreProfile {
       ? retentionFromRatio(a2)
       : Year2Retention.LOW;
 
+  // PC Boxleiter from two independent anchors, blended in log space:
+  //   A) matcher `reviewsToUnits` — a directly measured PC Boxleiter.
+  //   B) matcher `globalReviewsToUnits × pcShare` — the worldwide ratio
+  //      (which global-only anchors can measure) folded to PC through the
+  //      matched split. When both exist they cross-check; either alone is
+  //      used as-is; `null` only when neither is available.
+  const pcBoxleiter = blendPcBoxleiter(match);
+
   // Boxleiter defaults: null when unobserved so the estimator falls back
   // to its own global PC/PS constants.
   const [pcLow, pcHigh] =
-    reviewsToUnits !== null
+    pcBoxleiter !== null
       ? [
-          reviewsToUnits * (1 - BOXLEITER_SPREAD_FRACTION),
-          reviewsToUnits * (1 + BOXLEITER_SPREAD_FRACTION),
+          pcBoxleiter * (1 - BOXLEITER_SPREAD_FRACTION),
+          pcBoxleiter * (1 + BOXLEITER_SPREAD_FRACTION),
         ]
       : [null, null];
 
   const [psLow, psHigh] =
-    reviewsToUnits !== null
+    pcBoxleiter !== null
       ? [
-          reviewsToUnits *
+          pcBoxleiter *
             PS_TO_PC_BOXLEITER_RATIO *
             (1 - BOXLEITER_SPREAD_FRACTION),
-          reviewsToUnits *
+          pcBoxleiter *
             PS_TO_PC_BOXLEITER_RATIO *
             (1 + BOXLEITER_SPREAD_FRACTION),
         ]
@@ -276,6 +283,35 @@ function overlay(match: MatchResult): ResolvedGenreProfile {
     psDefaultBoxleiterLow: psLow,
     psDefaultBoxleiterHigh: psHigh,
   };
+}
+
+/**
+ * Blend the PC Boxleiter from the two independent matcher anchors:
+ *   A) `reviewsToUnits` — measured PC Boxleiter (reviews → PC units).
+ *   B) `globalReviewsToUnits × pcShare` — the worldwide ratio (measurable by
+ *      global-only games) folded to PC through the matched split.
+ * Geometric mean when both are available (they estimate the same quantity, so
+ * log-space averaging halves the variance and surfaces agreement); otherwise
+ * whichever exists; `null` when neither does.
+ */
+function blendPcBoxleiter(match: MatchResult): number | null {
+  const direct =
+    match.reviewsToUnits !== null && match.reviewsToUnits > 0
+      ? match.reviewsToUnits
+      : null;
+  const pcShare = match.platformShares?.pc ?? null;
+  const viaGlobal =
+    match.globalReviewsToUnits !== null &&
+    match.globalReviewsToUnits > 0 &&
+    pcShare !== null &&
+    pcShare > 0
+      ? match.globalReviewsToUnits * pcShare
+      : null;
+
+  if (direct !== null && viaGlobal !== null) {
+    return Math.sqrt(direct * viaGlobal);
+  }
+  return direct ?? viaGlobal;
 }
 
 function retentionFromRatio(ratio: number): Year2Retention {

@@ -89,6 +89,11 @@ export default async function AdminReferenceProfilesPage() {
               hint="Anchors with a PC reviews→units ratio (drives the Boxleiter default)."
             />
             <StatCard
+              label="With global reviews→units"
+              value={`${stats.coverage.globalReviewsToUnits} / ${stats.total}`}
+              hint="Anchors with a worldwide reviews→units ratio (lets global-only games contribute; blended into the Boxleiter via the split)."
+            />
+            <StatCard
               label="With platform split"
               value={`${stats.coverage.platformShares} / ${stats.total}`}
               hint="Anchors with a proxied PC/console share (drives console ventilation)."
@@ -189,6 +194,12 @@ export default async function AdminReferenceProfilesPage() {
                   </TableHead>
                   <TableHead
                     className="text-right"
+                    title="Worldwide reviews→units ratio (global-only signal; ≈ R→U / PC share)"
+                  >
+                    G→U
+                  </TableHead>
+                  <TableHead
+                    className="text-right"
                     title="Week-1 cumulative reviews / year-1 (curve s1). m1 ≈ 1/s1"
                   >
                     s1
@@ -245,6 +256,11 @@ export default async function AdminReferenceProfilesPage() {
                     <TableCell className="text-right text-xs tabular-nums">
                       {a.reviewsToUnits !== null
                         ? a.reviewsToUnits.toFixed(1)
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-right text-xs tabular-nums">
+                      {a.globalReviewsToUnits !== null
+                        ? a.globalReviewsToUnits.toFixed(1)
                         : '—'}
                     </TableCell>
                     <TableCell className="text-right text-xs tabular-nums">
