@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Game } from '../entities/game.entity';
 import { Milestone } from '../entities/milestone.entity';
 import {
@@ -9,19 +9,16 @@ import {
   AuditVerdict,
   MilestoneAudit,
 } from '../entities/milestone-audit.entity';
-import { Platform } from '../entities/enums';
+import { Platform, SalesSource } from '../entities/enums';
 import { LlmExtractorService } from '../llm/llm-extractor.service';
-import { isPeriodicQuote } from '../ingestion/sales-figure.utils';
 
-// A per-platform figure must not exceed the GLOBAL total by more than this
-// slack before it is flagged as inconsistent (mirrors the ingestion guard).
-const CROSS_PLATFORM_SLACK = 1.15;
-
-// Two figures for the same (game, platform) scope are treated as near
-// duplicates when their units are within this ratio of each other AND their
-// dates are within DUPLICATE_DATE_DAYS.
-const DUPLICATE_UNITS_RATIO = 0.05;
-const DUPLICATE_DATE_DAYS = 120;
+// Synthetic proxy sources: injected deliberately, their `note` documents the
+// methodology rather than being a press quote, so they are excluded from
+// auditing (the model would always misread "players" as engagement).
+const LEAK_SOURCES = new Set<SalesSource>([
+  SalesSource.STEAM_LEAK,
+  SalesSource.PLAYSTATION_LEAK,
+]);
 
 // A stored `reportedAt` is only re-proposed when the LLM-implied date differs
 // by more than this many days (or when the milestone is undated).
@@ -39,7 +36,6 @@ export interface AuditOptions {
   gameId?: string;
   limit?: number;
   incremental?: boolean;
-  useLlm?: boolean;
   persist?: boolean;
   onProgress?: (done: number, total: number) => void;
 }
@@ -65,7 +61,6 @@ export interface AuditFinding {
     units?: number;
     isEngagement?: boolean;
   };
-  ruleFlags: string[];
   reasons: string[];
   llmUsed: boolean;
 }
@@ -95,7 +90,7 @@ const LLM_SCHEMA = {
     isValidCumulativeLifetimeUnits: {
       type: 'boolean',
       description:
-        'True only if the quote states a CUMULATIVE LIFETIME copies/units-sold total for THIS EXACT game. False for periodic (first-week/quarter/fiscal) figures, revenue/$ figures, engagement metrics (players, downloads, active users, subscribers), franchise/series totals, or a different game.',
+        'True only if the quote states a CUMULATIVE LIFETIME copies/units SOLD (or shipped) total for THIS specific game. A total stated "as of <date>", "by <date>", "to date", "cumulative" or "has sold X" is VALID. False for periodic-window figures, revenue/$ figures, engagement metrics, or multi-game franchise/series totals.',
     },
     rejectionReason: {
       type: ['string', 'null'],
@@ -134,7 +129,7 @@ const LLM_SCHEMA = {
     units: {
       type: ['number', 'null'],
       description:
-        'The absolute unit count stated in the quote (e.g. "2 million" -> 2000000). Null if the quote states no count.',
+        'The absolute unit count stated in the quote. Beware locale formatting: "2 million" -> 2000000, and a European thousands separator like "100.000" or "400.000" -> 100000 / 400000. Null if the quote states no count.',
     },
     reportedAt: {
       type: ['string', 'null'],
@@ -160,7 +155,7 @@ const LLM_SCHEMA = {
     'confidence',
     'reason',
   ],
-} as const;
+} satisfies Record<string, unknown>;
 
 @Injectable()
 export class MilestoneAuditService {
@@ -177,7 +172,6 @@ export class MilestoneAuditService {
   ) {}
 
   async audit(opts: AuditOptions = {}): Promise<AuditRunResult> {
-    const useLlm = opts.useLlm ?? true;
     const incremental = opts.incremental ?? true;
     const persist = opts.persist ?? true;
 
@@ -191,14 +185,6 @@ export class MilestoneAuditService {
     if (opts.gameId) qb.andWhere('m.gameId = :gid', { gid: opts.gameId });
     const active = await qb.getMany();
     const totalActive = active.length;
-
-    // Sibling context per game (cross-platform overflow + duplicate checks).
-    const byGame = new Map<string, Milestone[]>();
-    for (const m of active) {
-      const arr = byGame.get(m.gameId) ?? [];
-      arr.push(m);
-      byGame.set(m.gameId, arr);
-    }
 
     const existingAudits = incremental
       ? new Map(
@@ -226,9 +212,7 @@ export class MilestoneAuditService {
     const findings: AuditFinding[] = [];
     let done = 0;
     for (const milestone of capped) {
-      const game = milestone.game;
-      const siblings = byGame.get(milestone.gameId) ?? [];
-      const finding = await this.auditOne(milestone, game, siblings, useLlm);
+      const finding = await this.auditOne(milestone, milestone.game);
       findings.push(finding);
       if (persist) await this.persist(milestone, finding);
       done++;
@@ -241,183 +225,118 @@ export class MilestoneAuditService {
   private async auditOne(
     milestone: Milestone,
     game: Game,
-    siblings: Milestone[],
-    useLlm: boolean,
   ): Promise<AuditFinding> {
-    const ruleFlags: string[] = [];
+    if (LEAK_SOURCES.has(milestone.source)) {
+      return this.finding(milestone, AuditVerdict.OK, 50, {}, [
+        'Leak-derived milestone; excluded from audit.',
+      ]);
+    }
+    if (!this.llm.enabled) {
+      return this.finding(milestone, AuditVerdict.OK, 50, {}, [
+        'LLM disabled (no OPENAI_API_KEY); milestone not audited.',
+      ]);
+    }
+    const note = (milestone.note ?? '').trim();
+    if (!note) {
+      return this.finding(milestone, AuditVerdict.OK, 50, {}, [
+        'No quote to audit against.',
+      ]);
+    }
+
+    const llm = await this.runLlmCritic(milestone, game);
+    if (!llm) {
+      return this.finding(milestone, AuditVerdict.OK, 50, {}, [
+        'LLM returned no verdict; milestone not audited.',
+      ]);
+    }
+
+    return this.combine(milestone, llm);
+  }
+
+  private combine(milestone: Milestone, llm: LlmVerdict): AuditFinding {
+    const confidence = clampScore(llm.confidence);
+
+    if (!llm.isValidCumulativeLifetimeUnits) {
+      return this.finding(
+        milestone,
+        AuditVerdict.REJECT,
+        confidence,
+        {},
+        [
+          `Not a valid lifetime units figure (${llm.rejectionReason ?? 'other'}) — ${llm.reason}`,
+        ],
+        true,
+      );
+    }
+
+    const proposed: AuditFinding['proposed'] = {};
     const reasons: string[] = [];
 
-    const note = milestone.note ?? '';
-
-    if (note && isPeriodicQuote(note)) {
-      ruleFlags.push('PERIODIC_QUOTE');
-      reasons.push('Quote matches a periodic/revenue/engagement pattern.');
-    }
-    if (!milestone.reportedAt) {
-      ruleFlags.push('UNDATED');
-      reasons.push('Milestone has no reportedAt date.');
-    } else if (
-      game.releaseDate &&
-      milestone.reportedAt.getTime() < game.releaseDate.getTime()
-    ) {
-      ruleFlags.push('PRE_RELEASE');
-      reasons.push('Reported date is before the game release date.');
-    }
-
-    const quoteUnits = parseUnitsFromQuote(note);
-    if (
-      quoteUnits !== null &&
-      milestone.units > 0 &&
-      (quoteUnits / milestone.units > UNITS_HIGH_RATIO ||
-        quoteUnits / milestone.units < UNITS_LOW_RATIO)
-    ) {
-      ruleFlags.push('UNITS_QUOTE_MISMATCH');
-      reasons.push(
-        `Quote implies ~${formatUnits(quoteUnits)} but stored units are ${formatUnits(milestone.units)}.`,
-      );
-    }
-
-    const scope = classifyPlatformScope(note);
-    if (
-      scope.platform &&
-      scope.confidence === 'high' &&
-      scope.platform !== milestone.platform &&
-      !milestone.isEngagement
-    ) {
-      ruleFlags.push('PLATFORM_QUOTE_MISMATCH');
-      reasons.push(
-        `Quote scopes to ${scope.platform} but stored platform is ${milestone.platform}.`,
-      );
-    }
-
-    // Cross-platform overflow: a per-platform figure larger than the GLOBAL
-    // total of the same game (both dated within a year of each other).
-    if (milestone.platform !== Platform.GLOBAL && !milestone.isEngagement) {
-      const globalMax = Math.max(
-        0,
-        ...siblings
-          .filter((s) => s.platform === Platform.GLOBAL && !s.isEngagement)
-          .map((s) => s.units),
-      );
-      if (globalMax > 0 && milestone.units > globalMax * CROSS_PLATFORM_SLACK) {
-        ruleFlags.push('EXCEEDS_GLOBAL');
+    if (llm.confidence >= MIN_LLM_FIX_CONFIDENCE) {
+      const llmPlatform = normalizePlatform(llm.platform);
+      if (
+        llmPlatform &&
+        llmPlatform !== milestone.platform &&
+        !milestone.isEngagement
+      ) {
+        proposed.platform = llmPlatform;
         reasons.push(
-          `Per-platform units (${formatUnits(milestone.units)}) exceed the game's GLOBAL total (${formatUnits(globalMax)}).`,
+          `Platform should be ${llmPlatform} (was ${milestone.platform}).`,
+        );
+      }
+      if (llm.isEngagement !== milestone.isEngagement) {
+        proposed.isEngagement = llm.isEngagement;
+        reasons.push(
+          `isEngagement should be ${llm.isEngagement} (was ${milestone.isEngagement}).`,
+        );
+      }
+      const llmDate = parseIsoDate(llm.reportedAt);
+      if (
+        llmDate &&
+        (!milestone.reportedAt ||
+          !datesWithinDays(llmDate, milestone.reportedAt, DATE_DRIFT_DAYS))
+      ) {
+        proposed.reportedAt = llmDate.toISOString();
+        reasons.push(
+          `Date should be ${llmDate.toISOString().slice(0, 10)} (was ${milestone.reportedAt?.toISOString().slice(0, 10) ?? 'none'}).`,
+        );
+      }
+      if (
+        llm.units !== null &&
+        llm.units > 0 &&
+        milestone.units > 0 &&
+        (llm.units / milestone.units > UNITS_HIGH_RATIO ||
+          llm.units / milestone.units < UNITS_LOW_RATIO)
+      ) {
+        proposed.units = Math.round(llm.units);
+        reasons.push(
+          `Units should be ~${formatUnits(llm.units)} (was ${formatUnits(milestone.units)}).`,
         );
       }
     }
 
-    // Duplicate: another active figure with the same scope, near-identical
-    // units and a close date. We flag the OLDER-captured one as the duplicate.
-    const dup = siblings.find(
-      (s) =>
-        s.id !== milestone.id &&
-        s.platform === milestone.platform &&
-        s.isEngagement === milestone.isEngagement &&
-        Math.abs(s.units - milestone.units) <=
-          milestone.units * DUPLICATE_UNITS_RATIO &&
-        datesWithinDays(s.reportedAt, milestone.reportedAt, DUPLICATE_DATE_DAYS) &&
-        s.capturedAt.getTime() < milestone.capturedAt.getTime(),
+    const verdict =
+      Object.keys(proposed).length > 0 ? AuditVerdict.FIX : AuditVerdict.OK;
+    if (verdict === AuditVerdict.OK) reasons.push('Milestone looks correct.');
+
+    return this.finding(
+      milestone,
+      verdict,
+      confidence,
+      proposed,
+      reasons,
+      true,
     );
-    if (dup) {
-      ruleFlags.push('DUPLICATE');
-      reasons.push(
-        `Near-duplicate of an earlier ${milestone.platform} figure (${formatUnits(milestone.units)}).`,
-      );
-    }
-
-    let llm: LlmVerdict | null = null;
-    let llmUsed = false;
-    if (useLlm && this.llm.enabled && note.trim().length > 0) {
-      llm = await this.runLlmCritic(milestone, game);
-      llmUsed = llm !== null;
-    }
-
-    return this.combine(milestone, ruleFlags, reasons, llm, llmUsed);
   }
 
-  private combine(
+  private finding(
     milestone: Milestone,
-    ruleFlags: string[],
+    verdict: AuditVerdict,
+    confidence: number,
+    proposed: AuditFinding['proposed'],
     reasons: string[],
-    llm: LlmVerdict | null,
-    llmUsed: boolean,
+    llmUsed = false,
   ): AuditFinding {
-    const proposed: AuditFinding['proposed'] = {};
-    let verdict: AuditVerdict = AuditVerdict.OK;
-    let confidence = 50;
-
-    if (llm && !llm.isValidCumulativeLifetimeUnits) {
-      verdict = AuditVerdict.REJECT;
-      confidence = clampScore(llm.confidence);
-      reasons.push(
-        `LLM: not a valid lifetime units figure (${llm.rejectionReason ?? 'other'}) — ${llm.reason}`,
-      );
-    } else if (ruleFlags.includes('PERIODIC_QUOTE') && !llm) {
-      verdict = AuditVerdict.REJECT;
-      confidence = 70;
-    } else if (ruleFlags.includes('DUPLICATE')) {
-      verdict = AuditVerdict.REJECT;
-      confidence = Math.max(confidence, 65);
-    } else {
-      if (llm && llm.confidence >= MIN_LLM_FIX_CONFIDENCE) {
-        const llmPlatform = normalizePlatform(llm.platform);
-        if (
-          llmPlatform &&
-          llmPlatform !== milestone.platform &&
-          !milestone.isEngagement
-        ) {
-          proposed.platform = llmPlatform;
-          reasons.push(
-            `LLM: platform should be ${llmPlatform} (was ${milestone.platform}).`,
-          );
-        }
-        if (llm.isEngagement !== milestone.isEngagement) {
-          proposed.isEngagement = llm.isEngagement;
-          reasons.push(
-            `LLM: isEngagement should be ${llm.isEngagement} (was ${milestone.isEngagement}).`,
-          );
-        }
-        const llmDate = parseIsoDate(llm.reportedAt);
-        if (
-          llmDate &&
-          (!milestone.reportedAt ||
-            !datesWithinDays(llmDate, milestone.reportedAt, DATE_DRIFT_DAYS))
-        ) {
-          proposed.reportedAt = llmDate.toISOString();
-          reasons.push(
-            `LLM: date should be ${llmDate.toISOString().slice(0, 10)} (was ${milestone.reportedAt?.toISOString().slice(0, 10) ?? 'none'}).`,
-          );
-        }
-        if (
-          llm.units !== null &&
-          llm.units > 0 &&
-          milestone.units > 0 &&
-          (llm.units / milestone.units > UNITS_HIGH_RATIO ||
-            llm.units / milestone.units < UNITS_LOW_RATIO)
-        ) {
-          proposed.units = Math.round(llm.units);
-          reasons.push(
-            `LLM: units should be ~${formatUnits(llm.units)} (was ${formatUnits(milestone.units)}).`,
-          );
-        }
-      }
-
-      if (Object.keys(proposed).length > 0) {
-        verdict = AuditVerdict.FIX;
-        confidence = llm ? clampScore(llm.confidence) : 55;
-      } else if (ruleFlags.length > 0) {
-        // No concrete correction to propose, but a deterministic rule fired
-        // (undated, pre-release, exceeds-global…): surface it for review
-        // rather than silently marking it OK.
-        verdict = AuditVerdict.FIX;
-        confidence = llm ? clampScore(llm.confidence) : 50;
-      } else {
-        verdict = AuditVerdict.OK;
-        confidence = llm ? clampScore(llm.confidence) : 50;
-      }
-    }
-
     return {
       milestoneId: milestone.id,
       gameId: milestone.gameId,
@@ -434,7 +353,6 @@ export class MilestoneAuditService {
         sourceUrl: milestone.sourceUrl,
       },
       proposed,
-      ruleFlags,
       reasons,
       llmUsed,
     };
@@ -445,15 +363,38 @@ export class MilestoneAuditService {
     game: Game,
   ): Promise<LlmVerdict | null> {
     const system =
-      'You audit a single sales milestone already stored in a database. ' +
-      'You are given the game and the verbatim quote the figure was extracted ' +
-      'from. Judge STRICTLY from the quote text — never use outside knowledge. ' +
-      'A valid milestone is a CUMULATIVE LIFETIME copies/units-sold total for ' +
-      'THIS EXACT game. Reject periodic figures (first-week, weekend, monthly, ' +
-      'quarter, fiscal-year windows), revenue/$ figures, engagement metrics ' +
-      '(players, downloads, active users, subscribers), franchise/series ' +
-      'totals, and figures about a different game. Determine the platform scope, ' +
-      'unit count and date implied by the quote.';
+      'You audit a single sales milestone stored in a database. You are given ' +
+      'the game and the verbatim quote the figure was extracted from. Judge ' +
+      'STRICTLY from the quote text — never use outside knowledge.\n\n' +
+      'The note may mix the ORIGINAL quoted figure (usually inside nested ' +
+      "quotation marks) with the operator's own annotations. Base your verdict " +
+      'on the original quoted figure; treat annotations (e.g. "launch-scoped", ' +
+      '"predates the PC release") as secondary context, not as a reason to ' +
+      'reject a figure the quote itself states as a worldwide/cumulative total.\n\n' +
+      'A VALID milestone is a cumulative lifetime copies/units SOLD (or ' +
+      'shipped) total for THIS specific game.\n' +
+      '- "as of <date>", "by <date>", "to date", "cumulative", "lifetime", ' +
+      '"has sold/shipped X", "total shipments", "shipments and digital sales", ' +
+      '"units shipped" are VALID: they are cumulative sell-in/sell-through ' +
+      'totals, normally stated as-of a date. Do NOT reject these as periodic.\n' +
+      '- A total measured at or around a launch ("as of launch", ' +
+      '"launch-scoped", "at launch") is STILL a cumulative total. Reject as ' +
+      '"periodic" ONLY when the figure explicitly counts sales DURING a bounded ' +
+      "WINDOW: first day/week/weekend/month, opening sales, a named month's " +
+      'sales, a specific quarter (Q1-Q4) or a fiscal year (FY).\n' +
+      '- Reject as "revenue" when the figure is money ($/€/£/¥), not a unit ' +
+      'count.\n' +
+      '- Reject as "engagement" when it counts players/downloads/installs/' +
+      'active users/subscribers rather than copies sold.\n' +
+      '- Reject as "franchise" ONLY when the quote explicitly sums MULTIPLE ' +
+      "different games or a whole series. A single game's worldwide or " +
+      'shipment total is NOT franchise. A regional total (e.g. "across Europe ' +
+      'and North America") is STILL this game — treat it as valid and note the ' +
+      'region in the reason.\n' +
+      '- Reject as "wrong_game" when the quote is clearly about a different ' +
+      'title.\n\n' +
+      'Also determine the platform scope, unit count and date implied by the ' +
+      'quote.';
 
     const user = [
       `Game: ${game.name}`,
@@ -475,7 +416,7 @@ export class MilestoneAuditService {
       system,
       user,
       schemaName: 'milestone_audit_verdict',
-      schema: LLM_SCHEMA as unknown as Record<string, unknown>,
+      schema: LLM_SCHEMA,
     });
   }
 
@@ -502,7 +443,7 @@ export class MilestoneAuditService {
       : null;
     row.proposedUnits = finding.proposed.units ?? null;
     row.proposedIsEngagement = finding.proposed.isEngagement ?? null;
-    row.ruleFlags = finding.ruleFlags;
+    row.ruleFlags = [];
     row.reasons = finding.reasons;
     row.llmUsed = finding.llmUsed;
     row.fingerprint = fingerprintOf(milestone);
@@ -549,101 +490,12 @@ function datesWithinDays(
 function normalizePlatform(value: string | null): Platform | null {
   if (!value) return null;
   const upper = value.toUpperCase();
-  return (Object.values(Platform) as string[]).includes(upper)
-    ? (upper as Platform)
-    : null;
-}
-
-const SCALE_WORDS: Record<string, number> = {
-  thousand: 1e3,
-  k: 1e3,
-  million: 1e6,
-  m: 1e6,
-  billion: 1e9,
-  bn: 1e9,
-  b: 1e9,
-};
-
-// Best-effort extraction of the units figure a quote is asserting. Prefers a
-// count adjacent to "copies/units/sold/sales"; falls back to the first
-// number+scale token. Returns null when nothing plausible is found.
-export function parseUnitsFromQuote(quote: string): number | null {
-  if (!quote) return null;
-  const re =
-    /(\d[\d,.]*)\s*(thousand|million|billion|bn|k|m|b)?\b([^.]{0,24})/gi;
-  let best: { value: number; scored: boolean } | null = null;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(quote)) !== null) {
-    const raw = match[1].replace(/,/g, '');
-    const num = Number.parseFloat(raw);
-    if (!Number.isFinite(num)) continue;
-    const scaleWord = match[2]?.toLowerCase();
-    const scale = scaleWord ? SCALE_WORDS[scaleWord] : 1;
-    // A bare integer without a scale word and without a copies/units cue is
-    // almost never a sales figure (dates, prices, versions) — skip it.
-    const tail = (match[3] ?? '').toLowerCase();
-    const near = /(copies|units|sold|sales)/.test(tail);
-    if (!scaleWord && !near) continue;
-    const value = num * scale;
-    if (value <= 0) continue;
-    if (!best || (near && !best.scored) || (near === best.scored && value > best.value)) {
-      best = { value, scored: near };
-    }
-  }
-  return best ? best.value : null;
+  if (!(upper in Platform)) return null;
+  return (Platform as Record<string, Platform>)[upper];
 }
 
 function formatUnits(n: number): string {
   if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
   if (n >= 1e3) return `${(n / 1e3).toFixed(0)}k`;
   return `${Math.round(n)}`;
-}
-
-type Scope = 'global' | 'pc' | 'ps' | 'xbox' | 'switch' | 'console';
-
-const SCOPE_PATTERNS: Array<{ scope: Exclude<Scope, 'global' | 'console'>; re: RegExp }> = [
-  { scope: 'pc', re: /\b(steam|pc)\b/i },
-  { scope: 'ps', re: /\b(playstation|ps[45]|psn)\b/i },
-  { scope: 'xbox', re: /\bxbox\b/i },
-  { scope: 'switch', re: /\b(switch)\b/i },
-];
-
-const SCOPING_CONTEXT =
-  /\b(on|via|for|through)\s+(steam|pc|playstation|ps[45]|xbox|switch|nintendo)\b|\b(steam|pc|playstation|ps[45]|xbox|switch)\s+(sales|copies|units|version|players)\b|copies\s+on\b/i;
-
-const GLOBAL_HINT =
-  /\b(worldwide|global(?:ly)?|all\s+platforms|combined|across)\b/i;
-
-const SCOPE_TO_PLATFORM: Record<Exclude<Scope, 'global' | 'console'>, Platform> = {
-  pc: Platform.PC,
-  ps: Platform.PLAYSTATION,
-  xbox: Platform.XBOX,
-  switch: Platform.SWITCH,
-};
-
-// Compact port of the note→scope classifier used by the platform-split miner:
-// only returns a single-platform verdict when the quote clearly scopes to it.
-export function classifyPlatformScope(note: string): {
-  platform: Platform | null;
-  confidence: 'high' | 'low';
-} {
-  if (!note) return { platform: null, confidence: 'low' };
-
-  const mentioned = [
-    ...new Set(SCOPE_PATTERNS.filter((p) => p.re.test(note)).map((p) => p.scope)),
-  ];
-
-  if (mentioned.length >= 2) return { platform: Platform.GLOBAL, confidence: 'high' };
-  if (mentioned.length === 1) {
-    const hasScoping = SCOPING_CONTEXT.test(note);
-    if (GLOBAL_HINT.test(note) && !hasScoping) {
-      return { platform: Platform.GLOBAL, confidence: 'low' };
-    }
-    return {
-      platform: SCOPE_TO_PLATFORM[mentioned[0]],
-      confidence: hasScoping ? 'high' : 'low',
-    };
-  }
-  if (GLOBAL_HINT.test(note)) return { platform: Platform.GLOBAL, confidence: 'high' };
-  return { platform: null, confidence: 'low' };
 }

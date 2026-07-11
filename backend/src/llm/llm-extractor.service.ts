@@ -26,7 +26,7 @@ export class LlmExtractorService {
   constructor(config: ConfigService) {
     const openaiKey = config.get<string>('OPENAI_API_KEY');
     this.openai = openaiKey ? new OpenAI({ apiKey: openaiKey }) : null;
-    this.openaiModel = config.get<string>('OPENAI_MODEL') ?? 'gpt-4o-mini';
+    this.openaiModel = config.get<string>('OPENAI_MODEL') ?? 'gpt-5-mini';
 
     if (!this.openai) {
       this.logger.warn(
@@ -50,14 +50,15 @@ export class LlmExtractorService {
     }
   }
 
-  private async extractWithOpenAI<T>(
-    params: ExtractParams,
-  ): Promise<T | null> {
+  private async extractWithOpenAI<T>(params: ExtractParams): Promise<T | null> {
     if (!this.openai) return null;
+
+    // GPT-5 and o-series reasoning models only accept the default temperature (1).
+    const supportsTemperature = !/^(gpt-5|o\d)/.test(this.openaiModel);
 
     const response = await this.openai.chat.completions.create({
       model: this.openaiModel,
-      temperature: 0,
+      ...(supportsTemperature ? { temperature: 0 } : {}),
       messages: [
         { role: 'system', content: params.system },
         { role: 'user', content: params.user },
@@ -69,7 +70,7 @@ export class LlmExtractorService {
             name: params.schemaName,
             description:
               'Return the structured extraction result matching the schema.',
-            parameters: params.schema as Record<string, unknown>,
+            parameters: params.schema,
           },
         },
       ],

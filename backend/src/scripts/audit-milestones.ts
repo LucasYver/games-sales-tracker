@@ -13,17 +13,16 @@ import {
  * Phase 1 — milestone audit (report only).
  *
  * Re-judges every active milestone against its OWN stored evidence (verbatim
- * `note`, sourceUrl, units, platform, date) using deterministic rules + an LLM
- * critic, and writes a report of what WOULD be fixed or rejected. It never
- * mutates a milestone or a game — the only writes are the `milestone_audit`
- * findings rows (needed for incremental re-runs and the future review queue).
+ * `note`, sourceUrl, units, platform, date) using an LLM critic, and writes a
+ * report of what WOULD be fixed or rejected. It never mutates a milestone or a
+ * game — the only writes are the `milestone_audit` findings rows (needed for
+ * incremental re-runs and the future review queue).
  *
  * Usage (from backend/):
- *   npm run audit:milestones                 # incremental, LLM on, persists findings
+ *   npm run audit:milestones                 # incremental, persists findings
  *   npm run audit:milestones -- --full       # re-audit everything (ignore prior findings)
  *   npm run audit:milestones -- --game <id>  # single game
  *   npm run audit:milestones -- --limit 50   # cap the number of milestones audited
- *   npm run audit:milestones -- --no-llm     # deterministic rules only (no OpenAI calls)
  *   npm run audit:milestones -- --dry-run    # compute + report, persist NOTHING
  */
 
@@ -31,16 +30,14 @@ interface Args {
   gameId?: string;
   limit?: number;
   full: boolean;
-  useLlm: boolean;
   persist: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { full: false, useLlm: true, persist: true };
+  const args: Args = { full: false, persist: true };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--full') args.full = true;
-    else if (a === '--no-llm') args.useLlm = false;
     else if (a === '--dry-run') args.persist = false;
     else if (a === '--game') args.gameId = argv[++i];
     else if (a === '--limit') args.limit = Number.parseInt(argv[++i], 10);
@@ -50,19 +47,15 @@ function parseArgs(argv: string[]): Args {
 
 function summarize(findings: AuditFinding[]): {
   byVerdict: Record<string, number>;
-  byRuleFlag: Record<string, number>;
   llmUsed: number;
 } {
   const byVerdict: Record<string, number> = {};
-  const byRuleFlag: Record<string, number> = {};
   let llmUsed = 0;
   for (const f of findings) {
     byVerdict[f.verdict] = (byVerdict[f.verdict] ?? 0) + 1;
-    for (const flag of f.ruleFlags)
-      byRuleFlag[flag] = (byRuleFlag[flag] ?? 0) + 1;
     if (f.llmUsed) llmUsed++;
   }
-  return { byVerdict, byRuleFlag, llmUsed };
+  return { byVerdict, llmUsed };
 }
 
 async function main(): Promise<void> {
@@ -75,7 +68,7 @@ async function main(): Promise<void> {
   const service = app.get(MilestoneAuditService);
 
   logger.log(
-    `Auditing milestones (incremental=${!args.full}, llm=${args.useLlm}, persist=${args.persist}` +
+    `Auditing milestones (incremental=${!args.full}, persist=${args.persist}` +
       `${args.gameId ? `, game=${args.gameId}` : ''}${args.limit ? `, limit=${args.limit}` : ''}).`,
   );
 
@@ -83,7 +76,6 @@ async function main(): Promise<void> {
     gameId: args.gameId,
     limit: args.limit,
     incremental: !args.full,
-    useLlm: args.useLlm,
     persist: args.persist,
     onProgress: (done, total) => {
       if (done % 25 === 0 || done === total) {
@@ -92,7 +84,7 @@ async function main(): Promise<void> {
     },
   });
 
-  const { byVerdict, byRuleFlag, llmUsed } = summarize(findings);
+  const { byVerdict, llmUsed } = summarize(findings);
 
   const actionable = findings
     .filter((f) => f.verdict !== AuditVerdict.OK)
@@ -110,7 +102,7 @@ async function main(): Promise<void> {
         totalActive,
         scanned,
         skipped,
-        summary: { byVerdict, byRuleFlag, llmUsed },
+        summary: { byVerdict, llmUsed },
         findings: actionable,
       },
       null,
@@ -126,10 +118,6 @@ async function main(): Promise<void> {
   logger.log(`LLM critic used:   ${llmUsed}/${scanned}`);
   logger.log('Verdicts:');
   for (const [k, v] of Object.entries(byVerdict).sort((a, b) => b[1] - a[1])) {
-    logger.log(`  ${k}: ${v}`);
-  }
-  logger.log('Rule flags:');
-  for (const [k, v] of Object.entries(byRuleFlag).sort((a, b) => b[1] - a[1])) {
     logger.log(`  ${k}: ${v}`);
   }
   logger.log(`Actionable findings (FIX/REJECT): ${actionable.length}`);
