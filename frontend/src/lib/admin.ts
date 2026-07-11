@@ -70,7 +70,6 @@ export interface AdminStats {
     total: number;
     withSales: number;
     withEstimate: number;
-    withCalibration: number;
   };
   milestones: {
     total: number;
@@ -89,12 +88,6 @@ export interface AdminGameSummary {
   releaseDate: string | null;
   isFree: boolean;
   platforms: Platform[];
-  calibratedMultiplier: number | null;
-  calibratedPsMultiplier: number | null;
-  calibratedXboxMultiplier: number | null;
-  calibrationSourcePc: SalesSource | null;
-  calibrationSourcePs: SalesSource | null;
-  calibrationSourceXbox: SalesSource | null;
   hasMilestone: boolean;
   hasEstimate: boolean;
   lastRefreshedAt: string | null;
@@ -224,12 +217,6 @@ export interface AdminGamePageSummary {
   lastRefreshedAt: string | null;
   createdAt: string;
   updatedAt: string;
-  calibratedMultiplier: number | null;
-  calibratedPsMultiplier: number | null;
-  calibratedXboxMultiplier: number | null;
-  calibrationSourcePc: SalesSource | null;
-  calibrationSourcePs: SalesSource | null;
-  calibrationSourceXbox: SalesSource | null;
   sources: AdminGameSource[];
   latestSignals: LatestSignal[];
   peakCcu: { value: number; capturedAt: string } | null;
@@ -293,12 +280,6 @@ export interface AdminEstimateSnapshot {
   computedAt: string;
   estimatedTodayLow: number;
   estimatedTodayHigh: number;
-  // "Pure algo" headline: same range but computed with all
-  // calibrated multipliers disabled AND no declared-figure floor/cap
-  // in the reconciliation step. Nullable: snapshots persisted before
-  // the column was introduced don't have it.
-  pureEstimatedTodayLow: number | null;
-  pureEstimatedTodayHigh: number | null;
   reconciliation: AdminReconciliationEntry[];
 }
 
@@ -394,12 +375,6 @@ export interface IssueGroup<T> {
 export interface AdminIssues {
   undatedMilestones: IssueGroup<AdminMilestoneWithGame>;
   suspectQuotes: IssueGroup<AdminMilestoneWithGame>;
-  calibrationOutliers: IssueGroup<{
-    gameId: string;
-    gameName: string;
-    platform: Platform;
-    calibratedMultiplier: number;
-  }>;
   staleGames: IssueGroup<{
     gameId: string;
     gameName: string;
@@ -584,9 +559,7 @@ export interface BoxleiterBreakdownEntry {
   platform: Platform;
   method: string;
   signal: { metric: string; value: number; capturedAt: string };
-  calibratedValue: number | null;
-  isCalibrated: boolean;
-  multiplierSource: 'matcher' | 'global' | 'calibrated';
+  multiplierSource: 'matcher' | 'global';
   multiplierLow: number;
   multiplierHigh: number;
   finalLow: number;
@@ -649,7 +622,7 @@ export interface PlatformBreakdownResult {
 export interface AdminEstimateBreakdown {
   computedAt: string;
   platforms: PlatformBreakdownResult[];
-  pureTotal: { low: number; high: number } | null;
+  total: { low: number; high: number } | null;
   declared: {
     units: number;
     source: string;

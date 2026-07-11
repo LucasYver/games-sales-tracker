@@ -1,15 +1,12 @@
 import {
-  IsEnum,
   IsInt,
   IsISO8601,
-  IsNumber,
   IsOptional,
   IsPositive,
   IsString,
   MinLength,
   ValidateIf,
 } from 'class-validator';
-import { SalesSource } from '../../entities';
 
 export class UpdateGameDto {
   @IsOptional()
@@ -27,37 +24,4 @@ export class UpdateGameDto {
   @IsInt()
   @IsPositive()
   igdbId?: number | null;
-
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsNumber()
-  @IsPositive()
-  calibratedMultiplier?: number | null;
-
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsNumber()
-  @IsPositive()
-  calibratedPsMultiplier?: number | null;
-
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsNumber()
-  @IsPositive()
-  calibratedXboxMultiplier?: number | null;
-
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsEnum(SalesSource)
-  calibrationSourcePc?: SalesSource | null;
-
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsEnum(SalesSource)
-  calibrationSourcePs?: SalesSource | null;
-
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsEnum(SalesSource)
-  calibrationSourceXbox?: SalesSource | null;
 }

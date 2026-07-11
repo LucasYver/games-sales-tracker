@@ -49,7 +49,6 @@ export class AdminController {
     @Query('platform') platform?: string,
     @Query('platformExclusive') platformExclusive?: string,
     @Query('hasSales') hasSales?: string,
-    @Query('calibrated') calibrated?: string,
     @Query('hasEstimates') hasEstimates?: string,
     @Query('sort') sort?: string,
     @Query('direction') direction?: string,
@@ -62,12 +61,6 @@ export class AdminController {
       platformExclusive: platformExclusive === 'true',
       hasSales:
         hasSales === 'true' ? true : hasSales === 'false' ? false : undefined,
-      calibrated:
-        calibrated === 'true'
-          ? true
-          : calibrated === 'false'
-            ? false
-            : undefined,
       hasEstimates:
         hasEstimates === 'true'
           ? true

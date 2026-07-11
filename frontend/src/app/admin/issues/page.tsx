@@ -1,11 +1,5 @@
 import Link from 'next/link';
-import {
-  AlertTriangle,
-  Calculator,
-  Target,
-  Wifi,
-  Globe,
-} from 'lucide-react';
+import { AlertTriangle, Target, Wifi, Globe } from 'lucide-react';
 import { adminFetch, type AdminIssues } from '@/lib/admin';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -35,7 +29,6 @@ export default async function AdminIssuesPage() {
   const issues = await adminFetch<AdminIssues>('/issues');
 
   const totalProblems =
-    issues.calibrationOutliers.count +
     issues.staleGames.count +
     issues.inactiveTrustedSources.count +
     issues.gamesWithoutAnySignal.count +
@@ -56,53 +49,6 @@ export default async function AdminIssuesPage() {
           </p>
         </div>
       </header>
-
-      {/* Calibration outliers */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm font-semibold tracking-wide uppercase">
-            <Calculator aria-hidden="true" className="size-4" />
-            Calibration outliers ({issues.calibrationOutliers.count})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {issues.calibrationOutliers.items.length === 0 ? (
-            <p className="text-muted-foreground p-6 text-sm">
-              All calibrated multipliers are within plausible bounds.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Game</TableHead>
-                  <TableHead>Platform</TableHead>
-                  <TableHead className="text-right">Multiplier</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {issues.calibrationOutliers.items.map((o) => (
-                  <TableRow key={`${o.gameId}-${o.platform}`}>
-                    <TableCell>
-                      <Link
-                        href={`/admin/games/${o.gameId}`}
-                        className="hover:text-primary hover:underline"
-                      >
-                        {o.gameName}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{o.platform}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {o.calibratedMultiplier.toFixed(2)}x
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
 
       {/* Estimation misses */}
       <Card>

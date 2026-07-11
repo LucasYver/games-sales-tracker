@@ -27,6 +27,7 @@
     "backfill:platform-release-dates": "ts-node src/scripts/backfill-platform-release-dates.ts",
     "backfill:ps-reconstruction": "ts-node src/scripts/backfill-ps-reconstruction.ts",
     "validate:matcher-holdout": "ts-node src/scripts/validate-matcher-holdout.ts",
+    "audit:milestones": "ts-node src/scripts/audit-milestones.ts",
     "typeorm": "typeorm-ts-node-commonjs",
     "migration:generate": "npm run typeorm -- migration:generate -d src/db/data-source.ts",
     "migration:run": "npm run typeorm -- migration:run -d src/db/data-source.ts",

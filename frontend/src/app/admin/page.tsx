@@ -76,7 +76,7 @@ export default async function AdminDashboard() {
         <StatCard
           label="Games"
           value={compactNumber(stats.games.total)}
-          sublabel={`${stats.games.withSales} with declared sales · ${stats.games.withCalibration} calibrated`}
+          sublabel={`${stats.games.withSales} with declared sales`}
         />
         <StatCard
           label="Milestones"

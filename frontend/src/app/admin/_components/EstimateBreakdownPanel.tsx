@@ -40,7 +40,6 @@ const MULTIPLIER_SOURCE_LABEL: Record<
 > = {
   matcher: 'matcher',
   global: 'global fallback',
-  calibrated: 'calibrated',
 };
 
 function ProvenanceTag({ label }: { label: string }) {
@@ -73,11 +72,6 @@ function BoxleiterRow({ entry }: { entry: BoxleiterBreakdownEntry }) {
           {fmtMultiplierRange(entry.multiplierLow, entry.multiplierHigh)}
         </span>
         <ProvenanceTag label={MULTIPLIER_SOURCE_LABEL[entry.multiplierSource]} />
-        {entry.calibratedValue != null && (
-          <span className="text-muted-foreground/60 font-mono text-[10px]">
-            calibrated ×{entry.calibratedValue.toFixed(2)}
-          </span>
-        )}
         <span>=</span>
         <span className="text-foreground font-mono tabular-nums">
           {fmtRange(entry.finalLow, entry.finalHigh)}
@@ -242,11 +236,10 @@ export function EstimateBreakdownView({
 }: {
   breakdown: AdminEstimateBreakdown;
 }) {
-  const { platforms, pureTotal, declared } = breakdown;
+  const { platforms, total, declared } = breakdown;
   if (platforms.length === 0) return null;
 
-  const ratio =
-    pureTotal && declared ? pureTotal.high / declared.units : null;
+  const ratio = total && declared ? total.high / declared.units : null;
   const ratioTone =
     ratio == null
       ? ''
@@ -260,12 +253,12 @@ export function EstimateBreakdownView({
     <Card>
       <CardHeader>
         <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-          Pure algo breakdown
+          Estimate breakdown
         </CardTitle>
         <p className="text-muted-foreground text-xs">
-          Matcher-derived multipliers &amp; shares · no declared figures ·
-          re-computed on demand. Console bands are ventilated from PC/PS via the
-          matcher platform split.
+          Matcher-derived multipliers &amp; shares · re-computed on demand.
+          Console bands are ventilated from PC/PS via the matcher platform
+          split.
         </p>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -273,17 +266,17 @@ export function EstimateBreakdownView({
           <PlatformSection key={p.platform} p={p} />
         ))}
 
-        {(pureTotal ?? declared) && (
+        {(total ?? declared) && (
           <div className="space-y-1 border-t pt-4">
             <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
-              Pure total vs declared
+              Total vs declared
             </p>
             <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
-              {pureTotal && (
+              {total && (
                 <span className="tabular-nums">
-                  pure{' '}
+                  estimate{' '}
                   <span className="font-semibold">
-                    {fmtRange(pureTotal.low, pureTotal.high)}
+                    {fmtRange(total.low, total.high)}
                   </span>
                 </span>
               )}

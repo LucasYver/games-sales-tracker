@@ -52,21 +52,6 @@ export class EstimateSnapshot {
   @Column('int')
   estimatedTodayHigh: number;
 
-  // "Pure algo" headline: same range but computed by re-running the
-  // estimation pipeline as if no declared sales record existed for
-  // this game. Bypasses the calibrated Boxleiter multipliers (forces
-  // defaults) AND the declared-figure-aided floor/cap inside
-  // `aggregateSales`. Lets us measure how strong the model is on its
-  // own, independent of any external help.
-  //
-  // Nullable because legacy rows produced before the column existed
-  // can't be re-derived without re-running the full rebuild path.
-  @Column('int', { nullable: true })
-  pureEstimatedTodayLow: number | null;
-
-  @Column('int', { nullable: true })
-  pureEstimatedTodayHigh: number | null;
-
   @Column('jsonb', { default: () => "'[]'::jsonb" })
   reconciliation: SerializedReconciliationEntry[];
 

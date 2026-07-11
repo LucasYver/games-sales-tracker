@@ -10,7 +10,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Platform, SalesSource } from './enums';
+import { Platform } from './enums';
 import { GameSource } from './game-source.entity';
 import { SignalSnapshot } from './signal-snapshot.entity';
 import { SalesEstimate } from './sales-estimate.entity';
@@ -136,44 +136,6 @@ export class Game {
   // data is too sparse/unreliable and would skew the derived reference vectors.
   @Column({ type: 'boolean', default: false })
   excludedFromReference: boolean;
-
-  // Per-platform Boxleiter multipliers (signal → units) derived from this
-  // game's most reliable declared figure for each platform. When set, they
-  // replace the generic default ranges so per-platform estimates are
-  // calibrated to this specific title. Null until a trustworthy declared
-  // figure with a contemporaneous signal snapshot exists for that platform.
-  //   - calibratedMultiplier:     PC, units per Steam review
-  //   - calibratedPsMultiplier:   PlayStation, units per PS Store rating
-  //   - calibratedXboxMultiplier: Xbox, units per Xbox Store rating
-  @Column({ type: 'float', nullable: true })
-  calibratedMultiplier: number | null;
-
-  @Column({ type: 'float', nullable: true })
-  calibratedPsMultiplier: number | null;
-
-  @Column({ type: 'float', nullable: true })
-  calibratedXboxMultiplier: number | null;
-
-  // SalesSource of the milestone that produced each calibrated multiplier
-  // above. Kept for traceability only — the spread around a calibrated
-  // multiplier is now a single uniform `CALIBRATED_MULTIPLIER_SPREAD` and
-  // no longer varies by source. Always populated when the corresponding
-  // `calibrated*Multiplier` is.
-  @Column({ type: 'enum', enum: SalesSource, nullable: true })
-  calibrationSourcePc: SalesSource | null;
-
-  @Column({ type: 'enum', enum: SalesSource, nullable: true })
-  calibrationSourcePs: SalesSource | null;
-
-  @Column({ type: 'enum', enum: SalesSource, nullable: true })
-  calibrationSourceXbox: SalesSource | null;
-
-  // True when `calibratedPsMultiplier` was derived using a reconstructed
-  // (synthetic) PS rating at the milestone date rather than a real snapshot in
-  // the calibration window — see `EstimationService.recalibrateFromGlobal`.
-  // Traceability only; does not affect the estimate.
-  @Column({ type: 'boolean', default: false })
-  psCalibrationReconstructed: boolean;
 
   @CreateDateColumn()
   createdAt: Date;

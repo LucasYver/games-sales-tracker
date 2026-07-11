@@ -33,12 +33,6 @@ export interface UpdateGameInput {
   name?: string;
   releaseDate?: string | null;
   igdbId?: number | null;
-  calibratedMultiplier?: number | null;
-  calibratedPsMultiplier?: number | null;
-  calibratedXboxMultiplier?: number | null;
-  calibrationSourcePc?: SalesSource | null;
-  calibrationSourcePs?: SalesSource | null;
-  calibrationSourceXbox?: SalesSource | null;
 }
 
 export interface UpdateMilestoneInput {
@@ -59,7 +53,6 @@ export interface AdminStats {
     total: number;
     withSales: number;
     withEstimate: number;
-    withCalibration: number;
   };
   milestones: {
     total: number;
@@ -87,12 +80,6 @@ export interface AdminGameSummary {
   releaseDate: Date | null;
   isFree: boolean;
   platforms: Platform[];
-  calibratedMultiplier: number | null;
-  calibratedPsMultiplier: number | null;
-  calibratedXboxMultiplier: number | null;
-  calibrationSourcePc: SalesSource | null;
-  calibrationSourcePs: SalesSource | null;
-  calibrationSourceXbox: SalesSource | null;
   hasMilestone: boolean;
   hasEstimate: boolean;
   lastRefreshedAt: Date | null;
@@ -125,8 +112,6 @@ export interface AdminEstimateSnapshot {
   computedAt: Date;
   estimatedTodayLow: number;
   estimatedTodayHigh: number;
-  pureEstimatedTodayLow: number | null;
-  pureEstimatedTodayHigh: number | null;
   reconciliation: SerializedReconciliationEntry[];
 }
 
@@ -222,12 +207,6 @@ export interface AdminGameSummary2 {
   lastRefreshedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
-  calibratedMultiplier: number | null;
-  calibratedPsMultiplier: number | null;
-  calibratedXboxMultiplier: number | null;
-  calibrationSourcePc: SalesSource | null;
-  calibrationSourcePs: SalesSource | null;
-  calibrationSourceXbox: SalesSource | null;
   sources: unknown[];
   latestSignals: LatestSignal[];
   peakCcu: { value: number; capturedAt: Date } | null;
@@ -288,12 +267,6 @@ export interface IssueGroup<T> {
 export interface AdminIssues {
   undatedMilestones: IssueGroup<Milestone & { gameName: string }>;
   suspectQuotes: IssueGroup<Milestone & { gameName: string }>;
-  calibrationOutliers: IssueGroup<{
-    gameId: string;
-    gameName: string;
-    platform: Platform;
-    calibratedMultiplier: number;
-  }>;
   staleGames: IssueGroup<{
     gameId: string;
     gameName: string;
@@ -315,8 +288,6 @@ export interface AdminIssues {
   }>;
 }
 
-const CALIBRATION_LOW_BOUND = 6;
-const CALIBRATION_HIGH_BOUND = 400;
 const STALE_DAYS = 30;
 const ISSUE_PREVIEW_LIMIT = 50;
 
@@ -398,7 +369,6 @@ export class AdminService {
       gamesTotal,
       gamesWithSales,
       gamesWithEstimate,
-      gamesWithCalibration,
       salesTotal,
       salesUndated,
       bySourceRows,
@@ -420,7 +390,6 @@ export class AdminService {
         .innerJoin('g.estimates', 'e')
         .select('COUNT(DISTINCT g.id)', 'c')
         .getRawOne<{ c: string }>(),
-      this.games.count({ where: { calibratedMultiplier: undefined } as never }),
       this.milestones.count({ where: { rejectedAt: IsNull() } }),
       this.milestones.count({
         where: { reportedAt: IsNull(), rejectedAt: IsNull() },
@@ -457,24 +426,11 @@ export class AdminService {
     );
     for (const row of bySourceRows) bySource[row.source] = Number(row.c);
 
-    // Count games that have at least one calibrated Boxleiter multiplier
-    // (PC, PlayStation or Xbox). Done in raw SQL because TypeORM's typed
-    // where helpers don't compose well with multi-column "any not null".
-    const calibrated = await this.games
-      .createQueryBuilder('g')
-      .where(
-        'g.calibratedMultiplier IS NOT NULL ' +
-          'OR g.calibratedPsMultiplier IS NOT NULL ' +
-          'OR g.calibratedXboxMultiplier IS NOT NULL',
-      )
-      .getCount();
-
     return {
       games: {
         total: gamesTotal,
         withSales: Number(gamesWithSales?.c ?? 0),
         withEstimate: Number(gamesWithEstimate?.c ?? 0),
-        withCalibration: calibrated,
       },
       milestones: {
         total: salesTotal,
@@ -499,7 +455,6 @@ export class AdminService {
     platform?: string;
     platformExclusive?: boolean;
     hasSales?: boolean;
-    calibrated?: boolean;
     hasEstimates?: boolean;
     sort?: 'updated' | 'releaseDate' | 'lastRefreshed';
     direction?: 'asc' | 'desc';
@@ -508,11 +463,6 @@ export class AdminService {
   }): Promise<PaginatedAdmin<AdminGameSummary>> {
     const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
     const offset = Math.max(opts.offset ?? 0, 0);
-
-    const calibratedExpr =
-      'g.calibratedMultiplier IS NOT NULL ' +
-      'OR g.calibratedPsMultiplier IS NOT NULL ' +
-      'OR g.calibratedXboxMultiplier IS NOT NULL';
 
     // Existence is checked via correlated EXISTS subqueries instead of
     // joining + aggregating the milestone/estimate rows. The previous
@@ -544,11 +494,6 @@ export class AdminService {
           );
         }
       }
-      if (opts.calibrated === true) {
-        builder.andWhere(`(${calibratedExpr})`);
-      } else if (opts.calibrated === false) {
-        builder.andWhere(`NOT (${calibratedExpr})`);
-      }
       if (opts.hasSales === true) {
         builder.andWhere(hasMilestoneExpr);
       } else if (opts.hasSales === false) {
@@ -571,12 +516,6 @@ export class AdminService {
         'g.releaseDate AS "releaseDate"',
         'g.isFree AS "isFree"',
         'g.platforms AS platforms',
-        'g.calibratedMultiplier AS "calibratedMultiplier"',
-        'g.calibratedPsMultiplier AS "calibratedPsMultiplier"',
-        'g.calibratedXboxMultiplier AS "calibratedXboxMultiplier"',
-        'g.calibrationSourcePc AS "calibrationSourcePc"',
-        'g.calibrationSourcePs AS "calibrationSourcePs"',
-        'g.calibrationSourceXbox AS "calibrationSourceXbox"',
         'g.lastRefreshedAt AS "lastRefreshedAt"',
         'g.createdAt AS "createdAt"',
         'g.updatedAt AS "updatedAt"',
@@ -608,12 +547,6 @@ export class AdminService {
         releaseDate: Date | null;
         isFree: boolean;
         platforms: string | Platform[];
-        calibratedMultiplier: string | null;
-        calibratedPsMultiplier: string | null;
-        calibratedXboxMultiplier: string | null;
-        calibrationSourcePc: SalesSource | null;
-        calibrationSourcePs: SalesSource | null;
-        calibrationSourceXbox: SalesSource | null;
         lastRefreshedAt: Date | null;
         createdAt: Date;
         updatedAt: Date;
@@ -630,19 +563,6 @@ export class AdminService {
       releaseDate: r.releaseDate,
       isFree: r.isFree,
       platforms: parsePlatforms(r.platforms),
-      calibratedMultiplier:
-        r.calibratedMultiplier == null ? null : Number(r.calibratedMultiplier),
-      calibratedPsMultiplier:
-        r.calibratedPsMultiplier == null
-          ? null
-          : Number(r.calibratedPsMultiplier),
-      calibratedXboxMultiplier:
-        r.calibratedXboxMultiplier == null
-          ? null
-          : Number(r.calibratedXboxMultiplier),
-      calibrationSourcePc: r.calibrationSourcePc,
-      calibrationSourcePs: r.calibrationSourcePs,
-      calibrationSourceXbox: r.calibrationSourceXbox,
       hasMilestone: Boolean(r.hasMilestone),
       hasEstimate: Boolean(r.hasEstimate),
       lastRefreshedAt: r.lastRefreshedAt,
@@ -737,8 +657,6 @@ export class AdminService {
         computedAt: s.computedAt,
         estimatedTodayLow: s.estimatedTodayLow,
         estimatedTodayHigh: s.estimatedTodayHigh,
-        pureEstimatedTodayLow: s.pureEstimatedTodayLow,
-        pureEstimatedTodayHigh: s.pureEstimatedTodayHigh,
         reconciliation: s.reconciliation,
       }),
     );
@@ -750,12 +668,6 @@ export class AdminService {
       releaseDate: game.releaseDate,
       isFree: game.isFree,
       platforms: game.platforms,
-      calibratedMultiplier: game.calibratedMultiplier,
-      calibratedPsMultiplier: game.calibratedPsMultiplier,
-      calibratedXboxMultiplier: game.calibratedXboxMultiplier,
-      calibrationSourcePc: game.calibrationSourcePc,
-      calibrationSourcePs: game.calibrationSourcePs,
-      calibrationSourceXbox: game.calibrationSourceXbox,
       hasMilestone: visibleMilestones.length > 0,
       hasEstimate: game.estimates.length > 0,
       milestonesCount: visibleMilestones.length,
@@ -889,12 +801,6 @@ export class AdminService {
       lastRefreshedAt: game.lastRefreshedAt,
       createdAt: game.createdAt,
       updatedAt: game.updatedAt,
-      calibratedMultiplier: game.calibratedMultiplier,
-      calibratedPsMultiplier: game.calibratedPsMultiplier,
-      calibratedXboxMultiplier: game.calibratedXboxMultiplier,
-      calibrationSourcePc: game.calibrationSourcePc,
-      calibrationSourcePs: game.calibrationSourcePs,
-      calibrationSourceXbox: game.calibrationSourceXbox,
       sources: game.sources,
       latestSignals: latestSignals.map((s) => ({
         metric: s.metric,
@@ -1124,78 +1030,7 @@ export class AdminService {
       }
     }
 
-    // Calibrated multipliers must always travel with their source (the
-    // entity contract says "always populated when the corresponding
-    // multiplier is"). The source is purely informational now — spread is
-    // uniform — but we keep the pairing for traceability and so the
-    // admin UI can show "calibrated from <source>" next to the value.
-    this.applyCalibration(
-      game,
-      'calibratedMultiplier',
-      'calibrationSourcePc',
-      'PC',
-      input.calibratedMultiplier,
-      input.calibrationSourcePc,
-    );
-    this.applyCalibration(
-      game,
-      'calibratedPsMultiplier',
-      'calibrationSourcePs',
-      'PlayStation',
-      input.calibratedPsMultiplier,
-      input.calibrationSourcePs,
-    );
-    this.applyCalibration(
-      game,
-      'calibratedXboxMultiplier',
-      'calibrationSourceXbox',
-      'Xbox',
-      input.calibratedXboxMultiplier,
-      input.calibrationSourceXbox,
-    );
-
     return this.games.save(game);
-  }
-
-  private applyCalibration(
-    game: Game,
-    multiplierField:
-      | 'calibratedMultiplier'
-      | 'calibratedPsMultiplier'
-      | 'calibratedXboxMultiplier',
-    sourceField:
-      | 'calibrationSourcePc'
-      | 'calibrationSourcePs'
-      | 'calibrationSourceXbox',
-    label: string,
-    multiplier: number | null | undefined,
-    source: SalesSource | null | undefined,
-  ): void {
-    if (multiplier === undefined && source === undefined) return;
-
-    const nextMultiplier =
-      multiplier === undefined ? game[multiplierField] : multiplier;
-    const nextSource = source === undefined ? game[sourceField] : source;
-
-    if (nextMultiplier === null) {
-      game[multiplierField] = null;
-      game[sourceField] = null;
-      return;
-    }
-
-    if (!Number.isFinite(nextMultiplier) || nextMultiplier <= 0) {
-      throw new BadRequestException(
-        `${label} calibrated multiplier must be a positive number`,
-      );
-    }
-    if (!nextSource) {
-      throw new BadRequestException(
-        `${label} calibrated multiplier requires a calibration source`,
-      );
-    }
-
-    game[multiplierField] = nextMultiplier;
-    game[sourceField] = nextSource;
   }
 
   private async buildUniqueSlug(
@@ -1405,55 +1240,6 @@ export class AdminService {
       suspectAll.map((s) => s.gameId),
     );
 
-    // Calibration outliers: any per-platform calibrated multiplier sitting
-    // near the plausible-bounds edges, across PC / PlayStation / Xbox.
-    const calibrationRows = await this.games
-      .createQueryBuilder('g')
-      .select(['g.id AS "gameId"', 'g.name AS "gameName"'])
-      .addSelect('g.calibratedMultiplier', 'pc')
-      .addSelect('g.calibratedPsMultiplier', 'ps')
-      .addSelect('g.calibratedXboxMultiplier', 'xbox')
-      .where(
-        '(g.calibratedMultiplier IS NOT NULL AND (g.calibratedMultiplier < :low OR g.calibratedMultiplier > :high)) ' +
-          'OR (g.calibratedPsMultiplier IS NOT NULL AND (g.calibratedPsMultiplier < :low OR g.calibratedPsMultiplier > :high)) ' +
-          'OR (g.calibratedXboxMultiplier IS NOT NULL AND (g.calibratedXboxMultiplier < :low OR g.calibratedXboxMultiplier > :high))',
-        { low: CALIBRATION_LOW_BOUND, high: CALIBRATION_HIGH_BOUND },
-      )
-      .getRawMany<{
-        gameId: string;
-        gameName: string;
-        pc: string | null;
-        ps: string | null;
-        xbox: string | null;
-      }>();
-
-    const calibrationOutliers: {
-      gameId: string;
-      gameName: string;
-      platform: Platform;
-      calibratedMultiplier: number;
-    }[] = [];
-    for (const row of calibrationRows) {
-      const push = (platform: Platform, value: string | null) => {
-        if (value == null) return;
-        const m = Number(value);
-        if (m < CALIBRATION_LOW_BOUND || m > CALIBRATION_HIGH_BOUND) {
-          calibrationOutliers.push({
-            gameId: row.gameId,
-            gameName: row.gameName,
-            platform,
-            calibratedMultiplier: m,
-          });
-        }
-      };
-      push(Platform.PC, row.pc);
-      push(Platform.PLAYSTATION, row.ps);
-      push(Platform.XBOX, row.xbox);
-    }
-    calibrationOutliers.sort(
-      (a, b) => b.calibratedMultiplier - a.calibratedMultiplier,
-    );
-
     // Stale games: no STEAM_REVIEWS signal in the last STALE_DAYS.
     const staleCutoff = new Date(Date.now() - STALE_DAYS * 24 * 3600 * 1000);
     const staleRows = await this.games
@@ -1550,10 +1336,6 @@ export class AdminService {
           ...r,
           gameName: suspectNames.get(r.gameId) ?? '',
         })),
-      },
-      calibrationOutliers: {
-        count: calibrationOutliers.length,
-        items: calibrationOutliers.slice(0, ISSUE_PREVIEW_LIMIT),
       },
       staleGames: {
         count: staleTotal,

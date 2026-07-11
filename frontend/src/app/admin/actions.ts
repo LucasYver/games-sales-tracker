@@ -91,12 +91,6 @@ export interface UpdateGamePayload {
   name?: string;
   releaseDate?: string | null;
   igdbId?: number | null;
-  calibratedMultiplier?: number | null;
-  calibratedPsMultiplier?: number | null;
-  calibratedXboxMultiplier?: number | null;
-  calibrationSourcePc?: SalesSource | null;
-  calibrationSourcePs?: SalesSource | null;
-  calibrationSourceXbox?: SalesSource | null;
 }
 
 export async function updateGame(

@@ -305,24 +305,6 @@ function OverviewTab({ s }: { s: AdminGamePageSummary }) {
               <ChipSet items={s.steamTags} />
             </Meta>
             <Meta label="DLC">{s.dlc.length}</Meta>
-            <Meta label="Calibration">
-              <span className="tabular-nums">
-                PC {mult(s.calibratedMultiplier)}{' '}
-                <span className="text-muted-foreground">
-                  {s.calibrationSourcePc ?? 'default'}
-                </span>
-                {has('PLAYSTATION') && (
-                  <>
-                    {' · '}PS {mult(s.calibratedPsMultiplier)}
-                  </>
-                )}
-                {has('XBOX') && (
-                  <>
-                    {' · '}Xbox {mult(s.calibratedXboxMultiplier)}
-                  </>
-                )}
-              </span>
-            </Meta>
           </dl>
           {s.summary && (
             <p className="text-muted-foreground text-sm leading-relaxed">
@@ -335,12 +317,6 @@ function OverviewTab({ s }: { s: AdminGamePageSummary }) {
               name: s.name,
               releaseDate: s.releaseDate,
               igdbId: s.igdbId,
-              calibratedMultiplier: s.calibratedMultiplier,
-              calibratedPsMultiplier: s.calibratedPsMultiplier,
-              calibratedXboxMultiplier: s.calibratedXboxMultiplier,
-              calibrationSourcePc: s.calibrationSourcePc,
-              calibrationSourcePs: s.calibrationSourcePs,
-              calibrationSourceXbox: s.calibrationSourceXbox,
             }}
           />
         </CardContent>
@@ -384,14 +360,6 @@ function OverviewTab({ s }: { s: AdminGamePageSummary }) {
       </Card>
     </div>
   );
-
-  function has(p: Platform) {
-    return s.platforms.includes(p);
-  }
-}
-
-function mult(v: number | null): string {
-  return v != null ? `×${v.toFixed(1)}` : '—';
 }
 
 function Meta({ label, children }: { label: string; children: React.ReactNode }) {
@@ -421,7 +389,7 @@ function ChipSet({ items }: { items: string[] }) {
   );
 }
 
-// ─── Estimates tab — calibrated vs pure-algo, per-method pipeline ─────────────
+// ─── Estimates tab — corpus estimate, per-method pipeline ─────────────
 
 const PLATFORM_ORDER: Platform[] = ['PC', 'PLAYSTATION', 'XBOX', 'SWITCH'];
 
@@ -436,11 +404,8 @@ async function EstimatesTab({
     `/games/${gameId}/estimate-breakdown`,
   ).catch(() => null);
 
-  const algo = b?.pureTotal ?? null; // pure, matcher-derived (no calibration)
-  const calibrated = s.latestEstimate; // the number the model actually uses
-  const isCalibrated = Boolean(
-    s.calibrationSourcePc || s.calibrationSourcePs || s.calibrationSourceXbox,
-  );
+  const algo = b?.total ?? null; // corpus-derived estimate
+  const latestEstimate = s.latestEstimate;
   const declared = b?.declared ?? null;
 
   const platforms =
@@ -460,79 +425,34 @@ async function EstimatesTab({
         re-run.
       </p>
 
-      {/* Calibrated vs Algo — two numbers only when a calibration exists;
-          otherwise the calibrated path == the algo path, so show ONE number. */}
-      {isCalibrated ? (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Card className="border-primary/40">
-            <CardContent className="pt-5">
-              <div className="text-muted-foreground flex items-center gap-2 text-[10px] font-semibold tracking-wide uppercase">
-                Calibrated estimate
-                <span className="bg-primary/15 text-primary rounded px-1.5 py-0.5 text-[9px]">
-                  calibrated
-                </span>
-              </div>
-              <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums">
-                {calibrated
-                  ? compactMid(
-                      calibrated.estimatedTodayLow,
-                      calibrated.estimatedTodayHigh,
-                    )
-                  : '—'}
-              </div>
-              <div className="text-muted-foreground mt-0.5 text-[11px]">
-                {calibrated
-                  ? `${fmtRange(calibrated.estimatedTodayLow, calibrated.estimatedTodayHigh)} · the number the model uses`
-                  : 'no snapshot — hit Rebuild'}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-5">
-              <div className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
-                Algo estimate (pure)
-              </div>
-              <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums">
-                {algo ? compactMid(algo.low, algo.high) : '—'}
-              </div>
-              <div className="text-muted-foreground mt-0.5 text-[11px]">
-                {algo
-                  ? `${fmtRange(algo.low, algo.high)} · matcher multipliers, ignores calibration`
-                  : '—'}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      ) : (
-        <Card>
-          <CardContent className="pt-5">
-            <div className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
-              Estimate today
-            </div>
-            <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums">
-              {algo
-                ? compactMid(algo.low, algo.high)
-                : calibrated
-                  ? compactMid(
-                      calibrated.estimatedTodayLow,
-                      calibrated.estimatedTodayHigh,
-                    )
-                  : '—'}
-            </div>
-            <div className="text-muted-foreground mt-0.5 text-[11px]">
-              {algo
-                ? `${fmtRange(algo.low, algo.high)} · pure algo (no calibration set)`
-                : 'no snapshot — hit Rebuild'}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardContent className="pt-5">
+          <div className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
+            Estimate today
+          </div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums">
+            {algo
+              ? compactMid(algo.low, algo.high)
+              : latestEstimate
+                ? compactMid(
+                    latestEstimate.estimatedTodayLow,
+                    latestEstimate.estimatedTodayHigh,
+                  )
+                : '—'}
+          </div>
+          <div className="text-muted-foreground mt-0.5 text-[11px]">
+            {algo
+              ? `${fmtRange(algo.low, algo.high)} · corpus model`
+              : 'no snapshot — hit Rebuild'}
+          </div>
+        </CardContent>
+      </Card>
 
       {b && algo ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-              How the algo {compactMid(algo.low, algo.high)} is built
+              How the estimate {compactMid(algo.low, algo.high)} is built
             </CardTitle>
             <p className="text-muted-foreground text-xs">
               Each platform aggregates its methods; consoles are ventilated from
@@ -634,15 +554,11 @@ function EntryNode({
   entry: AdminEstimateBreakdown['platforms'][number]['entries'][number];
 }) {
   if (entry.type === 'boxleiter') {
-    const src =
-      entry.multiplierSource === 'calibrated'
-        ? 'calibrated'
-        : entry.multiplierSource;
     return (
       <PipeNode
-        label={entry.multiplierSource === 'calibrated' ? 'Boxleiter (cal.)' : 'Boxleiter'}
+        label="Boxleiter"
         value={compactMid(entry.finalLow, entry.finalHigh)}
-        sub={`${compact(entry.signal.value)} ${entry.signal.metric} × ${entry.multiplierLow.toFixed(1)}–${entry.multiplierHigh.toFixed(1)} [${src}]`}
+        sub={`${compact(entry.signal.value)} ${entry.signal.metric} × ${entry.multiplierLow.toFixed(1)}–${entry.multiplierHigh.toFixed(1)} [${entry.multiplierSource}]`}
       />
     );
   }

@@ -8,7 +8,6 @@ import {
   Milestone,
   Platform,
   SalesEstimate,
-  SalesSource,
   SignalMetric,
   SignalSnapshot,
   SourceType,
@@ -19,12 +18,8 @@ import {
 } from './estimation-method.service';
 import { type ResolvedGenreProfile } from '../reference-profiles/sales-profile-resolver.service';
 import { SalesProfileResolverService } from '../reference-profiles/sales-profile-resolver.service';
+import { reconstructPsCurveMonthly } from './ps-curve-reconstruction';
 import {
-  reconstructPsCurveMonthly,
-  reconstructPsRatingAt,
-} from './ps-curve-reconstruction';
-import {
-  CALIBRATED_MULTIPLIER_SPREAD,
   FIRST_WEEK_BUCKET_LARGE_YEAR1_RATIO,
   FIRST_WEEK_BUCKET_SMALL_YEAR1_RATIO,
   FIRST_WEEK_BUCKET_THRESHOLD,
@@ -51,39 +46,12 @@ import {
 } from '../games/sales-modeling.constants';
 import { platformReleaseDate } from '../games/platform-release-date';
 
-// Calibration only trusts a milestone when a signal snapshot exists
-// within this window of the milestone's reported date — otherwise
-// units/signals would mix points from very different times and produce
-// a bogus multiplier.
-const CALIBRATION_WINDOW_DAYS = 365;
-
-// Minimum estimated share of a platform in the worldwide breakdown
-// required to calibrate it from a GLOBAL record (see
-// `recalibrateFromGlobal`). Platforms whose proxy share falls below this
-// threshold keep their default multiplier instead — splitting a
-// worldwide figure over a marginal platform produces volatile, untrust-
-// worthy multipliers.
-const GLOBAL_SPLIT_MIN_PLATFORM_SHARE = 0.05;
-
 // How aggressively `aggregateMethods` widens the combined band when the
 // input methods disagree about the midpoint. 0 = no inflation (pure
 // weighted average), 1 = inflate by the full relative spread. Picked
 // conservatively at 0.5 until we have multiple active methods to
 // observe and tune against.
 const AGGREGATION_DISAGREEMENT_ALPHA = 0.5;
-
-/**
- * Knobs to flip estimation into "pure algo" mode. When set,
- * `resolveMultiplier` ignores `Game.calibratedMultiplier*` and falls
- * back to the platform default range, so the produced
- * `EstimateResult`s show what the model would have said with zero
- * declared-figure help. Used by `snapshotReconcile` to populate the
- * `pureEstimatedToday*` columns alongside the regular reconciled
- * headline.
- */
-export interface EstimateOptions {
-  ignoreCalibration?: boolean;
-}
 
 // ───── Breakdown types (diagnostic / read-only) ──────────────────────────
 
@@ -92,12 +60,10 @@ export interface BoxleiterBreakdownEntry {
   platform: Platform;
   method: string;
   signal: { metric: SignalMetric; value: number; capturedAt: string };
-  calibratedValue: number | null;
-  isCalibrated: boolean;
-  // Where the default multiplier band comes from: the data-driven
-  // matcher (reviewsToUnits → Boxleiter), the global constant fallback
-  // (cold-start, no matched anchors), or a per-game calibrated figure.
-  multiplierSource: 'matcher' | 'global' | 'calibrated';
+  // Where the multiplier band comes from: the data-driven matcher
+  // (reviewsToUnits → Boxleiter) or the global constant fallback
+  // (cold-start, no matched anchors).
+  multiplierSource: 'matcher' | 'global';
   multiplierLow: number;
   multiplierHigh: number;
   finalLow: number;
@@ -169,7 +135,7 @@ export interface PlatformBreakdownResult {
 export interface EstimateBreakdownResult {
   computedAt: string;
   platforms: PlatformBreakdownResult[];
-  pureTotal: { low: number; high: number } | null;
+  total: { low: number; high: number } | null;
   declared: {
     units: number;
     source: string;
@@ -213,12 +179,6 @@ interface PlatformConfig {
   defaultHigh: number;
   plausibleMin: number;
   plausibleMax: number;
-  // How a stored Game row exposes the calibrated multiplier for this
-  // platform. The originating source is stored alongside the value via
-  // `write` for traceability but is not read back at estimate time —
-  // the spread is uniform across sources.
-  read: (game: Game) => number | null;
-  write: (gameId: string, value: number, source: SalesSource) => Promise<void>;
   methodPrefix: 'boxleiter' | 'ps-ratings-boxleiter' | 'xbox-ratings-boxleiter';
 }
 
@@ -256,14 +216,6 @@ export class EstimationService {
         defaultHigh: PC_BOXLEITER_DEFAULT_HIGH,
         plausibleMin: PC_BOXLEITER_PLAUSIBLE_MIN,
         plausibleMax: PC_BOXLEITER_PLAUSIBLE_MAX,
-        read: (g) => g.calibratedMultiplier,
-        write: (id, value, source) =>
-          this.games
-            .update(id, {
-              calibratedMultiplier: value,
-              calibrationSourcePc: source,
-            })
-            .then(() => {}),
         methodPrefix: 'boxleiter',
       },
       {
@@ -273,14 +225,6 @@ export class EstimationService {
         defaultHigh: PS_BOXLEITER_DEFAULT_HIGH,
         plausibleMin: PS_BOXLEITER_PLAUSIBLE_MIN,
         plausibleMax: PS_BOXLEITER_PLAUSIBLE_MAX,
-        read: (g) => g.calibratedPsMultiplier,
-        write: (id, value, source) =>
-          this.games
-            .update(id, {
-              calibratedPsMultiplier: value,
-              calibrationSourcePs: source,
-            })
-            .then(() => {}),
         methodPrefix: 'ps-ratings-boxleiter',
       },
       {
@@ -290,14 +234,6 @@ export class EstimationService {
         defaultHigh: XBOX_BOXLEITER_DEFAULT_HIGH,
         plausibleMin: XBOX_BOXLEITER_PLAUSIBLE_MIN,
         plausibleMax: XBOX_BOXLEITER_PLAUSIBLE_MAX,
-        read: (g) => g.calibratedXboxMultiplier,
-        write: (id, value, source) =>
-          this.games
-            .update(id, {
-              calibratedXboxMultiplier: value,
-              calibrationSourceXbox: source,
-            })
-            .then(() => {}),
         methodPrefix: 'xbox-ratings-boxleiter',
       },
     ];
@@ -317,7 +253,6 @@ export class EstimationService {
   async estimateAllPlatforms(
     gameId: string,
     asOf?: Date,
-    opts: EstimateOptions = {},
     trace?: EstimateTrace,
   ): Promise<EstimateResult[]> {
     const game = await this.games.findOne({
@@ -334,7 +269,6 @@ export class EstimationService {
         game,
         cfg,
         asOf,
-        opts,
         trace,
       );
       if (boxleiter) results.push(boxleiter);
@@ -355,11 +289,8 @@ export class EstimationService {
   }
 
   /**
-   * Persist estimates as if we had run `computeAndStore` at `asOf`. Unlike
-   * the live flow, we DO NOT recalibrate: the calibration uses the latest
-   * declared figure available anyway, which is the same when rebuilding
-   * the past with current knowledge. Used by the historical rebuild
-   * pipeline (`GamesService.rebuildEstimateHistory`).
+   * Persist estimates as if we had run `computeAndStore` at `asOf`. Used by
+   * the historical rebuild pipeline (`GamesService.rebuildEstimateHistory`).
    */
   async computeAndStoreAt(
     gameId: string,
@@ -540,34 +471,6 @@ export class EstimationService {
     }
 
     return { aggregates, splits };
-  }
-
-  /**
-   * Run the full estimation pipeline in "pure algo" mode (no
-   * calibrated multipliers, no DB writes) and return only the
-   * per-platform `aggregated` consensus rows. The splits and base
-   * rows are computed in-memory then discarded — they would just
-   * shadow the real (calibrated) rows in the admin view, which is
-   * not what we want.
-   *
-   * Used by `GamesService.snapshotReconcile` to populate the
-   * `pureEstimatedTodayLow/High` columns alongside the regular
-   * headline.
-   */
-  async computePureAggregatesByPlatform(
-    gameId: string,
-    asOf?: Date,
-  ): Promise<Map<Platform, EstimateResult>> {
-    const results = await this.estimateAllPlatforms(gameId, asOf, {
-      ignoreCalibration: true,
-    });
-    if (results.length === 0) return new Map();
-
-    const { aggregates } = await this.aggregateResultsByPlatform(
-      gameId,
-      results,
-    );
-    return aggregates;
   }
 
   private buildAggregateRow(
@@ -812,25 +715,12 @@ export class EstimationService {
     };
   }
 
-  /**
-   * Derive and persist this game's Boxleiter multipliers for every platform
-   * from the worldwide declared figure. Milestones are worldwide totals, so
-   * the declared units are split proportionally across platforms (using each
-   * platform's static-default proxy weight) and each platform's multiplier is
-   * derived from its share — see `recalibrateFromGlobal`.
-   */
-  async recalibrateAll(gameId: string): Promise<void> {
-    await this.recalibrateFromGlobal(gameId);
-    await this.recalibrateFromPcRegion(gameId);
-  }
-
   // ───── internals ────────────────────────────────────────────────────────
 
   private async estimateForPlatform(
     game: Game,
     cfg: PlatformConfig,
     asOf?: Date,
-    opts: EstimateOptions = {},
     trace?: EstimateTrace,
   ): Promise<EstimateResult | null> {
     const latestSignal = await this.signals.findOne({
@@ -848,12 +738,7 @@ export class EstimationService {
     const signalValue = latestSignal.value;
     const profile = await this.salesProfile.resolveForGame(game);
     const profileDefaults = this.resolveProfileDefaults(cfg.platform, profile);
-    const { low, high, method, isCalibrated } = this.resolveMultiplier(
-      game,
-      cfg,
-      opts,
-      profileDefaults,
-    );
+    const { low, high, method } = this.resolveMultiplier(cfg, profileDefaults);
 
     const estimatedLow = signalValue * low;
     const estimatedHigh = signalValue * high;
@@ -869,13 +754,7 @@ export class EstimationService {
           value: signalValue,
           capturedAt: latestSignal.capturedAt.toISOString(),
         },
-        calibratedValue: cfg.read(game) ?? null,
-        isCalibrated,
-        multiplierSource: isCalibrated
-          ? 'calibrated'
-          : profileDefaults
-            ? 'matcher'
-            : 'global',
+        multiplierSource: profileDefaults ? 'matcher' : 'global',
         multiplierLow: low,
         multiplierHigh: high,
         finalLow: Math.round(estimatedLow),
@@ -1066,233 +945,14 @@ export class EstimationService {
   }
 
   private resolveMultiplier(
-    game: Game,
     cfg: PlatformConfig,
-    opts: EstimateOptions = {},
     profileDefaults?: { low: number; high: number },
-  ): { low: number; high: number; method: string; isCalibrated: boolean } {
-    const calibrated = opts.ignoreCalibration ? null : cfg.read(game);
-    if (calibrated && calibrated > 0) {
-      return {
-        low: calibrated * (1 - CALIBRATED_MULTIPLIER_SPREAD),
-        high: calibrated * (1 + CALIBRATED_MULTIPLIER_SPREAD),
-        method: `${cfg.methodPrefix}-calibrated`,
-        isCalibrated: true,
-      };
-    }
+  ): { low: number; high: number; method: string } {
     return {
       low: profileDefaults?.low ?? cfg.defaultLow,
       high: profileDefaults?.high ?? cfg.defaultHigh,
       method: `${cfg.methodPrefix}-default`,
-      isCalibrated: false,
     };
-  }
-
-  /**
-   * Calibrate per-platform multipliers from the worldwide declared figure.
-   * Milestones are worldwide totals ("X million copies sold across all
-   * platforms"), so we split the declared units across platforms and derive
-   * a per-platform multiplier from each share.
-   *
-   * Algorithm:
-   *  1. Pick the best record (most recent reportedAt; largest on ties).
-   *  2. For each tracked platform, find the signal snapshot closest to
-   *     the record's date (within `CALIBRATION_WINDOW_DAYS`).
-   *  3. Compute a proxy estimate per platform using the **midpoint of
-   *     the static default** multiplier (deliberately NOT the calibrated
-   *     value — using the calibrated value would create a feedback loop
-   *     that re-derives whatever was already stored).
-   *  4. Split the declared units proportionally to each platform's share
-   *     of the total proxy estimate.
-   *  5. For each platform whose share is at least
-   *     `GLOBAL_SPLIT_MIN_PLATFORM_SHARE`, derive
-   *     `multiplier = declared_p / signal_p` and persist it (with the
-   *     record's source for spread modulation at read time).
-   *
-   * Example
-   *   - PC: 100,000 units
-   *   - PS: 50,000 units
-   *   - Xbox: 25,000 units
-   *   - Global: 175,000 units
-   *   - Proxy: 100,000 * 0.5 + 50,000 * 0.3 + 25,000 * 0.2 = 75,000
-   *   - Share: 100,000 / 75,000 = 1.33
-   *   - Multiplier: 175,000 / 100,000 = 1.75
-   */
-  private async recalibrateFromGlobal(gameId: string): Promise<void> {
-    const candidates = await this.milestones.find({
-      where: {
-        gameId,
-        rejectedAt: IsNull(),
-        isEngagement: false,
-        // Worldwide totals only. Single-platform milestones (platform='PC',
-        // 'PLAYSTATION', …) are not consumed by the GLOBAL→platform split —
-        // feeding one here would be mistaken for a worldwide figure and split
-        // across platforms.
-        platform: Platform.GLOBAL,
-      },
-    });
-    if (candidates.length === 0) return;
-
-    candidates.sort((a, b) => {
-      const ta = a.reportedAt?.getTime() ?? 0;
-      const tb = b.reportedAt?.getTime() ?? 0;
-      return tb - ta;
-    });
-    const best = candidates[0];
-    if (best.units <= 0 || !best.reportedAt) return;
-
-    const target = best.reportedAt.getTime();
-
-    // For each platform: find the signal closest to the record's date
-    // within the calibration window, and compute a proxy weight from
-    // the static default multiplier midpoint.
-    type Slot = {
-      cfg: PlatformConfig;
-      signalValue: number;
-      proxy: number;
-      reconstructed: boolean;
-    };
-    const windowMs = CALIBRATION_WINDOW_DAYS * 24 * 3600 * 1000;
-    const slots: Slot[] = [];
-    for (const cfg of this.platforms) {
-      // Only real measurements anchor a slot; synthetic rows never do.
-      const snapshots = await this.signals.find({
-        where: { gameId, metric: cfg.signalMetric, synthetic: false },
-      });
-      let signalValue: number | null = null;
-      let reconstructed = false;
-      if (snapshots.length > 0) {
-        const closest = snapshots.reduce((acc, r) =>
-          Math.abs(r.capturedAt.getTime() - target) <
-          Math.abs(acc.capturedAt.getTime() - target)
-            ? r
-            : acc,
-        );
-        if (
-          Math.abs(closest.capturedAt.getTime() - target) <= windowMs &&
-          closest.value > 0
-        ) {
-          signalValue = closest.value;
-        }
-      }
-
-      // PlayStation fallback: when no real rating exists near the milestone
-      // date (the common case for pre-2024 figures), reconstruct one from the
-      // game's Steam-review curve shape instead of skipping the platform.
-      if (
-        signalValue === null &&
-        cfg.platform === Platform.PLAYSTATION &&
-        best.reportedAt
-      ) {
-        const rebuilt = await this.reconstructPsRatingValueAt(
-          gameId,
-          best.reportedAt,
-        );
-        if (rebuilt !== null && rebuilt > 0) {
-          signalValue = rebuilt;
-          reconstructed = true;
-        }
-      }
-
-      if (signalValue === null) continue;
-
-      const defaultMid = (cfg.defaultLow + cfg.defaultHigh) / 2;
-      slots.push({
-        cfg,
-        signalValue,
-        proxy: signalValue * defaultMid,
-        reconstructed,
-      });
-    }
-
-    const totalProxy = slots.reduce((sum, s) => sum + s.proxy, 0);
-    if (totalProxy <= 0) return;
-
-    for (const slot of slots) {
-      const share = slot.proxy / totalProxy;
-      if (share < GLOBAL_SPLIT_MIN_PLATFORM_SHARE) continue;
-
-      const allocated = best.units * share;
-      const multiplier = allocated / slot.signalValue;
-      if (
-        multiplier < slot.cfg.plausibleMin ||
-        multiplier > slot.cfg.plausibleMax
-      ) {
-        this.logger.debug(
-          `Skipping implausible global-split ${slot.cfg.platform} calibration for ${gameId}: ${multiplier.toFixed(1)}`,
-        );
-        continue;
-      }
-
-      await slot.cfg.write(gameId, multiplier, best.source);
-      if (slot.cfg.platform === Platform.PLAYSTATION) {
-        await this.games.update(gameId, {
-          psCalibrationReconstructed: slot.reconstructed,
-        });
-      }
-      this.logger.log(
-        `[calibration:global-split] ${gameId} ${slot.cfg.platform}: ` +
-          `share=${(share * 100).toFixed(1)}% multiplier=${multiplier.toFixed(2)} ` +
-          `(from ${best.source} ${best.units.toLocaleString()} units` +
-          `${slot.reconstructed ? ', PS signal reconstructed' : ''})`,
-      );
-    }
-  }
-
-  /**
-   * Reconstruct the PS rating count at `target` from the game's latest real PS
-   * anchor and its Steam-review curve shape (see `ps-curve-reconstruction.ts`).
-   * Returns `null` when any guardrail trips, so the caller abstains rather than
-   * calibrate on a fabricated number.
-   */
-  private async reconstructPsRatingValueAt(
-    gameId: string,
-    target: Date,
-  ): Promise<number | null> {
-    const anchor = await this.signals.findOne({
-      where: {
-        gameId,
-        metric: SignalMetric.PS_RATINGS,
-        synthetic: false,
-      },
-      order: { capturedAt: 'DESC' },
-    });
-    if (!anchor || anchor.value <= 0) return null;
-
-    const steamRows = await this.signals.find({
-      where: {
-        gameId,
-        metric: SignalMetric.STEAM_REVIEWS,
-        synthetic: false,
-      },
-      order: { capturedAt: 'ASC' },
-      select: { capturedAt: true, value: true },
-    });
-    if (steamRows.length === 0) return null;
-
-    const game = await this.games.findOne({
-      where: { id: gameId },
-      relations: { platformReleaseDates: true },
-    });
-    const psReleaseDate = game
-      ? platformReleaseDate(game, Platform.PLAYSTATION)
-      : null;
-
-    const outcome = reconstructPsRatingAt(target, {
-      anchor: { capturedAt: anchor.capturedAt, value: anchor.value },
-      psReleaseDate,
-      steamReviews: steamRows.map((r) => ({
-        capturedAt: r.capturedAt,
-        value: r.value,
-      })),
-    });
-    if (outcome.value === null) {
-      this.logger.debug(
-        `[calibration:ps-reconstruct] ${gameId} abstained: ${outcome.reason}`,
-      );
-      return null;
-    }
-    return outcome.value;
   }
 
   /**
@@ -1383,122 +1043,22 @@ export class EstimationService {
     return { pointsWritten: curve.length };
   }
 
-  /**
-   * Calibrate the PC multiplier directly from a `platform='PC'` milestone
-   * (e.g. `STEAM_LEAK`: 2018 Steam-leak owner counts, treated as paid
-   * buyers on Steam). Skipped when a more recent `platform='GLOBAL'`
-   * milestone exists — that figure would already have set the PC
-   * multiplier via `recalibrateFromGlobal` and is presumed more current.
-   *
-   * Algorithm:
-   *  1. Pick the most recent PC milestone (tie-break: largest units).
-   *  2. Bail if the latest GLOBAL milestone is more recent (or same date)
-   *     so the GLOBAL-split keeps priority.
-   *  3. Find the STEAM_REVIEWS signal closest to the PC milestone's
-   *     `reportedAt` (within `CALIBRATION_WINDOW_DAYS`).
-   *  4. `multiplier = declared_PC / signal_PC`, validated against the PC
-   *     plausibility bounds, then persisted on `calibratedMultiplier`.
-   *
-   * Spread on read stays the standard `CALIBRATED_MULTIPLIER_SPREAD` —
-   * STEAM_LEAK has confidenceScore=90 and is treated like an authoritative
-   * source.
-   */
-  private async recalibrateFromPcRegion(gameId: string): Promise<void> {
-    const pcCandidates = await this.milestones.find({
-      where: {
-        gameId,
-        rejectedAt: IsNull(),
-        isEngagement: false,
-        platform: Platform.PC,
-      },
-    });
-    if (pcCandidates.length === 0) return;
-
-    pcCandidates.sort((a, b) => {
-      const ta = a.reportedAt?.getTime() ?? 0;
-      const tb = b.reportedAt?.getTime() ?? 0;
-      if (tb !== ta) return tb - ta;
-      return b.units - a.units;
-    });
-    const best = pcCandidates[0];
-    if (best.units <= 0 || !best.reportedAt) return;
-
-    const latestGlobal = await this.milestones.findOne({
-      where: {
-        gameId,
-        rejectedAt: IsNull(),
-        isEngagement: false,
-        platform: Platform.GLOBAL,
-      },
-      order: { reportedAt: 'DESC' },
-    });
-    if (
-      latestGlobal?.reportedAt &&
-      latestGlobal.reportedAt.getTime() >= best.reportedAt.getTime()
-    ) {
-      return;
-    }
-
-    const cfg = this.platforms.find((p) => p.platform === Platform.PC);
-    if (!cfg) return;
-
-    const snapshots = await this.signals.find({
-      where: { gameId, metric: cfg.signalMetric },
-    });
-    if (snapshots.length === 0) return;
-    const target = best.reportedAt.getTime();
-    const closest = snapshots.reduce((acc, r) =>
-      Math.abs(r.capturedAt.getTime() - target) <
-      Math.abs(acc.capturedAt.getTime() - target)
-        ? r
-        : acc,
-    );
-    if (
-      Math.abs(closest.capturedAt.getTime() - target) >
-      CALIBRATION_WINDOW_DAYS * 24 * 3600 * 1000
-    ) {
-      return;
-    }
-    if (closest.value <= 0) return;
-
-    const multiplier = best.units / closest.value;
-    if (multiplier < cfg.plausibleMin || multiplier > cfg.plausibleMax) {
-      this.logger.debug(
-        `Skipping implausible PC-region calibration for ${gameId}: ${multiplier.toFixed(1)}`,
-      );
-      return;
-    }
-
-    await cfg.write(gameId, multiplier, best.source);
-    this.logger.log(
-      `[calibration:pc-region] ${gameId} PC: multiplier=${multiplier.toFixed(2)} ` +
-        `(from ${best.source} ${best.units.toLocaleString()} units @ ` +
-        `${best.reportedAt.toISOString().slice(0, 10)}, signal=${closest.value.toLocaleString()})`,
-    );
-  }
-
   // ───── estimate breakdown (diagnostic) ──────────────────────────────────
 
   /**
-   * Step-by-step breakdown of the **pure algo** estimation for a game.
+   * Step-by-step breakdown of the estimation for a game.
    *
    * Single source of truth: this runs the *real* estimation pipeline
-   * (`estimateAllPlatforms` + `aggregateResultsByPlatform`) in pure mode
-   * (`ignoreCalibration: true`) with a `trace` collector attached, then
-   * assembles the recorded intermediate values. Nothing is re-computed
-   * and nothing is persisted, so the numbers shown are guaranteed
-   * identical to what the production pipeline produces.
+   * (`estimateAllPlatforms` + `aggregateResultsByPlatform`) with a `trace`
+   * collector attached, then assembles the recorded intermediate values.
+   * Nothing is re-computed and nothing is persisted, so the numbers shown
+   * are guaranteed identical to what the production pipeline produces.
    */
   async computeBreakdown(gameId: string): Promise<EstimateBreakdownResult> {
     const computedAt = new Date().toISOString();
 
     const trace = createEstimateTrace();
-    const results = await this.estimateAllPlatforms(
-      gameId,
-      undefined,
-      { ignoreCalibration: true },
-      trace,
-    );
+    const results = await this.estimateAllPlatforms(gameId, undefined, trace);
 
     const { aggregates } = await this.aggregateResultsByPlatform(
       gameId,
@@ -1557,7 +1117,7 @@ export class EstimationService {
       },
     );
 
-    const pureTotal =
+    const total =
       aggregates.size > 0
         ? {
             low: [...aggregates.values()].reduce(
@@ -1574,7 +1134,7 @@ export class EstimationService {
     return {
       computedAt,
       platforms,
-      pureTotal,
+      total,
       declared: bestDeclared
         ? {
             units: bestDeclared.units,

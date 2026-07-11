@@ -35,7 +35,6 @@ const PLATFORM_LABELS: Partial<Record<Platform, string>> = {
 // Explicit, distinct hues instead of the theme's monochrome --chart-*
 // palette (all grey, chroma 0), which made every line hard to tell apart.
 const RECONCILED_COLOR = 'oklch(0.55 0.2 255)'; // blue
-const PURE_ALGO_COLOR = 'oklch(0.72 0.17 60)'; // amber
 
 const PLATFORM_COLORS: Partial<Record<Platform, string>> = {
   PC: 'oklch(0.6 0.16 150)', // green
@@ -50,12 +49,8 @@ const chartConfig: ChartConfig = {
     color: RECONCILED_COLOR,
   },
   mid: {
-    label: 'Reconciled estimate',
+    label: 'Estimate',
     color: RECONCILED_COLOR,
-  },
-  pureMid: {
-    label: 'Pure algo (no declared figures)',
-    color: PURE_ALGO_COLOR,
   },
   pcMid: { label: 'PC (per-platform)', color: PLATFORM_COLORS.PC! },
   playstationMid: {
@@ -101,7 +96,6 @@ interface ChartPoint {
   high: number;
   mid: number;
   range: [number, number];
-  pureMid?: number;
   pcMid?: number;
   playstationMid?: number;
   xboxMid?: number;
@@ -109,9 +103,8 @@ interface ChartPoint {
 }
 
 export function EstimateHistoryChart({ snapshots }: Props) {
-  const { data, presentPlatforms, hasPure, yMax } = useMemo(() => {
+  const { data, presentPlatforms, yMax } = useMemo(() => {
     const platforms = new Set<Platform>();
-    let pure = false;
     let maxValue = 0;
     const points: ChartPoint[] = snapshots.map((s) => {
       const point: ChartPoint = {
@@ -121,15 +114,6 @@ export function EstimateHistoryChart({ snapshots }: Props) {
         mid: Math.round((s.estimatedTodayLow + s.estimatedTodayHigh) / 2),
         range: [s.estimatedTodayLow, s.estimatedTodayHigh],
       };
-      if (
-        s.pureEstimatedTodayLow !== null &&
-        s.pureEstimatedTodayHigh !== null
-      ) {
-        point.pureMid = Math.round(
-          (s.pureEstimatedTodayLow + s.pureEstimatedTodayHigh) / 2,
-        );
-        pure = true;
-      }
       for (const r of s.reconciliation) {
         const key = PLATFORM_DATA_KEY[r.platform];
         if (!key) continue;
@@ -143,7 +127,6 @@ export function EstimateHistoryChart({ snapshots }: Props) {
     return {
       data: points,
       presentPlatforms: platforms,
-      hasPure: pure,
       yMax: niceCeiling(maxValue),
     };
   }, [snapshots]);
@@ -202,10 +185,7 @@ export function EstimateHistoryChart({ snapshots }: Props) {
                   ];
                 }
                 if (name === 'mid') {
-                  return [formatUnits(value as number), 'Reconciled mid'];
-                }
-                if (name === 'pureMid') {
-                  return [formatUnits(value as number), 'Pure algo mid'];
+                  return [formatUnits(value as number), 'Estimate mid'];
                 }
                 for (const [platform, key] of Object.entries(
                   PLATFORM_DATA_KEY,
@@ -241,18 +221,6 @@ export function EstimateHistoryChart({ snapshots }: Props) {
           dot={false}
           isAnimationActive={false}
         />
-        {hasPure && (
-          <Line
-            dataKey="pureMid"
-            type="monotone"
-            stroke="var(--color-pureMid)"
-            strokeWidth={1.5}
-            strokeDasharray="2 3"
-            dot={false}
-            connectNulls
-            isAnimationActive={false}
-          />
-        )}
         {(Object.keys(PLATFORM_DATA_KEY) as Platform[])
           .filter((p) => presentPlatforms.has(p))
           .map((p) => (

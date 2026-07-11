@@ -111,7 +111,6 @@ export default async function AdminGamesPage({
     q?: string;
     platform?: string;
     hasSales?: string;
-    calibrated?: string;
     hasEstimates?: string;
     sort?: string;
     direction?: string;
@@ -122,7 +121,6 @@ export default async function AdminGamesPage({
     q,
     platform,
     hasSales,
-    calibrated,
     hasEstimates,
     sort,
     direction,
@@ -136,7 +134,6 @@ export default async function AdminGamesPage({
   if (q) filters.q = q;
   if (platform) filters.platform = platform;
   if (hasSales) filters.hasSales = hasSales;
-  if (calibrated) filters.calibrated = calibrated;
   if (hasEstimates) filters.hasEstimates = hasEstimates;
   if (sort) filters.sort = sort;
   if (direction) filters.direction = direction;
@@ -224,19 +221,6 @@ export default async function AdminGamesPage({
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="calibrated">Calibration</Label>
-              <select
-                id="calibrated"
-                name="calibrated"
-                defaultValue={calibrated ?? ''}
-                className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs"
-              >
-                <option value="">Any</option>
-                <option value="true">Calibrated</option>
-                <option value="false">Not calibrated</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-1.5">
               <Label htmlFor="hasEstimates">Estimates</Label>
               <select
                 id="hasEstimates"
@@ -272,7 +256,6 @@ export default async function AdminGamesPage({
               />
               <TableHead className="text-right">Milestone</TableHead>
               <TableHead className="text-right">Estimate</TableHead>
-              <TableHead className="text-right">Calibrated</TableHead>
               <SortableHead
                 column="lastRefreshed"
                 label="Last refresh"
@@ -317,21 +300,6 @@ export default async function AdminGamesPage({
                 </TableCell>
                 <TableCell className="text-right">
                   {g.hasEstimate ? 'Yes' : '—'}
-                </TableCell>
-                <TableCell className="text-right text-xs tabular-nums">
-                  {[
-                    g.calibratedMultiplier != null
-                      ? `PC ${g.calibratedMultiplier.toFixed(1)}x`
-                      : null,
-                    g.calibratedPsMultiplier != null
-                      ? `PS ${g.calibratedPsMultiplier.toFixed(1)}x`
-                      : null,
-                    g.calibratedXboxMultiplier != null
-                      ? `Xb ${g.calibratedXboxMultiplier.toFixed(1)}x`
-                      : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ') || '—'}
                 </TableCell>
                 <TableCell className="text-muted-foreground text-right text-sm">
                   {formatDate(g.lastRefreshedAt)}

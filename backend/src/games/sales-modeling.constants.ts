@@ -143,16 +143,6 @@ export const XBOX_BOXLEITER_PLAUSIBLE_MAX = 600;
 //   Palworld       2.1M peak → ~15M+   (~7× short term, climbs with age)
 //   Stardew Valley  95K peak → ~30M+   (~315× long tail)
 
-// Tightening factor applied around a calibrated multiplier when computing the
-// per-platform Boxleiter range: low = m * (1 - X), high = m * (1 + X).
-//
-// A single uniform spread is applied regardless of the milestone's source:
-// the source no longer drives the model's confidence, only the latest
-// dated milestone wins per platform. Picked at the middle of the previous
-// per-source spread band (±30 %) as a conservative default.
-
-export const CALIBRATED_MULTIPLIER_SPREAD = 0.3;
-
 // ─── Achievement-based estimation (Exophase coverage) ───────────────────────
 //
 // Used by EstimationService to turn an Exophase `most-common achievement`
@@ -171,10 +161,8 @@ export const CALIBRATED_MULTIPLIER_SPREAD = 0.3;
 //
 // Both effects are folded into a single per-platform multiplier range
 // below. These are deliberately wide because they are rough defaults: the
-// numbers will be replaced by per-game calibration once publisher IR
-// figures land (see BACKLOG.md, "Publisher IR / Earnings parsers"). When
-// that happens, follow the same pattern as `calibratedMultiplier` on
-// `Game` and use `CALIBRATED_MULTIPLIER_SPREAD` to tighten the range.
+// numbers will be replaced by finer per-genre profiles once publisher IR
+// figures land (see BACKLOG.md, "Publisher IR / Earnings parsers").
 //
 // The Steam (PC) range is informed by the bias measurement we get for
 // free from the Steam official achievement API (~1.15-1.30× on the few

@@ -46,6 +46,8 @@ import { AddGamePlatformReleaseDate1782780000000 } from './1782780000000-AddGame
 import { AddPsReconstructionSupport1783456310205 } from './1783456310205-AddPsReconstructionSupport';
 import { DropPublisherSteamShare1783500000000 } from './1783500000000-DropPublisherSteamShare';
 import { AddReferenceProfileGlobalReviewsToUnits1783600000000 } from './1783600000000-AddReferenceProfileGlobalReviewsToUnits';
+import { AddMilestoneAudit1783775191521 } from './1783775191521-AddMilestoneAudit';
+import { DropCalibrationAndPureEstimate1783780000000 } from './1783780000000-DropCalibrationAndPureEstimate';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -103,4 +105,6 @@ export const migrations: MixedList<Function | string> = [
   AddPsReconstructionSupport1783456310205,
   DropPublisherSteamShare1783500000000,
   AddReferenceProfileGlobalReviewsToUnits1783600000000,
+  AddMilestoneAudit1783775191521,
+  DropCalibrationAndPureEstimate1783780000000,
 ];
