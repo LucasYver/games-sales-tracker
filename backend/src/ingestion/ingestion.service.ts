@@ -6,14 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import {
-  Between,
-  In,
-  IsNull,
-  MoreThanOrEqual,
-  Not,
-  Repository,
-} from 'typeorm';
+import { Between, In, IsNull, MoreThanOrEqual, Not, Repository } from 'typeorm';
 import {
   AchievementSnapshot,
   Game,
@@ -127,6 +120,22 @@ const TAVILY_EXCLUDED_DOMAINS = [
   'similarweb.com',
   'rec0ded88.com',
   'raijin.gg',
+  // Estimate providers whose figures are explicitly modeled ("we estimate",
+  // "estimated X to Y", "up to X") yet get mislabeled as sourced milestones
+  'gamerevenuedata.com',
+  'steamrev.com',
+  'steampulse.org',
+  // Listicle / SEO / AI content-farms that republish VG Insights / SteamSpy
+  // estimates or other outlets as if they were sourced figures (misattributed,
+  // deduped, mislabeled, or conflating player counts with copies sold)
+  'levvvel.com',
+  'accio.com',
+  '247wallst.com',
+  'grokipedia.com',
+  'expertbeacon.com',
+  'playercounter.com',
+  'sixfasts.com',
+  'rickyspears.com',
   // Catalog / playtime / review trackers (no real sales data)
   'howlongtobeat.com',
   'backloggd.com',
@@ -2330,9 +2339,7 @@ export class IngestionService {
    * The worklist is built synchronously (a handful of aggregate queries) so the
    * caller still learns how many games / tasks were queued.
    */
-  async startBackfillMissing(
-    options: { createdAfter?: Date } = {},
-  ): Promise<{
+  async startBackfillMissing(options: { createdAfter?: Date } = {}): Promise<{
     started: boolean;
     alreadyRunning: boolean;
     games: number;
@@ -2362,7 +2369,12 @@ export class IngestionService {
         this.backfillAllRunning = false;
       });
 
-    return { started: true, alreadyRunning: false, games: worklist.length, tasks };
+    return {
+      started: true,
+      alreadyRunning: false,
+      games: worklist.length,
+      tasks,
+    };
   }
 
   /**
@@ -2429,15 +2441,18 @@ export class IngestionService {
       if (Number.isFinite(appId)) appIdByGame.set(row.gameId, appId);
     }
 
-    const idSet = async (sql: string, params: unknown[]): Promise<Set<string>> =>
+    const idSet = async (
+      sql: string,
+      params: unknown[],
+    ): Promise<Set<string>> =>
       new Set(
         (await this.signals.query(sql, params)).map(
           (r: { gameId: string }) => r.gameId,
         ),
       );
 
-    const [ccuDone, reviewsDone, followersDone, ratingsDone] = await Promise.all(
-      [
+    const [ccuDone, reviewsDone, followersDone, ratingsDone] =
+      await Promise.all([
         idSet(
           `SELECT DISTINCT "gameId" FROM signal_snapshot WHERE metric = $1 AND "capturedAt" < $2`,
           [SignalMetric.STEAM_CONCURRENT, staleCutoff.toISOString()],
@@ -2458,8 +2473,7 @@ export class IngestionService {
             SignalMetric.SWITCH_RATINGS,
           ],
         ),
-      ],
-    );
+      ]);
 
     const items: BackfillWorkItem[] = [];
     for (const game of games) {
