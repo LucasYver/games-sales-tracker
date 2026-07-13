@@ -28,6 +28,7 @@ import { TavilyClient } from './tavily.client';
 import { PerplexityClient } from './perplexity.client';
 import { ExophaseClient } from './exophase.client';
 import { GamesPopularityClient } from './games-popularity.client';
+import { TwitchClient } from './twitch.client';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { GamesPopularityClient } from './games-popularity.client';
     PerplexityClient,
     ExophaseClient,
     GamesPopularityClient,
+    TwitchClient,
   ],
   exports: [IngestionService, IgdbClient],
 })

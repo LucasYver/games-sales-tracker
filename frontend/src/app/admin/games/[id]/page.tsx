@@ -36,6 +36,7 @@ import { MilestoneRow } from '../../_components/MilestoneRow';
 import { CcuHistoryChart } from '../../_components/CcuHistoryChart';
 import { ReviewHistoryChart } from '../../_components/ReviewHistoryChart';
 import { FollowersHistoryChart } from '../../_components/FollowersHistoryChart';
+import { TwitchViewersHistoryChart } from '../../_components/TwitchViewersHistoryChart';
 import { EstimateBreakdownView } from '../../_components/EstimateBreakdownPanel';
 import { deleteGame, setReferenceExclusion } from '../../actions';
 
@@ -645,6 +646,11 @@ async function ChartsTab({
         )}
         <ChartCard title="Steam followers">
           <FollowersHistoryChart followersHistory={c.followersHistory} />
+        </ChartCard>
+        <ChartCard title="Twitch viewers">
+          <TwitchViewersHistoryChart
+            twitchViewersHistory={c.twitchViewersHistory}
+          />
         </ChartCard>
         {has('PLAYSTATION') && c.psRatingsHistory.length > 0 && (
           <ChartCard title="PlayStation ratings">

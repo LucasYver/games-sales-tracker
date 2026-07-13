@@ -51,6 +51,7 @@ import {
   GamesPopularityClient,
   GamesPopularityPoint,
 } from './games-popularity.client';
+import { TwitchClient } from './twitch.client';
 import { SourcesService } from '../sources/sources.service';
 import { PublishersService } from '../publishers/publishers.service';
 import {
@@ -246,6 +247,7 @@ export class IngestionService {
     private readonly perplexity: PerplexityClient,
     private readonly exophase: ExophaseClient,
     private readonly gamesPopularity: GamesPopularityClient,
+    private readonly twitch: TwitchClient,
     private readonly sources: SourcesService,
     private readonly publishers: PublishersService,
     private readonly config: ConfigService,
@@ -2169,6 +2171,153 @@ export class IngestionService {
         (leftover > 0 ? `, ${leftover} left for next run` : ''),
     );
     return { processed, followers, failed, leftover };
+  }
+
+  /**
+   * Resolve (and cache) the Twitch game id for a game. Reuses an existing
+   * `game_source` row (source=TWITCH) when present; otherwise resolves it by
+   * name via the Twitch Helix API and persists the mapping so later polls skip
+   * the lookup. Returns null when Twitch can't match the name (no mapping) or
+   * credentials are missing. The unique (source, externalId) constraint means
+   * two games can't share a Twitch id — a collision is logged and treated as
+   * "no mapping" for the second game rather than crashing the run.
+   */
+  private async resolveTwitchGameId(
+    gameId: string,
+    gameName: string,
+  ): Promise<string | null> {
+    const existing = await this.gameSources.findOne({
+      where: { gameId, source: SourceType.TWITCH },
+    });
+    if (existing) return existing.externalId;
+
+    const resolved = await this.twitch.resolveGameId(gameName);
+    if (!resolved) return null;
+
+    try {
+      await this.gameSources.save(
+        this.gameSources.create({
+          gameId,
+          source: SourceType.TWITCH,
+          externalId: resolved.id,
+          url: `https://www.twitch.tv/directory/game/${encodeURIComponent(
+            resolved.name,
+          )}`,
+        }),
+      );
+    } catch (error) {
+      // Most likely the unique (source, externalId) constraint: another game
+      // already claimed this Twitch id. Don't persist a duplicate; skip.
+      this.logger.warn(
+        `[twitch] could not link game ${gameId} to Twitch id ${resolved.id}: ${error}`,
+      );
+      return null;
+    }
+    return resolved.id;
+  }
+
+  /**
+   * Poll live Twitch viewers for one game and persist a TWITCH_VIEWERS signal.
+   * Storage mirrors {@link pollSteamCcu}: a single row per UTC day = that day's
+   * peak (upsert-if-higher), so hourly polling captures the daily high without
+   * exploding row counts. Best-effort: an unmapped game or a fetch failure
+   * leaves any value already on record in place.
+   */
+  async pollTwitchViewers(gameId: string, gameName: string): Promise<void> {
+    const twitchGameId = await this.resolveTwitchGameId(gameId, gameName);
+    if (!twitchGameId) return;
+
+    const total = await this.twitch.getTotalViewers(twitchGameId);
+    if (total === null) return;
+    const current = total.viewers;
+
+    const now = new Date();
+    const dayStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const dayEnd = new Date(dayStart.getTime() + 24 * 3600 * 1000 - 1);
+    const todayRow = await this.signals.findOne({
+      where: {
+        gameId,
+        metric: SignalMetric.TWITCH_VIEWERS,
+        capturedAt: Between(dayStart, dayEnd),
+      },
+      order: { value: 'DESC' },
+    });
+
+    if (!todayRow) {
+      await this.signals.save(
+        this.signals.create({
+          gameId,
+          source: SourceType.TWITCH,
+          metric: SignalMetric.TWITCH_VIEWERS,
+          value: current,
+          capturedAt: dayStart,
+        }),
+      );
+    } else if (current > todayRow.value) {
+      todayRow.value = current;
+      todayRow.capturedAt = dayStart;
+      await this.signals.save(todayRow);
+    }
+  }
+
+  /**
+   * Fan-out over every tracked (non-free) game — PC and console alike, since
+   * Twitch viewership is platform-agnostic — polling live Twitch viewers.
+   * Games are processed stalest-TWITCH_VIEWERS-first so a run truncated by
+   * `budgetMs` (the Vercel cron wall-clock) still makes forward progress across
+   * invocations. Skipped entirely when Twitch credentials are missing.
+   */
+  async pollAllTwitchViewers(
+    options: { budgetMs?: number } = {},
+  ): Promise<{ polled: number; failed: number; leftover: number }> {
+    if (!this.twitch.isConfigured()) {
+      this.logger.warn('[twitch] disabled (no IGDB/Twitch credentials).');
+      return { polled: 0, failed: 0, leftover: 0 };
+    }
+
+    const budgetMs = options.budgetMs ?? Number.POSITIVE_INFINITY;
+    const startedAt = Date.now();
+
+    // Stalest-first: games whose latest TWITCH_VIEWERS snapshot is oldest (or
+    // missing) sort ahead, guaranteeing forward progress if the run is capped.
+    const rows: Array<{ gameId: string; name: string }> =
+      await this.games.query(
+        `SELECT g.id AS "gameId", g.name AS "name"
+           FROM game g
+           LEFT JOIN LATERAL (
+             SELECT MAX(s."capturedAt") AS last
+               FROM signal_snapshot s
+              WHERE s."gameId" = g.id
+                AND s.metric = 'TWITCH_VIEWERS'
+           ) l ON true
+          WHERE g."isFree" = false
+            AND g."deletedAt" IS NULL
+          ORDER BY l.last ASC NULLS FIRST`,
+      );
+
+    let polled = 0;
+    let failed = 0;
+    for (const row of rows) {
+      if (Date.now() - startedAt >= budgetMs) break;
+      try {
+        await this.pollTwitchViewers(row.gameId, row.name);
+        polled += 1;
+      } catch (error) {
+        failed += 1;
+        this.logger.warn(
+          `[twitch] poll failed for game ${row.gameId}: ${error}`,
+        );
+      }
+    }
+
+    const leftover = rows.length - polled - failed;
+    this.logger.log(
+      `[twitch] poll complete: ${polled} polled, ${failed} failed` +
+        (leftover > 0 ? `, ${leftover} left for next run` : ''),
+    );
+    return { polled, failed, leftover };
   }
 
   /**

@@ -43,6 +43,12 @@ export class CronController {
     return this.refresh.captureGamesPopularity();
   }
 
+  @Get('poll-twitch-viewers')
+  @HttpCode(200)
+  pollTwitchViewers() {
+    return this.refresh.captureTwitchViewers();
+  }
+
   @Get('recompute-rank')
   @HttpCode(200)
   recomputeRank() {

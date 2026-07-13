@@ -146,6 +146,28 @@ export class RefreshService {
   }
 
   /**
+   * Poll live Twitch viewers for every tracked game on a short cadence so
+   * intra-day peaks are captured. Mirrors the CCU poll but is platform-
+   * agnostic (Twitch viewership exists for console-only games too). A
+   * wall-clock budget keeps the run under the Vercel `maxDuration`, and
+   * stalest-first ordering drains any leftover on the next run.
+   */
+  async captureTwitchViewers() {
+    const RUN_BUDGET_MS = 11 * 60 * 1000;
+    try {
+      const result = await this.ingestion.pollAllTwitchViewers({
+        budgetMs: RUN_BUDGET_MS,
+      });
+      this.logger.log(
+        `Twitch viewers poll done: ${result.polled} polled, ` +
+          `${result.failed} failed, ${result.leftover} left.`,
+      );
+    } catch (error) {
+      this.logger.warn(`Twitch viewers poll failed: ${error}`);
+    }
+  }
+
+  /**
    * Weekly recompute of the home-grown review-velocity rank over the whole
    * tracked universe → `game_rank`. Read-heavy full recompute; scheduled after
    * the followers/rank capture so it sees fresh review data.

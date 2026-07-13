@@ -15,6 +15,7 @@ export enum SourceType {
   NINTENDO_ESHOP = 'NINTENDO_ESHOP',
   WIKIPEDIA = 'WIKIPEDIA',
   EXOPHASE = 'EXOPHASE',
+  TWITCH = 'TWITCH',
   MANUAL = 'MANUAL',
 }
 
@@ -62,6 +63,13 @@ export enum SignalMetric {
   // Postgres enum in prod (enum values can't be safely dropped); existing rows,
   // if any, are harmless dead data.
   STEAM_TOPSELLER_RANK = 'STEAM_TOPSELLER_RANK',
+  // Total concurrent Twitch viewers across all live streams of the game, a
+  // hype / mainstream-attention proxy (distinct from CCU: it counts watchers,
+  // not players). Summed over the top live streams from the Twitch Helix
+  // /streams endpoint (Twitch exposes no aggregate total). One row per UTC day
+  // = that day's peak, mirroring STEAM_CONCURRENT. Forward-only: history starts
+  // when collection begins (no free Twitch backfill exists).
+  TWITCH_VIEWERS = 'TWITCH_VIEWERS',
 }
 
 export enum ConfidenceLevel {

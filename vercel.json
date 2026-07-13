@@ -20,6 +20,7 @@
     "crons": [
         { "path": "/api/cron/refresh-games",  "schedule": "0 0,6,12,18 * * *" },
         { "path": "/api/cron/poll-ccu",        "schedule": "0 * * * *" },
+        { "path": "/api/cron/poll-twitch-viewers", "schedule": "30 * * * *" },
         { "path": "/api/cron/capture-prices",  "schedule": "0 6 * * *" },
         { "path": "/api/cron/poll-feeds",      "schedule": "*/30 * * * *" },
         { "path": "/api/cron/discover-games",  "schedule": "0 2 * * *" },

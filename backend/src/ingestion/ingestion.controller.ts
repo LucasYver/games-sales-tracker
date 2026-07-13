@@ -93,4 +93,9 @@ export class IngestionController {
   async discoverIgdb() {
     return this.ingestion.discoverIgdbGames();
   }
+
+  @Post('poll-twitch-viewers')
+  async pollTwitchViewers() {
+    return this.ingestion.pollAllTwitchViewers();
+  }
 }

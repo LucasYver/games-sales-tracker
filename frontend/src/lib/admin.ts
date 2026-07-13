@@ -244,6 +244,7 @@ export interface AdminGameChartsData {
   ccuHistory: AdminCcuPoint[];
   reviewHistory: AdminCcuPoint[];
   followersHistory: AdminCcuPoint[];
+  twitchViewersHistory: AdminCcuPoint[];
   psRatingsHistory: AdminCcuPoint[];
   psRatingsSyntheticHistory: AdminCcuPoint[];
   xboxRatingsHistory: AdminCcuPoint[];

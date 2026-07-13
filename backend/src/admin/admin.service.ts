@@ -234,6 +234,9 @@ export interface AdminGameCharts {
   ccuHistory: { capturedAt: Date; value: number }[];
   reviewHistory: { capturedAt: Date; value: number }[];
   followersHistory: { capturedAt: Date; value: number }[];
+  // Full TWITCH_VIEWERS series (daily peak concurrent Twitch viewers).
+  // Forward-only; history starts when polling began (no Twitch backfill).
+  twitchViewersHistory: { capturedAt: Date; value: number }[];
   // Console store-rating series (cumulative counts). Only rendered per-platform
   // and only when the game has data, so a PC-only game shows none.
   psRatingsHistory: { capturedAt: Date; value: number }[];
@@ -855,6 +858,7 @@ export class AdminService {
       ccu,
       reviews,
       followers,
+      twitchViewers,
       psR,
       psRSynthetic,
       xboxR,
@@ -865,6 +869,7 @@ export class AdminService {
       series(SignalMetric.STEAM_CONCURRENT),
       series(SignalMetric.STEAM_REVIEWS),
       series(SignalMetric.STEAM_FOLLOWERS),
+      series(SignalMetric.TWITCH_VIEWERS),
       series(SignalMetric.PS_RATINGS),
       series(SignalMetric.PS_RATINGS, true),
       series(SignalMetric.XBOX_RATINGS),
@@ -888,6 +893,7 @@ export class AdminService {
       ccuHistory: map(ccu),
       reviewHistory: map(reviews),
       followersHistory: map(followers),
+      twitchViewersHistory: map(twitchViewers),
       psRatingsHistory: map(psR),
       psRatingsSyntheticHistory: map(psRSynthetic),
       xboxRatingsHistory: map(xboxR),
