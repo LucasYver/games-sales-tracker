@@ -99,7 +99,8 @@
     "ratingsTitle": "Notes des stores",
     "steamReviews": "{count} avis Steam",
     "storeScore": "{score}/5",
-    "storeRatings": "{count} avis"
+    "storeRatings": "{count} avis",
+    "reviewerMedianPlaytime": "~{hours}h de jeu médian par évaluateur"
   },
   "salesHistory": {
     "estimated": "estimé",

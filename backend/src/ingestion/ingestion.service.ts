@@ -561,6 +561,7 @@ export class IngestionService {
     if (!game) return null;
 
     await this.pollSteamReviews(game.id, appId);
+    await this.pollSteamReviewerPlaytime(game.id, appId);
     await this.pollSteamCcu(game.id, appId);
 
     await this.scrapeStoreRatings(game.id, game.name, game.platforms);
@@ -969,6 +970,33 @@ export class IngestionService {
         source: SourceType.STEAM,
         metric: SignalMetric.STEAM_REVIEWS,
         value: reviews,
+      }),
+    );
+  }
+
+  /**
+   * Sample reviewer lifetime playtime from Steam and persist a
+   * `STEAM_REVIEWER_MEDIAN_PLAYTIME` snapshot (value in MINUTES). This is a
+   * directional, SteamSpy-style proxy derived from `author.playtime_forever`
+   * over a sample of recent reviews — not a whole-population figure and never
+   * an estimate input; see the metric's doc comment in `enums.ts`.
+   *
+   * Best-effort: a fetch failure (or a game whose reviews carry no playtime)
+   * leaves any value already on record in place.
+   */
+  private async pollSteamReviewerPlaytime(
+    gameId: string,
+    appId: number,
+  ): Promise<void> {
+    const playtime = await this.steam.fetchReviewerPlaytime(appId);
+    if (playtime === null) return;
+
+    await this.signals.save(
+      this.signals.create({
+        gameId,
+        source: SourceType.STEAM,
+        metric: SignalMetric.STEAM_REVIEWER_MEDIAN_PLAYTIME,
+        value: playtime.medianMinutes,
       }),
     );
   }
@@ -2975,6 +3003,9 @@ export class IngestionService {
         // remain on the refresh chain.
         Number.isFinite(steamAppId)
           ? this.pollSteamReviews(game.id, steamAppId)
+          : Promise.resolve(),
+        Number.isFinite(steamAppId)
+          ? this.pollSteamReviewerPlaytime(game.id, steamAppId)
           : Promise.resolve(),
       ]);
 

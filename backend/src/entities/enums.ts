@@ -70,6 +70,15 @@ export enum SignalMetric {
   // = that day's peak, mirroring STEAM_CONCURRENT. Forward-only: history starts
   // when collection begins (no free Twitch backfill exists).
   TWITCH_VIEWERS = 'TWITCH_VIEWERS',
+  // Median lifetime playtime (in MINUTES) across a sample of the game's Steam
+  // reviewers, computed from `author.playtime_forever` on the public
+  // `appreviews` endpoint. This is NOT a whole-population figure: it reflects
+  // only users who left a review (a self-selected, engaged subset) and is
+  // sampled from the most recent reviews, so treat it as a directional proxy
+  // à la SteamSpy's `median_forever`, not ground truth. Median (not mean) is
+  // stored because a handful of idle/AFK reviewers with thousands of hours
+  // badly skew the average. One row per poll; never feeds the estimate.
+  STEAM_REVIEWER_MEDIAN_PLAYTIME = 'STEAM_REVIEWER_MEDIAN_PLAYTIME',
 }
 
 export enum ConfidenceLevel {

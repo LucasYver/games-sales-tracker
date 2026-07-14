@@ -117,7 +117,12 @@ export interface TotalSales {
 // A single dated sales figure, kept for the timeline so the same game can show
 // how its reported sales evolved over time across sources.
 export interface StoreRatings {
-  steam: { reviews: number } | null;
+  // `reviewerMedianPlaytimeMinutes`: directional SteamSpy-style proxy sampled
+  // from reviewer `playtime_forever`; null when never polled or unavailable.
+  steam: {
+    reviews: number;
+    reviewerMedianPlaytimeMinutes: number | null;
+  } | null;
   playstation: { reviews: number; score: number | null } | null;
   xbox: { reviews: number; score: number | null } | null;
 }
@@ -481,6 +486,7 @@ export class GamesService {
   private async buildStoreRatings(gameId: string): Promise<StoreRatings> {
     const metrics = [
       SignalMetric.STEAM_REVIEWS,
+      SignalMetric.STEAM_REVIEWER_MEDIAN_PLAYTIME,
       SignalMetric.PS_RATINGS,
       SignalMetric.XBOX_RATINGS,
     ];
@@ -497,11 +503,19 @@ export class GamesService {
     }
 
     const steam = latest.get(SignalMetric.STEAM_REVIEWS);
+    const steamPlaytime = latest.get(
+      SignalMetric.STEAM_REVIEWER_MEDIAN_PLAYTIME,
+    );
     const ps = latest.get(SignalMetric.PS_RATINGS);
     const xbox = latest.get(SignalMetric.XBOX_RATINGS);
 
     return {
-      steam: steam ? { reviews: steam.value } : null,
+      steam: steam
+        ? {
+            reviews: steam.value,
+            reviewerMedianPlaytimeMinutes: steamPlaytime?.value ?? null,
+          }
+        : null,
       playstation: ps
         ? { reviews: ps.value, score: ps.averageRating ?? null }
         : null,

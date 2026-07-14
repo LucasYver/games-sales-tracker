@@ -50,6 +50,17 @@ export interface SteamReviewHistory {
   reportedTotal: number | null;
 }
 
+export interface SteamReviewerPlaytime {
+  // Median lifetime playtime across the sampled reviewers, in minutes.
+  medianMinutes: number;
+  // Mean lifetime playtime across the sampled reviewers, in minutes. Kept for
+  // logging/diagnostics only — the mean is heavily skewed by idle outliers,
+  // which is exactly why we persist the median as the headline figure.
+  averageMinutes: number;
+  // Number of reviews that carried a usable `playtime_forever` value.
+  sampleSize: number;
+}
+
 export interface SteamReviewHistogram {
   // Bucket granularity Steam chose for this app: 'month' (full history for
   // high-volume games), 'week' or 'day' (recent-only for low-volume games).
@@ -88,7 +99,9 @@ export class SteamClient {
           : [],
         categories: Array.isArray(d.categories)
           ? (d.categories as { description?: unknown }[])
-              .map((c) => (typeof c.description === 'string' ? c.description : null))
+              .map((c) =>
+                typeof c.description === 'string' ? c.description : null,
+              )
               .filter((c): c is string => c !== null)
           : [],
         dlc: Array.isArray(d.dlc)
@@ -113,9 +126,7 @@ export class SteamClient {
    */
   async findAppIdByName(name: string): Promise<number | null> {
     try {
-      const { data } = await axios.get<
-        { appid: string; name: string }[]
-      >(
+      const { data } = await axios.get<{ appid: string; name: string }[]>(
         `https://steamcommunity.com/actions/SearchApps/${encodeURIComponent(name)}`,
         { timeout: 15000 },
       );
@@ -152,7 +163,12 @@ export class SteamClient {
       for (const entry of raw as Array<{ name?: unknown; percent?: unknown }>) {
         const apiName = typeof entry.name === 'string' ? entry.name : null;
         const percent = Number(entry.percent);
-        if (!apiName || !Number.isFinite(percent) || percent < 0 || percent > 100) {
+        if (
+          !apiName ||
+          !Number.isFinite(percent) ||
+          percent < 0 ||
+          percent > 100
+        ) {
           continue;
         }
         parsed.push({ apiName, percent });
@@ -181,7 +197,11 @@ export class SteamClient {
         { params: { appid: appId, format: 'json' }, timeout: 15000 },
       );
       const players = data?.response?.player_count;
-      if (typeof players !== 'number' || !Number.isFinite(players) || players < 0) {
+      if (
+        typeof players !== 'number' ||
+        !Number.isFinite(players) ||
+        players < 0
+      ) {
         return null;
       }
       return players;
@@ -273,8 +293,7 @@ export class SteamClient {
 
       if (pages === 0) {
         const summaryTotal = data?.query_summary?.total_reviews;
-        reportedTotal =
-          typeof summaryTotal === 'number' ? summaryTotal : null;
+        reportedTotal = typeof summaryTotal === 'number' ? summaryTotal : null;
       }
 
       const reviews = Array.isArray(data?.reviews) ? data.reviews : [];
@@ -294,8 +313,7 @@ export class SteamClient {
         totalFetched += 1;
       }
 
-      const nextCursor =
-        typeof data?.cursor === 'string' ? data.cursor : null;
+      const nextCursor = typeof data?.cursor === 'string' ? data.cursor : null;
       if (!nextCursor || seenCursors.has(nextCursor)) break;
       seenCursors.add(nextCursor);
       cursor = nextCursor;
@@ -311,6 +329,96 @@ export class SteamClient {
       .sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
 
     return { daily: sorted, totalFetched, reportedTotal };
+  }
+
+  /**
+   * Sample reviewer lifetime playtime from the public `appreviews` endpoint and
+   * return the median/mean (in minutes) over the sample. Each review carries an
+   * `author.playtime_forever` field (minutes played in this app, as of the
+   * author's last library sync); we page through the most recent reviews and
+   * aggregate those values.
+   *
+   * This is our own, API-only equivalent of SteamSpy's `median_forever`. It is
+   * NOT a whole-population statistic: reviewers are a self-selected, engaged
+   * subset of owners, and we only sample the most recent `maxPages` worth, so
+   * the figure is directional. The median is the meaningful output — the mean
+   * is dragged upward by the handful of reviewers who leave a game idling for
+   * thousands of hours.
+   *
+   * `appreviews` shares the store's ~200 req/5 min IP rate limit, so pages are
+   * throttled; `filter=recent` gives stable chronological pagination (unlike
+   * `all`, whose sliding helpfulness window never terminates). Returns null
+   * when no review carried a usable playtime value.
+   */
+  async fetchReviewerPlaytime(
+    appId: number,
+    options: { throttleMs?: number; maxPages?: number } = {},
+  ): Promise<SteamReviewerPlaytime | null> {
+    const throttleMs = options.throttleMs ?? 700;
+    const maxPages = options.maxPages ?? 10;
+
+    const playtimes: number[] = [];
+    const seenCursors = new Set<string>();
+    let cursor = '*';
+    let pages = 0;
+
+    while (pages < maxPages) {
+      let data: any;
+      try {
+        data = await this.getStoreJson(
+          `https://store.steampowered.com/appreviews/${appId}`,
+          {
+            json: 1,
+            filter: 'recent',
+            language: 'all',
+            purchase_type: 'all',
+            review_type: 'all',
+            num_per_page: 100,
+            cursor,
+          },
+        );
+      } catch (error) {
+        this.logger.warn(
+          `fetchReviewerPlaytime page ${pages + 1} failed for ${appId}: ${error}`,
+        );
+        break;
+      }
+
+      const reviews = Array.isArray(data?.reviews) ? data.reviews : [];
+      if (reviews.length === 0) break;
+
+      for (const review of reviews as Array<{
+        author?: { playtime_forever?: unknown };
+      }>) {
+        const minutes = Number(review.author?.playtime_forever);
+        if (Number.isFinite(minutes) && minutes >= 0) playtimes.push(minutes);
+      }
+
+      const nextCursor = typeof data?.cursor === 'string' ? data.cursor : null;
+      if (!nextCursor || seenCursors.has(nextCursor)) break;
+      seenCursors.add(nextCursor);
+      cursor = nextCursor;
+      pages += 1;
+
+      if (throttleMs > 0) await new Promise((r) => setTimeout(r, throttleMs));
+    }
+
+    if (playtimes.length === 0) return null;
+
+    playtimes.sort((a, b) => a - b);
+    const mid = Math.floor(playtimes.length / 2);
+    const medianMinutes =
+      playtimes.length % 2 === 0
+        ? (playtimes[mid - 1] + playtimes[mid]) / 2
+        : playtimes[mid];
+    const averageMinutes =
+      playtimes.reduce((sum, v) => sum + v, 0) / playtimes.length;
+
+    return {
+      medianMinutes: Math.round(medianMinutes),
+      averageMinutes: Math.round(averageMinutes),
+      sampleSize: playtimes.length,
+    };
   }
 
   /**

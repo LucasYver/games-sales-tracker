@@ -150,15 +150,26 @@ function StoreRatingsCard({ ratings }: { ratings: StoreRatings }) {
   const t = useTranslations('gamePage');
   const format = useFormatter();
 
-  const rows: { label: string; reviews: number; score: number | null }[] = [];
+  const rows: {
+    label: string;
+    reviews: number;
+    score: number | null;
+    medianPlaytimeMinutes: number | null;
+  }[] = [];
   if (ratings.steam) {
-    rows.push({ label: 'Steam', reviews: ratings.steam.reviews, score: null });
+    rows.push({
+      label: 'Steam',
+      reviews: ratings.steam.reviews,
+      score: null,
+      medianPlaytimeMinutes: ratings.steam.reviewerMedianPlaytimeMinutes,
+    });
   }
   if (ratings.playstation) {
     rows.push({
       label: 'PlayStation',
       reviews: ratings.playstation.reviews,
       score: ratings.playstation.score,
+      medianPlaytimeMinutes: null,
     });
   }
   if (ratings.xbox) {
@@ -166,6 +177,7 @@ function StoreRatingsCard({ ratings }: { ratings: StoreRatings }) {
       label: 'Xbox',
       reviews: ratings.xbox.reviews,
       score: ratings.xbox.score,
+      medianPlaytimeMinutes: null,
     });
   }
 
@@ -176,24 +188,42 @@ function StoreRatingsCard({ ratings }: { ratings: StoreRatings }) {
           {t('ratingsTitle')}
         </h2>
         <ul className="flex flex-col gap-2">
-          {rows.map(({ label, reviews, score }) => (
-            <li key={label} className="flex items-center justify-between text-sm">
+          {rows.map(({ label, reviews, score, medianPlaytimeMinutes }) => (
+            <li
+              key={label}
+              className="flex items-start justify-between text-sm"
+            >
               <span className="text-muted-foreground font-medium">{label}</span>
-              <span className="text-right">
-                {score !== null && (
-                  <span className="mr-1 font-semibold">
-                    ★ {t('storeScore', { score: score.toFixed(1) })}
+              <span className="flex flex-col items-end text-right">
+                <span>
+                  {score !== null && (
+                    <span className="mr-1 font-semibold">
+                      ★ {t('storeScore', { score: score.toFixed(1) })}
+                    </span>
+                  )}
+                  <span className="text-muted-foreground">
+                    {label === 'Steam'
+                      ? t('steamReviews', {
+                          count: format.number(reviews, {
+                            notation: 'compact',
+                          }),
+                        })
+                      : t('storeRatings', {
+                          count: format.number(reviews, {
+                            notation: 'compact',
+                          }),
+                        })}
+                  </span>
+                </span>
+                {medianPlaytimeMinutes !== null && (
+                  <span className="text-muted-foreground text-xs">
+                    {t('reviewerMedianPlaytime', {
+                      hours: format.number(medianPlaytimeMinutes / 60, {
+                        maximumFractionDigits: 1,
+                      }),
+                    })}
                   </span>
                 )}
-                <span className="text-muted-foreground">
-                  {label === 'Steam'
-                    ? t('steamReviews', {
-                        count: format.number(reviews, { notation: 'compact' }),
-                      })
-                    : t('storeRatings', {
-                        count: format.number(reviews, { notation: 'compact' }),
-                      })}
-                </span>
               </span>
             </li>
           ))}

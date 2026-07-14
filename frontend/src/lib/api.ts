@@ -66,7 +66,10 @@ export interface PublicEstimateSnapshot {
 }
 
 export interface StoreRatings {
-  steam: { reviews: number } | null;
+  steam: {
+    reviews: number;
+    reviewerMedianPlaytimeMinutes: number | null;
+  } | null;
   playstation: { reviews: number; score: number | null } | null;
   xbox: { reviews: number; score: number | null } | null;
 }

@@ -99,7 +99,8 @@
     "ratingsTitle": "Store ratings",
     "steamReviews": "{count} Steam reviews",
     "storeScore": "{score}/5",
-    "storeRatings": "{count} ratings"
+    "storeRatings": "{count} ratings",
+    "reviewerMedianPlaytime": "~{hours}h median reviewer playtime"
   },
   "salesHistory": {
     "estimated": "estimated",

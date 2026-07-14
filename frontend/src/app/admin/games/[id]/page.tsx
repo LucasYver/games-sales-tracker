@@ -77,6 +77,11 @@ function latest(summary: AdminGamePageSummary, metric: string): number | null {
   return summary.latestSignals.find((s) => s.metric === metric)?.value ?? null;
 }
 
+function fmtHoursFromMinutes(minutes: number | null): string {
+  if (minutes == null) return '—';
+  return `${(minutes / 60).toFixed(1)}h`;
+}
+
 // ─── page ─────────────────────────────────────────────────────────────────
 
 export default async function AdminGameDetailPage({
@@ -173,7 +178,7 @@ export default async function AdminGameDetailPage({
       </div>
 
       {/* ── KPI strip ── */}
-      <div className="border-border grid grid-cols-2 divide-x divide-y overflow-hidden rounded-xl border sm:grid-cols-5 sm:divide-y-0">
+      <div className="border-border grid grid-cols-2 divide-x divide-y overflow-hidden rounded-xl border sm:grid-cols-6 sm:divide-y-0">
         <Kpi
           label="Est. today"
           value={
@@ -202,6 +207,13 @@ export default async function AdminGameDetailPage({
           label="Steam reviews"
           value={compact(latest(s, 'STEAM_REVIEWS'))}
           hint={fmtDate(s.releaseDate)}
+        />
+        <Kpi
+          label="Median playtime"
+          value={fmtHoursFromMinutes(
+            latest(s, 'STEAM_REVIEWER_MEDIAN_PLAYTIME'),
+          )}
+          hint="Steam reviewers"
         />
         <Kpi
           label="Peak CCU"
