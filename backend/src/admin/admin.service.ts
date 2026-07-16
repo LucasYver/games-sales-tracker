@@ -459,6 +459,7 @@ export class AdminService {
     platformExclusive?: boolean;
     hasSales?: boolean;
     hasEstimates?: boolean;
+    needsRefresh?: boolean;
     sort?: 'updated' | 'releaseDate' | 'lastRefreshed';
     direction?: 'asc' | 'desc';
     offset?: number;
@@ -477,6 +478,23 @@ export class AdminService {
       'WHERE m."gameId" = g.id AND m."rejectedAt" IS NULL)';
     const hasEstimateExpr =
       'EXISTS (SELECT 1 FROM sales_estimate e WHERE e."gameId" = g.id)';
+
+    // SQL mirror of getRefreshIntervalDays()/isDueForRefresh()
+    // (scheduler/refresh-interval.ts) so the admin listing can filter on the
+    // cron's refresh cadence without materialising the whole catalog. Keep the
+    // age tiers in sync with that file.
+    const ageDaysExpr = 'EXTRACT(EPOCH FROM (now() - g."releaseDate")) / 86400';
+    const refreshIntervalExpr =
+      `CASE ` +
+      `WHEN ${ageDaysExpr} <= 180 THEN 1 ` +
+      `WHEN ${ageDaysExpr} <= 365 THEN 7 ` +
+      `WHEN ${ageDaysExpr} <= 1095 THEN 30 ` +
+      `WHEN ${ageDaysExpr} <= 1825 THEN 90 ` +
+      `ELSE 180 END`;
+    const needsRefreshExpr =
+      `g."releaseDate" IS NOT NULL AND (` +
+      `g."lastRefreshedAt" IS NULL OR ` +
+      `EXTRACT(EPOCH FROM (now() - g."lastRefreshedAt")) / 86400 >= (${refreshIntervalExpr}))`;
 
     const applyFilters = (
       builder: ReturnType<typeof this.games.createQueryBuilder>,
@@ -506,6 +524,11 @@ export class AdminService {
         builder.andWhere(hasEstimateExpr);
       } else if (opts.hasEstimates === false) {
         builder.andWhere(`NOT ${hasEstimateExpr}`);
+      }
+      if (opts.needsRefresh === true) {
+        builder.andWhere(`(${needsRefreshExpr})`);
+      } else if (opts.needsRefresh === false) {
+        builder.andWhere(`NOT (${needsRefreshExpr})`);
       }
       return builder;
     };

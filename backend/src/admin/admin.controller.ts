@@ -50,6 +50,7 @@ export class AdminController {
     @Query('platformExclusive') platformExclusive?: string,
     @Query('hasSales') hasSales?: string,
     @Query('hasEstimates') hasEstimates?: string,
+    @Query('needsRefresh') needsRefresh?: string,
     @Query('sort') sort?: string,
     @Query('direction') direction?: string,
     @Query('offset') offset?: string,
@@ -65,6 +66,12 @@ export class AdminController {
         hasEstimates === 'true'
           ? true
           : hasEstimates === 'false'
+            ? false
+            : undefined,
+      needsRefresh:
+        needsRefresh === 'true'
+          ? true
+          : needsRefresh === 'false'
             ? false
             : undefined,
       sort:

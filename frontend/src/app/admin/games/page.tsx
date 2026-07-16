@@ -112,6 +112,7 @@ export default async function AdminGamesPage({
     platform?: string;
     hasSales?: string;
     hasEstimates?: string;
+    needsRefresh?: string;
     sort?: string;
     direction?: string;
     page?: string;
@@ -122,6 +123,7 @@ export default async function AdminGamesPage({
     platform,
     hasSales,
     hasEstimates,
+    needsRefresh,
     sort,
     direction,
     page: pageParam,
@@ -135,6 +137,7 @@ export default async function AdminGamesPage({
   if (platform) filters.platform = platform;
   if (hasSales) filters.hasSales = hasSales;
   if (hasEstimates) filters.hasEstimates = hasEstimates;
+  if (needsRefresh) filters.needsRefresh = needsRefresh;
   if (sort) filters.sort = sort;
   if (direction) filters.direction = direction;
 
@@ -231,6 +234,19 @@ export default async function AdminGamesPage({
                 <option value="">Any</option>
                 <option value="true">With estimate</option>
                 <option value="false">Without estimate</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="needsRefresh">Needs refresh</Label>
+              <select
+                id="needsRefresh"
+                name="needsRefresh"
+                defaultValue={needsRefresh ?? ''}
+                className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs"
+              >
+                <option value="">Any</option>
+                <option value="true">Due for refresh</option>
+                <option value="false">Up to date</option>
               </select>
             </div>
             <Button type="submit">Apply</Button>
