@@ -22,11 +22,17 @@ export class LlmExtractorService {
   private readonly logger = new Logger(LlmExtractorService.name);
   private readonly openai: OpenAI | null;
   private readonly openaiModel: string;
+  private readonly reasoningEffort?: string;
 
   constructor(config: ConfigService) {
     const openaiKey = config.get<string>('OPENAI_API_KEY');
     this.openai = openaiKey ? new OpenAI({ apiKey: openaiKey }) : null;
-    this.openaiModel = config.get<string>('OPENAI_MODEL') ?? 'gpt-5-mini';
+    this.openaiModel = config.get<string>('OPENAI_MODEL') ?? 'gpt-5.6-luna';
+    // Optional per-model tuning. Newer reasoning models (e.g. gpt-5.6-*)
+    // reject function tools unless reasoning_effort is 'none', while older
+    // ones (gpt-5-mini) reject 'none' — so it must stay caller-configurable
+    // rather than inferred from the model name.
+    this.reasoningEffort = config.get<string>('OPENAI_REASONING_EFFORT');
 
     if (!this.openai) {
       this.logger.warn(
@@ -59,6 +65,12 @@ export class LlmExtractorService {
     const response = await this.openai.chat.completions.create({
       model: this.openaiModel,
       ...(supportsTemperature ? { temperature: 0 } : {}),
+      ...(this.reasoningEffort
+        ? {
+            reasoning_effort: this
+              .reasoningEffort as OpenAI.Chat.ChatCompletionCreateParams['reasoning_effort'],
+          }
+        : {}),
       messages: [
         { role: 'system', content: params.system },
         { role: 'user', content: params.user },
