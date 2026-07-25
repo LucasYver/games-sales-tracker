@@ -28,11 +28,14 @@ export class LlmExtractorService {
     const openaiKey = config.get<string>('OPENAI_API_KEY');
     this.openai = openaiKey ? new OpenAI({ apiKey: openaiKey }) : null;
     this.openaiModel = config.get<string>('OPENAI_MODEL') ?? 'gpt-5.6-luna';
-    // Optional per-model tuning. Newer reasoning models (e.g. gpt-5.6-*)
-    // reject function tools unless reasoning_effort is 'none', while older
-    // ones (gpt-5-mini) reject 'none' — so it must stay caller-configurable
-    // rather than inferred from the model name.
-    this.reasoningEffort = config.get<string>('OPENAI_REASONING_EFFORT');
+    // Newer reasoning models (gpt-5.x, e.g. gpt-5.6-luna) reject function
+    // tools on /v1/chat/completions unless reasoning_effort is 'none', while
+    // older ones (gpt-5-mini) reject 'none' and only accept minimal|low|
+    // medium|high. So the default is derived from the model; an explicit
+    // OPENAI_REASONING_EFFORT always wins (set it to empty to send nothing).
+    this.reasoningEffort =
+      config.get<string>('OPENAI_REASONING_EFFORT') ??
+      LlmExtractorService.defaultReasoningEffort(this.openaiModel);
 
     if (!this.openai) {
       this.logger.warn(
@@ -43,6 +46,15 @@ export class LlmExtractorService {
 
   get enabled(): boolean {
     return this.openai !== null;
+  }
+
+  /**
+   * Reasoning models named `gpt-5.<minor>` (e.g. gpt-5.6-luna) only allow
+   * function tools when reasoning_effort is 'none'. Everything else keeps the
+   * previous behaviour of sending no reasoning_effort at all.
+   */
+  private static defaultReasoningEffort(model: string): string | undefined {
+    return /^gpt-5\.\d/.test(model) ? 'none' : undefined;
   }
 
   async extract<T>(params: ExtractParams): Promise<T | null> {
