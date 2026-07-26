@@ -50,6 +50,7 @@ import { AddMilestoneAudit1783775191521 } from './1783775191521-AddMilestoneAudi
 import { DropCalibrationAndPureEstimate1783780000000 } from './1783780000000-DropCalibrationAndPureEstimate';
 import { AddTwitchViewersMetric1783790000000 } from './1783790000000-AddTwitchViewersMetric';
 import { AddSteamReviewerMedianPlaytimeMetric1783800000000 } from './1783800000000-AddSteamReviewerMedianPlaytimeMetric';
+import { DropMilestoneAudit1783810000000 } from './1783810000000-DropMilestoneAudit';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -111,4 +112,5 @@ export const migrations: MixedList<Function | string> = [
   DropCalibrationAndPureEstimate1783780000000,
   AddTwitchViewersMetric1783790000000,
   AddSteamReviewerMedianPlaytimeMetric1783800000000,
+  DropMilestoneAudit1783810000000,
 ];

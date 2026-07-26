@@ -12,6 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
+import { MilestoneConsistencyService } from './milestone-consistency.service';
 import { AdminTokenGuard } from './admin-token.guard';
 import { SalesSource } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
@@ -25,11 +26,13 @@ import { ImportCcuCsvDto } from './dto/import-ccu-csv.dto';
 import { ImportReviewsCsvDto } from './dto/import-reviews-csv.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
 import { UpdateMilestoneDto } from './dto/update-milestone.dto';
+import { CreateMilestoneDto } from './dto/create-milestone.dto';
 @Controller('admin')
 @UseGuards(AdminTokenGuard)
 export class AdminController {
   constructor(
     private readonly admin: AdminService,
+    private readonly consistency: MilestoneConsistencyService,
     private readonly ingestion: IngestionService,
     private readonly publishers: PublishersService,
     private readonly genres: GenresService,
@@ -206,6 +209,22 @@ export class AdminController {
       offset: offset ? Number(offset) : undefined,
       limit: limit ? Number(limit) : undefined,
     });
+  }
+
+  // Deterministic consistency triage: milestones that contradict their game's
+  // own sales trajectory (or a hard invariant). Recomputed on demand.
+  @Get('milestones/consistency')
+  milestoneConsistency(@Query('gameId') gameId?: string) {
+    return this.consistency.findIssues(gameId);
+  }
+
+  @Post('games/:id/milestones')
+  @HttpCode(200)
+  createMilestone(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: CreateMilestoneDto,
+  ) {
+    return this.admin.createMilestone(id, body);
   }
 
   @Patch('milestones/:id')

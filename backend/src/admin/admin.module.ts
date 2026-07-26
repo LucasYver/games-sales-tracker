@@ -16,6 +16,7 @@ import {
 } from '../entities';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
+import { MilestoneConsistencyService } from './milestone-consistency.service';
 import { IngestionModule } from '../ingestion/ingestion.module';
 import { GamesModule } from '../games/games.module';
 import { PublishersModule } from '../publishers/publishers.module';
@@ -47,6 +48,6 @@ import { ReferenceProfilesModule } from '../reference-profiles/reference-profile
     ReferenceProfilesModule,
   ],
   controllers: [AdminController],
-  providers: [AdminService],
+  providers: [AdminService, MilestoneConsistencyService],
 })
 export class AdminModule {}

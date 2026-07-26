@@ -10,7 +10,6 @@ import { SourcesModule } from './sources/sources.module';
 import { PublishersModule } from './publishers/publishers.module';
 import { GenresModule } from './genres/genres.module';
 import { ReferenceProfilesModule } from './reference-profiles/reference-profiles.module';
-import { MilestoneAuditModule } from './milestone-audit/milestone-audit.module';
 import { AdminModule } from './admin/admin.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -28,7 +27,6 @@ import { AppService } from './app.service';
     PublishersModule,
     GenresModule,
     ReferenceProfilesModule,
-    MilestoneAuditModule,
     AdminModule,
   ],
   controllers: [AppController],

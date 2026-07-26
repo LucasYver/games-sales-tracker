@@ -185,6 +185,32 @@ export interface UpdateMilestonePayload {
   confidenceScore?: number | null;
 }
 
+export interface CreateMilestonePayload {
+  source: SalesSource;
+  units: number;
+  reportedAt: string;
+  platform?: string;
+  publisher?: string | null;
+  sourceUrl?: string | null;
+  note?: string | null;
+  isEngagement?: boolean;
+  isEstimate?: boolean;
+  confidenceScore?: number | null;
+}
+
+export async function createMilestone(
+  gameId: string,
+  payload: CreateMilestonePayload,
+): Promise<void> {
+  await adminFetch(`/games/${gameId}/milestones`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  revalidatePath('/admin/milestones');
+  revalidatePath('/admin/issues');
+  revalidatePath(`/admin/games/${gameId}`);
+}
+
 export async function updateMilestone(
   id: string,
   gameId: string,
@@ -195,6 +221,7 @@ export async function updateMilestone(
     body: JSON.stringify(payload),
   });
   revalidatePath('/admin/milestones');
+  revalidatePath('/admin/milestones/consistency');
   revalidatePath('/admin/issues');
   revalidatePath(`/admin/games/${gameId}`);
 }
@@ -202,6 +229,7 @@ export async function updateMilestone(
 export async function deleteMilestone(id: string): Promise<void> {
   await adminFetch(`/milestones/${id}`, { method: 'DELETE' });
   revalidatePath('/admin/milestones');
+  revalidatePath('/admin/milestones/consistency');
   revalidatePath('/admin/issues');
 }
 

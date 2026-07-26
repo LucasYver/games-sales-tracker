@@ -33,6 +33,7 @@ import { ImportCcuCsvButton } from '../../_components/ImportCcuCsvButton';
 import { ImportReviewsCsvButton } from '../../_components/ImportReviewsCsvButton';
 import { EditGameForm } from '../../_components/EditGameForm';
 import { MilestoneRow } from '../../_components/MilestoneRow';
+import { AddMilestoneForm } from '../../_components/AddMilestoneForm';
 import { CcuHistoryChart } from '../../_components/CcuHistoryChart';
 import { ReviewHistoryChart } from '../../_components/ReviewHistoryChart';
 import { FollowersHistoryChart } from '../../_components/FollowersHistoryChart';
@@ -1104,7 +1105,10 @@ function MilestonesTab({ s }: { s: AdminGamePageSummary }) {
           Declared milestones · {s.milestonesCount}
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent className="flex flex-col gap-4 p-0">
+        <div className="px-6">
+          <AddMilestoneForm gameId={s.id} />
+        </div>
         {/* Same MilestoneRow component as the /admin/milestones listing — it's a
             table row, so it must live inside a <Table>. `gameName` is omitted
             here (we're already on the game), giving the 8-column layout. */}

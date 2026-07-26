@@ -46,8 +46,8 @@ function neighbourWeight(similarity: number, qualityScore: number): number {
 
 /**
  * Soft-similarity weights per feature. Sum = 1.0 so the resulting
- * `similarity` stays in [0, 1]. Play-mode is a hard filter and does
- * not appear here.
+ * `similarity` stays in [0, 1]. Play-mode is a hard filter and does not
+ * appear here.
  *
  * Priority order (product decision, not just the diagnostic):
  *  1. `gameplayType` — the dominant axis. It separates a grand-strategy/4X
@@ -77,34 +77,39 @@ function neighbourWeight(similarity: number, qualityScore: number): number {
  *     franchises) keep selling for years, so their curve has a much longer
  *     tail than a one-and-done title.
  *
- * `franchise`, `liveService`, `devTrackRecord` and `annualIteration` stay
- * low: muted on the leak population (PC paid pre-2018 hits), kept active so
- * they're ready once the corpus holds the game types they distinguish.
+ * `franchise`, `liveService`, `devTrackRecord`, `annualIteration` and
+ * `playtime` stay low. The first four are muted on the leak population (PC
+ * paid pre-2018 hits), kept active so they're ready once the corpus holds the
+ * game types they distinguish. `playtime` (median reviewer playtime, see
+ * `playtimeSimilarity`) is a game-length/engagement fingerprint (a 2h
+ * narrative game vs a 100h grand-strategy title behave very differently) with
+ * only partial coverage (~1/3 of anchors), so it is neutral for most matches.
  *
- * `rank` (home-grown chart fingerprint, see `homegrownRankSimilarity`) was
- * calibrated on the leak holdout (`scripts/validate-matcher-holdout.ts`):
- * 0.10 was the balanced optimum on the July-2018 leak (342 games) — median
- * |log-error| improved on all three targets — reviewsToUnits 0.349→0.336,
- * m1 0.212→0.206, y2 0.074→0.071 — while the other ten weights were scaled
- * down by 0.9 so the total still sums to 1.0. Above 0.10, reviewsToUnits/m1
- * regress (only y2 keeps gaining). Re-run the holdout after touching this
- * weight and rebalance the others by hand to keep the sum at 1.0.
+ * Calibrated on the leak holdout (`scripts/validate-matcher-holdout.ts`).
+ * `playtime` at 0.10 was the balanced optimum: vs no playtime, median
+ * |log-error| improved on reviewsToUnits (0.364→0.360) and m1 (0.185→0.182)
+ * with y2 flat, and mean |log-error| / MAPE improved on all three; above 0.10
+ * only y2 keeps gaining (same pattern as `rank`). Introducing it scaled the
+ * other twelve axes by 0.9 so the table still sums to 1.0. Re-run the holdout
+ * after touching any weight and keep the sum at 1.0.
  *
- * Price is intentionally absent: no reliable per-game price coverage.
+ * Price is intentionally absent: no reliable per-game release price (price
+ * capture started 2026, long after most launches).
  */
 const SIMILARITY_WEIGHTS = {
-  gameplayType: 0.39,
-  rank: 0.124,
-  publisherMatch: 0.09,
-  developerMatch: 0.09,
-  releaseEra: 0.045,
-  scaleBucket: 0.036,
-  platformsOverlap: 0.054,
-  dlcTier: 0.054,
-  franchise: 0.036,
-  liveService: 0.027,
-  devTrackRecord: 0.027,
-  annualIteration: 0.027,
+  gameplayType: 0.351,
+  rank: 0.1116,
+  publisherMatch: 0.081,
+  developerMatch: 0.081,
+  releaseEra: 0.0405,
+  scaleBucket: 0.0324,
+  platformsOverlap: 0.0486,
+  dlcTier: 0.0486,
+  franchise: 0.0324,
+  liveService: 0.0243,
+  devTrackRecord: 0.0243,
+  annualIteration: 0.0243,
+  playtime: 0.1,
 } as const;
 
 // Inner scales for the rank axis (see `homegrownRankSimilarity`). The peak axis
@@ -113,6 +118,15 @@ const SIMILARITY_WEIGHTS = {
 // shape how fast each sub-axis decays with distance.
 const RANK_PEAK_LOG_SCALE = 2.0;
 const RANK_SUSTAIN_LOG_SCALE = 1.5;
+
+/**
+ * Decay scale for the playtime axis (see `playtimeSimilarity`). Playtime spans
+ * orders of magnitude (a ~2h narrative game vs a 200h+ grand-strategy title),
+ * so we compare `log(minutes)` and decay with distance. 1.5 (natural-log units)
+ * means a 2× playtime gap ≈ 0.63 similarity, a 4× gap ≈ 0.40, a 10× gap ≈ 0.21
+ * — close lengths stay similar, order-of-magnitude gaps separate cleanly.
+ */
+const PLAYTIME_LOG_SCALE = 1.5;
 
 /**
  * Genres/tags that describe production scale or a catch-all label rather
@@ -271,6 +285,9 @@ interface AnchorRow {
   trackRecord: TrackRecordTier;
   // Home-grown rank fingerprint; filled from the rank index in findNeighbours.
   rank: RankAgg | null;
+  // Median reviewer playtime in minutes; filled from the playtime index in
+  // findNeighbours. `null` when the game has no playtime signal.
+  playtime: number | null;
   qualityScore: number;
   scaleUnits: number | null;
   curve: CurveVector;
@@ -329,6 +346,7 @@ export class MatcherService {
     const k = opts.k ?? DEFAULT_NEIGHBOURS;
     const trackRecordIndex = await this.buildTrackRecordIndex();
     const rankIndex = await this.buildRankIndex();
+    const playtimeIndex = await this.buildPlaytimeIndex();
     const corpus = await this.loadCorpus(opts.holdoutGameId);
     for (const row of corpus) {
       row.trackRecord = trackRecordIndex.tierFor(
@@ -337,6 +355,7 @@ export class MatcherService {
         row.gameId,
       );
       row.rank = rankIndex.get(row.gameId) ?? null;
+      row.playtime = playtimeIndex.get(row.gameId) ?? null;
     }
     const targetFeatures = this.featurise(target);
     targetFeatures.trackRecord = trackRecordIndex.tierFor(
@@ -347,6 +366,9 @@ export class MatcherService {
     const targetGameId = opts.targetGameId ?? opts.holdoutGameId;
     targetFeatures.rank = targetGameId
       ? (rankIndex.get(targetGameId) ?? null)
+      : null;
+    targetFeatures.playtime = targetGameId
+      ? (playtimeIndex.get(targetGameId) ?? null)
       : null;
 
     const explain = opts.explain ?? false;
@@ -485,6 +507,7 @@ export class MatcherService {
       ),
       annualIteration:
         row.isAnnualIteration === target.isAnnualIteration ? 1.0 : 0.0,
+      playtime: playtimeSimilarity(row.playtime, target.playtime),
     };
   }
 
@@ -776,6 +799,8 @@ export class MatcherService {
         trackRecord: 'UNKNOWN',
         // Filled in by findNeighbours from the rank index (by gameId).
         rank: null,
+        // Filled in by findNeighbours from the playtime index (by gameId).
+        playtime: null,
         qualityScore: Number(r.qualityScore),
         scaleUnits,
         curve: {
@@ -813,6 +838,7 @@ export class MatcherService {
       // Overwritten in findNeighbours once the shared indexes are built.
       trackRecord: 'UNKNOWN',
       rank: null,
+      playtime: null,
     };
   }
 
@@ -883,6 +909,32 @@ export class MatcherService {
   }
 
   /**
+   * Load the latest median-reviewer-playtime signal (in minutes) per game into
+   * an in-memory map keyed by gameId, used to attach a playtime to the target
+   * and every anchor. Synthetic rows are excluded. One cheap query per matcher
+   * call, mirroring {@link buildRankIndex}.
+   */
+  private async buildPlaytimeIndex(): Promise<Map<string, number>> {
+    const rows = await this.anchors.manager.query<
+      Array<{ gameId: string; value: string | number }>
+    >(
+      `SELECT DISTINCT ON ("gameId") "gameId", value
+         FROM signal_snapshot
+        WHERE metric = 'STEAM_REVIEWER_MEDIAN_PLAYTIME'
+          AND synthetic = false
+        ORDER BY "gameId", "capturedAt" DESC`,
+    );
+    const index = new Map<string, number>();
+    for (const r of rows) {
+      const minutes = Number(r.value);
+      if (Number.isFinite(minutes) && minutes > 0) {
+        index.set(r.gameId, minutes);
+      }
+    }
+    return index;
+  }
+
+  /**
    * How many eligible anchors currently sit in the corpus. Exposed for
    * ops/monitoring dashboards — a shrinking corpus is a red flag for
    * the ETL, not for the matcher.
@@ -913,6 +965,8 @@ interface TargetInternal {
   trackRecord: TrackRecordTier;
   // Home-grown rank fingerprint; set in findNeighbours.
   rank: RankAgg | null;
+  // Median reviewer playtime in minutes; set in findNeighbours.
+  playtime: number | null;
 }
 
 interface TrackRecordEntry {
@@ -1242,6 +1296,23 @@ function homegrownRankSimilarity(a: RankAgg | null, b: RankAgg | null): number {
 /** Distance → similarity: 1 when equal, decaying to 0 as |x−y| grows. */
 function expCloseness(x: number, y: number, scale: number): number {
   return Math.exp(-Math.abs(x - y) / scale);
+}
+
+/**
+ * Playtime axis. Compares two games' median reviewer playtime (minutes) in
+ * log space and decays with distance (see {@link PLAYTIME_LOG_SCALE}). Neutral
+ * (0.5) when either side has no playtime signal, matching the era/dlc/rank
+ * convention so missing playtime neither rewards nor penalises — important
+ * here because playtime coverage is only partial. Values are floored at 1
+ * minute to keep `log` finite for near-zero medians.
+ */
+function playtimeSimilarity(a: number | null, b: number | null): number {
+  if (a === null || b === null) return 0.5;
+  return expCloseness(
+    Math.log(Math.max(a, 1)),
+    Math.log(Math.max(b, 1)),
+    PLAYTIME_LOG_SCALE,
+  );
 }
 
 /**

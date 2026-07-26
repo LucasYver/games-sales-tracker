@@ -130,6 +130,41 @@ export interface AdminMilestoneWithGame extends AdminMilestone {
   gameName: string;
 }
 
+// ─── Milestone consistency triage (GET /admin/milestones/consistency) ───────
+
+export type ConsistencyRule =
+  | 'PRE_RELEASE'
+  | 'NON_MONOTONIC'
+  | 'PLATFORM_SUM_EXCEEDS_GLOBAL'
+  | 'PLATFORM_EXCEEDS_GLOBAL'
+  | 'MAGNITUDE_OUTLIER';
+
+export type ConsistencySeverity = 'high' | 'medium';
+
+export interface ConsistencyFlag {
+  rule: ConsistencyRule;
+  severity: ConsistencySeverity;
+  message: string;
+  relatedMilestoneIds: string[];
+}
+
+export interface ConsistencyGameGroup {
+  gameId: string;
+  gameName: string;
+  releaseDate: string | null;
+  milestones: AdminMilestone[];
+  flags: Record<string, ConsistencyFlag[]>;
+  highFlagCount: number;
+  totalFlagCount: number;
+}
+
+export interface ConsistencyIssuesResult {
+  gamesFlagged: number;
+  milestonesFlagged: number;
+  byRule: Record<ConsistencyRule, number>;
+  games: ConsistencyGameGroup[];
+}
+
 export interface AdminEstimate {
   id: string;
   gameId: string;

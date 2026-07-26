@@ -89,7 +89,7 @@ interface BackfillWorkItem {
 // hosts falling back to the MEDIA tier). For sources matched in the
 // trusted-source registry, the source's `weight` is written directly to
 // `confidenceScore`.
-const DEFAULT_CONFIDENCE_SCORE: Record<SalesSource, number> = {
+export const DEFAULT_CONFIDENCE_SCORE: Record<SalesSource, number> = {
   [SalesSource.OFFICIAL]: 100,
   [SalesSource.ANNOUNCEMENT]: 70,
   [SalesSource.WIKIPEDIA]: 45,

@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Library,
   Receipt,
+  ShieldCheck,
   Globe,
   Building2,
   Tags,
@@ -44,6 +45,12 @@ const NAV_ITEMS = [
     href: '/admin/milestones',
     label: 'Milestones',
     icon: Receipt,
+    exact: true,
+  },
+  {
+    href: '/admin/milestones/consistency',
+    label: 'Consistency',
+    icon: ShieldCheck,
     exact: false,
   },
   {

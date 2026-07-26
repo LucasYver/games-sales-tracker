@@ -25,6 +25,7 @@ import {
   TrustedSource,
 } from '../entities';
 import { isPeriodicQuote } from '../ingestion/sales-figure.utils';
+import { DEFAULT_CONFIDENCE_SCORE } from '../ingestion/ingestion.service';
 import { slugify } from '../common/slug';
 import { GamesService } from '../games/games.service';
 import { ReferenceProfileService } from '../reference-profiles/reference-profile.service';
@@ -43,6 +44,19 @@ export interface UpdateMilestoneInput {
   sourceUrl?: string | null;
   note?: string | null;
   reportedAt?: string | null;
+  isEngagement?: boolean;
+  isEstimate?: boolean;
+  confidenceScore?: number | null;
+}
+
+export interface CreateMilestoneInput {
+  source: SalesSource;
+  units: number;
+  reportedAt: string;
+  platform?: Platform;
+  publisher?: string | null;
+  sourceUrl?: string | null;
+  note?: string | null;
   isEngagement?: boolean;
   isEstimate?: boolean;
   confidenceScore?: number | null;
@@ -1118,6 +1132,36 @@ export class AdminService {
     }
 
     return { items, total };
+  }
+
+  /**
+   * Manually add a milestone to a game from the admin UI. Confidence defaults
+   * to the source tier's baseline when the operator leaves it blank, matching
+   * the ingestion pipeline's behaviour for manual inputs.
+   */
+  async createMilestone(
+    gameId: string,
+    input: CreateMilestoneInput,
+  ): Promise<Milestone> {
+    const game = await this.games.findOne({ where: { id: gameId } });
+    if (!game) throw new NotFoundException(`Game ${gameId} not found`);
+
+    return this.milestones.save(
+      this.milestones.create({
+        gameId,
+        source: input.source,
+        units: input.units,
+        reportedAt: new Date(input.reportedAt),
+        platform: input.platform ?? Platform.GLOBAL,
+        publisher: input.publisher ?? null,
+        sourceUrl: input.sourceUrl ?? null,
+        note: input.note ?? null,
+        isEngagement: input.isEngagement ?? false,
+        isEstimate: input.isEstimate ?? false,
+        confidenceScore:
+          input.confidenceScore ?? DEFAULT_CONFIDENCE_SCORE[input.source],
+      }),
+    );
   }
 
   /**
