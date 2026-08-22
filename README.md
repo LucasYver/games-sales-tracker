@@ -1,124 +1,222 @@
 # Game Sales Tracker
 
-A prototype platform that **estimates video game sales** by aggregating public
-signals, because publishers rarely disclose unit sales directly.
+Plateforme qui **estime les ventes de jeux vidéo** en agrégeant des signaux
+publics, parce que les éditeurs divulguent rarement leurs chiffres unitaires.
 
-The core idea: there is no single API that returns "game X sold N copies".
-So instead of pretending to know an exact number, we:
+Au lieu d’afficher un nombre exact inventé, le modèle :
 
-1. Collect dated **signal snapshots** (Steam reviews, SteamSpy owners).
-2. Apply a calibrated **Boxleiter multiplier** (copies sold per Steam review).
-3. Output an **estimate range + confidence level**, never a fake exact figure.
-4. Keep rare **official figures** separately as ground truth for calibration.
+1. Collecte des **snapshots de signaux** datés (avis Steam, notes PS/Xbox, etc.).
+2. Applique un **multiplicateur Boxleiter** calibré (copies vendues par avis).
+3. Retourne une **fourchette + niveau de confiance**.
+4. Conserve les **chiffres officiels** à part, comme vérité terrain pour la calibration.
 
-## Stack
+## Prérequis
 
-| Layer     | Tech                                      |
-| --------- | ----------------------------------------- |
-| Backend   | NestJS (TypeScript) + TypeORM             |
-| Database  | PostgreSQL                                |
-| Frontend  | Next.js (App Router) + Tailwind CSS       |
-| Infra     | Docker Compose (Postgres + Redis)         |
-| Sources   | IGDB (catalog), Steam Store API, SteamSpy |
+| Outil | Version | Rôle |
+| ----- | ------- | ---- |
+| [Node.js](https://nodejs.org/) | 20+ (22 recommandé) | Backend NestJS + frontend Next.js |
+| [Docker](https://www.docker.com/) | récent | PostgreSQL 16 + Redis en local |
+| `psql` | optionnel | Restaurer le dump (sinon via `docker exec`, voir ci-dessous) |
 
-> TypeORM runs with `synchronize: true` for prototype convenience (the schema is
-> derived from the entities at startup). The `pg_trgm` extension and the trigram
-> search index are ensured on boot by `DatabaseInitService`. Switch to TypeORM
-> migrations before production.
+Ports utilisés en local :
 
-## Project structure
+| Service | Port |
+| ------- | ---- |
+| Frontend | `3000` |
+| Backend API | `3001` (`/api`) |
+| PostgreSQL | `5433` |
+| Redis | `6380` |
 
-```
-game-sales-tracker/
-├── backend/            NestJS API + TypeORM + ingestion + estimation
-│   └── src/
-│       ├── entities/     TypeORM entities + enums
-│       ├── database/     TypeOrmModule config + trigram init
-│       ├── games/        search + game detail endpoints
-│       ├── ingestion/    IGDB / Steam / SteamSpy clients + service
-│       ├── estimation/   Boxleiter estimation (calibrated)
-│       ├── scheduler/    daily signal refresh (cron)
-│       └── scripts/      bootstrap-games (curated catalog)
-├── frontend/           Next.js UI (search + game page)
-└── docker-compose.yml  Postgres + Redis
+## Installation
+
+### 1. Cloner le dépôt
+
+```bash
+git clone <url-du-repo> games-sales-tracker
+cd games-sales-tracker
 ```
 
-## Getting started
-
-### 1. Start the database
+### 2. Démarrer PostgreSQL et Redis
 
 ```bash
 docker compose up -d
 ```
 
-### 2. Backend
+Cela lance Postgres (`gamesales` / `gamesales` / base `gamesales` sur le port
+**5433**) et Redis sur **6380**.
+
+### 3. Restaurer le dump de prod (obligatoire pour avoir des données)
+
+Le schéma et le catalogue de jeux ne se bootstrapent pas à partir de zéro :
+**il faut importer un dump SQL** pour travailler avec des données réalistes
+(jeux, signaux, estimations, milestones, etc.).
+
+Le fichier attendu se trouve dans `backend/dumps/` (ex. `prod-2026-08-22.sql`,
+~330 Mo). Ce dossier est gitignoré — récupérez le dump auprès d’un collègue ou
+générez-le depuis la prod avec `pg_dump` (connexion directe Neon, pas le
+pooler).
+
+**Première installation** — volume Postgres vierge, restauration directe :
+
+```bash
+# Retire la directive \restrict (pg_dump 18 / Neon) incompatible avec psql 16
+sed '/^\\restrict/d' backend/dumps/prod-2026-08-22.sql \
+  | docker exec -i gamesales-postgres psql -U gamesales -d gamesales
+```
+
+La restauration prend quelques minutes. Des warnings sur le schéma `neon_auth`
+(Neon) en local sont normaux et sans impact.
+
+**Réimporter un dump** (remplacer toutes les données locales) :
+
+```bash
+docker compose down -v          # supprime le volume Postgres
+docker compose up -d
+sed '/^\\restrict/d' backend/dumps/prod-2026-08-22.sql \
+  | docker exec -i gamesales-postgres psql -U gamesales -d gamesales
+```
+
+Alternative si `psql` est installé sur la machine (`brew install libpq`) :
+
+```bash
+sed '/^\\restrict/d' backend/dumps/prod-2026-08-22.sql \
+  | psql "postgresql://gamesales:gamesales@localhost:5433/gamesales"
+```
+
+### 4. Backend
 
 ```bash
 cd backend
-cp .env.example .env        # already created with local defaults
+cp .env.example .env
 npm install
-npm run start:dev           # http://localhost:3001/api (auto-creates schema)
-# In another shell, populate the catalog with ~85 real Steam games:
-npm run bootstrap:games
+npm run start:dev
 ```
 
-To use real IGDB ingestion, fill `IGDB_CLIENT_ID` / `IGDB_CLIENT_SECRET`
-in `.env` (create a Twitch app at https://dev.twitch.tv/console/apps).
+Le backend démarre sur **http://localhost:3001/api**.
 
-### 3. Frontend
+Le `.env.example` pointe déjà vers la base Docker locale :
+
+```
+DATABASE_URL="postgresql://gamesales:gamesales@localhost:5433/gamesales"
+```
+
+Au boot, TypeORM applique les migrations en attente puis initialise l’extension
+`pg_trgm` et l’index de recherche trigram sur `game.name`.
+
+### 5. Frontend
+
+Dans un second terminal :
 
 ```bash
 cd frontend
 npm install
-npm run dev                 # http://localhost:3000
+npm run dev
 ```
 
-## API
+Le frontend est disponible sur **http://localhost:3000**. Par défaut il appelle
+l’API locale (`http://localhost:3001/api`) — aucun `.env` n’est requis pour le
+dev local.
 
-| Method | Endpoint               | Description                              |
-| ------ | ---------------------- | ---------------------------------------- |
-| GET    | `/api/games/search?q=` | Search games in the local catalog        |
-| GET    | `/api/games/:slug`     | Game detail + latest estimate + history  |
-| POST   | `/api/ingestion/steam` | Ingest a Steam app (`{ "appId": 1145360 }`) |
-| POST   | `/api/ingestion/igdb`  | Import from IGDB (`{ "query": "Hades" }`)   |
+### 6. Vérifier
 
-### Ingest a real game (no IGDB key needed)
+1. Ouvrir http://localhost:3000
+2. Chercher un jeu connu (ex. « Hades », « Elden Ring »)
+3. La fiche jeu doit afficher estimations, historique de signaux et milestones
+
+Recherche typo-tolérante via PostgreSQL `pg_trgm` : `witchr` → The Witcher 3,
+`eldn ring` → ELDEN RING.
+
+## Variables d’environnement (backend)
+
+Copier `backend/.env.example` → `backend/.env`. Seuls `DATABASE_URL` (et
+`PORT` / `CORS_ORIGINS`) sont **obligatoires** pour le dev local après
+restauration du dump.
+
+| Variable | Obligatoire | Rôle |
+| -------- | ----------- | ---- |
+| `DATABASE_URL` | oui | Connexion Postgres runtime |
+| `DATABASE_URL_DIRECT` | prod seulement | Connexion directe pour les migrations (Neon sans `-pooler`) |
+| `IGDB_CLIENT_ID` / `IGDB_CLIENT_SECRET` | non | Import catalogue IGDB ([Twitch dev console](https://dev.twitch.tv/console/apps)) |
+| `OPENAI_API_KEY` | non | Extraction de chiffres depuis texte (Wikipedia, presse) |
+| `TAVILY_API_KEY` / `PERPLEXITY_API_KEY` | non | Découverte d’articles backlog |
+| `GAMES_POPULARITY_API_KEY` | non | Backfill followers Steam + top-seller rank |
+| `ADMIN_TOKEN` | non | Accès back-office `/admin` (vide = désactivé) |
+
+Sans clés API, l’app fonctionne avec les données déjà présentes dans le dump ;
+seuls l’ingestion live et certains crons sont ignorés.
+
+## Stack
+
+| Couche | Tech |
+| ------ | ---- |
+| Backend | NestJS (TypeScript) + TypeORM |
+| Base | PostgreSQL 16 |
+| Frontend | Next.js 16 (App Router) + Tailwind CSS |
+| Infra locale | Docker Compose (Postgres + Redis) |
+| Sources | IGDB, Steam, scraping PS/Xbox Store |
+
+## Structure du projet
+
+```
+games-sales-tracker/
+├── backend/              API NestJS + ingestion + estimation
+│   ├── dumps/            Dumps SQL prod (gitignoré)
+│   └── src/
+│       ├── entities/     Entités TypeORM
+│       ├── db/migrations/ Migrations TypeORM
+│       ├── games/        Recherche + fiches jeux
+│       ├── ingestion/    Clients IGDB / Steam / stores
+│       ├── estimation/   Modèle Boxleiter calibré
+│       ├── scheduler/    Crons (refresh signaux, backlog…)
+│       └── scripts/      Scripts one-shot (backfill, diagnostic…)
+├── frontend/             UI Next.js (recherche + fiche jeu + admin)
+└── docker-compose.yml    Postgres (5433) + Redis (6380)
+```
+
+Documentation complémentaire : `ARCHITECTURE.md`, `ESTIMATION.md`.
+
+## API (aperçu)
+
+| Méthode | Endpoint | Description |
+| ------- | -------- | ----------- |
+| GET | `/api/games/search?q=` | Recherche dans le catalogue local |
+| GET | `/api/games/:slug` | Détail jeu + dernière estimation + historique |
+| GET | `/api/games/popular` | Jeux populaires (page d’accueil) |
+| POST | `/api/ingestion/steam` | Ingérer un app Steam (`{ "appId": 1145360 }`) |
+| POST | `/api/ingestion/igdb` | Importer depuis IGDB (`{ "query": "Hades" }`) |
+
+Exemple — ingérer Hades sans clé IGDB :
 
 ```bash
-# Hades (Steam app id 1145360)
 curl -X POST http://localhost:3001/api/ingestion/steam \
   -H 'Content-Type: application/json' \
   -d '{"appId": 1145360}'
 ```
 
-Then open the frontend and search for it.
+## Commandes utiles
 
-## Search
+```bash
+# Backend (depuis backend/)
+npm run start:dev          # dev avec hot-reload
+npm run migration:show     # migrations appliquées / en attente
+npm run test               # tests unitaires
 
-Search runs against the local catalog using PostgreSQL trigram matching
-(`pg_trgm` + `word_similarity`), so it is typo-tolerant and ranked by relevance:
+# Frontend (depuis frontend/)
+npm run dev                # dev Next.js
+npm run build              # build production
 
-- `witchr` → The Witcher 3: Wild Hunt
-- `eldn ring` → ELDEN RING
-- `cyberponk` → Cyberpunk 2077
+# Infra (depuis la racine)
+docker compose up -d       # démarrer Postgres + Redis
+docker compose down -v     # arrêter + effacer les données Postgres
+```
 
-To grow the catalog, ingest more Steam app ids (single endpoint or the
-`bootstrap:games` script) or wire up IGDB import.
+## Note sur la précision
 
-## Roadmap
+Un jeu tout juste sorti a peu de signaux : l’estimation est volontairement
+affichée avec **faible confiance et une fourchette large**.
 
-- Console coverage: collect official figures into `OfficialSales` (manual at
-  first, then financial-report parsing) — these calibrate the estimator.
-- Background jobs with BullMQ + Redis instead of in-process cron.
-- Multi-source estimate blending (reviews + owners + concurrent players).
-- Auth + multi-tenant for the SaaS layer.
+Les **jeux free-to-play** (flag Steam `is_free`) n’ont pas d’estimation de
+ventes : les avis ne sont pas un proxy fiable quand il n’y a pas d’unité vendue.
 
-## A note on accuracy
-
-A freshly released game has very little signal, so its estimate is shown with
-**low confidence and a wide range** on purpose. The credibility of the platform
-comes from being honest about uncertainty, not from displaying a precise number
-nobody actually has.
-
-**Free-to-play games** (detected via Steam's `is_free` flag) never get a sales
-estimate: reviews are not a proxy for units sold when there is no unit to sell.
+La crédibilité vient de l’honnêteté sur l’incertitude, pas d’un chiffre précis
+que personne ne possède réellement.
