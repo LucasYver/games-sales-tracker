@@ -1,9 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Game } from '../entities';
+import { Game, GameRank } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
 import { RankService } from '../reference-profiles/rank.service';
+import { isEligibleForAutomaticHarvest } from './harvest-eligibility';
 import { isDueForRefresh } from './refresh-interval';
 
 @Injectable()
@@ -13,20 +14,15 @@ export class RefreshService {
   constructor(
     @InjectRepository(Game)
     private readonly games: Repository<Game>,
+    @InjectRepository(GameRank)
+    private readonly gameRanks: Repository<GameRank>,
     private readonly ingestion: IngestionService,
     private readonly rank: RankService,
   ) {}
 
   /**
-   * Periodic full refresh of tracked games. Runs the same end-to-end chain as
-   * the admin "Refresh data" button (Steam details + reviews, Wikipedia LLM
-   * extraction, store ratings, trusted-search / Tavily backlog
-   * discovery, and estimation). Each game has its own cadence based on its
-   * release date (newer titles refreshed more often; games older than 5 years
-   * still refresh every 180 days rather than stopping); games with no known
-   * release date are skipped entirely. The cron may not finish all eligible
-   * games in a single run — leftovers will be picked up by the next nightly
-   * execution.
+   * Periodic signals refresh. Milestone sources are deliberately handled by
+   * the independently budgeted harvest loop below.
    *
    * Covers every tracked game (PC + console-only) and excludes free-to-play
    * titles, for which we don't compute sales estimates.
@@ -40,7 +36,7 @@ export class RefreshService {
 
     // Stalest first: never-refreshed games (`lastRefreshedAt IS NULL`) sort
     // ahead of everything else. Combined with the always-on stamp in
-    // `refreshGame`, this guarantees forward progress — the large backlog of
+    // `refreshGameSignals`, this guarantees forward progress — the large backlog of
     // never-refreshed (often old) titles drains before we re-refresh recent
     // ones, instead of starving at the tail of an unordered scan.
     const games = await this.games.find({
@@ -68,14 +64,69 @@ export class RefreshService {
         break;
       }
       try {
-        await this.ingestion.refreshGame(game.id);
+        await this.ingestion.refreshGameSignals(game.id);
       } catch (error) {
-        this.logger.warn(`Refresh failed for game ${game.id}: ${error}`);
+        this.logger.warn(
+          `Signals refresh failed for game ${game.id}: ${error}`,
+        );
       }
       processed += 1;
     }
 
-    this.logger.log(`Refresh complete: ${processed} game(s) processed.`);
+    this.logger.log(
+      `Signals refresh complete: ${processed} game(s) processed.`,
+    );
+  }
+
+  async harvestAllGameMilestones() {
+    const RUN_BUDGET_MS = 11 * 60 * 1000;
+    const startedAt = Date.now();
+    const [games, ranks] = await Promise.all([
+      this.games.find({
+        where: { isFree: false },
+        order: {
+          lastMilestoneHarvestedAt: {
+            direction: 'ASC',
+            nulls: 'FIRST',
+          },
+        },
+      }),
+      this.gameRanks.find({
+        select: ['gameId', 'recentVelocityPercentile'],
+      }),
+    ]);
+    const recentPercentileByGame = new Map(
+      ranks.map((rank) => [rank.gameId, rank.recentVelocityPercentile]),
+    );
+    const now = new Date();
+    const eligible = games.filter((game) => {
+      const tierEligible = isEligibleForAutomaticHarvest(
+        game.catalogTier,
+        recentPercentileByGame.get(game.id),
+      );
+      return (
+        tierEligible &&
+        isDueForRefresh(game.releaseDate, game.lastMilestoneHarvestedAt, now)
+      );
+    });
+
+    this.logger.log(
+      `Harvesting up to ${eligible.length} due game(s) of ${games.length}, ` +
+        `budget ${RUN_BUDGET_MS / 1000}s.`,
+    );
+
+    let processed = 0;
+    for (const game of eligible) {
+      if (Date.now() - startedAt >= RUN_BUDGET_MS) break;
+      try {
+        await this.ingestion.harvestGameMilestones(game.id);
+      } catch (error) {
+        this.logger.warn(`Harvest failed for game ${game.id}: ${error}`);
+      }
+      processed += 1;
+    }
+
+    this.logger.log(`Harvest complete: ${processed} game(s) processed.`);
   }
 
   /**

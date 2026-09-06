@@ -46,6 +46,14 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  --color-surface-alt: var(--surface-alt);
+  --color-surface-hi: var(--surface-hi);
+  --color-border-soft: var(--border-soft);
+  --color-text-faint: var(--text-faint);
+  --color-source-official: var(--source-official);
+  --color-source-media: var(--source-media);
+  --color-source-estimate: var(--source-estimate);
+  --color-source-leak: var(--source-leak);
 }
 
 body {
@@ -129,6 +137,45 @@ body {
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+/* Public-site palette — "Chart Room". A dark, data-first surface in the spirit
+   of SteamDB: near-black blue ground, hairline borders, one gold accent for
+   links and active state. Confidence/provenance colours are deliberately a
+   separate set (green / blue / grey / red) so semantics never read as accent.
+   Scoped to `.chart-scope` (set on the public <html>) — admin keeps its own. */
+.chart-scope {
+  --background: #0e1420;
+  --foreground: #cfd8e3;
+  --card: #141b28;
+  --card-foreground: #cfd8e3;
+  --popover: #141b28;
+  --popover-foreground: #cfd8e3;
+  --primary: #d9a441;
+  --primary-foreground: #0e1013;
+  --secondary: #18202e;
+  --secondary-foreground: #cfd8e3;
+  --muted: #111722;
+  --muted-foreground: #7c8a9a;
+  --accent: #1b2431;
+  --accent-foreground: #d9a441;
+  --destructive: #c85a54;
+  --border: #26303f;
+  --input: #26303f;
+  --ring: #d9a441;
+  --radius: 0.25rem;
+
+  /* Row striping + the faintest divider, one step darker than --border. */
+  --surface-alt: #111722;
+  --surface-hi: #18202e;
+  --border-soft: #1d2634;
+  --text-faint: #5a6675;
+
+  /* Provenance / confidence semantics, independent of the gold accent. */
+  --source-official: #4caa7d;
+  --source-media: #5b8fd9;
+  --source-estimate: #8a94a3;
+  --source-leak: #c85a54;
 }
 
 /* Admin-scoped palette — the EXACT colours from the approved game-page design

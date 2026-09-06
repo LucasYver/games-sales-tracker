@@ -20,40 +20,49 @@
     "MEDIUM": "Medium confidence"
   },
   "nav": {
-    "langSwitch": "Français"
+    "langSwitch": "Français",
+    "ranking": "Ranking"
   },
   "siteMeta": {
-    "description": "Video game sales estimates built from multiple cross-checked calculation methods to get as close to reality as possible.",
-    "keywords": "video game sales, sales tracker, estimates, copies sold, PC, PlayStation, Xbox, Switch",
+    "description": "How many copies did that game sell? Video game sales figures for PC, PlayStation, Xbox and Switch, updated daily.",
+    "keywords": "video game sales, sales tracker, copies sold, PC, PlayStation, Xbox, Switch",
     "siteName": "Game Sales Tracker",
     "title": "Game Sales Tracker — How many copies did that game sell?",
     "titleTemplate": "%s · Game Sales Tracker"
   },
   "homeMeta": {
-    "description": "How many copies did that game sell? Cross-checked sales estimates for PC, PlayStation, Xbox and Switch — honest ranges built from multiple methods.",
-    "title": "Video game sales estimates"
+    "description": "Video game sales, figure by figure: PC, PlayStation, Xbox and Switch, ranked and updated daily.",
+    "title": "Video game sales"
   },
   "gamePageMeta": {
-    "description": "Live sales estimate for {name}, with a confidence score and a historical timeline of reported figures.",
-    "title": "{name} ({year}) — Estimated sales",
-    "titleNoYear": "{name} — Estimated sales"
+    "description": "Sales for {name}: current figure, per-platform split and store review trends.",
+    "title": "{name} ({year}) — Sales",
+    "titleNoYear": "{name} — Sales"
   },
   "home": {
-    "badge": "Cross-checked data · honest ranges",
     "gamesCount": "{count, number} games",
     "listingEmpty": "No games found for these filters.",
-    "listingOldest": "Oldest games",
-    "listingPopular": "Popular games",
-    "listingRecent": "Newest games",
-    "releasedOn": "Released {date}",
     "searchEmpty": "No game found. Try another spelling.",
     "searchHeading": "Results for \"{query}\"",
-    "subtitle": "We cross several calculation methods to estimate how many copies a game has sold, on PC and consoles — as honest ranges rather than fake exact figures.",
-    "title": "How many copies did that game sell?"
+    "title": "Video game sales"
+  },
+  "table": {
+    "game": "Game",
+    "platforms": "Platforms",
+    "reviews": "Reviews",
+    "reviewsCount": "{count} reviews",
+    "sales": "Sales"
   },
   "searchBar": {
-    "button": "Search",
-    "placeholder": "Search a game (e.g. Hades, Baldur's Gate)"
+    "close": "Close search",
+    "empty": "No game found.",
+    "hint": "Type at least {count} characters to search.",
+    "keyboardHint": "↑ ↓ to navigate · ↵ to open · Esc to close",
+    "placeholder": "Search a game (e.g. Hades, Baldur's Gate)",
+    "resultsCount": "{count} results",
+    "resultsLabel": "Search results",
+    "reviewsCount": "{count} reviews",
+    "searching": "Searching…"
   },
   "filter": {
     "closeFilters": "Close filters",
@@ -80,38 +89,50 @@
     "yearLabel": "Release year",
     "yearTo": "To"
   },
-  "gameCard": {
-    "newBadge": "NEW",
-    "noEstimate": "No estimate yet",
-    "upcomingBadge": "Upcoming"
-  },
   "gamePage": {
-    "asOfNow": "live estimate",
-    "back": "Back",
-    "estimateTitle": "Estimated sales today",
-    "freeToPlayNote": "No sales figure: this game is free-to-play.",
-    "noData": "No sales data yet for this game.",
-    "releasedOn": "Released {date}",
-    "infoTitle": "Game info",
+    "allPlatforms": "all platforms",
+    "asOf": "as of {date}",
+    "back": "Home",
+    "ccuLabel": "Concurrent players",
+    "chartAlt": "{series} over time.",
     "developer": "Developer",
-    "publisher": "Publisher",
+    "followersSeries": "Steam followers",
+    "followersSeriesAlt": "Steam followers of {name} over time.",
+    "freeToPlayNote": "No sales figure: this game is free-to-play.",
     "genres": "Genres",
-    "ratingsTitle": "Store ratings",
-    "steamReviews": "{count} Steam reviews",
-    "storeScore": "{score}/5",
-    "storeRatings": "{count} ratings",
-    "reviewerMedianPlaytime": "~{hours}h median reviewer playtime"
-  },
-  "salesHistory": {
-    "estimated": "estimated",
-    "subtitle": "Cumulative sales over time.",
-    "title": "Sales over time",
-    "today": "Today"
-  },
-  "methodology": {
-    "paragraph1": "Our estimate combines several independent calculation methods that we continuously cross-check to get as close to the real figure as possible.",
-    "paragraph2": "The confidence score reflects how consistent these methods are: when they agree, the range tightens; when they diverge, we flag it clearly.",
-    "title": "How we estimate"
+    "noData": "No sales figure yet for this game.",
+    "peakCcu": "All-time peak of {value} concurrent players · {date}",
+    "platformColumn": "Platforms",
+    "platformsTitle": "Sales by platform",
+    "playstationLabel": "PlayStation",
+    "priceAtLowest": "at its all-time low",
+    "priceDate": "Date",
+    "priceDiscount": "Discount",
+    "priceLabel": "Price",
+    "priceList": "List price",
+    "priceLowest": "all-time low: {price}",
+    "priceNoHistory": "No price history for this game yet.",
+    "pricePaid": "Paid",
+    "priceTitle": "Price history",
+    "publisher": "Publisher",
+    "release": "Release",
+    "releasedOn": "released {date}",
+    "reviewsPlaystation": "PlayStation reviews",
+    "reviewsSteam": "Steam reviews",
+    "reviewsSwitch": "Switch reviews",
+    "salesColumn": "Sales",
+    "salesTitle": "Sales",
+    "shareColumn": "Share",
+    "steamLabel": "Steam",
+    "storeRatings": "{count} reviews",
+    "storeScoreWithCount": "{score}/5 · {count} reviews",
+    "switchLabel": "Switch",
+    "tabOverview": "Overview",
+    "tabPrice": "Price",
+    "tabsLabel": "Game sections",
+    "techTitle": "Game details",
+    "updatedAt": "Figures updated on {date}.",
+    "updatedUnknown": "Figures updated daily."
   },
   "refreshButton": {
     "error": "Refresh failed. Try again.",
@@ -124,5 +145,23 @@
     "nav": "Pagination",
     "next": "Next page",
     "previous": "Previous page"
+  },
+  "ranking": {
+    "empty": "No ranked game yet.",
+    "explainer": "This ranking is ours. Every week we measure how fast each game accumulates Steam reviews, and compare those speeds across every game we track: the fastest of the week takes first place. It comes from no external source, and it never uses estimated sales — a sales chart built on our own sales estimates would go in circles. So it measures activity around a game, not its sales. The default order rewards staying power: a game that spent a hundred weeks in the top 10% ranks above one that led for a single week.",
+    "game": "Game",
+    "metaDescription": "Our own chart: the games accumulating Steam reviews fastest, week after week.",
+    "metaTitle": "Game ranking",
+    "peak": "Peak rank",
+    "peakShort": "peak #{rank}",
+    "sales": "Sales",
+    "sortLabel": "Sort",
+    "sortPeak": "Peak rank",
+    "sortTop": "Weeks in the top 10%",
+    "sortWeeks": "Weeks charted",
+    "title": "Our ranking",
+    "topDecile": "Wks top 10%",
+    "topDecileShort": "{count} wks top 10%",
+    "weeks": "Wks charted"
   }
 }

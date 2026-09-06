@@ -10,7 +10,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Platform } from './enums';
+import { CatalogTier, Platform } from './enums';
 import { GameSource } from './game-source.entity';
 import { SignalSnapshot } from './signal-snapshot.entity';
 import { SalesEstimate } from './sales-estimate.entity';
@@ -143,6 +143,13 @@ export class Game {
   @UpdateDateColumn()
   updatedAt: Date;
 
+  @Column({
+    type: 'enum',
+    enum: CatalogTier,
+    default: CatalogTier.CORE,
+  })
+  catalogTier: CatalogTier;
+
   // Soft-delete marker. When set, the row stays in the DB but is hidden from
   // every standard read (TypeORM excludes soft-deleted rows by default) so the
   // discovery / refresh pipelines never re-create a game an admin removed.
@@ -155,6 +162,9 @@ export class Game {
   // refresh cadence depends on the game's age (see refresh-interval.ts).
   @Column({ type: 'timestamptz', nullable: true })
   lastRefreshedAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  lastMilestoneHarvestedAt: Date | null;
 
   // Timestamp of the last Steam price capture for this game. Used by the
   // daily price-capture cron to only re-price games once a week (stalest

@@ -20,40 +20,49 @@
     "MEDIUM": "Confiance moyenne"
   },
   "nav": {
-    "langSwitch": "English"
+    "langSwitch": "English",
+    "ranking": "Classement"
   },
   "siteMeta": {
-    "description": "Estimations de ventes de jeux vidéo construites à partir de plusieurs méthodes de calcul recoupées pour fournir le chiffre le plus proche de la réalité.",
-    "keywords": "ventes jeux vidéo, sales tracker, estimations, copies vendues, PC, PlayStation, Xbox, Switch",
+    "description": "Combien d'exemplaires ce jeu a-t-il vendus ? Chiffres de ventes jeu vidéo sur PC, PlayStation, Xbox et Switch, mis à jour chaque jour.",
+    "keywords": "ventes jeux vidéo, sales tracker, copies vendues, PC, PlayStation, Xbox, Switch",
     "siteName": "Game Sales Tracker",
     "title": "Game Sales Tracker — Combien de copies ce jeu a-t-il vendues ?",
     "titleTemplate": "%s · Game Sales Tracker"
   },
   "homeMeta": {
-    "description": "Combien d'exemplaires ce jeu a-t-il vendus ? Découvrez les estimations de ventes — PC, PlayStation, Xbox, Switch — recoupées via plusieurs méthodes.",
-    "title": "Estimations de ventes de jeux vidéo"
+    "description": "Les ventes des jeux vidéo, chiffre par chiffre : PC, PlayStation, Xbox et Switch, classées et mises à jour chaque jour.",
+    "title": "Ventes de jeux vidéo"
   },
   "gamePageMeta": {
-    "description": "Estimation actuelle des ventes de {name}, avec score de confiance et historique des chiffres dans le temps.",
-    "title": "{name} ({year}) — Ventes estimées",
-    "titleNoYear": "{name} — Ventes estimées"
+    "description": "Ventes de {name} : chiffre actuel, ventilation par plateforme et évolution des avis boutique.",
+    "title": "{name} ({year}) — Ventes",
+    "titleNoYear": "{name} — Ventes"
   },
   "home": {
-    "badge": "Données recoupées · estimations honnêtes",
     "gamesCount": "{count, number} jeux",
     "listingEmpty": "Aucun jeu trouvé pour ces filtres.",
-    "listingOldest": "Jeux les plus anciens",
-    "listingPopular": "Jeux populaires",
-    "listingRecent": "Jeux récents",
-    "releasedOn": "Sorti le {date}",
     "searchEmpty": "Aucun jeu trouvé. Essayez une autre orthographe.",
     "searchHeading": "Résultats pour « {query} »",
-    "subtitle": "Nous croisons plusieurs méthodes de calcul pour estimer le nombre d'exemplaires vendus, sur PC et consoles — sous forme de fourchettes honnêtes plutôt que de faux chiffres exacts.",
-    "title": "Combien d'exemplaires ce jeu a-t-il vendus ?"
+    "title": "Ventes de jeux vidéo"
+  },
+  "table": {
+    "game": "Jeu",
+    "platforms": "Plateformes",
+    "reviews": "Avis",
+    "reviewsCount": "{count} avis",
+    "sales": "Ventes"
   },
   "searchBar": {
-    "button": "Rechercher",
-    "placeholder": "Rechercher un jeu (ex. Hades, Baldur's Gate)"
+    "close": "Fermer la recherche",
+    "empty": "Aucun jeu trouvé.",
+    "hint": "Tapez au moins {count} caractères pour lancer la recherche.",
+    "keyboardHint": "↑ ↓ pour naviguer · ↵ pour ouvrir · Échap pour fermer",
+    "placeholder": "Rechercher un jeu (ex. Hades, Baldur's Gate)",
+    "resultsCount": "{count} résultats",
+    "resultsLabel": "Résultats de recherche",
+    "reviewsCount": "{count} avis",
+    "searching": "Recherche…"
   },
   "filter": {
     "closeFilters": "Fermer les filtres",
@@ -80,38 +89,50 @@
     "yearLabel": "Année de sortie",
     "yearTo": "À"
   },
-  "gameCard": {
-    "newBadge": "NOUVEAU",
-    "noEstimate": "Pas encore d'estimation",
-    "upcomingBadge": "À venir"
-  },
   "gamePage": {
-    "asOfNow": "estimation actuelle",
-    "back": "Retour",
-    "estimateTitle": "Ventes estimées aujourd'hui",
-    "freeToPlayNote": "Pas de chiffre de ventes : ce jeu est gratuit.",
-    "noData": "Aucune donnée de vente pour ce jeu.",
-    "releasedOn": "Sorti le {date}",
-    "infoTitle": "Infos du jeu",
+    "allPlatforms": "toutes plateformes",
+    "asOf": "au {date}",
+    "back": "Accueil",
+    "ccuLabel": "Joueurs simultanés",
+    "chartAlt": "Évolution de {series} dans le temps.",
     "developer": "Développeur",
-    "publisher": "Éditeur",
+    "followersSeries": "Followers Steam",
+    "followersSeriesAlt": "Évolution du nombre de followers Steam de {name}.",
+    "freeToPlayNote": "Pas de chiffre de ventes : ce jeu est gratuit.",
     "genres": "Genres",
-    "ratingsTitle": "Notes des stores",
-    "steamReviews": "{count} avis Steam",
-    "storeScore": "{score}/5",
+    "noData": "Aucun chiffre de vente pour ce jeu.",
+    "peakCcu": "Record de {value} joueurs simultanés · {date}",
+    "platformColumn": "Plateformes",
+    "platformsTitle": "Ventes par plateforme",
+    "playstationLabel": "PlayStation",
+    "priceAtLowest": "au plus bas historique",
+    "priceDate": "Date",
+    "priceDiscount": "Remise",
+    "priceLabel": "Prix",
+    "priceList": "Catalogue",
+    "priceLowest": "plus bas historique : {price}",
+    "priceNoHistory": "Pas encore d'historique de prix pour ce jeu.",
+    "pricePaid": "Prix payé",
+    "priceTitle": "Historique de prix",
+    "publisher": "Éditeur",
+    "release": "Sortie",
+    "releasedOn": "sorti le {date}",
+    "reviewsPlaystation": "Avis PlayStation",
+    "reviewsSteam": "Avis Steam",
+    "reviewsSwitch": "Avis Switch",
+    "salesColumn": "Ventes",
+    "salesTitle": "Ventes",
+    "shareColumn": "Part",
+    "steamLabel": "Steam",
     "storeRatings": "{count} avis",
-    "reviewerMedianPlaytime": "~{hours}h de jeu médian par évaluateur"
-  },
-  "salesHistory": {
-    "estimated": "estimé",
-    "subtitle": "Évolution des ventes cumulées au fil du temps.",
-    "title": "Ventes dans le temps",
-    "today": "Aujourd'hui"
-  },
-  "methodology": {
-    "paragraph1": "Notre estimation combine plusieurs méthodes de calcul indépendantes que nous recoupons en permanence afin de nous rapprocher du chiffre réel.",
-    "paragraph2": "Le score de confiance reflète la cohérence entre ces méthodes : quand elles convergent, la fourchette se resserre ; quand elles divergent, nous l'indiquons clairement.",
-    "title": "Notre méthodologie"
+    "storeScoreWithCount": "{score}/5 · {count} avis",
+    "switchLabel": "Switch",
+    "tabOverview": "Vue d'ensemble",
+    "tabPrice": "Prix",
+    "tabsLabel": "Sections de la fiche",
+    "techTitle": "Fiche technique",
+    "updatedAt": "Chiffres mis à jour le {date}.",
+    "updatedUnknown": "Chiffres mis à jour quotidiennement."
   },
   "refreshButton": {
     "error": "L'actualisation a échoué. Réessayez.",
@@ -124,5 +145,23 @@
     "nav": "Pagination",
     "next": "Page suivante",
     "previous": "Page précédente"
+  },
+  "ranking": {
+    "empty": "Aucun jeu classé pour le moment.",
+    "explainer": "Ce classement est le nôtre. Chaque semaine, nous mesurons la vitesse à laquelle chaque jeu accumule des avis Steam, et nous comparons ces vitesses entre tous les jeux que nous suivons : le plus rapide de la semaine prend la première place. Il ne vient d'aucune source externe, et il n'utilise jamais les ventes estimées — un classement des ventes construit sur nos propres estimations de ventes tournerait en rond. Il mesure donc l'activité autour d'un jeu, pas ses ventes. Le classement par défaut récompense la durée : un jeu resté cent semaines dans le top 10 % passe devant celui qui a fait une seule semaine en tête.",
+    "game": "Jeu",
+    "metaDescription": "Le classement maison : les jeux qui accumulent le plus vite des avis Steam, semaine après semaine.",
+    "metaTitle": "Classement des jeux",
+    "peak": "Meilleur rang",
+    "peakShort": "meilleur #{rank}",
+    "sales": "Ventes",
+    "sortLabel": "Tri",
+    "sortPeak": "Meilleur rang",
+    "sortTop": "Durée dans le top 10 %",
+    "sortWeeks": "Semaines classé",
+    "title": "Classement maison",
+    "topDecile": "Sem. top 10 %",
+    "topDecileShort": "{count} sem. top 10 %",
+    "weeks": "Sem. classé"
   }
 }

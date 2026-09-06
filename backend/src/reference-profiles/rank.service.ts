@@ -94,10 +94,14 @@ export class RankService {
 
     // Per-game weekly review velocity → per-week list of {gameId, vel > 0}.
     const weekMap = new Map<number, Array<{ g: string; vel: number }>>();
+    const currentWeek = Math.floor(Date.now() / WEEK_MS);
     for (const [gameId, series] of byGame) {
       if (series.length < 2) continue;
       const firstWeek = Math.floor(series[0].t / WEEK_MS);
-      const lastWeek = Math.floor(series[series.length - 1].t / WEEK_MS);
+      const lastWeek = Math.min(
+        Math.floor(series[series.length - 1].t / WEEK_MS),
+        currentWeek - 1,
+      );
       for (let w = firstWeek; w <= lastWeek; w++) {
         const vel =
           this.valueAt(series, (w + 1) * WEEK_MS) -
@@ -111,18 +115,27 @@ export class RankService {
 
     // Rank each qualifying week (desc velocity) and accumulate positions.
     const positions = new Map<string, Positions>();
+    let recentVelocityPercentiles = new Map<string, number>();
+    let latestRankedWeek = -1;
     let rankedWeeks = 0;
-    for (const [, list] of weekMap) {
+    for (const [week, list] of weekMap) {
       if (list.length < MIN_WEEK_GAMES) continue;
       rankedWeeks += 1;
       list.sort((a, b) => b.vel - a.vel || (a.g < b.g ? -1 : 1));
       const n = list.length;
+      const weekPercentiles = new Map<string, number>();
       for (let i = 0; i < n; i++) {
         const pos = i + 1;
+        const percentile = pos / n;
         let acc = positions.get(list[i].g);
         if (!acc) positions.set(list[i].g, (acc = { ranks: [], pcts: [] }));
         acc.ranks.push(pos);
-        acc.pcts.push(pos / n);
+        acc.pcts.push(percentile);
+        weekPercentiles.set(list[i].g, percentile);
+      }
+      if (week > latestRankedWeek) {
+        latestRankedWeek = week;
+        recentVelocityPercentiles = weekPercentiles;
       }
     }
 
@@ -137,6 +150,8 @@ export class RankService {
           avgRank: ranks.reduce((a, b) => a + b, 0) / ranks.length,
           peakPercentile: Math.min(...pcts),
           avgPercentile: pcts.reduce((a, b) => a + b, 0) / pcts.length,
+          recentVelocityPercentile:
+            recentVelocityPercentiles.get(gameId) ?? null,
           weeksTopDecile: pcts.filter((p) => p <= TOP_DECILE).length,
           computedAt,
         }),

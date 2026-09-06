@@ -13,6 +13,12 @@ export class CronController {
     return this.refresh.refreshAllGames();
   }
 
+  @Get('harvest-milestones')
+  @HttpCode(200)
+  harvestMilestones() {
+    return this.refresh.harvestAllGameMilestones();
+  }
+
   @Get('poll-ccu')
   @HttpCode(200)
   pollCcu() {

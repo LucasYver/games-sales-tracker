@@ -46,6 +46,9 @@ export class GameRank {
   @Column('float')
   avgPercentile: number;
 
+  @Column('float', { nullable: true })
+  recentVelocityPercentile: number | null;
+
   // Weeks spent in the top decile (percentile <= 0.10) — the sustain axis,
   // era-robust.
   @Column('int')

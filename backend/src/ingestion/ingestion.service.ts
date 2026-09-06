@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Between, In, IsNull, MoreThanOrEqual, Not, Repository } from 'typeorm';
 import {
   AchievementSnapshot,
+  CatalogTier,
   Game,
   GamePlatformReleaseDate,
   GameSource,
@@ -49,9 +50,10 @@ import { SourcesService } from '../sources/sources.service';
 import { PublishersService } from '../publishers/publishers.service';
 import {
   DISCOVERY_RELEASE_FLOOR,
-  IGDB_MIN_RATING_COUNT,
-  STEAM_MIN_REVIEWS,
+  IGDB_CORE_MIN_RATING_COUNT,
+  STEAM_CORE_MIN_REVIEWS,
 } from './discovery.constants';
+import { classifyCatalogTier, promoteCatalogTier } from './catalog-tier';
 
 const STORE_SOURCE_BY_PLATFORM: Partial<Record<Platform, SourceType>> = {
   [Platform.PLAYSTATION]: SourceType.PS_STORE,
@@ -264,13 +266,8 @@ export class IngestionService {
 
   /**
    * Discover catalog candidates from IGDB (popularity-ranked + fresh releases),
-   * skip the ones we already track, and ingest the rest. Admission rule:
-   *   - IGDB total_rating_count ≥ {@link IGDB_MIN_RATING_COUNT}, OR
-   *   - live Steam reviews ≥ {@link STEAM_MIN_REVIEWS} (fast-moving fresh hits).
-   * Every new game is ingested fully (store ratings + Wikipedia extraction) so
-   * that console platforms are immediately available without waiting for the
-   * nightly per-app refresh cron. Wikipedia LLM calls add ~$0.01/game;
-   * acceptable given the daily incremental volume is typically 20–50 new titles.
+   * promote known extended games that now meet the core threshold, and ingest
+   * new games with their catalog tier. Initial ingestion is signals-only.
    */
   async discoverIgdbGames(): Promise<{
     discovered: number;
@@ -279,51 +276,40 @@ export class IngestionService {
   }> {
     const candidates = await this.igdb.discoverCandidates();
 
-    const knownIgdbIds = new Set(
-      (
-        await this.games.find({
-          where: { igdbId: Not(IsNull()) },
-          select: ['igdbId'],
-          withDeleted: true,
-        })
-      ).map((g) => g.igdbId),
+    const knownGames = await this.games.find({
+      select: ['id', 'igdbId', 'catalogTier', 'deletedAt'],
+      withDeleted: true,
+    });
+    const knownById = new Map(knownGames.map((game) => [game.id, game]));
+    const knownByIgdbId = new Map(
+      knownGames
+        .filter((game) => game.igdbId !== null)
+        .map((game) => [game.igdbId, game]),
     );
-    const knownSteamIds = new Set(
-      (
-        await this.gameSources.find({
-          where: { source: SourceType.STEAM },
-          select: ['externalId'],
-        })
-      ).map((s) => s.externalId),
+    const steamSources = await this.gameSources.find({
+      where: { source: SourceType.STEAM },
+      select: ['gameId', 'externalId'],
+    });
+    const knownBySteamId = new Map(
+      steamSources
+        .map(
+          (source) =>
+            [source.externalId, knownById.get(source.gameId) ?? null] as const,
+        )
+        .filter((entry): entry is [string, Game] => entry[1] !== null),
     );
 
     let ingested = 0;
     let skipped = 0;
     for (const candidate of candidates) {
-      if (knownIgdbIds.has(candidate.igdbId)) {
-        skipped += 1;
-        continue;
-      }
-      if (
-        candidate.steamAppId &&
-        knownSteamIds.has(String(candidate.steamAppId))
-      ) {
-        skipped += 1;
-        continue;
-      }
-
       try {
-        const admitted = await this.admitCandidate(candidate);
-        if (!admitted) {
+        const existingByIgdb = knownByIgdbId.get(candidate.igdbId);
+        if (existingByIgdb) {
+          await this.promoteToCoreIfEligible(existingByIgdb, candidate);
           skipped += 1;
           continue;
         }
 
-        // Fallback: IGDB doesn't always link a game to its Steam app (EA /
-        // Ubisoft / Epic-exclusive titles that joined Steam late often miss
-        // the external_games row). When the candidate is supposed to be on PC,
-        // try to resolve the Steam appId from the game name. Found = treat as
-        // a Steam candidate; not found = fall back to console-only.
         let steamAppId = candidate.steamAppId;
         if (!steamAppId && candidate.platforms.includes(Platform.PC)) {
           steamAppId = await this.steam.findAppIdByName(candidate.name);
@@ -331,23 +317,38 @@ export class IngestionService {
             this.logger.log(
               `[discovery] resolved Steam appId ${steamAppId} for "${candidate.name}" via name search`,
             );
-            if (knownSteamIds.has(String(steamAppId))) {
-              skipped += 1;
-              continue;
-            }
           }
         }
 
+        const candidateWithSteam = { ...candidate, steamAppId };
+        const existing = steamAppId
+          ? knownBySteamId.get(String(steamAppId))
+          : undefined;
+        if (existing) {
+          await this.promoteToCoreIfEligible(existing, candidateWithSteam);
+          skipped += 1;
+          continue;
+        }
+
+        const catalogTier = await this.classifyCandidate(candidateWithSteam);
+        if (!catalogTier) {
+          skipped += 1;
+          continue;
+        }
+
         if (steamAppId) {
-          const id = await this.ingestSteamApp(steamAppId);
+          const id = await this.ingestSteamApp(steamAppId, { catalogTier });
           if (id) {
-            knownIgdbIds.add(candidate.igdbId);
-            knownSteamIds.add(String(steamAppId));
+            const game = await this.games.findOne({ where: { id } });
+            if (game) {
+              knownById.set(id, game);
+              knownByIgdbId.set(candidate.igdbId, game);
+              knownBySteamId.set(String(steamAppId), game);
+            }
             ingested += 1;
           }
         } else {
-          await this.ingestIgdbGame(candidate);
-          knownIgdbIds.add(candidate.igdbId);
+          await this.ingestIgdbGame(candidate, { catalogTier });
           ingested += 1;
         }
       } catch (error) {
@@ -364,25 +365,43 @@ export class IngestionService {
     return { discovered: candidates.length, ingested, skipped };
   }
 
+  private async promoteToCoreIfEligible(
+    game: Game,
+    candidate: IgdbGame,
+  ): Promise<void> {
+    if (game.deletedAt || game.catalogTier === CatalogTier.CORE) return;
+    const nextTier = promoteCatalogTier(
+      game.catalogTier,
+      await this.classifyCandidate(candidate),
+    );
+    if (nextTier !== game.catalogTier) {
+      await this.games.update(game.id, { catalogTier: nextTier });
+      game.catalogTier = nextTier;
+    }
+  }
+
   /**
    * Decide whether a discovery candidate is worth tracking. Established titles
    * pass on IGDB popularity alone; otherwise we only keep fresh releases whose
    * live Steam review count clears the bar (a Steam lookup is done only when
    * needed, to avoid one HTTP call per long-tail candidate).
    */
-  private async admitCandidate(candidate: IgdbGame): Promise<boolean> {
-    if (
-      candidate.releaseDate &&
-      candidate.releaseDate < DISCOVERY_RELEASE_FLOOR
-    ) {
-      // Pre-floor classics are already filtered in-query by their high rating
-      // bar; anything reaching here below the floor is a popular landmark.
-      return candidate.totalRatingCount >= IGDB_MIN_RATING_COUNT;
-    }
-    if (candidate.totalRatingCount >= IGDB_MIN_RATING_COUNT) return true;
-    if (!candidate.steamAppId) return false;
-    const reviews = await this.steam.getTotalReviews(candidate.steamAppId);
-    return (reviews ?? 0) >= STEAM_MIN_REVIEWS;
+  private async classifyCandidate(
+    candidate: IgdbGame,
+  ): Promise<CatalogTier | null> {
+    const needsSteamReviews =
+      candidate.totalRatingCount < IGDB_CORE_MIN_RATING_COUNT &&
+      (!candidate.releaseDate ||
+        candidate.releaseDate >= DISCOVERY_RELEASE_FLOOR);
+    const reviews =
+      needsSteamReviews && candidate.steamAppId
+        ? await this.steam.getTotalReviews(candidate.steamAppId)
+        : null;
+    return classifyCatalogTier(
+      candidate.totalRatingCount,
+      reviews,
+      candidate.releaseDate,
+    );
   }
 
   /**
@@ -441,10 +460,16 @@ export class IngestionService {
 
     let gameId: string | null = null;
     if (steamAppId) {
-      gameId = await this.ingestSteamApp(steamAppId, { restoreDeleted: true });
+      gameId = await this.ingestSteamApp(steamAppId, {
+        restoreDeleted: true,
+        catalogTier: CatalogTier.CORE,
+      });
     }
     if (!gameId) {
-      await this.ingestIgdbGame(candidate, { restoreDeleted: true });
+      await this.ingestIgdbGame(candidate, {
+        restoreDeleted: true,
+        catalogTier: CatalogTier.CORE,
+      });
       const created = await this.games.findOne({
         where: { igdbId: candidate.igdbId },
       });
@@ -473,7 +498,7 @@ export class IngestionService {
    */
   private async ingestIgdbGame(
     candidate: IgdbGame,
-    options: { restoreDeleted?: boolean } = {},
+    options: { restoreDeleted?: boolean; catalogTier?: CatalogTier } = {},
   ): Promise<void> {
     const game = await this.upsertGameFromIgdb(candidate, options);
     if (!game) return;
@@ -483,9 +508,9 @@ export class IngestionService {
 
   private async upsertGameFromIgdb(
     candidate: IgdbGame,
-    options: { restoreDeleted?: boolean } = {},
+    options: { restoreDeleted?: boolean; catalogTier?: CatalogTier } = {},
   ): Promise<Game | null> {
-    const { restoreDeleted = false } = options;
+    const { restoreDeleted = false, catalogTier } = options;
 
     const existing = await this.games.findOne({
       where: { igdbId: candidate.igdbId },
@@ -502,10 +527,22 @@ export class IngestionService {
         await this.games.restore(existing.id);
         existing.deletedAt = null;
       }
+      await this.ensureIgdbSource(
+        existing.id,
+        candidate.igdbId,
+        candidate.slug,
+      );
       await this.syncPlatformReleaseDates(
         existing.id,
         candidate.platformReleaseDates,
       );
+      if (
+        catalogTier === CatalogTier.CORE &&
+        existing.catalogTier === CatalogTier.EXTENDED
+      ) {
+        existing.catalogTier = CatalogTier.CORE;
+        await this.games.save(existing);
+      }
       return existing;
     }
 
@@ -523,9 +560,11 @@ export class IngestionService {
       developer: candidate.developer,
       publisher: candidate.publisher,
       genres: candidate.genres.length > 0 ? candidate.genres : null,
+      catalogTier: catalogTier ?? CatalogTier.CORE,
     });
     const game = await this.games.save(entity);
     await this.publishers.resolveAndLink(game.id, game.publisher);
+    await this.ensureIgdbSource(game.id, candidate.igdbId, candidate.slug);
     await this.syncPlatformReleaseDates(
       game.id,
       candidate.platformReleaseDates,
@@ -541,7 +580,7 @@ export class IngestionService {
    */
   async ingestSteamApp(
     appId: number,
-    options: { restoreDeleted?: boolean } = {},
+    options: { restoreDeleted?: boolean; catalogTier?: CatalogTier } = {},
   ): Promise<string | null> {
     const details = await this.steam.getAppDetails(appId);
     if (!details) {
@@ -883,6 +922,9 @@ export class IngestionService {
             averageRating: rating.averageRating,
           }),
         );
+        if (rating.sourceUrl) {
+          await this.ensureStoreSource(gameId, source, rating.sourceUrl);
+        }
       }
       const summary = ratings
         .map((r) => `${r.platform}=${r.ratingCount}`)
@@ -972,6 +1014,12 @@ export class IngestionService {
         value: reviews,
       }),
     );
+    if (reviews >= STEAM_CORE_MIN_REVIEWS) {
+      await this.games.update(
+        { id: gameId, catalogTier: CatalogTier.EXTENDED },
+        { catalogTier: CatalogTier.CORE },
+      );
+    }
   }
 
   /**
@@ -2956,35 +3004,33 @@ export class IngestionService {
     );
   }
 
-  /**
-   * Re-run the automatic source discovery for an existing game: Wikipedia
-   * (LLM), trusted press articles (web search + LLM) and console store
-   * ratings. Used by the "search sources" button on the detail page.
-   * Best-effort: each source logs and continues.
-   */
   async refreshGame(
     gameId: string,
   ): Promise<{ found: boolean; articlesIngested: number }> {
+    const signals = await this.refreshGameSignals(gameId);
+    if (!signals.found) return { found: false, articlesIngested: 0 };
+    return this.harvestGameMilestones(gameId);
+  }
+
+  async refreshGameSignals(gameId: string): Promise<{ found: boolean }> {
     const game = await this.games.findOne({ where: { id: gameId } });
     if (!game) {
-      this.logger.warn(`refreshGame: game ${gameId} not found`);
-      return { found: false, articlesIngested: 0 };
+      this.logger.warn(`refreshGameSignals: game ${gameId} not found`);
+      return { found: false };
     }
 
     const startedAt = Date.now();
-    this.logger.log(`[refresh] "${game.name}" (${gameId}) — starting`);
+    this.logger.log(`[signals] "${game.name}" (${gameId}) — starting`);
 
     try {
       await this.ensureSteamSource(game);
+      await this.ensureIgdbLink(game);
 
-      this.logger.log(`[refresh] "${game.name}" — Wikipedia LLM extraction…`);
-      await this.scrapeWikipedia(game.id, game.name);
-
-      this.logger.log(`[refresh] "${game.name}" — store ratings (PS/Xbox)…`);
+      this.logger.log(`[signals] "${game.name}" — store ratings (PS/Xbox)…`);
       await this.scrapeStoreRatings(game.id, game.name, game.platforms);
 
       this.logger.log(
-        `[refresh] "${game.name}" — achievements (Exophase Steam / PSN / Xbox + Steam official %)…`,
+        `[signals] "${game.name}" — achievements (Exophase Steam / PSN / Xbox + Steam official %)…`,
       );
       const steamSource = await this.gameSources.findOne({
         where: { gameId: game.id, source: SourceType.STEAM },
@@ -3009,30 +3055,48 @@ export class IngestionService {
           : Promise.resolve(),
       ]);
 
-      this.logger.log(`[refresh] "${game.name}" — running backlog discovery…`);
-      const backlog = await this.discoverBacklog(game.id, game.name);
       this.logger.log(
-        `[refresh] "${game.name}" — backlog checked=${backlog.checked} ingested=${backlog.ingested} records=${backlog.records}`,
-      );
-
-      this.logger.log(
-        `[refresh] "${game.name}" — rebuilding estimate history…`,
+        `[signals] "${game.name}" — rebuilding estimate history…`,
       );
       const rebuild = await this.gamesService.rebuildEstimateHistory(game.id);
       this.logger.log(
-        `[refresh] "${game.name}" — rebuilt ${rebuild.points} point(s): ${rebuild.estimates} estimates, ${rebuild.snapshots} snapshots`,
+        `[signals] "${game.name}" — rebuilt ${rebuild.points} point(s): ${rebuild.estimates} estimates, ${rebuild.snapshots} snapshots`,
       );
 
       this.logger.log(
-        `[refresh] "${game.name}" — done in ${Date.now() - startedAt}ms, ${backlog.ingested} article(s) ingested with figures`,
+        `[signals] "${game.name}" — done in ${Date.now() - startedAt}ms`,
       );
-
-      return { found: true, articlesIngested: 0 };
+      return { found: true };
     } finally {
-      // Always stamp lastRefreshedAt — even when a source threw — so a
-      // persistently failing game cannot stay perpetually "due" and starve the
-      // rest of the catalog by re-consuming every run's time budget.
       await this.games.update(game.id, { lastRefreshedAt: new Date() });
+    }
+  }
+
+  async harvestGameMilestones(
+    gameId: string,
+  ): Promise<{ found: boolean; articlesIngested: number }> {
+    const game = await this.games.findOne({ where: { id: gameId } });
+    if (!game) {
+      this.logger.warn(`harvestGameMilestones: game ${gameId} not found`);
+      return { found: false, articlesIngested: 0 };
+    }
+
+    const startedAt = Date.now();
+    this.logger.log(`[harvest] "${game.name}" (${gameId}) — starting`);
+
+    try {
+      await this.scrapeWikipedia(game.id, game.name);
+      const backlog = await this.discoverBacklog(game.id, game.name);
+      const rebuild = await this.gamesService.rebuildEstimateHistory(game.id);
+      this.logger.log(
+        `[harvest] "${game.name}" — done in ${Date.now() - startedAt}ms, ` +
+          `${backlog.ingested} article(s), ${rebuild.points} estimate point(s)`,
+      );
+      return { found: true, articlesIngested: backlog.ingested };
+    } finally {
+      await this.games.update(game.id, {
+        lastMilestoneHarvestedAt: new Date(),
+      });
     }
   }
 
@@ -3413,6 +3477,104 @@ export class IngestionService {
    * ingest path, which our upsert recognizes via igdbId and attaches to the
    * existing game rather than creating a duplicate.
    */
+  /**
+   * Record the IGDB page for a game so the public site can link to it. Uses
+   * IGDB's own slug, never ours: ours is derived from the name and carries
+   * collision suffixes, which would produce 404s. Best-effort and idempotent —
+   * an existing row is refreshed only when the URL actually changed.
+   */
+  private async ensureIgdbSource(
+    gameId: string,
+    igdbId: number,
+    igdbSlug: string | null,
+  ): Promise<void> {
+    if (!igdbSlug) return;
+    const url = `https://www.igdb.com/games/${igdbSlug}`;
+
+    try {
+      const existing = await this.gameSources.findOne({
+        where: { gameId, source: SourceType.IGDB },
+      });
+      if (existing) {
+        if (existing.url === url && existing.externalId === String(igdbId)) {
+          return;
+        }
+        existing.url = url;
+        existing.externalId = String(igdbId);
+        await this.gameSources.save(existing);
+        return;
+      }
+      await this.gameSources.save(
+        this.gameSources.create({
+          gameId,
+          source: SourceType.IGDB,
+          externalId: String(igdbId),
+          url,
+        }),
+      );
+    } catch (error) {
+      // The (source, externalId) unique constraint can reject a duplicate when
+      // two of our games point at the same IGDB entry. Not worth failing an
+      // ingest run over a link.
+      this.logger.warn(`Could not link IGDB source for game ${gameId}: ${error}`);
+    }
+  }
+
+  /**
+   * Record the console store page a rating was scraped from, so the public
+   * site can link straight to the PS / Xbox product page.
+   */
+  private async ensureStoreSource(
+    gameId: string,
+    source: SourceType,
+    url: string,
+  ): Promise<void> {
+    // Both store URLs end on the product id (PS `concept/10000123`, Xbox
+    // `.../store/<slug>/<productId>`), which is what belongs in `externalId`.
+    // Falling back to our own id keeps the (source, externalId) unique key
+    // satisfied when a URL shape changes.
+    const externalId =
+      url.split('?')[0].split('/').filter(Boolean).pop() ?? gameId;
+
+    try {
+      const existing = await this.gameSources.findOne({
+        where: { gameId, source },
+      });
+      if (existing) {
+        if (existing.url === url) return;
+        existing.url = url;
+        existing.externalId = externalId;
+        await this.gameSources.save(existing);
+        return;
+      }
+      await this.gameSources.save(
+        this.gameSources.create({ gameId, source, externalId, url }),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not link ${source} store page for game ${gameId}: ${error}`,
+      );
+    }
+  }
+
+  /**
+   * Backfill the IGDB link for a game tracked before we started recording it.
+   * Costs one IGDB lookup, and only for games still missing the row, so a
+   * refresh run pays it once per game and never again.
+   */
+  private async ensureIgdbLink(game: Game): Promise<void> {
+    if (!game.igdbId) return;
+
+    const existing = await this.gameSources.findOne({
+      where: { gameId: game.id, source: SourceType.IGDB },
+    });
+    if (existing?.url) return;
+
+    const record = await this.igdb.findById(game.igdbId);
+    if (!record?.slug) return;
+    await this.ensureIgdbSource(game.id, game.igdbId, record.slug);
+  }
+
   private async ensureSteamSource(game: Game): Promise<void> {
     if (!game.platforms?.includes(Platform.PC)) return;
 
@@ -3427,15 +3589,15 @@ export class IngestionService {
     this.logger.log(
       `[refresh] "${game.name}" — resolved Steam appId ${appId} via name search, attaching`,
     );
-    await this.ingestSteamApp(appId);
+    await this.ingestSteamApp(appId, { catalogTier: game.catalogTier });
   }
 
   private async upsertGameFromSteam(
     appId: number,
     details: SteamAppDetails,
-    options: { restoreDeleted?: boolean } = {},
+    options: { restoreDeleted?: boolean; catalogTier?: CatalogTier } = {},
   ): Promise<Game | null> {
-    const { restoreDeleted = false } = options;
+    const { restoreDeleted = false, catalogTier } = options;
 
     const existingSource = await this.gameSources.findOne({
       where: {
@@ -3499,6 +3661,9 @@ export class IngestionService {
         if (game.igdbId == null) game.igdbId = igdb.igdbId;
         if (igdb.platforms.length > 0) game.platforms = igdb.platforms;
       }
+      if (catalogTier === CatalogTier.CORE) {
+        game.catalogTier = CatalogTier.CORE;
+      }
       this.applyDerivedFeatures(game);
       const saved = await this.games.save(game);
       await this.publishers.resolveAndLink(saved.id, saved.publisher);
@@ -3558,6 +3723,9 @@ export class IngestionService {
         }
         if (steamTags) existingByIgdb.steamTags = steamTags;
         if (details.dlc.length > 0) existingByIgdb.dlc = details.dlc;
+        if (catalogTier === CatalogTier.CORE) {
+          existingByIgdb.catalogTier = CatalogTier.CORE;
+        }
         this.applyDerivedFeatures(existingByIgdb);
         const saved = await this.games.save(existingByIgdb);
         await this.publishers.resolveAndLink(saved.id, saved.publisher);
@@ -3592,6 +3760,7 @@ export class IngestionService {
       categories: details.categories.length > 0 ? details.categories : null,
       steamTags,
       dlc: details.dlc.length > 0 ? details.dlc : null,
+      catalogTier: catalogTier ?? CatalogTier.CORE,
     });
     this.applyDerivedFeatures(entity);
     const game = await this.games.save(entity);

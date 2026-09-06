@@ -31,6 +31,11 @@ export enum Platform {
   OTHER = 'OTHER',
 }
 
+export enum CatalogTier {
+  CORE = 'CORE',
+  EXTENDED = 'EXTENDED',
+}
+
 export enum SignalMetric {
   STEAM_REVIEWS = 'STEAM_REVIEWS',
   // Daily snapshot of Steam's GetNumberOfCurrentPlayers (raw value at poll time).

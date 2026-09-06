@@ -69,7 +69,7 @@ export default async function LocaleLayout({
   return (
     <html
       lang={locale}
-      className={`${sans.variable} ${mono.variable} h-full antialiased`}
+      className={`${sans.variable} ${mono.variable} chart-scope dark h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="flex min-h-full flex-col">

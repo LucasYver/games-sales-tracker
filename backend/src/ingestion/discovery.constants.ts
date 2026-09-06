@@ -3,10 +3,8 @@
 // used per-app as a fast-moving admission signal for very fresh releases that
 // IGDB hasn't accumulated ratings for yet.
 
-// IGDB `total_rating_count` (player + critic ratings) a game must reach to be
-// admitted on IGDB popularity alone. Low enough to catch solid mid-tier titles,
-// high enough to keep out the long tail of unknown releases.
-export const IGDB_MIN_RATING_COUNT = 80;
+export const IGDB_CATALOG_MIN_RATING_COUNT = 20;
+export const IGDB_CORE_MIN_RATING_COUNT = 80;
 
 // Pre-2012 games are only admitted when they are landmark titles — i.e. they
 // cleared a much higher IGDB rating bar (Skyrim, GTA IV, Mass Effect 2…).
@@ -20,7 +18,8 @@ export const DISCOVERY_RELEASE_FLOOR = new Date('2012-01-01T00:00:00Z');
 // A fresh release with few IGDB ratings is still admitted when its live Steam
 // review count is high — Steam ratings move far faster than IGDB's right after
 // launch.
-export const STEAM_MIN_REVIEWS = 2500;
+export const STEAM_CATALOG_MIN_REVIEWS = 500;
+export const STEAM_CORE_MIN_REVIEWS = 2500;
 
 // How far back the "recent releases" discovery query looks. These candidates
 // skip the IGDB rating bar and are admitted via the Steam review signal.

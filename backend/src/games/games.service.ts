@@ -7,8 +7,10 @@ import {
   EstimateSnapshot,
   EstimationDiscrepancy,
   Game,
+  GameRank,
   Milestone,
   Platform,
+  PriceSnapshot,
   SalesEstimate,
   SalesSource,
   SerializedReconciliationEntry,
@@ -53,6 +55,10 @@ export interface PopularGame {
   reviews: number;
   estimatedLow: number | null;
   estimatedHigh: number | null;
+  // 'reported' = a worldwide figure a source published, 'estimate' = our
+  // model. The listing and the game page must show the same number, so both
+  // resolve it the same way (see `headlineSales`).
+  basis: 'reported' | 'estimate' | null;
 }
 
 export interface GenreOption {
@@ -62,6 +68,21 @@ export interface GenreOption {
 
 export interface PaginatedGames {
   items: PopularGame[];
+  total: number;
+}
+
+export type RankSort = 'top' | 'peak' | 'weeks';
+
+/** A listing row for our own chart: the game, plus how it has ranked. */
+export interface RankedGame extends PopularGame {
+  weeksCharted: number;
+  peakRank: number;
+  avgRank: number;
+  weeksTopDecile: number;
+}
+
+export interface PaginatedRankedGames {
+  items: RankedGame[];
   total: number;
 }
 
@@ -128,6 +149,32 @@ export interface StoreRatings {
 }
 
 /**
+ * Price over time, in cents of `currency`. `final` is what a buyer pays,
+ * `initial` the catalogue price — they differ exactly when a sale is running.
+ */
+export interface PublicPricePoint {
+  capturedAt: Date;
+  currency: string;
+  initial: number;
+  final: number;
+  discountPercent: number;
+}
+
+/**
+ * Our own chart position, computed from observed weekly review velocity across
+ * the games we track — never from estimated units, which would make it
+ * circular. Exposed so the page can say plainly whose ranking this is.
+ */
+export interface PublicRank {
+  weeksCharted: number;
+  peakRank: number;
+  avgRank: number;
+  peakPercentile: number;
+  weeksTopDecile: number;
+  computedAt: Date;
+}
+
+/**
  * One historical point of the headline reconciled estimate, exposed on the
  * public game detail to draw the sales-over-time chart. Mirrors the admin
  * `AdminEstimateSnapshot` but stripped of the internal reconciliation jsonb.
@@ -177,6 +224,10 @@ export class GamesService {
     private readonly discrepancies: Repository<EstimationDiscrepancy>,
     @InjectRepository(Milestone)
     private readonly milestones: Repository<Milestone>,
+    @InjectRepository(PriceSnapshot)
+    private readonly prices: Repository<PriceSnapshot>,
+    @InjectRepository(GameRank)
+    private readonly ranks: Repository<GameRank>,
     private readonly estimation: EstimationService,
     private readonly estimationMethods: EstimationMethodService,
   ) {}
@@ -221,6 +272,213 @@ export class GamesService {
       .addOrderBy('g.releaseDate', 'DESC', 'NULLS LAST')
       .limit(limit)
       .getMany();
+  }
+
+  /**
+   * Search results in the same shape as the listing, so the site's live search
+   * can show the sales figure and review count next to each hit instead of a
+   * bare title. Kept to a handful of rows — this runs on every keystroke.
+   */
+  async searchDetailed(query: string, limit = 8): Promise<PopularGame[]> {
+    const games = await this.search(query, limit);
+    if (games.length === 0) return [];
+
+    const ids = games.map((g) => g.id);
+    const [reviewRows, estimates, declaredByGame] = await Promise.all([
+      this.signals
+        .createQueryBuilder('s')
+        .select('s.gameId', 'gameId')
+        .addSelect('MAX(s.value)', 'reviews')
+        .where('s.gameId IN (:...ids)', { ids })
+        .andWhere('s.metric = :metric', {
+          metric: SignalMetric.STEAM_REVIEWS,
+        })
+        .groupBy('s.gameId')
+        .getRawMany<{ gameId: string; reviews: string }>(),
+      this.latestReconciledEstimates(ids),
+      this.declaredGlobalByGame(ids),
+    ]);
+
+    const reviewsByGame = new Map(
+      reviewRows.map((r) => [r.gameId, Number(r.reviews)]),
+    );
+
+    return games.map((game) => {
+      const headline = this.headlineSales(
+        declaredByGame.get(game.id) ?? null,
+        estimates.get(game.id) ?? null,
+      );
+      return {
+        id: game.id,
+        name: game.name,
+        slug: game.slug,
+        releaseDate: game.releaseDate,
+        coverUrl: game.coverUrl,
+        platforms: game.platforms ?? [],
+        genres: game.genres ?? [],
+        isFree: game.isFree,
+        reviews: reviewsByGame.get(game.id) ?? 0,
+        estimatedLow: headline?.low ?? null,
+        estimatedHigh: headline?.high ?? null,
+        basis: headline?.basis ?? null,
+      };
+    });
+  }
+
+  /**
+   * The one figure the site shows for a game. A worldwide figure a source
+   * actually published always wins over our model — that is what
+   * `buildTotal` does on the game page, and the listing has to agree with it
+   * or the same game shows two different numbers.
+   */
+  private headlineSales(
+    declaredUnits: number | null,
+    estimate: { low: number; high: number } | null,
+  ): { low: number; high: number; basis: 'reported' | 'estimate' } | null {
+    if (declaredUnits != null && declaredUnits > 0) {
+      return { low: declaredUnits, high: declaredUnits, basis: 'reported' };
+    }
+    if (estimate) return { ...estimate, basis: 'estimate' };
+    return null;
+  }
+
+  /**
+   * Latest worldwide declared figure per game, in one query. Mirrors
+   * `buildTotal`: most recent wins, engagement and modelled rows excluded.
+   */
+  private async declaredGlobalByGame(
+    gameIds: string[],
+  ): Promise<Map<string, number>> {
+    const map = new Map<string, number>();
+    if (gameIds.length === 0) return map;
+
+    const rows = await this.milestones
+      .createQueryBuilder('m')
+      .distinctOn(['m.gameId'])
+      .select('m.gameId', 'gameId')
+      .addSelect('m.units', 'units')
+      .where('m.gameId IN (:...gameIds)', { gameIds })
+      .andWhere('m.platform = :platform', { platform: Platform.GLOBAL })
+      .andWhere('m.rejectedAt IS NULL')
+      .andWhere('m.isEngagement = false')
+      .andWhere('m.isEstimate = false')
+      .orderBy('m.gameId')
+      .addOrderBy('m.reportedAt', 'DESC', 'NULLS LAST')
+      .getRawMany<{ gameId: string; units: string }>();
+
+    for (const row of rows) map.set(row.gameId, Number(row.units));
+    return map;
+  }
+
+  /**
+   * Our own chart, as a listing: games ordered by their average weekly
+   * position. The ranking is computed from observed review velocity across the
+   * games we track (see `RankService`), never from estimated units — using
+   * sales to rank sales would be circular.
+   */
+  async listRanked(
+    options: { limit?: number; offset?: number; sort?: RankSort } = {},
+  ): Promise<PaginatedRankedGames> {
+    const { limit = 50, offset = 0, sort = 'top' } = options;
+
+    const qb = this.games
+      .createQueryBuilder('g')
+      .innerJoin('game_rank', 'r', 'r."gameId" = g.id')
+      .leftJoin('g.signals', 's', 's.metric = :metric', {
+        metric: SignalMetric.STEAM_REVIEWS,
+      })
+      .select('g.id', 'id')
+      .addSelect('g.name', 'name')
+      .addSelect('g.slug', 'slug')
+      .addSelect('g.releaseDate', 'releaseDate')
+      .addSelect('g.coverUrl', 'coverUrl')
+      .addSelect('g.platforms', 'platforms')
+      .addSelect('g.genres', 'genres')
+      .addSelect('g.isFree', 'isFree')
+      .addSelect('COALESCE(MAX(s.value), 0)', 'reviews')
+      .addSelect('r."weeksCharted"', 'weeksCharted')
+      .addSelect('r."peakRank"', 'peakRank')
+      .addSelect('r."avgRank"', 'avgRank')
+      .addSelect('r."weeksTopDecile"', 'weeksTopDecile')
+      .where('g.deletedAt IS NULL')
+      .andWhere('r."weeksCharted" > 0')
+      .groupBy('g.id')
+      .addGroupBy('r."weeksCharted"')
+      .addGroupBy('r."peakRank"')
+      .addGroupBy('r."avgRank"')
+      .addGroupBy('r."weeksTopDecile"');
+
+    // Default to staying power, not a lucky week: a game charted once at #1
+    // would otherwise sit above one that held the top decile for two years.
+    if (sort === 'peak') {
+      qb.orderBy('r."peakRank"', 'ASC').addOrderBy(
+        'r."weeksCharted"',
+        'DESC',
+      );
+    } else if (sort === 'weeks') {
+      qb.orderBy('r."weeksCharted"', 'DESC').addOrderBy('r."avgRank"', 'ASC');
+    } else {
+      qb.orderBy('r."weeksTopDecile"', 'DESC')
+        .addOrderBy('r."weeksCharted"', 'DESC')
+        .addOrderBy('r."avgRank"', 'ASC');
+    }
+
+    const [rows, totalRow] = await Promise.all([
+      qb.offset(offset).limit(limit).getRawMany<{
+        id: string;
+        name: string;
+        slug: string;
+        releaseDate: Date | null;
+        coverUrl: string | null;
+        platforms: Platform[];
+        genres: string | null;
+        isFree: boolean;
+        reviews: string;
+        weeksCharted: number;
+        peakRank: number;
+        avgRank: string;
+        weeksTopDecile: number;
+      }>(),
+      this.games
+        .createQueryBuilder('g')
+        .innerJoin('game_rank', 'r', 'r."gameId" = g.id')
+        .where('g.deletedAt IS NULL')
+        .andWhere('r."weeksCharted" > 0')
+        .getCount(),
+    ]);
+
+    const ids = rows.map((r) => r.id);
+    const [latestByGame, declaredByGame] = await Promise.all([
+      this.latestReconciledEstimates(ids),
+      this.declaredGlobalByGame(ids),
+    ]);
+
+    const items = rows.map((r) => {
+      const headline = this.headlineSales(
+        declaredByGame.get(r.id) ?? null,
+        latestByGame.get(r.id) ?? null,
+      );
+      return {
+        id: r.id,
+        name: r.name,
+        slug: r.slug,
+        releaseDate: r.releaseDate,
+        coverUrl: r.coverUrl,
+        platforms: this.parsePlatforms(r.platforms),
+        genres: this.parseGenres(r.genres),
+        isFree: r.isFree,
+        reviews: Number(r.reviews),
+        estimatedLow: headline?.low ?? null,
+        estimatedHigh: headline?.high ?? null,
+        basis: headline?.basis ?? null,
+        weeksCharted: Number(r.weeksCharted),
+        peakRank: Number(r.peakRank),
+        avgRank: Number(r.avgRank),
+        weeksTopDecile: Number(r.weeksTopDecile),
+      };
+    });
+
+    return { items, total: totalRow };
   }
 
   async listPopular(
@@ -355,12 +613,17 @@ export class GamesService {
       totalPromise,
     ]);
 
-    const latestByGame = await this.latestReconciledEstimates(
-      rows.map((r) => r.id),
-    );
+    const ids = rows.map((r) => r.id);
+    const [latestByGame, declaredByGame] = await Promise.all([
+      this.latestReconciledEstimates(ids),
+      this.declaredGlobalByGame(ids),
+    ]);
 
     const items = rows.map((r) => {
-      const estimate = latestByGame.get(r.id);
+      const headline = this.headlineSales(
+        declaredByGame.get(r.id) ?? null,
+        latestByGame.get(r.id) ?? null,
+      );
       return {
         id: r.id,
         name: r.name,
@@ -371,8 +634,9 @@ export class GamesService {
         genres: this.parseGenres(r.genres),
         isFree: r.isFree,
         reviews: Number(r.reviews),
-        estimatedLow: estimate?.low ?? null,
-        estimatedHigh: estimate?.high ?? null,
+        estimatedLow: headline?.low ?? null,
+        estimatedHigh: headline?.high ?? null,
+        basis: headline?.basis ?? null,
       };
     });
 
@@ -439,6 +703,79 @@ export class GamesService {
       select: { capturedAt: true, value: true },
     });
 
+    // Console store rating counts over time, so the public page can chart
+    // reviews per store side by side. Reconstructed (synthetic) points stay
+    // out: they are a modelling aid, not a measurement. Xbox is absent on
+    // purpose — its store only exposes US-storefront ratings, so the series
+    // would not be comparable with the worldwide counts shown next to it.
+    const [psRatingsHistory, switchRatingsHistory] = await Promise.all(
+      [SignalMetric.PS_RATINGS, SignalMetric.SWITCH_RATINGS].map((metric) =>
+        this.signals.find({
+          where: { gameId: game.id, metric, synthetic: false },
+          order: { capturedAt: 'ASC' },
+          select: { capturedAt: true, value: true },
+        }),
+      ),
+    );
+
+    // Concurrent players: the daily series plus the all-time record, which is
+    // stored as its own metric (a new row only when the record is beaten, so
+    // it is read by value, not by date).
+    const [ccuHistory, peakCcuRow] = await Promise.all([
+      this.signals.find({
+        where: {
+          gameId: game.id,
+          metric: SignalMetric.STEAM_CONCURRENT,
+          synthetic: false,
+        },
+        order: { capturedAt: 'ASC' },
+        select: { capturedAt: true, value: true },
+      }),
+      this.signals.findOne({
+        where: { gameId: game.id, metric: SignalMetric.STEAM_PEAK_CCU },
+        order: { value: 'DESC' },
+        select: { capturedAt: true, value: true },
+      }),
+    ]);
+
+    const priceRows = await this.prices.find({
+      where: { gameId: game.id },
+      order: { capturedAt: 'ASC' },
+      select: {
+        capturedAt: true,
+        currency: true,
+        initial: true,
+        final: true,
+        discountPercent: true,
+      },
+    });
+    const priceHistory: PublicPricePoint[] = priceRows.map((p) => ({
+      capturedAt: p.capturedAt,
+      currency: p.currency,
+      initial: p.initial,
+      final: p.final,
+      discountPercent: p.discountPercent,
+    }));
+    const currentPrice = priceHistory.at(-1) ?? null;
+    // Cheapest it has ever been, so a visitor can tell a real sale from a
+    // routine one.
+    const lowestPrice = priceHistory.reduce<PublicPricePoint | null>(
+      (best, p) => (!best || p.final < best.final ? p : best),
+      null,
+    );
+
+    const rankRow = await this.ranks.findOne({ where: { gameId: game.id } });
+    const rank: PublicRank | null = rankRow
+      ? {
+          weeksCharted: rankRow.weeksCharted,
+          peakRank: rankRow.peakRank,
+          avgRank: rankRow.avgRank,
+          peakPercentile: rankRow.peakPercentile,
+          weeksTopDecile: rankRow.weeksTopDecile,
+          computedAt: rankRow.computedAt,
+        }
+      : null;
+
     const storeRatings = await this.buildStoreRatings(game.id);
 
     const estimateSnapshotRows = await this.estimateSnapshots.find({
@@ -474,11 +811,27 @@ export class GamesService {
       sources: game.sources,
       salesBreakdown: breakdown,
       totalSales: total,
+      // Resolved server-side so the listing, the search panel and this page
+      // can never disagree about a game's number.
+      headline: this.headlineSales(
+        total?.basis === 'reported' ? total.low : null,
+        estimatedToday,
+      ),
       reconciliation,
       estimatedToday,
       estimateSnapshots,
       reviewHistory,
       followersHistory,
+      psRatingsHistory,
+      switchRatingsHistory,
+      ccuHistory,
+      peakCcu: peakCcuRow
+        ? { value: peakCcuRow.value, capturedAt: peakCcuRow.capturedAt }
+        : null,
+      priceHistory,
+      currentPrice,
+      lowestPrice,
+      rank,
       storeRatings,
     };
   }
@@ -926,8 +1279,12 @@ export class GamesService {
     // Milestones are worldwide totals only — there is no per-platform
     // declared figure anymore, so every milestone is a global milestone and
     // the per-platform declared map stays empty (platform lines are filled
-    // from estimates below).
-    const globalMilestones: Milestone[] = milestones;
+    // from estimates below). Engagement rows ("players reached", subscription
+    // users included) are dropped here: they are not copies sold and must
+    // never anchor the headline total.
+    const globalMilestones: Milestone[] = milestones.filter(
+      (m) => !m.isEngagement,
+    );
     const bestByPlatform = new Map<Platform, Milestone>();
 
     // Highest declared worldwide figure (if any) — used as a floor +

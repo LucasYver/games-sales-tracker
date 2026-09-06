@@ -4,9 +4,9 @@ import axios from 'axios';
 import { Platform } from '../entities';
 import {
   DISCOVERY_RELEASE_FLOOR,
+  IGDB_CATALOG_MIN_RATING_COUNT,
   IGDB_DISCOVERY_MAX_PAGES,
   IGDB_DISCOVERY_PAGE_SIZE,
-  IGDB_MIN_RATING_COUNT,
   IGDB_PLATFORM_IDS,
   IGDB_PRE_FLOOR_MIN_RATING_COUNT,
   IGDB_RECENT_LIMIT,
@@ -16,6 +16,11 @@ import {
 export interface IgdbGame {
   igdbId: number;
   name: string;
+  // IGDB's own URL slug — the trailing segment of the canonical
+  // `https://www.igdb.com/games/<slug>` page. Ours is derived from the name
+  // and can diverge (collision suffixes, punctuation), so the link has to use
+  // theirs to be trustworthy.
+  slug: string | null;
   summary: string | null;
   releaseDate: Date | null;
   coverUrl: string | null;
@@ -41,6 +46,7 @@ interface CachedToken {
 // list stays consistent across search / lookup calls.
 const IGDB_FIELDS = [
   'name',
+  'slug',
   'summary',
   'first_release_date',
   'total_rating_count',
@@ -202,7 +208,7 @@ export class IgdbClient {
     // `game_type = 0` is "main game" (the old `category` field was removed).
     for (let page = 0; page < IGDB_DISCOVERY_MAX_PAGES; page++) {
       const body = [
-        `where game_type = 0 & total_rating_count >= ${IGDB_MIN_RATING_COUNT}`,
+        `where game_type = 0 & total_rating_count >= ${IGDB_CATALOG_MIN_RATING_COUNT}`,
         `& first_release_date >= ${floorUnix} & platforms = (${platforms});`,
         `fields ${IGDB_FIELDS};`,
         `sort total_rating_count desc;`,
@@ -367,6 +373,7 @@ export class IgdbClient {
     const g = raw as Record<string, unknown> & {
       id: number;
       name: string;
+      slug?: string;
       summary?: string;
       first_release_date?: number;
       total_rating_count?: number;
@@ -410,6 +417,7 @@ export class IgdbClient {
     return {
       igdbId: g.id,
       name: g.name,
+      slug: g.slug ?? null,
       summary: g.summary ?? null,
       releaseDate: g.first_release_date
         ? new Date(g.first_release_date * 1000)
