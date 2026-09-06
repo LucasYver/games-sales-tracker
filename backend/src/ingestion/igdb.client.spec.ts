@@ -1,6 +1,9 @@
 import { ConfigService } from '@nestjs/config';
+import axios from 'axios';
 import { Platform } from '../entities';
 import { IgdbClient } from './igdb.client';
+
+jest.mock('axios');
 
 // `mapGame` is private — it's the one place that turns a raw IGDB payload
 // into our `IgdbGame` shape, so it's worth covering directly rather than
@@ -74,5 +77,88 @@ describe('IgdbClient.mapGame — release_dates grouping', () => {
   it('returns an empty map when IGDB has no release_dates breakdown', () => {
     const result = mapGame(client, { id: 4, name: 'Some Game' });
     expect(result.platformReleaseDates.size).toBe(0);
+  });
+});
+
+const mockedAxios = axios as jest.Mocked<typeof axios>;
+
+function getAccessToken(client: IgdbClient): Promise<string> {
+  return (
+    client as unknown as { getAccessToken: () => Promise<string> }
+  ).getAccessToken();
+}
+
+function httpError(status?: number) {
+  return { response: status === undefined ? undefined : { status, data: {} } };
+}
+
+describe('IgdbClient.getAccessToken — Twitch outage handling', () => {
+  let client: IgdbClient;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedAxios.isAxiosError.mockReturnValue(true);
+    // The backoff is only there to space out real network calls; firing it
+    // synchronously keeps the retry assertions instant.
+    jest.spyOn(global, 'setTimeout').mockImplementation(((fn: () => void) => {
+      fn();
+      return 0;
+    }) as unknown as typeof setTimeout);
+
+    client = new IgdbClient(
+      new ConfigService({
+        IGDB_CLIENT_ID: 'id',
+        IGDB_CLIENT_SECRET: 'secret',
+      }),
+    );
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('retries a transient Twitch 500 and returns the token', async () => {
+    mockedAxios.post
+      .mockRejectedValueOnce(httpError(500))
+      .mockRejectedValueOnce(httpError(500))
+      .mockResolvedValueOnce({
+        data: { access_token: 'tok', expires_in: 3600 },
+      });
+
+    await expect(getAccessToken(client)).resolves.toBe('tok');
+    expect(mockedAxios.post.mock.calls).toHaveLength(3);
+  });
+
+  it('retries when the request never reaches Twitch', async () => {
+    mockedAxios.post.mockRejectedValueOnce(httpError()).mockResolvedValueOnce({
+      data: { access_token: 'tok', expires_in: 3600 },
+    });
+
+    await expect(getAccessToken(client)).resolves.toBe('tok');
+    expect(mockedAxios.post.mock.calls).toHaveLength(2);
+  });
+
+  it('gives up after exhausting the retries', async () => {
+    mockedAxios.post.mockRejectedValue(httpError(500));
+
+    await expect(getAccessToken(client)).rejects.toBeDefined();
+    expect(mockedAxios.post.mock.calls).toHaveLength(3);
+  });
+
+  it('does not retry rejected credentials', async () => {
+    mockedAxios.post.mockRejectedValue(httpError(400));
+
+    await expect(getAccessToken(client)).rejects.toBeDefined();
+    expect(mockedAxios.post.mock.calls).toHaveLength(1);
+  });
+
+  it('reuses a cached token instead of re-authenticating', async () => {
+    mockedAxios.post.mockResolvedValueOnce({
+      data: { access_token: 'tok', expires_in: 3600 },
+    });
+
+    await getAccessToken(client);
+    await expect(getAccessToken(client)).resolves.toBe('tok');
+    expect(mockedAxios.post.mock.calls).toHaveLength(1);
   });
 });

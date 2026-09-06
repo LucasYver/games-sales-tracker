@@ -11,7 +11,7 @@ import {
 } from '@/lib/api';
 import { Link } from '@/i18n/navigation';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
-import { SeriesChart } from '@/components/chart-room/SeriesChart';
+import { RangedChart } from '@/components/chart-room/RangedChart';
 
 export async function generateMetadata({
   params,
@@ -362,13 +362,14 @@ function PriceTab({ game }: { game: GameDetail }) {
       <SectionTitle>{t('priceTitle')}</SectionTitle>
       <div className="flex flex-col gap-5">
         {game.priceHistory.length > 1 && (
-          <SeriesChart
+          <RangedChart
             points={game.priceHistory.map((p) => ({
               capturedAt: p.capturedAt,
               value: p.final,
             }))}
             kind="money"
             currency={currency}
+            label={t('priceLabel')}
             ariaLabel={t('chartAlt', { series: t('priceLabel') })}
           />
         )}
@@ -649,9 +650,9 @@ function GamePageContent({ game, tab }: { game: GameDetail; tab: TabKey }) {
                 <PlatformBreakdown game={game} />
 
                 {charts.length > 0 && (
-                  <section className="flex flex-col gap-6 border-b border-border px-4 py-5">
+                  <section className="flex flex-col gap-7 border-b border-border px-4 py-5">
                     {charts.map((chart) => (
-                      <SeriesChart
+                      <RangedChart
                         key={chart.key}
                         points={chart.points}
                         label={chart.label}

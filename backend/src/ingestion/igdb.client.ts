@@ -42,6 +42,11 @@ interface CachedToken {
   expiresAt: number;
 }
 
+interface TwitchTokenResponse {
+  access_token: string;
+  expires_in: number;
+}
+
 // Fields we always want when reading an IGDB game, kept in one place so the
 // list stays consistent across search / lookup calls.
 const IGDB_FIELDS = [
@@ -517,37 +522,60 @@ export class IgdbClient {
     const clientId = this.config.get<string>('IGDB_CLIENT_ID')!;
     const clientSecret = this.config.get<string>('IGDB_CLIENT_SECRET')!;
 
-    try {
-      const { data } = await axios.post(
-        'https://id.twitch.tv/oauth2/token',
-        null,
-        {
-          params: {
-            client_id: clientId,
-            client_secret: clientSecret,
-            grant_type: 'client_credentials',
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const { data } = await axios.post<TwitchTokenResponse>(
+          'https://id.twitch.tv/oauth2/token',
+          null,
+          {
+            params: {
+              client_id: clientId,
+              client_secret: clientSecret,
+              grant_type: 'client_credentials',
+            },
+            timeout: 15000,
           },
-          timeout: 15000,
-        },
-      );
+        );
 
-      this.token = {
-        accessToken: data.access_token,
-        expiresAt: Date.now() + data.expires_in * 1000,
-      };
+        this.token = {
+          accessToken: data.access_token,
+          expiresAt: Date.now() + data.expires_in * 1000,
+        };
 
-      return this.token.accessToken;
-    } catch (error) {
-      // Twitch returns 400 "invalid_client" when the client_id / secret pair
-      // is rejected. The downstream caller will rethrow as a generic axios
-      // error; this log makes the actual cause unambiguous.
-      const detail = axios.isAxiosError(error)
-        ? JSON.stringify(error.response?.data ?? error.message)
-        : String(error);
-      this.logger.error(
-        `IGDB auth failed (check IGDB_CLIENT_ID / IGDB_CLIENT_SECRET in .env): ${detail}`,
-      );
-      throw error;
+        return this.token.accessToken;
+      } catch (error) {
+        const status = axios.isAxiosError(error)
+          ? error.response?.status
+          : undefined;
+        // Twitch answers 4xx ("invalid_client") only when the id/secret pair is
+        // actually rejected — retrying that is pointless. A 5xx or a bare
+        // network failure is a Twitch-side outage, and losing it here costs the
+        // whole daily discovery run, so those are worth a couple of retries.
+        const isCredentialError = status !== undefined && status < 500;
+        const retriable = axios.isAxiosError(error) && !isCredentialError;
+
+        if (retriable && attempt < maxAttempts) {
+          const backoffMs = attempt * 5000;
+          this.logger.warn(
+            `IGDB auth attempt ${attempt}/${maxAttempts} failed (status ${status ?? 'network'}); retrying in ${backoffMs}ms`,
+          );
+          await new Promise((r) => setTimeout(r, backoffMs));
+          continue;
+        }
+
+        const detail = axios.isAxiosError(error)
+          ? JSON.stringify(error.response?.data ?? error.message)
+          : String(error);
+        this.logger.error(
+          isCredentialError
+            ? `IGDB auth rejected (check IGDB_CLIENT_ID / IGDB_CLIENT_SECRET in .env): ${detail}`
+            : `IGDB auth failed after ${attempt} attempt(s), Twitch unreachable or erroring: ${detail}`,
+        );
+        throw error;
+      }
     }
+
+    throw new Error('IGDB auth failed: retries exhausted.');
   }
 }
