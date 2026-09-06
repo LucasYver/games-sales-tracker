@@ -48,12 +48,12 @@ import {
 import { TwitchClient } from './twitch.client';
 import { SourcesService } from '../sources/sources.service';
 import { PublishersService } from '../publishers/publishers.service';
+import { STEAM_CORE_MIN_REVIEWS } from './discovery.constants';
 import {
-  DISCOVERY_RELEASE_FLOOR,
-  IGDB_CORE_MIN_RATING_COUNT,
-  STEAM_CORE_MIN_REVIEWS,
-} from './discovery.constants';
-import { classifyCatalogTier, promoteCatalogTier } from './catalog-tier';
+  classifyCatalogTier,
+  needsLiveSteamReviewLookup,
+  promoteCatalogTier,
+} from './catalog-tier';
 
 const STORE_SOURCE_BY_PLATFORM: Partial<Record<Platform, SourceType>> = {
   [Platform.PLAYSTATION]: SourceType.PS_STORE,
@@ -266,8 +266,10 @@ export class IngestionService {
 
   /**
    * Discover catalog candidates from IGDB (popularity-ranked + fresh releases),
-   * promote known extended games that now meet the core threshold, and ingest
-   * new games with their catalog tier. Initial ingestion is signals-only.
+   * promote known extended games that now meet the core IGDB threshold, and
+   * insert new games as identity stubs. Signal collection (reviews, CCU,
+   * ratings, achievements, estimates) is left to the dedicated crons so this
+   * run can admit as many titles as possible inside the nightly window.
    */
   async discoverIgdbGames(): Promise<{
     discovered: number;
@@ -310,53 +312,36 @@ export class IngestionService {
           continue;
         }
 
-        let steamAppId = candidate.steamAppId;
-        if (!steamAppId && candidate.platforms.includes(Platform.PC)) {
-          steamAppId = await this.steam.findAppIdByName(candidate.name);
-          if (steamAppId) {
-            this.logger.log(
-              `[discovery] resolved Steam appId ${steamAppId} for "${candidate.name}" via name search`,
-            );
-          }
-        }
-
-        const candidateWithSteam = { ...candidate, steamAppId };
+        const steamAppId = candidate.steamAppId;
         const existing = steamAppId
           ? knownBySteamId.get(String(steamAppId))
           : undefined;
         if (existing) {
-          await this.promoteToCoreIfEligible(existing, candidateWithSteam);
+          await this.promoteToCoreIfEligible(existing, candidate);
           skipped += 1;
           continue;
         }
 
-        const catalogTier = await this.classifyCandidate(candidateWithSteam);
+        const catalogTier = await this.classifyCandidate(candidate);
         if (!catalogTier) {
           skipped += 1;
           continue;
         }
 
-        if (steamAppId) {
-          const id = await this.ingestSteamApp(steamAppId, { catalogTier });
-          if (id) {
-            const game = await this.games.findOne({ where: { id } });
-            if (game) {
-              knownById.set(id, game);
-              knownByIgdbId.set(candidate.igdbId, game);
-              knownBySteamId.set(String(steamAppId), game);
-            }
-            ingested += 1;
-          }
-        } else {
-          await this.ingestIgdbGame(candidate, { catalogTier });
-          ingested += 1;
+        const game = await this.ingestDiscoveryStub(candidate, catalogTier);
+        if (!game) {
+          skipped += 1;
+          continue;
         }
+        knownById.set(game.id, game);
+        knownByIgdbId.set(candidate.igdbId, game);
+        if (steamAppId) knownBySteamId.set(String(steamAppId), game);
+        ingested += 1;
       } catch (error) {
         this.logger.warn(
           `IGDB discovery ingest failed for "${candidate.name}" (igdb=${candidate.igdbId}): ${error}`,
         );
       }
-      await new Promise((r) => setTimeout(r, 200));
     }
 
     this.logger.log(
@@ -372,7 +357,11 @@ export class IngestionService {
     if (game.deletedAt || game.catalogTier === CatalogTier.CORE) return;
     const nextTier = promoteCatalogTier(
       game.catalogTier,
-      await this.classifyCandidate(candidate),
+      classifyCatalogTier(
+        candidate.totalRatingCount,
+        null,
+        candidate.releaseDate,
+      ),
     );
     if (nextTier !== game.catalogTier) {
       await this.games.update(game.id, { catalogTier: nextTier });
@@ -382,26 +371,45 @@ export class IngestionService {
 
   /**
    * Decide whether a discovery candidate is worth tracking. Established titles
-   * pass on IGDB popularity alone; otherwise we only keep fresh releases whose
-   * live Steam review count clears the bar (a Steam lookup is done only when
-   * needed, to avoid one HTTP call per long-tail candidate).
+   * pass on IGDB popularity alone. A live Steam review lookup is paid only for
+   * fresh releases that have not yet cleared the IGDB catalog bar — every
+   * other Steam call is deferred to the signal crons.
    */
   private async classifyCandidate(
     candidate: IgdbGame,
   ): Promise<CatalogTier | null> {
-    const needsSteamReviews =
-      candidate.totalRatingCount < IGDB_CORE_MIN_RATING_COUNT &&
-      (!candidate.releaseDate ||
-        candidate.releaseDate >= DISCOVERY_RELEASE_FLOOR);
+    const steamAppId = candidate.steamAppId;
     const reviews =
-      needsSteamReviews && candidate.steamAppId
-        ? await this.steam.getTotalReviews(candidate.steamAppId)
+      steamAppId !== null &&
+      needsLiveSteamReviewLookup(
+        candidate.totalRatingCount,
+        steamAppId,
+        candidate.releaseDate,
+      )
+        ? await this.steam.getTotalReviews(steamAppId)
         : null;
     return classifyCatalogTier(
       candidate.totalRatingCount,
       reviews,
       candidate.releaseDate,
     );
+  }
+
+  /**
+   * Identity-only insert used by catalog discovery: persist the IGDB row and
+   * attach a Steam source when IGDB already knows the app id. Does not poll
+   * signals, scrape stores, harvest milestones, or rebuild estimates.
+   */
+  private async ingestDiscoveryStub(
+    candidate: IgdbGame,
+    catalogTier: CatalogTier,
+  ): Promise<Game | null> {
+    const game = await this.upsertGameFromIgdb(candidate, { catalogTier });
+    if (!game) return null;
+    if (candidate.steamAppId) {
+      await this.attachSteamSource(game.id, candidate.steamAppId);
+    }
+    return game;
   }
 
   /**
@@ -3516,7 +3524,9 @@ export class IngestionService {
       // The (source, externalId) unique constraint can reject a duplicate when
       // two of our games point at the same IGDB entry. Not worth failing an
       // ingest run over a link.
-      this.logger.warn(`Could not link IGDB source for game ${gameId}: ${error}`);
+      this.logger.warn(
+        `Could not link IGDB source for game ${gameId}: ${error}`,
+      );
     }
   }
 
@@ -3589,7 +3599,32 @@ export class IngestionService {
     this.logger.log(
       `[refresh] "${game.name}" — resolved Steam appId ${appId} via name search, attaching`,
     );
-    await this.ingestSteamApp(appId, { catalogTier: game.catalogTier });
+    await this.attachSteamSource(game.id, appId);
+  }
+
+  private async attachSteamSource(
+    gameId: string,
+    appId: number,
+  ): Promise<void> {
+    const existing = await this.gameSources.findOne({
+      where: { gameId, source: SourceType.STEAM },
+    });
+    if (existing) return;
+
+    try {
+      await this.gameSources.save(
+        this.gameSources.create({
+          gameId,
+          source: SourceType.STEAM,
+          externalId: String(appId),
+          url: `https://store.steampowered.com/app/${appId}`,
+        }),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not link Steam source for game ${gameId} (app=${appId}): ${error}`,
+      );
+    }
   }
 
   private async upsertGameFromSteam(

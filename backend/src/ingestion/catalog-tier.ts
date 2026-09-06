@@ -40,3 +40,13 @@ export function promoteCatalogTier(
     ? currentTier
     : CatalogTier.CORE;
 }
+
+export function needsLiveSteamReviewLookup(
+  totalRatingCount: number,
+  steamAppId: number | null | undefined,
+  releaseDate: Date | null,
+): boolean {
+  if (!steamAppId) return false;
+  if (releaseDate && releaseDate < DISCOVERY_RELEASE_FLOOR) return false;
+  return totalRatingCount < IGDB_CATALOG_MIN_RATING_COUNT;
+}
