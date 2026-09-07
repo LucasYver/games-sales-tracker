@@ -79,6 +79,15 @@ export interface AdminStats {
   signals: { steamReviewsTotal: number; lastCapturedAt: string | null };
   trustedSources: { total: number; active: number; withFeed: number };
   estimates: { total: number };
+  ingestionPipelines: Array<{
+    pipeline: string;
+    total: number;
+    attempted: number;
+    succeeded: number;
+    failed: number;
+    lastAttemptAt: string | null;
+    lastSuccessAt: string | null;
+  }>;
 }
 
 export interface AdminGameSummary {

@@ -16,3 +16,4 @@ export * from './processed-article.entity';
 export * from './reference-profile.entity';
 export * from './game-rank.entity';
 export * from './game-platform-release-date.entity';
+export * from './game-ingestion-state.entity';

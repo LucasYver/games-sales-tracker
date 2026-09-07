@@ -13,9 +13,7 @@ export function classifyCatalogTier(
   releaseDate: Date | null,
 ): CatalogTier | null {
   if (releaseDate && releaseDate < DISCOVERY_RELEASE_FLOOR) {
-    return totalRatingCount >= IGDB_CORE_MIN_RATING_COUNT
-      ? CatalogTier.CORE
-      : null;
+    return null;
   }
   if (
     totalRatingCount >= IGDB_CORE_MIN_RATING_COUNT ||

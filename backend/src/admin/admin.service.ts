@@ -10,6 +10,7 @@ import {
   EstimateSnapshot,
   EstimationDiscrepancy,
   Game,
+  GameIngestionState,
   GameRank,
   GameSource,
   Milestone,
@@ -85,6 +86,15 @@ export interface AdminStats {
   estimates: {
     total: number;
   };
+  ingestionPipelines: Array<{
+    pipeline: string;
+    total: number;
+    attempted: number;
+    succeeded: number;
+    failed: number;
+    lastAttemptAt: Date | null;
+    lastSuccessAt: Date | null;
+  }>;
 }
 
 export interface AdminGameSummary {
@@ -334,6 +344,8 @@ export class AdminService {
     private readonly discrepancies: Repository<EstimationDiscrepancy>,
     @InjectRepository(GameRank)
     private readonly gameRanks: Repository<GameRank>,
+    @InjectRepository(GameIngestionState)
+    private readonly ingestionStates: Repository<GameIngestionState>,
     private readonly gamesService: GamesService,
     private readonly referenceProfiles: ReferenceProfileService,
   ) {}
@@ -395,6 +407,9 @@ export class AdminService {
       trustedActive,
       trustedWithFeed,
       estimatesTotal,
+      paidGamesTotal,
+      steamGamesTotal,
+      ingestionRows,
     ] = await Promise.all([
       this.games.count(),
       this.games
@@ -432,6 +447,37 @@ export class AdminService {
         .where('ts.feedUrl IS NOT NULL')
         .getCount(),
       this.estimates.count(),
+      this.games.count({ where: { isFree: false } }),
+      this.gameSources
+        .createQueryBuilder('gs')
+        .innerJoin(Game, 'g', 'g.id = gs.gameId')
+        .where('gs.source = :source', { source: SourceType.STEAM })
+        .andWhere('g.isFree = false')
+        .andWhere('g.deletedAt IS NULL')
+        .getCount(),
+      this.ingestionStates
+        .createQueryBuilder('state')
+        .innerJoin(Game, 'stateGame', 'stateGame.id = state.gameId')
+        .select('state.pipeline', 'pipeline')
+        .addSelect('COUNT(*)', 'attempted')
+        .addSelect(
+          'COUNT(*) FILTER (WHERE state.lastSuccessAt IS NOT NULL)',
+          'succeeded',
+        )
+        .addSelect('COUNT(*) FILTER (WHERE state.failureCount > 0)', 'failed')
+        .addSelect('MAX(state.lastAttemptAt)', 'lastAttemptAt')
+        .addSelect('MAX(state.lastSuccessAt)', 'lastSuccessAt')
+        .where('stateGame.deletedAt IS NULL')
+        .andWhere('stateGame.isFree = false')
+        .groupBy('state.pipeline')
+        .getRawMany<{
+          pipeline: string;
+          attempted: string;
+          succeeded: string;
+          failed: string;
+          lastAttemptAt: Date | null;
+          lastSuccessAt: Date | null;
+        }>(),
     ]);
 
     const bySource = Object.values(SalesSource).reduce(
@@ -442,6 +488,20 @@ export class AdminService {
       {} as Record<SalesSource, number>,
     );
     for (const row of bySourceRows) bySource[row.source] = Number(row.c);
+    const ingestionByPipeline = new Map(
+      ingestionRows.map((row) => [row.pipeline, row]),
+    );
+    const pipelineTargets: Array<[string, number]> = [
+      ['DISCOVERY', paidGamesTotal],
+      ['STEAM_REVIEWS', steamGamesTotal],
+      ['STORE_RATINGS', paidGamesTotal],
+      ['ACHIEVEMENTS', paidGamesTotal],
+      ['ESTIMATE_REBUILD', paidGamesTotal],
+      ['STEAM_CCU', steamGamesTotal],
+      ['STEAM_PRICE', steamGamesTotal],
+      ['TWITCH_VIEWERS', paidGamesTotal],
+      ['STEAM_POPULARITY', steamGamesTotal],
+    ];
 
     return {
       games: {
@@ -464,6 +524,18 @@ export class AdminService {
         withFeed: trustedWithFeed,
       },
       estimates: { total: estimatesTotal },
+      ingestionPipelines: pipelineTargets.map(([pipeline, total]) => {
+        const row = ingestionByPipeline.get(pipeline);
+        return {
+          pipeline,
+          total,
+          attempted: Number(row?.attempted ?? 0),
+          succeeded: Number(row?.succeeded ?? 0),
+          failed: Number(row?.failed ?? 0),
+          lastAttemptAt: row?.lastAttemptAt ?? null,
+          lastSuccessAt: row?.lastSuccessAt ?? null,
+        };
+      }),
     };
   }
 

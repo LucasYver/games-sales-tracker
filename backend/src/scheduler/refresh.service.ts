@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Game, GameRank } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
+import { IngestionStateService } from '../ingestion/ingestion-state.service';
 import { RankService } from '../reference-profiles/rank.service';
 import { isEligibleForAutomaticHarvest } from './harvest-eligibility';
 import { isDueForRefresh } from './refresh-interval';
@@ -17,65 +18,78 @@ export class RefreshService {
     @InjectRepository(GameRank)
     private readonly gameRanks: Repository<GameRank>,
     private readonly ingestion: IngestionService,
+    private readonly ingestionState: IngestionStateService,
     private readonly rank: RankService,
   ) {}
 
+  // Wall-clock cap per invocation, with headroom under the 800s Vercel
+  // `maxDuration` so the in-flight game can finish (and stamp its ingestion
+  // state) before the function is killed mid-run.
+  private static readonly RUN_BUDGET_MS = 11 * 60 * 1000;
+
   /**
-   * Periodic signals refresh. Milestone sources are deliberately handled by
-   * the independently budgeted harvest loop below.
-   *
-   * Covers every tracked game (PC + console-only) and excludes free-to-play
-   * titles, for which we don't compute sales estimates.
+   * Steam review counts + reviewer playtime. The cheapest and most valuable
+   * signal, so it gets the tightest cadence of the four pipelines that used
+   * to share a single monolithic refresh.
    */
-  async refreshAllGames() {
-    // Wall-clock cap per invocation, with headroom under the 800s Vercel
-    // `maxDuration` so the in-flight game can finish (and stamp
-    // `lastRefreshedAt`) before the function is killed mid-run.
-    const RUN_BUDGET_MS = 11 * 60 * 1000;
-    const startedAt = Date.now();
-
-    // Stalest first: never-refreshed games (`lastRefreshedAt IS NULL`) sort
-    // ahead of everything else. Combined with the always-on stamp in
-    // `refreshGameSignals`, this guarantees forward progress — the large backlog of
-    // never-refreshed (often old) titles drains before we re-refresh recent
-    // ones, instead of starving at the tail of an unordered scan.
-    const games = await this.games.find({
-      where: { isFree: false },
-      order: { lastRefreshedAt: { direction: 'ASC', nulls: 'FIRST' } },
-    });
-
-    const now = new Date();
-    const eligible = games.filter((game) =>
-      isDueForRefresh(game.releaseDate, game.lastRefreshedAt, now),
-    );
-
-    this.logger.log(
-      `Refreshing up to ${eligible.length} due game(s) of ${games.length} ` +
-        `(stalest first), budget ${RUN_BUDGET_MS / 1000}s.`,
-    );
-
-    let processed = 0;
-    for (const game of eligible) {
-      if (Date.now() - startedAt >= RUN_BUDGET_MS) {
-        this.logger.log(
-          `Run budget reached after ${processed} game(s); ` +
-            `${eligible.length - processed} left for the next run.`,
-        );
-        break;
-      }
-      try {
-        await this.ingestion.refreshGameSignals(game.id);
-      } catch (error) {
-        this.logger.warn(
-          `Signals refresh failed for game ${game.id}: ${error}`,
-        );
-      }
-      processed += 1;
+  async pollAllSteamReviews() {
+    try {
+      const result = await this.ingestion.pollAllSteamReviews({
+        budgetMs: RefreshService.RUN_BUDGET_MS,
+      });
+      this.logger.log(
+        `Steam reviews poll done: ${result.polled} polled, ` +
+          `${result.failed} failed, ${result.leftover} left, ` +
+          `${result.linked} link(s) backfilled.`,
+      );
+    } catch (error) {
+      this.logger.warn(`Steam reviews poll failed: ${error}`);
     }
+  }
 
-    this.logger.log(
-      `Signals refresh complete: ${processed} game(s) processed.`,
-    );
+  /** PlayStation/Xbox store ratings for console games. */
+  async captureStoreRatings() {
+    try {
+      const result = await this.ingestion.captureAllStoreRatings({
+        budgetMs: RefreshService.RUN_BUDGET_MS,
+      });
+      this.logger.log(
+        `Store ratings done: ${result.scraped} scraped, ` +
+          `${result.failed} failed, ${result.leftover} left.`,
+      );
+    } catch (error) {
+      this.logger.warn(`Store ratings capture failed: ${error}`);
+    }
+  }
+
+  /** Exophase + Steam official achievement rarities. */
+  async captureAchievements() {
+    try {
+      const result = await this.ingestion.captureAllAchievements({
+        budgetMs: RefreshService.RUN_BUDGET_MS,
+      });
+      this.logger.log(
+        `Achievements done: ${result.scraped} scraped, ` +
+          `${result.failed} failed, ${result.leftover} left.`,
+      );
+    } catch (error) {
+      this.logger.warn(`Achievements capture failed: ${error}`);
+    }
+  }
+
+  /** Estimate history rebuild, for games whose signals moved since last run. */
+  async rebuildStaleEstimates() {
+    try {
+      const result = await this.ingestion.rebuildStaleEstimates({
+        budgetMs: RefreshService.RUN_BUDGET_MS,
+      });
+      this.logger.log(
+        `Estimate rebuild done: ${result.rebuilt} rebuilt, ` +
+          `${result.failed} failed, ${result.leftover} left.`,
+      );
+    } catch (error) {
+      this.logger.warn(`Estimate rebuild failed: ${error}`);
+    }
   }
 
   async harvestAllGameMilestones() {
@@ -119,7 +133,9 @@ export class RefreshService {
     for (const game of eligible) {
       if (Date.now() - startedAt >= RUN_BUDGET_MS) break;
       try {
-        await this.ingestion.harvestGameMilestones(game.id);
+        await this.ingestionState.track(game.id, 'MILESTONE_HARVEST', () =>
+          this.ingestion.harvestGameMilestones(game.id),
+        );
       } catch (error) {
         this.logger.warn(`Harvest failed for game ${game.id}: ${error}`);
       }
@@ -136,10 +152,14 @@ export class RefreshService {
    * fetches CCU.
    */
   async refreshAllCcu() {
+    const RUN_BUDGET_MS = 10 * 60 * 1000;
     try {
-      const result = await this.ingestion.pollAllSteamCcu();
+      const result = await this.ingestion.pollAllSteamCcu({
+        budgetMs: RUN_BUDGET_MS,
+      });
       this.logger.log(
-        `CCU poll done: ${result.polled} polled, ${result.failed} failed.`,
+        `CCU poll done: ${result.polled} polled, ${result.failed} failed, ` +
+          `${result.leftover} left.`,
       );
     } catch (error) {
       this.logger.warn(`CCU poll failed: ${error}`);

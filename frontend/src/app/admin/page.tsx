@@ -13,11 +13,31 @@ import { SteamPsBackfillButton } from './_components/SteamPsBackfillButton';
 
 export const dynamic = 'force-dynamic';
 
+const PIPELINE_LABELS: Record<string, string> = {
+  DISCOVERY: 'Catalog discovery',
+  STEAM_REVIEWS: 'Steam reviews',
+  STORE_RATINGS: 'PS / Xbox store ratings',
+  ACHIEVEMENTS: 'Achievements',
+  ESTIMATE_REBUILD: 'Estimate rebuild',
+  STEAM_CCU: 'Steam CCU',
+  STEAM_PRICE: 'Steam prices',
+  TWITCH_VIEWERS: 'Twitch viewers',
+  STEAM_POPULARITY: 'Steam followers',
+};
+
 function compactNumber(n: number): string {
   return new Intl.NumberFormat('en-US', {
     notation: 'compact',
     maximumFractionDigits: 1,
   }).format(n);
+}
+
+function formatTimestamp(value: string | null): string {
+  if (!value) return '—';
+  return new Date(value).toLocaleString('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
 }
 
 function StatCard({
@@ -134,8 +154,8 @@ export default async function AdminDashboard() {
               Signal pipeline
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-muted-foreground text-sm">
-            <p>
+          <CardContent className="space-y-4">
+            <p className="text-muted-foreground text-sm">
               {compactNumber(stats.signals.steamReviewsTotal)} Steam review
               snapshots stored. Last captured:{' '}
               <span className="text-foreground font-medium">
@@ -143,6 +163,54 @@ export default async function AdminDashboard() {
               </span>
               .
             </p>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Pipeline</TableHead>
+                  <TableHead>Coverage</TableHead>
+                  <TableHead className="text-right">Never attempted</TableHead>
+                  <TableHead className="text-right">Failed</TableHead>
+                  <TableHead className="text-right">Last success</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {stats.ingestionPipelines.map((pipeline) => {
+                  const percent =
+                    pipeline.total > 0
+                      ? Math.round((pipeline.succeeded / pipeline.total) * 100)
+                      : 0;
+                  return (
+                    <TableRow key={pipeline.pipeline}>
+                      <TableCell className="font-medium">
+                        {PIPELINE_LABELS[pipeline.pipeline] ?? pipeline.pipeline}
+                      </TableCell>
+                      <TableCell className="tabular-nums">
+                        {pipeline.succeeded.toLocaleString()} /{' '}
+                        {pipeline.total.toLocaleString()} ({percent}%)
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {Math.max(
+                          pipeline.total - pipeline.attempted,
+                          0,
+                        ).toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        <span
+                          className={
+                            pipeline.failed > 0 ? 'text-destructive' : undefined
+                          }
+                        >
+                          {pipeline.failed.toLocaleString()}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-right text-xs">
+                        {formatTimestamp(pipeline.lastSuccessAt)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       </section>

@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   AchievementSnapshot,
   Game,
+  GameIngestionState,
   GamePlatformReleaseDate,
   GameSource,
   Milestone,
@@ -29,11 +30,13 @@ import { PerplexityClient } from './perplexity.client';
 import { ExophaseClient } from './exophase.client';
 import { GamesPopularityClient } from './games-popularity.client';
 import { TwitchClient } from './twitch.client';
+import { IngestionStateService } from './ingestion-state.service';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       Game,
+      GameIngestionState,
       GameSource,
       SignalSnapshot,
       PriceSnapshot,
@@ -63,7 +66,8 @@ import { TwitchClient } from './twitch.client';
     ExophaseClient,
     GamesPopularityClient,
     TwitchClient,
+    IngestionStateService,
   ],
-  exports: [IngestionService, IgdbClient],
+  exports: [IngestionService, IgdbClient, IngestionStateService],
 })
 export class IngestionModule {}

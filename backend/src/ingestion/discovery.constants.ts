@@ -6,13 +6,6 @@
 export const IGDB_CATALOG_MIN_RATING_COUNT = 20;
 export const IGDB_CORE_MIN_RATING_COUNT = 80;
 
-// Pre-2012 games are only admitted when they are landmark titles — i.e. they
-// cleared a much higher IGDB rating bar (Skyrim, GTA IV, Mass Effect 2…).
-// Everything else before this date is ignored as not worth tracking.
-export const IGDB_PRE_FLOOR_MIN_RATING_COUNT = 500;
-
-// Release-date floor: nothing before this is tracked unless it clears the
-// pre-floor landmark threshold above.
 export const DISCOVERY_RELEASE_FLOOR = new Date('2012-01-01T00:00:00Z');
 
 // A fresh release with few IGDB ratings is still admitted when its live Steam

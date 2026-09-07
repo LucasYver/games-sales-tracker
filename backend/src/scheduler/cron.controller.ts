@@ -7,10 +7,28 @@ import { RefreshService } from './refresh.service';
 export class CronController {
   constructor(private readonly refresh: RefreshService) {}
 
-  @Get('refresh-games')
+  @Get('poll-reviews')
   @HttpCode(200)
-  refreshGames() {
-    return this.refresh.refreshAllGames();
+  pollReviews() {
+    return this.refresh.pollAllSteamReviews();
+  }
+
+  @Get('capture-store-ratings')
+  @HttpCode(200)
+  captureStoreRatings() {
+    return this.refresh.captureStoreRatings();
+  }
+
+  @Get('capture-achievements')
+  @HttpCode(200)
+  captureAchievements() {
+    return this.refresh.captureAchievements();
+  }
+
+  @Get('rebuild-estimates')
+  @HttpCode(200)
+  rebuildEstimates() {
+    return this.refresh.rebuildStaleEstimates();
   }
 
   @Get('harvest-milestones')

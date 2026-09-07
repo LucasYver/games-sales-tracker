@@ -52,6 +52,8 @@ import { AddTwitchViewersMetric1783790000000 } from './1783790000000-AddTwitchVi
 import { AddSteamReviewerMedianPlaytimeMetric1783800000000 } from './1783800000000-AddSteamReviewerMedianPlaytimeMetric';
 import { DropMilestoneAudit1783810000000 } from './1783810000000-DropMilestoneAudit';
 import { AddCatalogTierAndHarvestTracking1788730000000 } from './1788730000000-AddCatalogTierAndHarvestTracking';
+import { AddGameIngestionState1788735000000 } from './1788735000000-AddGameIngestionState';
+import { SplitSignalsRefreshPipelines1788740000000 } from './1788740000000-SplitSignalsRefreshPipelines';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -115,4 +117,6 @@ export const migrations: MixedList<Function | string> = [
   AddSteamReviewerMedianPlaytimeMetric1783800000000,
   DropMilestoneAudit1783810000000,
   AddCatalogTierAndHarvestTracking1788730000000,
+  AddGameIngestionState1788735000000,
+  SplitSignalsRefreshPipelines1788740000000,
 ];

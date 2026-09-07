@@ -8,7 +8,6 @@ import {
   IGDB_DISCOVERY_MAX_PAGES,
   IGDB_DISCOVERY_PAGE_SIZE,
   IGDB_PLATFORM_IDS,
-  IGDB_PRE_FLOOR_MIN_RATING_COUNT,
   IGDB_RECENT_LIMIT,
   RECENT_WINDOW_DAYS,
 } from './discovery.constants';
@@ -185,10 +184,10 @@ export class IgdbClient {
   /**
    * Discover catalog candidates from IGDB, deduplicated by IGDB id. Combines:
    *   A — established hits released since the date floor, ranked by popularity;
-   *   B — landmark pre-floor classics (only the very biggest);
-   *   C — fresh releases, regardless of IGDB rating (admitted downstream via
+   *   B — fresh releases, regardless of IGDB rating (admitted downstream via
    *       the live Steam review signal).
-   * Caller applies the final admission rule (IGDB rating OR Steam reviews).
+   * Pre-2012 titles are never candidates. Caller applies the final admission
+   * rule (IGDB rating OR Steam reviews).
    */
   async discoverCandidates(): Promise<IgdbGame[]> {
     if (!this.isConfigured()) {
@@ -225,22 +224,7 @@ export class IgdbClient {
       if (games.length < IGDB_DISCOVERY_PAGE_SIZE) break;
     }
 
-    // B — landmark pre-floor classics.
-    for (let page = 0; page < IGDB_DISCOVERY_MAX_PAGES; page++) {
-      const body = [
-        `where game_type = 0 & total_rating_count >= ${IGDB_PRE_FLOOR_MIN_RATING_COUNT}`,
-        `& first_release_date < ${floorUnix} & platforms = (${platforms});`,
-        `fields ${IGDB_FIELDS};`,
-        `sort total_rating_count desc;`,
-        `limit ${IGDB_DISCOVERY_PAGE_SIZE};`,
-        `offset ${page * IGDB_DISCOVERY_PAGE_SIZE};`,
-      ].join(' ');
-      const games = await this.queryGames(body);
-      add(games);
-      if (games.length < IGDB_DISCOVERY_PAGE_SIZE) break;
-    }
-
-    // C — fresh releases (rating bar skipped; Steam review signal decides).
+    // B — fresh releases (rating bar skipped; Steam review signal decides).
     const recentBody = [
       `where game_type = 0 & first_release_date >= ${recentUnix}`,
       `& platforms = (${platforms});`,
