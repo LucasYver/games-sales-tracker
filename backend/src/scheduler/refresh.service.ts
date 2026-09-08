@@ -28,9 +28,8 @@ export class RefreshService {
   private static readonly RUN_BUDGET_MS = 11 * 60 * 1000;
 
   /**
-   * Steam review counts + reviewer playtime. The cheapest and most valuable
-   * signal, so it gets the tightest cadence of the four pipelines that used
-   * to share a single monolithic refresh.
+   * Steam review counts (Boxleiter input). Reviewer playtime is a separate
+   * monthly cron.
    */
   async pollAllSteamReviews() {
     try {
@@ -39,11 +38,24 @@ export class RefreshService {
       });
       this.logger.log(
         `Steam reviews poll done: ${result.polled} polled, ` +
-          `${result.failed} failed, ${result.leftover} left, ` +
-          `${result.linked} link(s) backfilled.`,
+          `${result.failed} failed, ${result.leftover} left.`,
       );
     } catch (error) {
       this.logger.warn(`Steam reviews poll failed: ${error}`);
+    }
+  }
+
+  async pollAllSteamReviewerPlaytime() {
+    try {
+      const result = await this.ingestion.pollAllSteamReviewerPlaytime({
+        budgetMs: RefreshService.RUN_BUDGET_MS,
+      });
+      this.logger.log(
+        `Steam reviewer playtime poll done: ${result.polled} polled, ` +
+          `${result.failed} failed, ${result.leftover} left.`,
+      );
+    } catch (error) {
+      this.logger.warn(`Steam reviewer playtime poll failed: ${error}`);
     }
   }
 
@@ -152,7 +164,7 @@ export class RefreshService {
    * fetches CCU.
    */
   async refreshAllCcu() {
-    const RUN_BUDGET_MS = 10 * 60 * 1000;
+    const RUN_BUDGET_MS = 11 * 60 * 1000;
     try {
       const result = await this.ingestion.pollAllSteamCcu({
         budgetMs: RUN_BUDGET_MS,
@@ -194,10 +206,10 @@ export class RefreshService {
   }
 
   /**
-   * Weekly refresh of Steam followers from games-popularity.com. Recent-window
+   * Daily refresh of Steam followers from games-popularity.com. Recent-window
    * only (the multi-year history is seeded once by the backfill script); a
    * wall-clock budget keeps the run under the Vercel `maxDuration`, and
-   * stalest-first ordering drains any leftover on the next weekly run.
+   * stalest-first ordering drains any leftover on the next run.
    */
   async captureGamesPopularity() {
     const RUN_BUDGET_MS = 11 * 60 * 1000;

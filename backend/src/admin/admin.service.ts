@@ -13,6 +13,7 @@ import {
   GameIngestionState,
   GameRank,
   GameSource,
+  IngestionPipeline,
   Milestone,
   Platform,
   PriceSnapshot,
@@ -25,11 +26,101 @@ import {
   SourceType,
   TrustedSource,
 } from '../entities';
+import {
+  cycleWindow,
+  type IngestionCadence,
+} from '../ingestion/ingestion-cadence';
 import { isPeriodicQuote } from '../ingestion/sales-figure.utils';
 import { DEFAULT_CONFIDENCE_SCORE } from '../ingestion/ingestion.service';
 import { slugify } from '../common/slug';
 import { GamesService } from '../games/games.service';
 import { ReferenceProfileService } from '../reference-profiles/reference-profile.service';
+
+interface IngestionCronConfig {
+  pipeline: IngestionPipeline;
+  cronPath: string;
+  schedule: string;
+  cadence: string;
+  cycle: IngestionCadence;
+  hourOffsetMinutes?: number;
+  target: 'paid' | 'steam' | 'console' | 'changed-signals';
+}
+
+const INGESTION_CRONS: IngestionCronConfig[] = [
+  {
+    pipeline: 'STEAM_CCU',
+    cronPath: '/api/cron/steam-ccu',
+    schedule: '0 * * * *',
+    cadence: 'Hourly',
+    cycle: 'hour',
+    target: 'steam',
+  },
+  {
+    pipeline: 'TWITCH_VIEWERS',
+    cronPath: '/api/cron/twitch-viewers',
+    schedule: '30 * * * *',
+    cadence: 'Hourly',
+    cycle: 'hour',
+    hourOffsetMinutes: 30,
+    target: 'paid',
+  },
+  {
+    pipeline: 'STEAM_REVIEWS',
+    cronPath: '/api/cron/steam-reviews',
+    schedule: '15 0,4,8,12,16,20 * * *',
+    cadence: 'Daily',
+    cycle: 'day',
+    target: 'steam',
+  },
+  {
+    pipeline: 'STEAM_REVIEWER_PLAYTIME',
+    cronPath: '/api/cron/steam-reviewer-playtime',
+    schedule: '40 0,6,12,18 * * *',
+    cadence: 'Monthly',
+    cycle: 'month',
+    target: 'steam',
+  },
+  {
+    pipeline: 'ESTIMATE_REBUILD',
+    cronPath: '/api/cron/estimate-rebuild',
+    schedule: '45 4 * * *',
+    cadence: 'Weekly',
+    cycle: 'week',
+    target: 'changed-signals',
+  },
+  {
+    pipeline: 'STEAM_PRICE',
+    cronPath: '/api/cron/steam-prices',
+    schedule: '0 6 * * *',
+    cadence: 'Weekly',
+    cycle: 'week',
+    target: 'steam',
+  },
+  {
+    pipeline: 'STEAM_POPULARITY',
+    cronPath: '/api/cron/steam-followers',
+    schedule: '0 4 * * *',
+    cadence: 'Daily',
+    cycle: 'day',
+    target: 'steam',
+  },
+  {
+    pipeline: 'STORE_RATINGS',
+    cronPath: '/api/cron/store-ratings',
+    schedule: '15 1,5,9,13,17,21 * * *',
+    cadence: 'Daily',
+    cycle: 'day',
+    target: 'console',
+  },
+  {
+    pipeline: 'ACHIEVEMENTS',
+    cronPath: '/api/cron/achievements',
+    schedule: '15 8 * * *',
+    cadence: 'Monthly',
+    cycle: 'month',
+    target: 'paid',
+  },
+];
 
 export interface UpdateGameInput {
   name?: string;
@@ -87,11 +178,17 @@ export interface AdminStats {
     total: number;
   };
   ingestionPipelines: Array<{
-    pipeline: string;
+    pipeline: IngestionPipeline;
+    cronPath: string;
+    schedule: string;
+    cadence: string;
+    cycleStartedAt: Date;
+    cycleEndsAt: Date;
     total: number;
-    attempted: number;
-    succeeded: number;
-    failed: number;
+    cycleAttempted: number;
+    cycleSucceeded: number;
+    cycleFailed: number;
+    historicalSucceeded: number;
     lastAttemptAt: Date | null;
     lastSuccessAt: Date | null;
   }>;
@@ -409,7 +506,7 @@ export class AdminService {
       estimatesTotal,
       paidGamesTotal,
       steamGamesTotal,
-      ingestionRows,
+      consoleGamesTotal,
     ] = await Promise.all([
       this.games.count(),
       this.games
@@ -455,29 +552,19 @@ export class AdminService {
         .andWhere('g.isFree = false')
         .andWhere('g.deletedAt IS NULL')
         .getCount(),
-      this.ingestionStates
-        .createQueryBuilder('state')
-        .innerJoin(Game, 'stateGame', 'stateGame.id = state.gameId')
-        .select('state.pipeline', 'pipeline')
-        .addSelect('COUNT(*)', 'attempted')
-        .addSelect(
-          'COUNT(*) FILTER (WHERE state.lastSuccessAt IS NOT NULL)',
-          'succeeded',
+      this.games
+        .createQueryBuilder('g')
+        .where('g.isFree = false')
+        .andWhere('g.deletedAt IS NULL')
+        .andWhere(
+          `(g.platforms @> ARRAY[:playstation]::game_platforms_enum[]
+            OR g.platforms @> ARRAY[:xbox]::game_platforms_enum[])`,
+          {
+            playstation: Platform.PLAYSTATION,
+            xbox: Platform.XBOX,
+          },
         )
-        .addSelect('COUNT(*) FILTER (WHERE state.failureCount > 0)', 'failed')
-        .addSelect('MAX(state.lastAttemptAt)', 'lastAttemptAt')
-        .addSelect('MAX(state.lastSuccessAt)', 'lastSuccessAt')
-        .where('stateGame.deletedAt IS NULL')
-        .andWhere('stateGame.isFree = false')
-        .groupBy('state.pipeline')
-        .getRawMany<{
-          pipeline: string;
-          attempted: string;
-          succeeded: string;
-          failed: string;
-          lastAttemptAt: Date | null;
-          lastSuccessAt: Date | null;
-        }>(),
+        .getCount(),
     ]);
 
     const bySource = Object.values(SalesSource).reduce(
@@ -488,20 +575,107 @@ export class AdminService {
       {} as Record<SalesSource, number>,
     );
     for (const row of bySourceRows) bySource[row.source] = Number(row.c);
-    const ingestionByPipeline = new Map(
-      ingestionRows.map((row) => [row.pipeline, row]),
+    const now = new Date();
+    const cronCycles = INGESTION_CRONS.map((cron) => ({
+      ...cron,
+      ...cycleWindow(cron.cycle, now, cron.hourOffsetMinutes ?? 0),
+    }));
+    const ingestionPipelines = await Promise.all(
+      cronCycles.map(async (cron) => {
+        const [progress, changedSignalsTarget] = await Promise.all([
+          this.ingestionStates
+            .createQueryBuilder('state')
+            .innerJoin(Game, 'stateGame', 'stateGame.id = state.gameId')
+            .select(
+              'COUNT(*) FILTER (WHERE state.lastAttemptAt >= :startedAt)',
+              'cycleAttempted',
+            )
+            .addSelect(
+              'COUNT(*) FILTER (WHERE state.lastSuccessAt >= :startedAt)',
+              'cycleSucceeded',
+            )
+            .addSelect(
+              `COUNT(*) FILTER (
+                WHERE state.lastAttemptAt >= :startedAt
+                  AND state.failureCount > 0
+              )`,
+              'cycleFailed',
+            )
+            .addSelect(
+              'COUNT(*) FILTER (WHERE state.lastSuccessAt IS NOT NULL)',
+              'historicalSucceeded',
+            )
+            .addSelect('MAX(state.lastAttemptAt)', 'lastAttemptAt')
+            .addSelect('MAX(state.lastSuccessAt)', 'lastSuccessAt')
+            .where('state.pipeline = :pipeline', {
+              pipeline: cron.pipeline,
+            })
+            .andWhere('stateGame.deletedAt IS NULL')
+            .andWhere('stateGame.isFree = false')
+            .setParameter('startedAt', cron.startedAt)
+            .getRawOne<{
+              cycleAttempted: string;
+              cycleSucceeded: string;
+              cycleFailed: string;
+              historicalSucceeded: string;
+              lastAttemptAt: Date | null;
+              lastSuccessAt: Date | null;
+            }>(),
+          cron.target === 'changed-signals'
+            ? this.ingestionStates
+                .createQueryBuilder('changed')
+                .innerJoin(
+                  Game,
+                  'changedGame',
+                  'changedGame.id = changed.gameId',
+                )
+                .where(
+                  `((
+                    changed.pipeline IN (
+                      'STEAM_REVIEWS',
+                      'STORE_RATINGS',
+                      'ACHIEVEMENTS'
+                    )
+                    AND changed.lastSuccessAt >= :startedAt
+                  ) OR (
+                    changed.pipeline = 'ESTIMATE_REBUILD'
+                    AND changed.lastAttemptAt >= :startedAt
+                  ))`,
+                  { startedAt: cron.startedAt },
+                )
+                .andWhere('changedGame.deletedAt IS NULL')
+                .andWhere('changedGame.isFree = false')
+                .select('COUNT(DISTINCT changed.gameId)', 'count')
+                .getRawOne<{ count: string }>()
+            : Promise.resolve(null),
+        ]);
+
+        const total =
+          cron.target === 'steam'
+            ? steamGamesTotal
+            : cron.target === 'console'
+              ? consoleGamesTotal
+              : cron.target === 'changed-signals'
+                ? Number(changedSignalsTarget?.count ?? 0)
+                : paidGamesTotal;
+
+        return {
+          pipeline: cron.pipeline,
+          cronPath: cron.cronPath,
+          schedule: cron.schedule,
+          cadence: cron.cadence,
+          cycleStartedAt: cron.startedAt,
+          cycleEndsAt: cron.endsAt,
+          total,
+          cycleAttempted: Number(progress?.cycleAttempted ?? 0),
+          cycleSucceeded: Number(progress?.cycleSucceeded ?? 0),
+          cycleFailed: Number(progress?.cycleFailed ?? 0),
+          historicalSucceeded: Number(progress?.historicalSucceeded ?? 0),
+          lastAttemptAt: progress?.lastAttemptAt ?? null,
+          lastSuccessAt: progress?.lastSuccessAt ?? null,
+        };
+      }),
     );
-    const pipelineTargets: Array<[string, number]> = [
-      ['DISCOVERY', paidGamesTotal],
-      ['STEAM_REVIEWS', steamGamesTotal],
-      ['STORE_RATINGS', paidGamesTotal],
-      ['ACHIEVEMENTS', paidGamesTotal],
-      ['ESTIMATE_REBUILD', paidGamesTotal],
-      ['STEAM_CCU', steamGamesTotal],
-      ['STEAM_PRICE', steamGamesTotal],
-      ['TWITCH_VIEWERS', paidGamesTotal],
-      ['STEAM_POPULARITY', steamGamesTotal],
-    ];
 
     return {
       games: {
@@ -524,18 +698,7 @@ export class AdminService {
         withFeed: trustedWithFeed,
       },
       estimates: { total: estimatesTotal },
-      ingestionPipelines: pipelineTargets.map(([pipeline, total]) => {
-        const row = ingestionByPipeline.get(pipeline);
-        return {
-          pipeline,
-          total,
-          attempted: Number(row?.attempted ?? 0),
-          succeeded: Number(row?.succeeded ?? 0),
-          failed: Number(row?.failed ?? 0),
-          lastAttemptAt: row?.lastAttemptAt ?? null,
-          lastSuccessAt: row?.lastSuccessAt ?? null,
-        };
-      }),
+      ingestionPipelines,
     };
   }
 

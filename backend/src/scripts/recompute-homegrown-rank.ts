@@ -5,7 +5,7 @@ import { RankService } from '../reference-profiles/rank.service';
 
 /**
  * Recompute the home-grown review-velocity rank over the whole tracked universe
- * and overwrite `game_rank`. Same work as the weekly `recompute-rank` cron, but
+ * and overwrite `game_rank`. Same work as the weekly `game-rank` cron, but
  * runnable on demand (and without the Vercel wall-clock cap).
  *
  * Run from backend/:

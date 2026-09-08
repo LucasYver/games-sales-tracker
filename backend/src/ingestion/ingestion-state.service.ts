@@ -5,6 +5,7 @@ import {
   GameIngestionState,
   IngestionPipeline,
 } from '../entities/game-ingestion-state.entity';
+import { IngestionCadence, isDue } from './ingestion-cadence';
 
 @Injectable()
 export class IngestionStateService {
@@ -56,6 +57,33 @@ export class IngestionStateService {
     gameIds: string[],
   ): Promise<string[]> {
     return this.selectDue(pipeline, gameIds, 0);
+  }
+
+  /**
+   * Games not yet attempted in the current cadence window, stalest first.
+   * Never-attempted games sort ahead of everything else so a budgeted cron
+   * drains its backlog instead of starving at the tail of an unordered scan.
+   */
+  async selectDueForCadence(
+    pipeline: IngestionPipeline,
+    gameIds: string[],
+    cadence: IngestionCadence,
+    hourOffsetMinutes = 0,
+  ): Promise<string[]> {
+    if (gameIds.length === 0) return [];
+    const now = new Date();
+    const rows = await this.states.find({
+      where: { pipeline, gameId: In(gameIds) },
+      select: ['gameId', 'lastAttemptAt'],
+    });
+    const attemptedAt = new Map(
+      rows.map((row) => [row.gameId, row.lastAttemptAt?.getTime() ?? 0]),
+    );
+    return gameIds
+      .filter((gameId) =>
+        isDue(attemptedAt.get(gameId) ?? null, cadence, now, hourOffsetMinutes),
+      )
+      .sort((a, b) => (attemptedAt.get(a) ?? 0) - (attemptedAt.get(b) ?? 0));
   }
 
   /**

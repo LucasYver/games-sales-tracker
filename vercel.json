@@ -18,17 +18,18 @@
         }
     ],
     "crons": [
-        { "path": "/api/cron/poll-reviews",    "schedule": "15 1,7,13,19 * * *" },
-        { "path": "/api/cron/rebuild-estimates", "schedule": "45 1,7,13,19 * * *" },
-        { "path": "/api/cron/capture-store-ratings", "schedule": "15 3 * * *" },
-        { "path": "/api/cron/capture-achievements",  "schedule": "15 8 * * *" },
-        { "path": "/api/cron/harvest-milestones", "schedule": "30 0,6,12,18 * * *" },
-        { "path": "/api/cron/poll-ccu",        "schedule": "0 * * * *" },
-        { "path": "/api/cron/poll-twitch-viewers", "schedule": "30 * * * *" },
-        { "path": "/api/cron/capture-prices",  "schedule": "0 6 * * *" },
-        { "path": "/api/cron/poll-feeds",      "schedule": "*/30 * * * *" },
-        { "path": "/api/cron/discover-games",  "schedule": "0 2 * * *" },
-        { "path": "/api/cron/capture-popularity", "schedule": "0 4 * * 1" },
-        { "path": "/api/cron/recompute-rank",     "schedule": "0 5 * * 1" }
+        { "path": "/api/cron/steam-reviews", "schedule": "15 0,4,8,12,16,20 * * *" },
+        { "path": "/api/cron/steam-reviewer-playtime", "schedule": "40 0,6,12,18 * * *" },
+        { "path": "/api/cron/estimate-rebuild", "schedule": "45 4 * * *" },
+        { "path": "/api/cron/store-ratings", "schedule": "15 1,5,9,13,17,21 * * *" },
+        { "path": "/api/cron/achievements", "schedule": "15 8 * * *" },
+        { "path": "/api/cron/milestone-harvest", "schedule": "30 0,6,12,18 * * *" },
+        { "path": "/api/cron/steam-ccu", "schedule": "0 * * * *" },
+        { "path": "/api/cron/twitch-viewers", "schedule": "30 * * * *" },
+        { "path": "/api/cron/steam-prices", "schedule": "0 6 * * *" },
+        { "path": "/api/cron/sales-feeds", "schedule": "*/30 * * * *" },
+        { "path": "/api/cron/game-discovery", "schedule": "0 2 * * *" },
+        { "path": "/api/cron/steam-followers", "schedule": "0 4 * * *" },
+        { "path": "/api/cron/game-rank", "schedule": "0 5 * * 1" }
     ]
 }

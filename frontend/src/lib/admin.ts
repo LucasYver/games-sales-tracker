@@ -81,10 +81,16 @@ export interface AdminStats {
   estimates: { total: number };
   ingestionPipelines: Array<{
     pipeline: string;
+    cronPath: string;
+    schedule: string;
+    cadence: string;
+    cycleStartedAt: string;
+    cycleEndsAt: string;
     total: number;
-    attempted: number;
-    succeeded: number;
-    failed: number;
+    cycleAttempted: number;
+    cycleSucceeded: number;
+    cycleFailed: number;
+    historicalSucceeded: number;
     lastAttemptAt: string | null;
     lastSuccessAt: string | null;
   }>;

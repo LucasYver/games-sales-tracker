@@ -11,6 +11,7 @@ import { Game } from './game.entity';
 export const INGESTION_PIPELINES = [
   'DISCOVERY',
   'STEAM_REVIEWS',
+  'STEAM_REVIEWER_PLAYTIME',
   'STORE_RATINGS',
   'ACHIEVEMENTS',
   'ESTIMATE_REBUILD',

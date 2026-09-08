@@ -7,75 +7,81 @@ import { RefreshService } from './refresh.service';
 export class CronController {
   constructor(private readonly refresh: RefreshService) {}
 
-  @Get('poll-reviews')
+  @Get('steam-reviews')
   @HttpCode(200)
-  pollReviews() {
+  steamReviews() {
     return this.refresh.pollAllSteamReviews();
   }
 
-  @Get('capture-store-ratings')
+  @Get('steam-reviewer-playtime')
   @HttpCode(200)
-  captureStoreRatings() {
+  steamReviewerPlaytime() {
+    return this.refresh.pollAllSteamReviewerPlaytime();
+  }
+
+  @Get('store-ratings')
+  @HttpCode(200)
+  storeRatings() {
     return this.refresh.captureStoreRatings();
   }
 
-  @Get('capture-achievements')
+  @Get('achievements')
   @HttpCode(200)
-  captureAchievements() {
+  achievements() {
     return this.refresh.captureAchievements();
   }
 
-  @Get('rebuild-estimates')
+  @Get('estimate-rebuild')
   @HttpCode(200)
-  rebuildEstimates() {
+  estimateRebuild() {
     return this.refresh.rebuildStaleEstimates();
   }
 
-  @Get('harvest-milestones')
+  @Get('milestone-harvest')
   @HttpCode(200)
-  harvestMilestones() {
+  milestoneHarvest() {
     return this.refresh.harvestAllGameMilestones();
   }
 
-  @Get('poll-ccu')
+  @Get('steam-ccu')
   @HttpCode(200)
-  pollCcu() {
+  steamCcu() {
     return this.refresh.refreshAllCcu();
   }
 
-  @Get('capture-prices')
+  @Get('steam-prices')
   @HttpCode(200)
-  capturePrices() {
+  steamPrices() {
     return this.refresh.captureSteamPrices();
   }
 
-  @Get('poll-feeds')
+  @Get('sales-feeds')
   @HttpCode(200)
-  pollFeeds() {
+  salesFeeds() {
     return this.refresh.pollTrustedFeeds();
   }
 
-  @Get('discover-games')
+  @Get('game-discovery')
   @HttpCode(200)
-  discoverGames() {
+  gameDiscovery() {
     return this.refresh.discoverNewGames();
   }
 
-  @Get('capture-popularity')
+  @Get('steam-followers')
   @HttpCode(200)
-  capturePopularity() {
+  steamFollowers() {
     return this.refresh.captureGamesPopularity();
   }
 
-  @Get('poll-twitch-viewers')
+  @Get('twitch-viewers')
   @HttpCode(200)
-  pollTwitchViewers() {
+  twitchViewers() {
     return this.refresh.captureTwitchViewers();
   }
 
-  @Get('recompute-rank')
+  @Get('game-rank')
   @HttpCode(200)
-  recomputeRank() {
+  gameRank() {
     return this.refresh.recomputeHomegrownRank();
   }
 }

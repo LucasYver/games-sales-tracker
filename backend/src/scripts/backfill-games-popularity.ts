@@ -9,7 +9,7 @@ import { IngestionService } from '../ingestion/ingestion.service';
  * One-shot backfill of Steam followers from games-popularity.com for tracked
  * (non-free) Steam games.
  *
- * Seeds the multi-year history that the weekly `capture-popularity` cron then
+ * Seeds the multi-year history that the daily `steam-followers` cron then
  * keeps fresh. History only reaches the provider's collection floor (~2024-03),
  * NOT launch — pre-2024 games get their recent trajectory only.
  *

@@ -16,6 +16,7 @@ export const dynamic = 'force-dynamic';
 const PIPELINE_LABELS: Record<string, string> = {
   DISCOVERY: 'Catalog discovery',
   STEAM_REVIEWS: 'Steam reviews',
+  STEAM_REVIEWER_PLAYTIME: 'Steam reviewer playtime',
   STORE_RATINGS: 'PS / Xbox store ratings',
   ACHIEVEMENTS: 'Achievements',
   ESTIMATE_REBUILD: 'Estimate rebuild',
@@ -38,6 +39,23 @@ function formatTimestamp(value: string | null): string {
     dateStyle: 'medium',
     timeStyle: 'short',
   });
+}
+
+function formatCycle(start: string, end: string): string {
+  const startedAt = new Date(start);
+  const endsAt = new Date(end);
+  const sameDay =
+    startedAt.toISOString().slice(0, 10) === endsAt.toISOString().slice(0, 10);
+  const format = (value: Date, includeDate: boolean) =>
+    value.toLocaleString('en-US', {
+      ...(includeDate ? { month: 'short', day: 'numeric' } : {}),
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'UTC',
+      hour12: false,
+    });
+
+  return `${format(startedAt, true)} → ${format(endsAt, !sameDay)} UTC`;
 }
 
 function StatCard({
@@ -151,7 +169,7 @@ export default async function AdminDashboard() {
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-              Signal pipeline
+              Cron progress
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -163,54 +181,111 @@ export default async function AdminDashboard() {
               </span>
               .
             </p>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Pipeline</TableHead>
-                  <TableHead>Coverage</TableHead>
-                  <TableHead className="text-right">Never attempted</TableHead>
-                  <TableHead className="text-right">Failed</TableHead>
-                  <TableHead className="text-right">Last success</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {stats.ingestionPipelines.map((pipeline) => {
-                  const percent =
-                    pipeline.total > 0
-                      ? Math.round((pipeline.succeeded / pipeline.total) * 100)
-                      : 0;
-                  return (
-                    <TableRow key={pipeline.pipeline}>
-                      <TableCell className="font-medium">
-                        {PIPELINE_LABELS[pipeline.pipeline] ?? pipeline.pipeline}
-                      </TableCell>
-                      <TableCell className="tabular-nums">
-                        {pipeline.succeeded.toLocaleString()} /{' '}
-                        {pipeline.total.toLocaleString()} ({percent}%)
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {Math.max(
-                          pipeline.total - pipeline.attempted,
-                          0,
-                        ).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        <span
-                          className={
-                            pipeline.failed > 0 ? 'text-destructive' : undefined
-                          }
-                        >
-                          {pipeline.failed.toLocaleString()}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-right text-xs">
-                        {formatTimestamp(pipeline.lastSuccessAt)}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cron</TableHead>
+                    <TableHead>Cadence</TableHead>
+                    <TableHead>Current cycle</TableHead>
+                    <TableHead>Progress</TableHead>
+                    <TableHead className="text-right">Remaining</TableHead>
+                    <TableHead className="text-right">Failed</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Last success</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {stats.ingestionPipelines.map((pipeline) => {
+                    const percent =
+                      pipeline.total > 0
+                        ? Math.round(
+                            (pipeline.cycleSucceeded / pipeline.total) * 100,
+                          )
+                        : 100;
+                    const remaining = Math.max(
+                      pipeline.total - pipeline.cycleSucceeded,
+                      0,
+                    );
+                    const status =
+                      pipeline.cycleFailed > 0
+                        ? 'Issues'
+                        : remaining === 0
+                          ? 'Complete'
+                          : pipeline.cycleAttempted > 0
+                            ? 'In progress'
+                            : 'Not started';
+
+                    return (
+                      <TableRow key={pipeline.pipeline}>
+                        <TableCell>
+                          <p className="font-medium">
+                            {PIPELINE_LABELS[pipeline.pipeline] ??
+                              pipeline.pipeline}
+                          </p>
+                          <code className="text-muted-foreground text-xs">
+                            {pipeline.cronPath}
+                          </code>
+                        </TableCell>
+                        <TableCell>
+                          <p className="whitespace-nowrap text-sm">
+                            {pipeline.cadence}
+                          </p>
+                          <code className="text-muted-foreground whitespace-nowrap text-xs">
+                            {pipeline.schedule}
+                          </code>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
+                          {formatCycle(
+                            pipeline.cycleStartedAt,
+                            pipeline.cycleEndsAt,
+                          )}
+                        </TableCell>
+                        <TableCell className="tabular-nums">
+                          <p className="whitespace-nowrap">
+                            {pipeline.cycleSucceeded.toLocaleString()} /{' '}
+                            {pipeline.total.toLocaleString()} ({percent}%)
+                          </p>
+                          <p className="text-muted-foreground whitespace-nowrap text-xs">
+                            {pipeline.cycleAttempted.toLocaleString()} attempted
+                          </p>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {remaining.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          <span
+                            className={
+                              pipeline.cycleFailed > 0
+                                ? 'text-destructive'
+                                : undefined
+                            }
+                          >
+                            {pipeline.cycleFailed.toLocaleString()}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              status === 'Complete'
+                                ? 'default'
+                                : status === 'Issues'
+                                  ? 'destructive'
+                                  : 'secondary'
+                            }
+                          >
+                            {status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground whitespace-nowrap text-right text-xs">
+                          {formatTimestamp(pipeline.lastSuccessAt)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       </section>

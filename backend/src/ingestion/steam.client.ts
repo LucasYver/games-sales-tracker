@@ -217,16 +217,13 @@ export class SteamClient {
    */
   async getTotalReviews(appId: number): Promise<number | null> {
     try {
-      const { data } = await axios.get(
+      const data = await this.getStoreJson(
         `https://store.steampowered.com/appreviews/${appId}`,
         {
-          params: {
-            json: 1,
-            language: 'all',
-            purchase_type: 'all',
-            num_per_page: 0,
-          },
-          timeout: 15000,
+          json: 1,
+          language: 'all',
+          purchase_type: 'all',
+          num_per_page: 0,
         },
       );
 

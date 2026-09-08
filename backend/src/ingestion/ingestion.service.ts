@@ -54,6 +54,7 @@ import {
   needsLiveSteamReviewLookup,
   promoteCatalogTier,
 } from './catalog-tier';
+import { cycleWindow } from './ingestion-cadence';
 import { IngestionStateService } from './ingestion-state.service';
 
 const STORE_SOURCE_BY_PLATFORM: Partial<Record<Platform, SourceType>> = {
@@ -349,8 +350,11 @@ export class IngestionService {
       }
     }
 
+    const LINK_BACKFILL_LIMIT = 120;
+    const linked = await this.backfillMissingSourceLinks(LINK_BACKFILL_LIMIT);
+
     this.logger.log(
-      `IGDB discovery: ${candidates.length} candidate(s), ${ingested} ingested, ${skipped} skipped.`,
+      `IGDB discovery: ${candidates.length} candidate(s), ${ingested} ingested, ${skipped} skipped, ${linked} source link(s) backfilled.`,
     );
     return { discovered: candidates.length, ingested, skipped };
   }
@@ -1181,27 +1185,31 @@ export class IngestionService {
       ...sourceByGameId.keys(),
     ]);
 
-    let polled = 0;
-    let failed = 0;
-    let attempted = 0;
-    for (const gameId of orderedGameIds) {
-      if (Date.now() - startedAt >= budgetMs) break;
-      const source = sourceByGameId.get(gameId);
-      if (!source) continue;
-      const appId = Number(source.externalId);
-      if (!Number.isFinite(appId)) continue;
+    const {
+      succeeded: polled,
+      failed,
+      attempted,
+    } = await this.runInBatches(
+      orderedGameIds,
+      6,
+      budgetMs,
+      startedAt,
+      async (gameId) => {
+        const source = sourceByGameId.get(gameId);
+        if (!source) return;
+        const appId = Number(source.externalId);
+        if (!Number.isFinite(appId)) return;
 
-      try {
-        await this.ingestionState.track(gameId, 'STEAM_CCU', () =>
-          this.pollSteamCcu(gameId, appId),
-        );
-        polled++;
-      } catch (error) {
-        failed++;
-        this.logger.warn(`[ccu] poll failed for game ${gameId}: ${error}`);
-      }
-      attempted += 1;
-    }
+        try {
+          await this.ingestionState.track(gameId, 'STEAM_CCU', () =>
+            this.pollSteamCcu(gameId, appId),
+          );
+        } catch (error) {
+          this.logger.warn(`[ccu] poll failed for game ${gameId}: ${error}`);
+          throw error;
+        }
+      },
+    );
 
     const leftover = orderedGameIds.length - attempted;
     this.logger.log(
@@ -1218,10 +1226,9 @@ export class IngestionService {
    * are otherwise only set on initial ingest). Each game is best-effort: a
    * failure is logged and the loop continues.
    *
-   * Each game is only re-priced once a week (`PRICE_REFRESH_INTERVAL_DAYS`):
-   * re-fetching every tracked game every night stopped fitting inside the
-   * cron's time budget as the catalog grew. Games are processed stalest
-   * first (`priceRefreshedAt ASC NULLS FIRST`), and a wall-clock budget
+   * Each game is only re-priced once per UTC week. Re-fetching every tracked
+   * game every night stopped fitting inside the cron's time budget as the
+   * catalog grew. Games are processed stalest first, and a wall-clock budget
    * caps the run so a large backlog drains progressively across nights
    * instead of timing out.
    */
@@ -1230,7 +1237,6 @@ export class IngestionService {
     skipped: number;
     failed: number;
   }> {
-    const PRICE_REFRESH_INTERVAL_DAYS = 7;
     const RUN_BUDGET_MS = 11 * 60 * 1000;
     const startedAt = Date.now();
 
@@ -1247,23 +1253,18 @@ export class IngestionService {
       steamSources.map((source) => [source.gameId, source]),
     );
 
-    // Stalest first: never-priced games (`priceRefreshedAt IS NULL`) sort
-    // ahead of everything else, guaranteeing forward progress through the
-    // backlog instead of starving at the tail of an unordered scan.
     const trackedGames = await this.games.find({
       where: { id: In(gameIds), isFree: false },
-      order: { priceRefreshedAt: { direction: 'ASC', nulls: 'FIRST' } },
     });
-
-    const now = new Date();
-    const isDueForPriceRefresh = (game: Game) => {
-      if (!game.priceRefreshedAt) return true;
-      const daysSince =
-        (now.getTime() - game.priceRefreshedAt.getTime()) /
-        (1000 * 60 * 60 * 24);
-      return daysSince >= PRICE_REFRESH_INTERVAL_DAYS;
-    };
-    const eligibleGames = trackedGames.filter(isDueForPriceRefresh);
+    const gameById = new Map(trackedGames.map((game) => [game.id, game]));
+    const dueGameIds = await this.ingestionState.selectDueForCadence(
+      'STEAM_PRICE',
+      [...gameById.keys()],
+      'week',
+    );
+    const eligibleGames = dueGameIds
+      .map((gameId) => gameById.get(gameId))
+      .filter((game): game is Game => game !== undefined);
 
     this.logger.log(
       `[price] ${eligibleGames.length} due game(s) of ${trackedGames.length} ` +
@@ -2253,12 +2254,20 @@ export class IngestionService {
           WHERE gs.source = 'STEAM'
           ORDER BY l.last ASC NULLS FIRST`,
       );
+    const dueGameIds = new Set(
+      await this.ingestionState.selectDueForCadence(
+        'STEAM_POPULARITY',
+        rows.map((row) => row.gameId),
+        'day',
+      ),
+    );
+    const dueRows = rows.filter((row) => dueGameIds.has(row.gameId));
 
     let processed = 0;
     let followers = 0;
     let failed = 0;
 
-    for (const row of rows) {
+    for (const row of dueRows) {
       if (Date.now() - startedAt >= budgetMs) break;
       const appId = Number(row.externalId);
       if (!Number.isFinite(appId)) continue;
@@ -2285,9 +2294,9 @@ export class IngestionService {
       processed += 1;
     }
 
-    const leftover = rows.length - processed;
+    const leftover = dueRows.length - processed;
     this.logger.log(
-      `[games-popularity] sync done: ${processed}/${rows.length} game(s), ` +
+      `[games-popularity] sync done: ${processed}/${dueRows.length} game(s), ` +
         `${followers} with followers, ${failed} error(s)` +
         (leftover > 0 ? `, ${leftover} left for next run` : ''),
     );
@@ -3170,29 +3179,22 @@ export class IngestionService {
   }
 
   /**
-   * Refresh the primary sales signal — Steam review counts and reviewer
-   * playtime — for every tracked Steam game. Split out of the former
-   * monolithic signals refresh: these are two cheap API calls that feed the
-   * estimate, so they must not queue behind the far slower store-ratings and
-   * achievements scrapes.
+   * Refresh the Steam review count (Boxleiter input) for every tracked Steam
+   * game. Reviewer playtime is a separate monthly pipeline.
    */
   async pollAllSteamReviews(options: { budgetMs?: number } = {}): Promise<{
     polled: number;
     failed: number;
     leftover: number;
-    linked: number;
   }> {
-    const REVIEW_REFRESH_INTERVAL_MS = 20 * 60 * 60 * 1000;
-    const LINK_BACKFILL_LIMIT = 120;
     const budgetMs = options.budgetMs ?? Number.POSITIVE_INFINITY;
     const startedAt = Date.now();
 
-    const linked = await this.backfillMissingSourceLinks(LINK_BACKFILL_LIMIT);
     const sourceByGameId = await this.trackedSteamSources();
-    const dueGameIds = await this.ingestionState.selectDue(
+    const dueGameIds = await this.ingestionState.selectDueForCadence(
       'STEAM_REVIEWS',
       [...sourceByGameId.keys()],
-      REVIEW_REFRESH_INTERVAL_MS,
+      'day',
     );
 
     let polled = 0;
@@ -3204,10 +3206,9 @@ export class IngestionService {
       if (!Number.isFinite(appId)) continue;
 
       try {
-        await this.ingestionState.track(gameId, 'STEAM_REVIEWS', async () => {
-          await this.pollSteamReviews(gameId, appId);
-          await this.pollSteamReviewerPlaytime(gameId, appId);
-        });
+        await this.ingestionState.track(gameId, 'STEAM_REVIEWS', () =>
+          this.pollSteamReviews(gameId, appId),
+        );
         await this.games.update(gameId, { lastRefreshedAt: new Date() });
         polled++;
       } catch (error) {
@@ -3219,23 +3220,66 @@ export class IngestionService {
 
     const leftover = dueGameIds.length - attempted;
     this.logger.log(
-      `[reviews] poll complete: ${polled} polled, ${failed} failed, ` +
-        `${leftover} left, ${linked} source link(s) backfilled.`,
+      `[reviews] poll complete: ${polled} polled, ${failed} failed, ${leftover} left.`,
     );
-    return { polled, failed, leftover, linked };
+    return { polled, failed, leftover };
+  }
+
+  /**
+   * Sample reviewer lifetime playtime for tracked Steam games. Expensive
+   * (paginated store API); once per UTC month, stalest-first under a budget.
+   */
+  async pollAllSteamReviewerPlaytime(
+    options: { budgetMs?: number } = {},
+  ): Promise<{ polled: number; failed: number; leftover: number }> {
+    const budgetMs = options.budgetMs ?? Number.POSITIVE_INFINITY;
+    const startedAt = Date.now();
+
+    const sourceByGameId = await this.trackedSteamSources();
+    const dueGameIds = await this.ingestionState.selectDueForCadence(
+      'STEAM_REVIEWER_PLAYTIME',
+      [...sourceByGameId.keys()],
+      'month',
+    );
+
+    let polled = 0;
+    let failed = 0;
+    let attempted = 0;
+    for (const gameId of dueGameIds) {
+      if (Date.now() - startedAt >= budgetMs) break;
+      const appId = Number(sourceByGameId.get(gameId)?.externalId);
+      if (!Number.isFinite(appId)) continue;
+
+      try {
+        await this.ingestionState.track(gameId, 'STEAM_REVIEWER_PLAYTIME', () =>
+          this.pollSteamReviewerPlaytime(gameId, appId),
+        );
+        polled++;
+      } catch (error) {
+        failed++;
+        this.logger.warn(
+          `[reviewer-playtime] poll failed for game ${gameId}: ${error}`,
+        );
+      }
+      attempted += 1;
+    }
+
+    const leftover = dueGameIds.length - attempted;
+    this.logger.log(
+      `[reviewer-playtime] poll complete: ${polled} polled, ${failed} failed, ${leftover} left.`,
+    );
+    return { polled, failed, leftover };
   }
 
   /**
    * Scrape PlayStation/Xbox store ratings for console games. Slow (one HTML
-   * fetch per store) and low-churn, so each game is only revisited every
-   * couple of weeks.
+   * fetch per store); each game is revisited at most once per UTC day.
    */
   async captureAllStoreRatings(options: { budgetMs?: number } = {}): Promise<{
     scraped: number;
     failed: number;
     leftover: number;
   }> {
-    const RATINGS_REFRESH_INTERVAL_MS = 14 * 24 * 60 * 60 * 1000;
     const budgetMs = options.budgetMs ?? Number.POSITIVE_INFINITY;
     const startedAt = Date.now();
 
@@ -3245,31 +3289,37 @@ export class IngestionService {
         .filter((game) => this.hasConsolePlatform(game.platforms))
         .map((game) => [game.id, game]),
     );
-    const dueGameIds = await this.ingestionState.selectDue(
+    const dueGameIds = await this.ingestionState.selectDueForCadence(
       'STORE_RATINGS',
       [...consoleGames.keys()],
-      RATINGS_REFRESH_INTERVAL_MS,
+      'day',
     );
 
-    let scraped = 0;
-    let failed = 0;
-    let attempted = 0;
-    for (const gameId of dueGameIds) {
-      if (Date.now() - startedAt >= budgetMs) break;
-      const game = consoleGames.get(gameId);
-      if (!game) continue;
+    const {
+      succeeded: scraped,
+      failed,
+      attempted,
+    } = await this.runInBatches(
+      dueGameIds,
+      3,
+      budgetMs,
+      startedAt,
+      async (gameId) => {
+        const game = consoleGames.get(gameId);
+        if (!game) return;
 
-      try {
-        await this.ingestionState.track(gameId, 'STORE_RATINGS', () =>
-          this.scrapeStoreRatings(game.id, game.name, game.platforms),
-        );
-        scraped++;
-      } catch (error) {
-        failed++;
-        this.logger.warn(`[stores] scrape failed for game ${gameId}: ${error}`);
-      }
-      attempted += 1;
-    }
+        try {
+          await this.ingestionState.track(gameId, 'STORE_RATINGS', () =>
+            this.scrapeStoreRatings(game.id, game.name, game.platforms),
+          );
+        } catch (error) {
+          this.logger.warn(
+            `[stores] scrape failed for game ${gameId}: ${error}`,
+          );
+          throw error;
+        }
+      },
+    );
 
     const leftover = dueGameIds.length - attempted;
     this.logger.log(
@@ -3280,15 +3330,13 @@ export class IngestionService {
 
   /**
    * Scrape Exophase achievement rarities (Steam/PSN/Xbox) plus Steam's own
-   * global achievement percentages. The slowest per-game signal and the least
-   * volatile, hence the monthly cadence.
+   * global achievement percentages. Once per UTC calendar month.
    */
   async captureAllAchievements(options: { budgetMs?: number } = {}): Promise<{
     scraped: number;
     failed: number;
     leftover: number;
   }> {
-    const ACHIEVEMENTS_REFRESH_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
     const budgetMs = options.budgetMs ?? Number.POSITIVE_INFINITY;
     const startedAt = Date.now();
 
@@ -3300,10 +3348,10 @@ export class IngestionService {
     const appIdByGameId = new Map(
       steamSources.map((source) => [source.gameId, Number(source.externalId)]),
     );
-    const dueGameIds = await this.ingestionState.selectDue(
+    const dueGameIds = await this.ingestionState.selectDueForCadence(
       'ACHIEVEMENTS',
       [...gameById.keys()],
-      ACHIEVEMENTS_REFRESH_INTERVAL_MS,
+      'month',
     );
 
     let scraped = 0;
@@ -3345,8 +3393,7 @@ export class IngestionService {
 
   /**
    * Recompute the estimate history of games whose signals moved since their
-   * last rebuild. Driven off `game_ingestion_state` rather than a fixed
-   * cadence so we only pay the (DB-heavy) rebuild when there is new input.
+   * last rebuild, at most once per UTC week.
    */
   async rebuildStaleEstimates(options: { budgetMs?: number } = {}): Promise<{
     rebuilt: number;
@@ -3355,6 +3402,7 @@ export class IngestionService {
   }> {
     const budgetMs = options.budgetMs ?? Number.POSITIVE_INFINITY;
     const startedAt = Date.now();
+    const weekStartedAt = cycleWindow('week').startedAt;
 
     const rows = await this.games.query<Array<{ gameId: string }>>(
       `SELECT signal."gameId"
@@ -3368,9 +3416,12 @@ export class IngestionService {
          AND game."deletedAt" IS NULL
          AND game."isFree" = false
        GROUP BY signal."gameId", rebuild."lastAttemptAt"
-       HAVING rebuild."lastAttemptAt" IS NULL
-           OR MAX(signal."lastSuccessAt") > rebuild."lastAttemptAt"
+       HAVING (rebuild."lastAttemptAt" IS NULL
+           OR rebuild."lastAttemptAt" < $1)
+          AND (rebuild."lastAttemptAt" IS NULL
+           OR MAX(signal."lastSuccessAt") > rebuild."lastAttemptAt")
        ORDER BY rebuild."lastAttemptAt" ASC NULLS FIRST`,
+      [weekStartedAt],
     );
 
     let rebuilt = 0;
@@ -4156,5 +4207,28 @@ export class IngestionService {
         (p) => p === Platform.PLAYSTATION || p === Platform.XBOX,
       ) ?? false
     );
+  }
+
+  private async runInBatches<T>(
+    items: T[],
+    concurrency: number,
+    budgetMs: number,
+    startedAt: number,
+    work: (item: T) => Promise<void>,
+  ): Promise<{ succeeded: number; failed: number; attempted: number }> {
+    let succeeded = 0;
+    let failed = 0;
+    let attempted = 0;
+    for (let i = 0; i < items.length; i += concurrency) {
+      if (Date.now() - startedAt >= budgetMs) break;
+      const batch = items.slice(i, i + concurrency);
+      const results = await Promise.allSettled(batch.map((item) => work(item)));
+      for (const result of results) {
+        attempted += 1;
+        if (result.status === 'fulfilled') succeeded += 1;
+        else failed += 1;
+      }
+    }
+    return { succeeded, failed, attempted };
   }
 }

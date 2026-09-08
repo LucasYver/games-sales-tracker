@@ -76,14 +76,14 @@ export function FollowersHistoryChart({ followersHistory }: Props) {
       return { data: [] as ChartPoint[], aggregated: false };
 
     const lastT = allPoints[allPoints.length - 1].t;
-    const cfg = RANGES.find((r) => r.key === range) ?? RANGES[RANGES.length - 1];
+    const cfg =
+      RANGES.find((r) => r.key === range) ?? RANGES[RANGES.length - 1];
     const cutoff = cfg.days === null ? -Infinity : lastT - cfg.days * DAY_MS;
     const windowed = allPoints.filter((p) => p.t >= cutoff);
     if (windowed.length === 0)
       return { data: [] as ChartPoint[], aggregated: false };
 
-    const spanDays =
-      (windowed[windowed.length - 1].t - windowed[0].t) / DAY_MS;
+    const spanDays = (windowed[windowed.length - 1].t - windowed[0].t) / DAY_MS;
     if (spanDays <= MONTHLY_AGGREGATION_THRESHOLD_DAYS) {
       return { data: windowed, aggregated: false };
     }
@@ -108,7 +108,7 @@ export function FollowersHistoryChart({ followersHistory }: Props) {
       <p className="text-muted-foreground p-6 text-sm">
         No Steam follower snapshots yet. They are sourced from
         games-popularity.com (run the backfill, or wait for the weekly
-        capture-popularity cron). Note: history only reaches ~2024-03.
+        steam-followers cron). Note: history only reaches ~2024-03.
       </p>
     );
   }
