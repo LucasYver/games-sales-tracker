@@ -42,6 +42,7 @@ import {
   lifetimeSalesPct,
 } from './sales-modeling.constants';
 import { platformReleaseDate } from './platform-release-date';
+import { normalizeSteamPriceCountry } from '../ingestion/steam-store-countries';
 
 export interface PopularGame {
   id: string;
@@ -150,6 +151,14 @@ export interface StoreRatings {
  */
 export interface PublicPricePoint {
   capturedAt: Date;
+  currency: string;
+  initial: number;
+  final: number;
+  discountPercent: number;
+}
+
+export interface PublicRegionalPrice {
+  country: string;
   currency: string;
   initial: number;
   final: number;
@@ -606,7 +615,8 @@ export class GamesService {
       .filter((g) => g.length > 0);
   }
 
-  async getBySlug(slug: string) {
+  async getBySlug(slug: string, country?: string) {
+    const priceCountry = normalizeSteamPriceCountry(country);
     const game = await this.games.findOne({
       where: { slug },
       relations: { sources: true, milestones: true },
@@ -685,7 +695,7 @@ export class GamesService {
     const priceRows = game.isFree
       ? []
       : await this.prices.find({
-          where: { gameId: game.id },
+          where: { gameId: game.id, country: priceCountry },
           order: { capturedAt: 'ASC' },
           select: {
             capturedAt: true,
@@ -703,12 +713,14 @@ export class GamesService {
       discountPercent: p.discountPercent,
     }));
     const currentPrice = priceHistory.at(-1) ?? null;
-    // Cheapest it has ever been, so a visitor can tell a real sale from a
-    // routine one.
     const lowestPrice = priceHistory.reduce<PublicPricePoint | null>(
       (best, p) => (!best || p.final < best.final ? p : best),
       null,
     );
+
+    const regionalPrices: PublicRegionalPrice[] = game.isFree
+      ? []
+      : await this.latestRegionalPrices(game.id);
 
     const rankRow = await this.ranks.findOne({ where: { gameId: game.id } });
     const rank: PublicRank | null = rankRow
@@ -778,9 +790,25 @@ export class GamesService {
       priceHistory,
       currentPrice,
       lowestPrice,
+      priceCountry,
+      regionalPrices,
       rank,
       storeRatings,
     };
+  }
+
+  private async latestRegionalPrices(
+    gameId: string,
+  ): Promise<PublicRegionalPrice[]> {
+    const rows: PublicRegionalPrice[] = await this.prices.query(
+      `SELECT DISTINCT ON (country)
+         country, currency, initial, final, "discountPercent"
+       FROM price_snapshot
+       WHERE "gameId" = $1
+       ORDER BY country, "capturedAt" DESC`,
+      [gameId],
+    );
+    return rows;
   }
 
   private async buildStoreRatings(gameId: string): Promise<StoreRatings> {

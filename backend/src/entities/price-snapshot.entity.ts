@@ -10,19 +10,21 @@ import {
 import { Game } from './game.entity';
 
 /**
- * Point-in-time snapshot of a game's Steam store price, captured on a daily
- * cadence so price changes (sales, permanent drops) form a time series. All
- * monetary values are in the currency's minor units (cents) for the region
- * polled (currently USD).
+ * Point-in-time snapshot of a game's Steam store price for one store
+ * country. Monetary values are in that currency's minor units (cents).
  */
 @Entity('price_snapshot')
 @Index(['gameId', 'capturedAt'])
+@Index(['gameId', 'country', 'capturedAt'])
 export class PriceSnapshot {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column('uuid')
   gameId: string;
+
+  @Column({ type: 'varchar', length: 2, default: 'us' })
+  country: string;
 
   @Column({ type: 'varchar', length: 8 })
   currency: string;

@@ -54,6 +54,7 @@ import { DropMilestoneAudit1783810000000 } from './1783810000000-DropMilestoneAu
 import { AddCatalogTierAndHarvestTracking1788730000000 } from './1788730000000-AddCatalogTierAndHarvestTracking';
 import { AddGameIngestionState1788735000000 } from './1788735000000-AddGameIngestionState';
 import { SplitSignalsRefreshPipelines1788740000000 } from './1788740000000-SplitSignalsRefreshPipelines';
+import { AddPriceSnapshotCountry1788750000000 } from './1788750000000-AddPriceSnapshotCountry';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -119,4 +120,5 @@ export const migrations: MixedList<Function | string> = [
   AddCatalogTierAndHarvestTracking1788730000000,
   AddGameIngestionState1788735000000,
   SplitSignalsRefreshPipelines1788740000000,
+  AddPriceSnapshotCountry1788750000000,
 ];

@@ -12,6 +12,11 @@ import {
 import { Link } from '@/i18n/navigation';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
 import { RangedChart } from '@/components/chart-room/RangedChart';
+import {
+  PriceCountrySelect,
+  RegionalPricesTable,
+} from '@/components/chart-room/PriceCountrySelect';
+import { Suspense } from 'react';
 
 export async function generateMetadata({
   params,
@@ -72,6 +77,21 @@ function platformUnits(low: number, high: number): number {
   const mid = (low + high) / 2;
   const step = mid >= 1_000_000 ? 100_000 : 10_000;
   return Math.max(step, Math.round(mid / step) * step);
+}
+
+function gamePageHref(
+  slug: string,
+  opts: { tab?: string; cc?: string },
+): string {
+  const params = new URLSearchParams();
+  if (opts.tab) params.set('tab', opts.tab);
+  if (opts.cc) params.set('cc', opts.cc);
+  const qs = params.toString();
+  return qs ? `/game/${slug}?${qs}` : `/game/${slug}`;
+}
+
+function defaultPriceCountry(locale: string): string {
+  return locale === 'fr' ? 'fr' : 'us';
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -181,6 +201,14 @@ function SalesHeadline({ game }: { game: GameDetail }) {
       )}
       <div className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-3 border-t border-border-soft pt-3">
         <PriceBlock game={game} />
+        {!game.isFree && (
+          <Suspense>
+            <PriceCountrySelect
+              countries={game.regionalPrices}
+              value={game.priceCountry}
+            />
+          </Suspense>
+        )}
         {game.peakCcu && (
           <span className="font-mono text-xs text-muted-foreground">
             {t('peakCcu', {
@@ -341,15 +369,6 @@ function PriceTab({ game }: { game: GameDetail }) {
   const t = useTranslations('gamePage');
   const format = useFormatter();
 
-  if (game.priceHistory.length === 0) {
-    return (
-      <section className="border-b border-border px-4 py-5">
-        <SectionTitle>{t('priceTitle')}</SectionTitle>
-        <p className="text-sm text-muted-foreground">{t('priceNoHistory')}</p>
-      </section>
-    );
-  }
-
   const currency = game.currentPrice?.currency ?? 'USD';
   const money = (cents: number) =>
     format.number(cents / 100, { style: 'currency', currency });
@@ -357,72 +376,97 @@ function PriceTab({ game }: { game: GameDetail }) {
 
   return (
     <section className="border-b border-border px-4 py-5">
-      <SectionTitle>{t('priceTitle')}</SectionTitle>
-      <div className="flex flex-col gap-5">
-        {game.priceHistory.length > 1 && (
-          <RangedChart
-            points={game.priceHistory.map((p) => ({
-              capturedAt: p.capturedAt,
-              value: p.final,
-            }))}
-            kind="money"
-            currency={currency}
-            label={t('priceLabel')}
-            ariaLabel={t('chartAlt', { series: t('priceLabel') })}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-mono text-[0.8rem] font-bold tracking-wider uppercase">
+          {t('priceTitle')}
+        </h2>
+        <Suspense>
+          <PriceCountrySelect
+            countries={game.regionalPrices}
+            value={game.priceCountry}
           />
+        </Suspense>
+      </div>
+      <div className="flex flex-col gap-5">
+        {game.priceHistory.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t('priceNoHistory')}</p>
+        ) : (
+          <>
+            {game.priceHistory.length > 1 && (
+              <RangedChart
+                points={game.priceHistory.map((p) => ({
+                  capturedAt: p.capturedAt,
+                  value: p.final,
+                }))}
+                kind="money"
+                currency={currency}
+                label={t('priceLabel')}
+                ariaLabel={t('chartAlt', { series: t('priceLabel') })}
+              />
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr>
+                    <th className="border-b border-border px-2 py-2 text-left font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                      {t('priceDate')}
+                    </th>
+                    <th className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                      {t('priceList')}
+                    </th>
+                    <th className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                      {t('pricePaid')}
+                    </th>
+                    <th className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                      {t('priceDiscount')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((p) => (
+                    <tr
+                      key={p.capturedAt}
+                      className="border-b border-border-soft last:border-b-0"
+                    >
+                      <td className="px-2 py-2 font-mono whitespace-nowrap tabular-nums">
+                        {format.dateTime(new Date(p.capturedAt), {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                        })}
+                      </td>
+                      <td className="px-2 py-2 text-right font-mono text-muted-foreground tabular-nums">
+                        {money(p.initial)}
+                      </td>
+                      <td className="px-2 py-2 text-right font-mono font-semibold tabular-nums">
+                        {money(p.final)}
+                      </td>
+                      <td className="px-2 py-2 text-right font-mono tabular-nums">
+                        {p.discountPercent > 0 ? (
+                          <span className="text-source-official">
+                            −{p.discountPercent}%
+                          </span>
+                        ) : (
+                          <span className="text-text-faint">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
 
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                <th className="border-b border-border px-2 py-2 text-left font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
-                  {t('priceDate')}
-                </th>
-                <th className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
-                  {t('priceList')}
-                </th>
-                <th className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
-                  {t('pricePaid')}
-                </th>
-                <th className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
-                  {t('priceDiscount')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((p) => (
-                <tr
-                  key={p.capturedAt}
-                  className="border-b border-border-soft last:border-b-0"
-                >
-                  <td className="px-2 py-2 font-mono whitespace-nowrap tabular-nums">
-                    {format.dateTime(new Date(p.capturedAt), {
-                      year: 'numeric',
-                      month: '2-digit',
-                      day: '2-digit',
-                    })}
-                  </td>
-                  <td className="px-2 py-2 text-right font-mono text-muted-foreground tabular-nums">
-                    {money(p.initial)}
-                  </td>
-                  <td className="px-2 py-2 text-right font-mono font-semibold tabular-nums">
-                    {money(p.final)}
-                  </td>
-                  <td className="px-2 py-2 text-right font-mono tabular-nums">
-                    {p.discountPercent > 0 ? (
-                      <span className="text-source-official">
-                        −{p.discountPercent}%
-                      </span>
-                    ) : (
-                      <span className="text-text-faint">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {game.regionalPrices.length > 0 && (
+          <div>
+            <h3 className="mb-3 font-mono text-[0.8rem] font-bold tracking-wider uppercase">
+              {t('priceRegionsTitle')}
+            </h3>
+            <RegionalPricesTable countries={game.regionalPrices} />
+          </div>
+        )}
       </div>
     </section>
   );
@@ -544,10 +588,12 @@ function TabNav({
   slug,
   active,
   showPrice,
+  cc,
 }: {
   slug: string;
   active: TabKey;
   showPrice: boolean;
+  cc?: string;
 }) {
   const t = useTranslations('gamePage');
   const tabs: { key: TabKey; label: string }[] = [
@@ -567,11 +613,10 @@ function TabNav({
         return (
           <Link
             key={tab.key}
-            href={
-              tab.key === 'overview'
-                ? `/game/${slug}`
-                : `/game/${slug}?tab=${tab.key}`
-            }
+            href={gamePageHref(slug, {
+              tab: tab.key === 'price' ? 'price' : undefined,
+              cc,
+            })}
             aria-current={on ? 'page' : undefined}
             className={`border px-2 py-1.5 font-mono text-[0.7rem] tracking-wide whitespace-nowrap uppercase ${
               on
@@ -587,7 +632,13 @@ function TabNav({
   );
 }
 
-function GamePageContent({ game, tab }: { game: GameDetail; tab: TabKey }) {
+function GamePageContent({
+  game,
+  tab,
+}: {
+  game: GameDetail;
+  tab: TabKey;
+}) {
   const t = useTranslations('gamePage');
   const format = useFormatter();
 
@@ -647,7 +698,12 @@ function GamePageContent({ game, tab }: { game: GameDetail; tab: TabKey }) {
 
         <GameHeader game={game} />
         <SalesHeadline game={game} />
-        <TabNav slug={game.slug} active={activeTab} showPrice={!game.isFree} />
+        <TabNav
+          slug={game.slug}
+          active={activeTab}
+          showPrice={!game.isFree}
+          cc={game.priceCountry}
+        />
 
         {/* Details sit top-left on wide screens; on a phone the figures come
             first and the sheet follows, so the order of importance holds. */}
@@ -699,10 +755,14 @@ export default async function GamePage({
   searchParams,
 }: {
   params: Promise<{ slug: string; locale: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; cc?: string }>;
 }) {
-  const [{ slug }, { tab }] = await Promise.all([params, searchParams]);
-  const game = await getGame(slug);
+  const [{ slug, locale }, { tab, cc }] = await Promise.all([
+    params,
+    searchParams,
+  ]);
+  const country = cc?.trim() || defaultPriceCountry(locale);
+  const game = await getGame(slug, country);
 
   if (!game) notFound();
 

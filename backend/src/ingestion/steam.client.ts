@@ -1,5 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import {
+  currencyForCountry,
+  type SteamStoreCountry,
+} from './steam-store-countries';
 
 export interface SteamPrice {
   // ISO 4217 currency code reported by Steam for the requested region.
@@ -74,6 +79,8 @@ export interface SteamReviewHistogram {
 export class SteamClient {
   private readonly logger = new Logger(SteamClient.name);
 
+  constructor(private readonly config: ConfigService) {}
+
   async getAppDetails(appId: number): Promise<SteamAppDetails | null> {
     try {
       const data = await this.getStoreJson(
@@ -115,6 +122,64 @@ export class SteamClient {
       this.logger.warn(`getAppDetails failed for ${appId}: ${error}`);
       return null;
     }
+  }
+
+  /**
+   * Current Steam store prices for many apps in one country, via
+   * `IStoreBrowseService/GetItems`. One HTTP call per country × ~50 appids.
+   * Currency is not in the payload — it comes from {@link currencyForCountry}.
+   */
+  async getStorePrices(
+    appIds: number[],
+    country: SteamStoreCountry,
+  ): Promise<Map<number, SteamPrice | null>> {
+    const result = new Map<number, SteamPrice | null>();
+    if (appIds.length === 0) return result;
+
+    const key = this.config.get<string>('STEAM_API_KEY')?.trim();
+    const payload = {
+      ids: appIds.map((appid) => ({ appid })),
+      context: {
+        language: 'english',
+        country_code: country.toUpperCase(),
+      },
+      data_request: { include_best_purchase_option: true },
+    };
+    const params: Record<string, unknown> = {
+      input_json: JSON.stringify(payload),
+    };
+    if (key) params.key = key;
+
+    const data = await this.getStoreJson(
+      'https://api.steampowered.com/IStoreBrowseService/GetItems/v1/',
+      params,
+    );
+    const items = data?.response?.store_items;
+    if (!Array.isArray(items)) {
+      throw new Error(
+        `GetItems returned no store_items for ${country} (${appIds.length} apps).`,
+      );
+    }
+
+    const currency = currencyForCountry(country);
+    const seen = new Set<number>();
+    for (const raw of items) {
+      const appId = Number(raw?.appid);
+      if (!Number.isFinite(appId)) continue;
+      seen.add(appId);
+      if (raw?.is_free === true) {
+        result.set(appId, null);
+        continue;
+      }
+      result.set(
+        appId,
+        this.parseBestPurchaseOption(raw?.best_purchase_option, currency),
+      );
+    }
+    for (const appId of appIds) {
+      if (!seen.has(appId)) result.set(appId, null);
+    }
+    return result;
   }
 
   /**
@@ -604,6 +669,30 @@ export class SteamClient {
    * already in minor units (cents). Returns null when the block is absent
    * (free or unpriced apps) or malformed.
    */
+  private parseBestPurchaseOption(
+    raw: unknown,
+    currency: string,
+  ): SteamPrice | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const p = raw as {
+      final_price_in_cents?: unknown;
+      original_price_in_cents?: unknown;
+      discount_pct?: unknown;
+    };
+    const final = Number(p.final_price_in_cents);
+    if (!Number.isFinite(final) || final < 0) return null;
+    const original = Number(p.original_price_in_cents);
+    const initial =
+      Number.isFinite(original) && original > 0 ? original : final;
+    const discountRaw = Number(p.discount_pct);
+    const discountPercent = Number.isFinite(discountRaw)
+      ? discountRaw
+      : initial > 0 && final < initial
+        ? Math.round((1 - final / initial) * 100)
+        : 0;
+    return { currency, initial, final, discountPercent };
+  }
+
   private parsePrice(raw: unknown): SteamPrice | null {
     if (!raw || typeof raw !== 'object') return null;
     const p = raw as {

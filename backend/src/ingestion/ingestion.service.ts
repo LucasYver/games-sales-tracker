@@ -27,6 +27,7 @@ import { EstimationService } from '../estimation/estimation.service';
 import { GamesService } from '../games/games.service';
 import { deriveFranchise, deriveLiveService } from '../games/game-features';
 import { slugify } from '../common/slug';
+import { STEAM_STORE_COUNTRIES } from './steam-store-countries';
 import {
   SteamAppDetails,
   SteamClient,
@@ -1221,18 +1222,11 @@ export class IngestionService {
   }
 
   /**
-   * Capture a Steam price point for tracked Steam games, building a
-   * `price_snapshot` time series of regular/discounted prices. Free-to-play
-   * titles are excluded (no price). Steam app details are re-fetched here, so
-   * we also opportunistically refresh `categories` / `dlc` on the game (these
-   * are otherwise only set on initial ingest). Each game is best-effort: a
-   * failure is logged and the loop continues.
-   *
-   * Each game is only re-priced once per UTC week. Re-fetching every tracked
-   * game every night stopped fitting inside the cron's time budget as the
-   * catalog grew. Games are processed stalest first, and a wall-clock budget
-   * caps the run so a large backlog drains progressively across nights
-   * instead of timing out.
+   * Capture Steam store prices for tracked paid Steam games, one snapshot
+   * per store country. Games are due once per UTC week (stalest first). Each
+   * run takes a subset of due games and fetches **every** country for that
+   * subset so a series is never half-filled. GetItems batches ~50 appids per
+   * country; wall-clock budget drains leftover games on later runs.
    */
   async captureAllSteamPrices(): Promise<{
     captured: number;
@@ -1240,6 +1234,8 @@ export class IngestionService {
     failed: number;
   }> {
     const RUN_BUDGET_MS = 11 * 60 * 1000;
+    const APP_BATCH = 50;
+    const COUNTRY_CONCURRENCY = 4;
     const startedAt = Date.now();
 
     const steamSources = await this.gameSources.find({
@@ -1266,95 +1262,202 @@ export class IngestionService {
     );
     const eligibleGames = dueGameIds
       .map((gameId) => gameById.get(gameId))
-      .filter((game): game is Game => game !== undefined);
+      .filter((game): game is Game => game !== undefined)
+      .filter((game) => {
+        const source = sourceByGameId.get(game.id);
+        const appId = source ? Number(source.externalId) : NaN;
+        return Number.isFinite(appId);
+      });
 
     this.logger.log(
       `[price] ${eligibleGames.length} due game(s) of ${trackedGames.length} ` +
-        `tracked (stalest first), budget ${RUN_BUDGET_MS / 1000}s.`,
+        `tracked (stalest first), ${STEAM_STORE_COUNTRIES.length} countries, ` +
+        `budget ${RUN_BUDGET_MS / 1000}s.`,
     );
-
-    // Steam's store appdetails endpoint is rate-limited to ~200 requests /
-    // 5 min per IP. Space calls out to stay under that ceiling and avoid the
-    // 429 bursts a tight loop produces.
-    const THROTTLE_MS = 1500;
 
     let captured = 0;
     let skipped = 0;
     let failed = 0;
-    let first = true;
-    for (const game of eligibleGames) {
+    let processedGames = 0;
+
+    for (let i = 0; i < eligibleGames.length; i += APP_BATCH) {
       if (Date.now() - startedAt >= RUN_BUDGET_MS) {
         this.logger.log(
-          `[price] run budget reached after ${captured + skipped + failed} ` +
-            `game(s); ${eligibleGames.length - (captured + skipped + failed)} left for the next run.`,
+          `[price] run budget reached after ${processedGames} game(s); ` +
+            `${eligibleGames.length - processedGames} left for the next run.`,
         );
         break;
       }
 
-      const source = sourceByGameId.get(game.id);
-      if (!source) continue;
-      const appId = Number(source.externalId);
-      if (!Number.isFinite(appId)) continue;
-
-      if (!first) await new Promise((r) => setTimeout(r, THROTTLE_MS));
-      first = false;
-
-      try {
-        const outcome = await this.ingestionState.track(
+      const chunk = eligibleGames.slice(i, i + APP_BATCH);
+      const chunkAppIds = chunk.map((game) =>
+        Number(sourceByGameId.get(game.id)!.externalId),
+      );
+      const gameIdByAppId = new Map(
+        chunk.map((game) => [
+          Number(sourceByGameId.get(game.id)!.externalId),
           game.id,
-          'STEAM_PRICE',
-          async () => {
-            const details = await this.steam.getAppDetails(appId);
-            if (!details) throw new Error('Steam app details unavailable.');
+        ]),
+      );
 
-            let metadataChanged = false;
-            if (details.categories.length > 0) {
-              game.categories = details.categories;
-              metadataChanged = true;
-            }
-            if (details.dlc.length > 0) {
-              game.dlc = details.dlc;
-              metadataChanged = true;
-            }
-            if (details.isFree && !game.isFree) {
-              game.isFree = true;
-              metadataChanged = true;
-            }
-            if (metadataChanged) this.applyDerivedFeatures(game);
+      const latestByKey = await this.latestPricesByGameCountry(
+        chunk.map((game) => game.id),
+      );
 
-            if (details.isFree || !details.price) return 'skipped' as const;
-            await this.prices.save(
-              this.prices.create({
-                gameId: game.id,
-                currency: details.price.currency,
-                initial: details.price.initial,
-                final: details.price.final,
-                discountPercent: details.price.discountPercent,
-              }),
-            );
-            return 'captured' as const;
-          },
+      let countriesAttempted = 0;
+      let ranOutOfBudget = false;
+      for (let c = 0; c < STEAM_STORE_COUNTRIES.length; c += COUNTRY_CONCURRENCY) {
+        if (Date.now() - startedAt >= RUN_BUDGET_MS) {
+          ranOutOfBudget = true;
+          break;
+        }
+        const countries = STEAM_STORE_COUNTRIES.slice(
+          c,
+          c + COUNTRY_CONCURRENCY,
         );
-        if (outcome === 'captured') captured++;
-        else skipped++;
-      } catch (error) {
-        failed++;
-        this.logger.warn(
-          `[price] capture failed for game ${game.id}: ${error}`,
+        const results = await Promise.allSettled(
+          countries.map((country) =>
+            this.captureCountryPrices(
+              country,
+              chunkAppIds,
+              gameIdByAppId,
+              latestByKey,
+            ),
+          ),
         );
-      } finally {
-        // Always stamp priceRefreshedAt — even when the fetch threw — so a
-        // persistently failing game cannot stay perpetually "due" and starve
-        // the rest of the catalog by re-consuming every run's time budget.
-        game.priceRefreshedAt = new Date();
-        await this.games.save(game);
+        countriesAttempted += countries.length;
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            captured += result.value.captured;
+            skipped += result.value.skipped;
+          } else {
+            failed += 1;
+            this.logger.warn(`[price] country batch failed: ${result.reason}`);
+          }
+        }
       }
+
+      if (ranOutOfBudget && countriesAttempted < STEAM_STORE_COUNTRIES.length) {
+        this.logger.log(
+          `[price] run budget reached mid-chunk after ${countriesAttempted}/` +
+            `${STEAM_STORE_COUNTRIES.length} countries; chunk not stamped.`,
+        );
+        break;
+      }
+
+      const now = new Date();
+      for (const game of chunk) {
+        try {
+          await this.ingestionState.track(game.id, 'STEAM_PRICE', async () => {
+            game.priceRefreshedAt = now;
+            await this.games.update(game.id, { priceRefreshedAt: now });
+            return 'ok' as const;
+          });
+        } catch (error) {
+          this.logger.warn(
+            `[price] failed to stamp game ${game.id}: ${error}`,
+          );
+        }
+      }
+      processedGames += chunk.length;
     }
 
     this.logger.log(
-      `[price] capture complete: ${captured} captured, ${skipped} skipped, ${failed} failed.`,
+      `[price] capture complete: ${captured} captured, ${skipped} skipped, ` +
+        `${failed} failed, ${processedGames} game(s) stamped.`,
     );
     return { captured, skipped, failed };
+  }
+
+  private async latestPricesByGameCountry(
+    gameIds: string[],
+  ): Promise<
+    Map<string, { initial: number; final: number; discountPercent: number }>
+  > {
+    const latest = new Map<
+      string,
+      { initial: number; final: number; discountPercent: number }
+    >();
+    if (gameIds.length === 0) return latest;
+    const rows: Array<{
+      gameId: string;
+      country: string;
+      initial: number;
+      final: number;
+      discountPercent: number;
+    }> = await this.prices.query(
+      `SELECT DISTINCT ON ("gameId", country)
+         "gameId", country, initial, final, "discountPercent"
+       FROM price_snapshot
+       WHERE "gameId" = ANY($1::uuid[])
+       ORDER BY "gameId", country, "capturedAt" DESC`,
+      [gameIds],
+    );
+    for (const row of rows) {
+      latest.set(`${row.gameId}:${row.country}`, {
+        initial: row.initial,
+        final: row.final,
+        discountPercent: row.discountPercent,
+      });
+    }
+    return latest;
+  }
+
+  private async captureCountryPrices(
+    country: (typeof STEAM_STORE_COUNTRIES)[number],
+    appIds: number[],
+    gameIdByAppId: Map<number, string>,
+    latestByKey: Map<
+      string,
+      { initial: number; final: number; discountPercent: number }
+    >,
+  ): Promise<{ captured: number; skipped: number }> {
+    const prices = await this.steam.getStorePrices(appIds, country);
+    const toInsert: Array<{
+      gameId: string;
+      country: string;
+      currency: string;
+      initial: number;
+      final: number;
+      discountPercent: number;
+    }> = [];
+    let skipped = 0;
+    for (const appId of appIds) {
+      const gameId = gameIdByAppId.get(appId);
+      if (!gameId) continue;
+      const price = prices.get(appId);
+      if (!price) {
+        skipped += 1;
+        continue;
+      }
+      const prev = latestByKey.get(`${gameId}:${country}`);
+      if (
+        prev &&
+        prev.initial === price.initial &&
+        prev.final === price.final &&
+        prev.discountPercent === price.discountPercent
+      ) {
+        skipped += 1;
+        continue;
+      }
+      toInsert.push({
+        gameId,
+        country,
+        currency: price.currency,
+        initial: price.initial,
+        final: price.final,
+        discountPercent: price.discountPercent,
+      });
+      latestByKey.set(`${gameId}:${country}`, {
+        initial: price.initial,
+        final: price.final,
+        discountPercent: price.discountPercent,
+      });
+    }
+    if (toInsert.length > 0) {
+      await this.prices.insert(toInsert);
+    }
+    return { captured: toInsert.length, skipped };
   }
 
   /**

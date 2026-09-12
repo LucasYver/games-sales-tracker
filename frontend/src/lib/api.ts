@@ -92,6 +92,14 @@ export interface PricePoint {
   discountPercent: number;
 }
 
+export interface RegionalPrice {
+  country: string;
+  currency: string;
+  initial: number;
+  final: number;
+  discountPercent: number;
+}
+
 /** Our own chart position, computed from weekly review velocity. */
 export interface RankInfo {
   weeksCharted: number;
@@ -149,6 +157,8 @@ export interface GameDetail {
   priceHistory: PricePoint[];
   currentPrice: PricePoint | null;
   lowestPrice: PricePoint | null;
+  priceCountry: string;
+  regionalPrices: RegionalPrice[];
   rank: RankInfo | null;
   storeRatings: StoreRatings;
 }
@@ -281,10 +291,17 @@ export async function getGenres(): Promise<GenreOption[]> {
   return res.json();
 }
 
-export async function getGame(slug: string): Promise<GameDetail | null> {
-  const res = await fetch(`${API_URL}/games/${encodeURIComponent(slug)}`, {
-    next: { revalidate: GAME_TTL },
-  });
+export async function getGame(
+  slug: string,
+  country?: string,
+): Promise<GameDetail | null> {
+  const search = new URLSearchParams();
+  if (country) search.set('country', country);
+  const qs = search.toString();
+  const res = await fetch(
+    `${API_URL}/games/${encodeURIComponent(slug)}${qs ? `?${qs}` : ''}`,
+    { next: { revalidate: GAME_TTL } },
+  );
   if (!res.ok) return null;
   const game = (await res.json()) as GameDetail;
   // Collections default to empty: a page that renders against an older API
@@ -302,5 +319,7 @@ export async function getGame(slug: string): Promise<GameDetail | null> {
     switchRatingsHistory: game.switchRatingsHistory ?? [],
     ccuHistory: game.ccuHistory ?? [],
     priceHistory: game.priceHistory ?? [],
+    regionalPrices: game.regionalPrices ?? [],
+    priceCountry: game.priceCountry ?? 'us',
   };
 }

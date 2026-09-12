@@ -914,7 +914,7 @@ export class AdminService {
     }));
 
     const prices = await this.prices.find({
-      where: { gameId: id },
+      where: { gameId: id, country: 'us' },
       order: { capturedAt: 'ASC' },
       take: 500,
     });
@@ -1150,7 +1150,7 @@ export class AdminService {
       series(SignalMetric.XBOX_RATINGS),
       series(SignalMetric.SWITCH_RATINGS),
       this.prices.find({
-        where: { gameId: id },
+        where: { gameId: id, country: 'us' },
         order: { capturedAt: 'ASC' },
         take: 2000,
       }),
