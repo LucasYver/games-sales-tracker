@@ -10,6 +10,11 @@ export interface StoreRating {
   sourceUrl: string;
 }
 
+export interface KnownStoreUrls {
+  playstationUrl?: string;
+  xboxUrl?: string;
+}
+
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/124.0 Safari/537.36';
@@ -39,16 +44,26 @@ export class StoreRatingsClient {
    * derived from the PS aggregate via `genre-console-split-from-ps-xbox`
    * (see `EstimationService.aggregateResultsByPlatform`).
    */
-  async getRatings(name: string): Promise<StoreRating[]> {
+  async getRatings(
+    name: string,
+    known: KnownStoreUrls = {},
+  ): Promise<StoreRating[]> {
     const [ps, xbox] = await Promise.all([
-      this.getPlaystation(name),
-      this.getXbox(name),
+      this.getPlaystation(name, known.playstationUrl),
+      this.getXbox(name, known.xboxUrl),
     ]);
     return [ps, xbox].filter((r): r is StoreRating => r !== null);
   }
 
-  private async getPlaystation(name: string): Promise<StoreRating | null> {
+  private async getPlaystation(
+    name: string,
+    knownUrl?: string,
+  ): Promise<StoreRating | null> {
     try {
+      if (knownUrl) {
+        const cached = await this.playstationRatingFromUrl(name, knownUrl);
+        if (cached) return cached;
+      }
       // Resolve the parent concept rather than a single SKU. PSN exposes
       // a per-SKU `totalRatingsCount` on every product page (PS4 vs PS5,
       // Standard vs Deluxe vs Ultimate, currency add-ons like "FC Points"),
@@ -76,26 +91,33 @@ export class StoreRatingsClient {
       if (!conceptId) return null;
 
       const url = `https://store.playstation.com/en-us/concept/${conceptId}`;
-      const page = await this.fetch(url);
-      if (!page) return null;
-
-      const title = this.extractPsTitle(page);
-      if (!title || !this.titleMatches(name, title)) return null;
-
-      const rating = this.extractPsStarRating(page);
-      if (!rating || rating.ratingCount <= 0) return null;
-
-      return {
-        platform: Platform.PLAYSTATION,
-        metric: SignalMetric.PS_RATINGS,
-        ratingCount: rating.ratingCount,
-        averageRating: rating.averageRating,
-        sourceUrl: url,
-      };
+      return this.playstationRatingFromUrl(name, url);
     } catch (error) {
       this.logger.warn(`PlayStation lookup failed for "${name}": ${error}`);
       return null;
     }
+  }
+
+  private async playstationRatingFromUrl(
+    name: string,
+    url: string,
+  ): Promise<StoreRating | null> {
+    const page = await this.fetchOptional(url);
+    if (!page) return null;
+
+    const title = this.extractPsTitle(page);
+    if (!title || !this.titleMatches(name, title)) return null;
+
+    const rating = this.extractPsStarRating(page);
+    if (!rating || rating.ratingCount <= 0) return null;
+
+    return {
+      platform: Platform.PLAYSTATION,
+      metric: SignalMetric.PS_RATINGS,
+      ratingCount: rating.ratingCount,
+      averageRating: rating.averageRating,
+      sourceUrl: url.split('?')[0],
+    };
   }
 
   /**
@@ -112,8 +134,16 @@ export class StoreRatingsClient {
    * (which is what console-only edition names like "Hollow Knight:
    * Voidheart Edition" or "Disco Elysium - The Final Cut" require).
    */
-  private async getXbox(name: string): Promise<StoreRating | null> {
+  private async getXbox(
+    name: string,
+    knownUrl?: string,
+  ): Promise<StoreRating | null> {
     try {
+      if (knownUrl) {
+        const cached = await this.xboxRatingFromUrl(name, knownUrl);
+        if (cached) return cached;
+      }
+
       const productIds = await this.resolveXboxProductIds(name);
       if (productIds.length === 0) return null;
 
@@ -129,13 +159,7 @@ export class StoreRatingsClient {
         const rating = this.extractXboxRating(page, productId);
         if (!rating || rating.ratingCount <= 0) continue;
 
-        const result: StoreRating = {
-          platform: Platform.XBOX,
-          metric: SignalMetric.XBOX_RATINGS,
-          ratingCount: rating.ratingCount,
-          averageRating: rating.averageRating,
-          sourceUrl: url,
-        };
+        const result = this.xboxRatingResult(url, rating);
         if (this.isExactTitleMatch(name, title)) return result;
         if (!firstPrefixMatch) firstPrefixMatch = result;
       }
@@ -178,6 +202,37 @@ export class StoreRatingsClient {
     return [...bucket[1].matchAll(/"productId":"([A-Z0-9]{12})"/g)].map(
       (m) => m[1],
     );
+  }
+
+  private async xboxRatingFromUrl(
+    name: string,
+    url: string,
+  ): Promise<StoreRating | null> {
+    const productId = url.split('?')[0].split('/').filter(Boolean).pop();
+    if (!productId) return null;
+    const page = await this.fetchOptional(url);
+    if (!page) return null;
+
+    const title = this.extractXboxTitle(page, productId);
+    if (!title || !this.titleMatches(name, title)) return null;
+
+    const rating = this.extractXboxRating(page, productId);
+    if (!rating || rating.ratingCount <= 0) return null;
+
+    return this.xboxRatingResult(url.split('?')[0], rating);
+  }
+
+  private xboxRatingResult(
+    url: string,
+    rating: { ratingCount: number; averageRating: number | null },
+  ): StoreRating {
+    return {
+      platform: Platform.XBOX,
+      metric: SignalMetric.XBOX_RATINGS,
+      ratingCount: rating.ratingCount,
+      averageRating: rating.averageRating,
+      sourceUrl: url,
+    };
   }
 
   private simplifyXboxQuery(name: string): string {
@@ -340,9 +395,7 @@ export class StoreRatingsClient {
    * tiles and must be skipped.
    */
   private extractPsConceptId(html: string): string | null {
-    const decoded = html
-      .replace(/\\u0026quot;/g, '"')
-      .replace(/&quot;/g, '"');
+    const decoded = html.replace(/\\u0026quot;/g, '"').replace(/&quot;/g, '"');
     for (const m of decoded.matchAll(/"conceptId":"(\d+)"/g)) {
       if (m[1]) return m[1];
     }

@@ -682,14 +682,26 @@ export class GamesService {
 
     if (!game) throw new NotFoundException(`Game "${slug}" not found`);
 
-    const visibleMilestones = game.milestones.filter(
-      (m) => m.rejectedAt == null,
-    );
+    const visibleMilestones = game.isFree
+      ? []
+      : game.milestones.filter((m) => m.rejectedAt == null);
 
-    const latestEstimates = await this.latestEstimatesByPlatform(game.id);
+    const latestEstimates = game.isFree
+      ? new Map<Platform, SalesEstimate>()
+      : await this.latestEstimatesByPlatform(game.id);
 
-    const { breakdown, total, reconciliation, estimatedToday } =
-      this.aggregateSales(visibleMilestones, latestEstimates, game.releaseDate);
+    const { breakdown, total, reconciliation, estimatedToday } = game.isFree
+      ? {
+          breakdown: [],
+          total: null,
+          reconciliation: [],
+          estimatedToday: null,
+        }
+      : this.aggregateSales(
+          visibleMilestones,
+          latestEstimates,
+          game.releaseDate,
+        );
 
     const reviewHistory = await this.signals.find({
       where: { gameId: game.id, metric: SignalMetric.STEAM_REVIEWS },
@@ -738,17 +750,19 @@ export class GamesService {
       }),
     ]);
 
-    const priceRows = await this.prices.find({
-      where: { gameId: game.id },
-      order: { capturedAt: 'ASC' },
-      select: {
-        capturedAt: true,
-        currency: true,
-        initial: true,
-        final: true,
-        discountPercent: true,
-      },
-    });
+    const priceRows = game.isFree
+      ? []
+      : await this.prices.find({
+          where: { gameId: game.id },
+          order: { capturedAt: 'ASC' },
+          select: {
+            capturedAt: true,
+            currency: true,
+            initial: true,
+            final: true,
+            discountPercent: true,
+          },
+        });
     const priceHistory: PublicPricePoint[] = priceRows.map((p) => ({
       capturedAt: p.capturedAt,
       currency: p.currency,
@@ -778,16 +792,18 @@ export class GamesService {
 
     const storeRatings = await this.buildStoreRatings(game.id);
 
-    const estimateSnapshotRows = await this.estimateSnapshots.find({
-      where: { gameId: game.id },
-      order: { computedAt: 'ASC' },
-      select: {
-        computedAt: true,
-        estimatedTodayLow: true,
-        estimatedTodayHigh: true,
-      },
-      take: 500,
-    });
+    const estimateSnapshotRows = game.isFree
+      ? []
+      : await this.estimateSnapshots.find({
+          where: { gameId: game.id },
+          order: { computedAt: 'ASC' },
+          select: {
+            computedAt: true,
+            estimatedTodayLow: true,
+            estimatedTodayHigh: true,
+          },
+          take: 500,
+        });
     const estimateSnapshots: PublicEstimateSnapshot[] =
       estimateSnapshotRows.map((s) => ({
         computedAt: s.computedAt,
@@ -1062,6 +1078,7 @@ export class GamesService {
       relations: { platformReleaseDates: true },
     });
     if (!game) throw new NotFoundException(`Game ${gameId} not found`);
+    if (game.isFree) return { points: 0, estimates: 0, snapshots: 0 };
 
     const moments = await this.collectCaptureMoments(
       gameId,

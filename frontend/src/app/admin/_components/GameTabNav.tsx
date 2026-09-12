@@ -14,16 +14,22 @@ const TABS = [
 
 export function GameTabNav({
   counts = {},
+  showEstimates = true,
 }: {
   counts?: Partial<Record<(typeof TABS)[number]['key'], number>>;
+  showEstimates?: boolean;
 }) {
   const pathname = usePathname();
   const params = useSearchParams();
   const active = params.get('tab') ?? 'overview';
 
+  const tabs = showEstimates
+    ? TABS
+    : TABS.filter((t) => t.key !== 'estimates');
+
   return (
     <nav className="border-border flex gap-1 overflow-x-auto border-b">
-      {TABS.map((t) => {
+      {tabs.map((t) => {
         const on = active === t.key;
         const count = counts[t.key];
         return (

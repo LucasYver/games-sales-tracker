@@ -100,7 +100,7 @@
     "developer": "Developer",
     "followersSeries": "Steam followers",
     "followersSeriesAlt": "Steam followers of {name} over time.",
-    "freeToPlayNote": "No sales figure: this game is free-to-play.",
+    "freeToPlayNote": "This game is free-to-play, so it has no sales estimate.",
     "genres": "Genres",
     "noData": "No sales figure yet for this game.",
     "peakCcu": "All-time peak of {value} concurrent players · {date}",

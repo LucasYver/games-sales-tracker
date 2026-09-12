@@ -166,7 +166,7 @@ export default async function AdminGameDetailPage({
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
             <RefreshGameButton gameId={s.id} />
-            <RebuildEstimatesButton gameId={s.id} />
+            {!s.isFree && <RebuildEstimatesButton gameId={s.id} />}
             <ImportCcuCsvButton gameId={s.id} />
             <ImportReviewsCsvButton gameId={s.id} />
             <DeleteButton
@@ -178,25 +178,35 @@ export default async function AdminGameDetailPage({
         </div>
       </div>
 
+      {s.isFree && (
+        <p className="border-border bg-muted/40 rounded-xl border px-4 py-3 text-sm">
+          This game is free-to-play, so it has no sales estimate.
+        </p>
+      )}
+
       {/* ── KPI strip ── */}
       <div className="border-border grid grid-cols-2 divide-x divide-y overflow-hidden rounded-xl border sm:grid-cols-6 sm:divide-y-0">
         <Kpi
           label="Est. today"
           value={
-            estToday
-              ? compactMid(
-                  estToday.estimatedTodayLow,
-                  estToday.estimatedTodayHigh,
-                )
-              : '—'
+            s.isFree
+              ? 'n/a'
+              : estToday
+                ? compactMid(
+                    estToday.estimatedTodayLow,
+                    estToday.estimatedTodayHigh,
+                  )
+                : '—'
           }
           hint={
-            estToday
-              ? fmtRange(
-                  estToday.estimatedTodayLow,
-                  estToday.estimatedTodayHigh,
-                )
-              : 'no snapshot'
+            s.isFree
+              ? 'free-to-play'
+              : estToday
+                ? fmtRange(
+                    estToday.estimatedTodayLow,
+                    estToday.estimatedTodayHigh,
+                  )
+                : 'no snapshot'
           }
         />
         <Kpi
@@ -232,6 +242,7 @@ export default async function AdminGameDetailPage({
 
       {/* ── Tabs ── */}
       <GameTabNav
+        showEstimates={!s.isFree}
         counts={{
           estimates: s.estimatesCount,
           milestones: s.milestonesCount,
@@ -240,8 +251,9 @@ export default async function AdminGameDetailPage({
 
       <Suspense key={tab} fallback={<TabSkeleton />}>
         {tab === 'overview' && <OverviewTab s={s} />}
-        {tab === 'estimates' && <EstimatesTab s={s} gameId={id} />}
-        {tab === 'charts' && <ChartsTab gameId={id} has={has} />}
+        {tab === 'estimates' &&
+          (s.isFree ? <FreeToPlayEstimateNotice /> : <EstimatesTab s={s} gameId={id} />)}
+        {tab === 'charts' && <ChartsTab gameId={id} has={has} isFree={s.isFree} />}
         {tab === 'matcher' && (
           <MatcherTab
             gameId={id}
@@ -256,6 +268,14 @@ export default async function AdminGameDetailPage({
 }
 
 // ─── KPI ────────────────────────────────────────────────────────────────────
+
+function FreeToPlayEstimateNotice() {
+  return (
+    <p className="border-border bg-muted/40 rounded-xl border px-4 py-3 text-sm">
+      This game is free-to-play, so it has no sales estimate.
+    </p>
+  );
+}
 
 function Kpi({
   label,
@@ -343,7 +363,11 @@ function OverviewTab({ s }: { s: AdminGamePageSummary }) {
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm">
-          {s.latestEstimate ? (
+          {s.isFree ? (
+            <p className="text-muted-foreground">
+              This game is free-to-play, so it has no sales estimate.
+            </p>
+          ) : s.latestEstimate ? (
             <>
               <div>
                 <div className="text-3xl font-bold tracking-tight tabular-nums">
@@ -637,9 +661,11 @@ function PipeOp({ children }: { children: React.ReactNode }) {
 async function ChartsTab({
   gameId,
   has,
+  isFree,
 }: {
   gameId: string;
   has: (p: Platform) => boolean;
+  isFree: boolean;
 }) {
   const c = await adminFetch<AdminGameChartsData>(`/games/${gameId}/charts`);
   const isSteam = has('PC') || c.reviewHistory.length > 0;
@@ -683,7 +709,7 @@ async function ChartsTab({
             <ReviewHistoryChart reviewHistory={c.switchRatingsHistory} />
           </ChartCard>
         )}
-        {c.prices.length > 0 && (
+        {!isFree && c.prices.length > 0 && (
           <ChartCard title="Steam price history">
             <div className="text-muted-foreground p-4 text-xs">
               {c.prices.length} price points · latest{' '}

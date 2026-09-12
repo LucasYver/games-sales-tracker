@@ -100,7 +100,7 @@
     "developer": "Développeur",
     "followersSeries": "Followers Steam",
     "followersSeriesAlt": "Évolution du nombre de followers Steam de {name}.",
-    "freeToPlayNote": "Pas de chiffre de ventes : ce jeu est gratuit.",
+    "freeToPlayNote": "Ce jeu est gratuit, il n’a donc pas d’estimation de ventes.",
     "genres": "Genres",
     "noData": "Aucun chiffre de vente pour ce jeu.",
     "peakCcu": "Record de {value} joueurs simultanés · {date}",

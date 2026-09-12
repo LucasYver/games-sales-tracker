@@ -3,7 +3,7 @@
 // used per-app as a fast-moving admission signal for very fresh releases that
 // IGDB hasn't accumulated ratings for yet.
 
-export const IGDB_CATALOG_MIN_RATING_COUNT = 20;
+export const IGDB_CATALOG_MIN_RATING_COUNT = 5;
 export const IGDB_CORE_MIN_RATING_COUNT = 80;
 
 export const DISCOVERY_RELEASE_FLOOR = new Date('2012-01-01T00:00:00Z');
@@ -31,5 +31,5 @@ export const IGDB_PLATFORM_IDS = [6, 9, 48, 167, 12, 49, 169];
 
 // Pagination / volume guards for the IGDB discovery queries.
 export const IGDB_DISCOVERY_PAGE_SIZE = 500;
-export const IGDB_DISCOVERY_MAX_PAGES = 12;
+export const IGDB_DISCOVERY_MAX_PAGES = 16;
 export const IGDB_RECENT_LIMIT = 300;

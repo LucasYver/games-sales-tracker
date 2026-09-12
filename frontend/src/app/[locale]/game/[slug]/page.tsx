@@ -211,6 +211,8 @@ function PriceBlock({ game }: { game: GameDetail }) {
   const t = useTranslations('gamePage');
   const format = useFormatter();
 
+  if (game.isFree) return null;
+
   const current = game.currentPrice;
   if (!current) return null;
 
@@ -257,6 +259,8 @@ function PlatformBreakdown({ game }: { game: GameDetail }) {
   const t = useTranslations('gamePage');
   const tPlatform = useTranslations('platform');
   const format = useFormatter();
+
+  if (game.isFree) return null;
 
   const rows = game.salesBreakdown
     .filter((row) => row.platform !== 'GLOBAL' && row.high > 0)
@@ -542,12 +546,22 @@ type TabKey = 'overview' | 'price';
  * Page tabs as plain links: the server renders the selected one, so the page
  * needs no client JS and every tab has its own shareable URL.
  */
-function TabNav({ slug, active }: { slug: string; active: TabKey }) {
+function TabNav({
+  slug,
+  active,
+  showPrice,
+}: {
+  slug: string;
+  active: TabKey;
+  showPrice: boolean;
+}) {
   const t = useTranslations('gamePage');
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'overview', label: t('tabOverview') },
-    { key: 'price', label: t('tabPrice') },
+    ...(showPrice ? [{ key: 'price' as const, label: t('tabPrice') }] : []),
   ];
+
+  if (tabs.length < 2) return null;
 
   return (
     <nav
@@ -582,6 +596,8 @@ function TabNav({ slug, active }: { slug: string; active: TabKey }) {
 function GamePageContent({ game, tab }: { game: GameDetail; tab: TabKey }) {
   const t = useTranslations('gamePage');
   const format = useFormatter();
+
+  const activeTab: TabKey = game.isFree ? 'overview' : tab;
 
   const asOf = asOfDate(game);
 
@@ -637,13 +653,13 @@ function GamePageContent({ game, tab }: { game: GameDetail; tab: TabKey }) {
 
         <GameHeader game={game} />
         <SalesHeadline game={game} />
-        <TabNav slug={game.slug} active={tab} />
+        <TabNav slug={game.slug} active={activeTab} showPrice={!game.isFree} />
 
         {/* Details sit top-left on wide screens; on a phone the figures come
             first and the sheet follows, so the order of importance holds. */}
         <div className="grid lg:grid-cols-[264px_minmax(0,1fr)]">
           <div className="lg:col-start-2 lg:row-start-1">
-            {tab === 'price' ? (
+            {activeTab === 'price' ? (
               <PriceTab game={game} />
             ) : (
               <>

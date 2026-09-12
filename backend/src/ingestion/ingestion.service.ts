@@ -34,7 +34,7 @@ import {
 } from './steam.client';
 import { SteamChartsClient } from './steamcharts.client';
 import { IgdbClient, IgdbGame } from './igdb.client';
-import { StoreRatingsClient } from './store-ratings.client';
+import { KnownStoreUrls, StoreRatingsClient } from './store-ratings.client';
 import { WikipediaClient } from './wikipedia.client';
 import { ArticleClient, ArticleSales } from './article.client';
 import { RssClient } from './rss.client';
@@ -914,6 +914,7 @@ export class IngestionService {
     gameId: string,
     name: string,
     platforms: Platform[],
+    knownUrls?: KnownStoreUrls,
   ): Promise<void> {
     if (!this.hasConsolePlatform(platforms)) {
       this.logger.log(`[stores] "${name}" — skipping store ratings (PC-only)`);
@@ -921,7 +922,8 @@ export class IngestionService {
     }
 
     try {
-      const ratings = await this.storeRatings.getRatings(name);
+      const urls = knownUrls ?? (await this.knownStoreUrlsFor(gameId));
+      const ratings = await this.storeRatings.getRatings(name, urls);
       if (ratings.length === 0) {
         this.logger.log(`[stores] "${name}" — no ratings found on PS/Xbox`);
         return;
@@ -1314,9 +1316,13 @@ export class IngestionService {
               game.dlc = details.dlc;
               metadataChanged = true;
             }
+            if (details.isFree && !game.isFree) {
+              game.isFree = true;
+              metadataChanged = true;
+            }
             if (metadataChanged) this.applyDerivedFeatures(game);
 
-            if (!details.price) return 'skipped' as const;
+            if (details.isFree || !details.price) return 'skipped' as const;
             await this.prices.save(
               this.prices.create({
                 gameId: game.id,
@@ -2792,6 +2798,9 @@ export class IngestionService {
   }> {
     const game = await this.games.findOne({ where: { id: gameId } });
     if (!game) return { found: false };
+    if (game.isFree) {
+      return { found: true, checked: 0, ingested: 0, records: 0 };
+    }
     const result = await this.discoverBacklog(gameId, game.name);
     return { found: true, ...result };
   }
@@ -2809,6 +2818,14 @@ export class IngestionService {
     gameId: string,
     name: string,
   ): Promise<{ checked: number; ingested: number; records: number }> {
+    const tracked = await this.games.findOne({
+      where: { id: gameId },
+      select: ['id', 'isFree'],
+    });
+    if (!tracked || tracked.isFree) {
+      return { checked: 0, ingested: 0, records: 0 };
+    }
+
     let checked = 0;
     let ingested = 0;
     let records = 0;
@@ -3005,6 +3022,12 @@ export class IngestionService {
     text: string,
     fallbackDate: Date | null = null,
   ): Promise<number> {
+    const tracked = await this.games.findOne({
+      where: { id: gameId },
+      select: ['id', 'isFree'],
+    });
+    if (!tracked || tracked.isFree) return 0;
+
     // Read-only lookup here: a fresh host has no entry yet, so we use the
     // MEDIA / weight=40 fallback. The actual TrustedSource row is created
     // only once we know the URL produced a usable record (in
@@ -3295,6 +3318,21 @@ export class IngestionService {
       'day',
     );
 
+    const storeSources = await this.gameSources.find({
+      where: { source: In([SourceType.PS_STORE, SourceType.XBOX_STORE]) },
+    });
+    const knownUrlsByGameId = new Map<string, KnownStoreUrls>();
+    for (const source of storeSources) {
+      if (!source.url) continue;
+      const current = knownUrlsByGameId.get(source.gameId) ?? {};
+      if (source.source === SourceType.PS_STORE) {
+        current.playstationUrl = source.url;
+      } else {
+        current.xboxUrl = source.url;
+      }
+      knownUrlsByGameId.set(source.gameId, current);
+    }
+
     const {
       succeeded: scraped,
       failed,
@@ -3310,7 +3348,12 @@ export class IngestionService {
 
         try {
           await this.ingestionState.track(gameId, 'STORE_RATINGS', () =>
-            this.scrapeStoreRatings(game.id, game.name, game.platforms),
+            this.scrapeStoreRatings(
+              game.id,
+              game.name,
+              game.platforms,
+              knownUrlsByGameId.get(gameId),
+            ),
           );
         } catch (error) {
           this.logger.warn(
@@ -3456,6 +3499,10 @@ export class IngestionService {
       this.logger.warn(`harvestGameMilestones: game ${gameId} not found`);
       return { found: false, articlesIngested: 0 };
     }
+    if (game.isFree) {
+      this.logger.log(`[harvest] "${game.name}" — skipped (free-to-play)`);
+      return { found: true, articlesIngested: 0 };
+    }
 
     const startedAt = Date.now();
     this.logger.log(`[harvest] "${game.name}" (${gameId}) — starting`);
@@ -3489,6 +3536,13 @@ export class IngestionService {
   ): Promise<ArticleIngestResult | null> {
     const game = await this.games.findOne({ where: { id: gameId } });
     if (!game) return null;
+    if (game.isFree) {
+      return {
+        matchedSource: null,
+        tier: SalesSource.MEDIA,
+        milestonesStored: 0,
+      };
+    }
 
     // See `ingestArticleFromText`: registry insertion is deferred until we
     // know the article produced at least one accepted milestone.
@@ -3584,6 +3638,7 @@ export class IngestionService {
   ): Promise<{ gameId: string | null; records: number }> {
     const game = await this.gamesService.matchByTitle(item.title);
     if (!game) return { gameId: null, records: 0 };
+    if (game.isFree) return { gameId: game.id, records: 0 };
 
     const fallbackDate = item.publishedAt ?? null;
     const text = item.contentHtml
@@ -3621,6 +3676,12 @@ export class IngestionService {
     confidenceScore: number,
     sales: ArticleSales,
   ): Promise<number> {
+    const tracked = await this.games.findOne({
+      where: { id: gameId },
+      select: ['id', 'isFree'],
+    });
+    if (!tracked || tracked.isFree) return 0;
+
     // Preserve admin-rejected fingerprints: a rejected milestone stays in
     // place so the fingerprint guard below can skip the matching re-extract.
     await this.milestones.delete({
@@ -4199,6 +4260,23 @@ export class IngestionService {
     }
     return candidate;
   }
+  private async knownStoreUrlsFor(gameId: string): Promise<KnownStoreUrls> {
+    const sources = await this.gameSources.find({
+      where: {
+        gameId,
+        source: In([SourceType.PS_STORE, SourceType.XBOX_STORE]),
+      },
+    });
+    const urls: KnownStoreUrls = {};
+    for (const source of sources) {
+      if (!source.url) continue;
+      if (source.source === SourceType.PS_STORE)
+        urls.playstationUrl = source.url;
+      if (source.source === SourceType.XBOX_STORE) urls.xboxUrl = source.url;
+    }
+    return urls;
+  }
+
   private hasConsolePlatform(
     platforms: Platform[] | null | undefined,
   ): boolean {

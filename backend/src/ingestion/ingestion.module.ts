@@ -68,6 +68,6 @@ import { IngestionStateService } from './ingestion-state.service';
     TwitchClient,
     IngestionStateService,
   ],
-  exports: [IngestionService, IgdbClient, IngestionStateService],
+  exports: [IngestionService, IgdbClient, IngestionStateService, SteamClient],
 })
 export class IngestionModule {}

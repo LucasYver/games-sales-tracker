@@ -58,10 +58,9 @@ const INGESTION_CRONS: IngestionCronConfig[] = [
   {
     pipeline: 'TWITCH_VIEWERS',
     cronPath: '/api/cron/twitch-viewers',
-    schedule: '30 * * * *',
+    schedule: '15,45 * * * *',
     cadence: 'Hourly',
     cycle: 'hour',
-    hourOffsetMinutes: 30,
     target: 'paid',
   },
   {
@@ -91,7 +90,7 @@ const INGESTION_CRONS: IngestionCronConfig[] = [
   {
     pipeline: 'STEAM_PRICE',
     cronPath: '/api/cron/steam-prices',
-    schedule: '0 6 * * *',
+    schedule: '20 6,14,22 * * *',
     cadence: 'Weekly',
     cycle: 'week',
     target: 'steam',
@@ -99,7 +98,7 @@ const INGESTION_CRONS: IngestionCronConfig[] = [
   {
     pipeline: 'STEAM_POPULARITY',
     cronPath: '/api/cron/steam-followers',
-    schedule: '0 4 * * *',
+    schedule: '0 4,16 * * *',
     cadence: 'Daily',
     cycle: 'day',
     target: 'steam',
