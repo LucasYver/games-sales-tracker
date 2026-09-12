@@ -1022,15 +1022,19 @@ export class AdminService {
         order: { reportedAt: 'DESC' },
       }),
       this.gameRanks.findOne({ where: { gameId: id } }),
-      this.signals.query(
+      this.signals.query<
+        Array<{
+          metric: SignalMetric;
+          value: string | number;
+          capturedAt: Date;
+        }>
+      >(
         `SELECT DISTINCT ON (metric) metric, value, "capturedAt"
              FROM signal_snapshot
             WHERE "gameId" = $1
             ORDER BY metric, "capturedAt" DESC`,
         [id],
-      ) as Promise<
-        Array<{ metric: SignalMetric; value: number; capturedAt: Date }>
-      >,
+      ),
       this.estimateSnapshots.findOne({
         where: { gameId: id },
         order: { computedAt: 'DESC' },

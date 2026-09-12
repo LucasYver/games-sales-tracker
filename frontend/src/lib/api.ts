@@ -23,13 +23,10 @@ export interface GameListItem {
   platforms: Platform[];
 }
 
-export type SalesBasis = 'reported' | 'estimate';
-
 /** The single figure the site shows, resolved by the API. */
 export interface HeadlineSales {
   low: number;
   high: number;
-  basis: SalesBasis;
 }
 
 export interface PopularGame extends GameListItem {
@@ -38,7 +35,6 @@ export interface PopularGame extends GameListItem {
   reviews: number;
   estimatedLow: number | null;
   estimatedHigh: number | null;
-  basis: SalesBasis | null;
 }
 
 export interface GenreOption {
@@ -158,36 +154,29 @@ export interface GameDetail {
 }
 
 /**
- * One number out of a range. A published figure is shown as-is; a modelled one
- * is the midpoint, rounded so we never imply precision we do not have (nearest
- * 100K above a million, nearest 10K below).
+ * One number out of a range: the midpoint, rounded so we never imply precision
+ * we do not have (nearest 100K above a million, nearest 10K below).
  */
 function roundedUnits(
   low: number | null,
   high: number | null,
-  basis: SalesBasis | null,
 ): number | null {
   if (low == null || high == null) return null;
   const mid = (low + high) / 2;
   if (mid <= 0) return null;
-  if (basis === 'reported') return Math.round(mid);
   const step = mid >= 1_000_000 ? 100_000 : 10_000;
   return Math.max(step, Math.round(mid / step) * step);
 }
 
 /** Listing and search rows. */
 export function listingUnits(game: PopularGame): number | null {
-  return roundedUnits(game.estimatedLow, game.estimatedHigh, game.basis);
+  return roundedUnits(game.estimatedLow, game.estimatedHigh);
 }
 
 /** Game page. Same resolution as the listing — the API decides, not the page. */
 export function headlineUnits(game: GameDetail): number | null {
   if (!game.headline) return null;
-  return roundedUnits(
-    game.headline.low,
-    game.headline.high,
-    game.headline.basis,
-  );
+  return roundedUnits(game.headline.low, game.headline.high);
 }
 
 export async function searchGames(

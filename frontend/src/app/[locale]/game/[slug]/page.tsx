@@ -62,14 +62,8 @@ export async function generateMetadata({
   };
 }
 
-/**
- * The date that actually qualifies the headline: when a source published the
- * figure if it is a published one, otherwise when we last recomputed ours.
- */
+/** The date that qualifies the headline: when we last recomputed the estimate. */
 function asOfDate(game: GameDetail): string | null {
-  if (game.headline?.basis === 'reported') {
-    return game.totalSales?.reportedAt ?? null;
-  }
   return game.estimateSnapshots.at(-1)?.computedAt ?? null;
 }
 

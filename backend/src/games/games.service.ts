@@ -55,10 +55,6 @@ export interface PopularGame {
   reviews: number;
   estimatedLow: number | null;
   estimatedHigh: number | null;
-  // 'reported' = a worldwide figure a source published, 'estimate' = our
-  // model. The listing and the game page must show the same number, so both
-  // resolve it the same way (see `headlineSales`).
-  basis: 'reported' | 'estimate' | null;
 }
 
 export interface GenreOption {
@@ -284,7 +280,7 @@ export class GamesService {
     if (games.length === 0) return [];
 
     const ids = games.map((g) => g.id);
-    const [reviewRows, estimates, declaredByGame] = await Promise.all([
+    const [reviewRows, estimates] = await Promise.all([
       this.signals
         .createQueryBuilder('s')
         .select('s.gameId', 'gameId')
@@ -296,7 +292,6 @@ export class GamesService {
         .groupBy('s.gameId')
         .getRawMany<{ gameId: string; reviews: string }>(),
       this.latestReconciledEstimates(ids),
-      this.declaredGlobalByGame(ids),
     ]);
 
     const reviewsByGame = new Map(
@@ -304,10 +299,7 @@ export class GamesService {
     );
 
     return games.map((game) => {
-      const headline = this.headlineSales(
-        declaredByGame.get(game.id) ?? null,
-        estimates.get(game.id) ?? null,
-      );
+      const headline = estimates.get(game.id) ?? null;
       return {
         id: game.id,
         name: game.name,
@@ -320,54 +312,8 @@ export class GamesService {
         reviews: reviewsByGame.get(game.id) ?? 0,
         estimatedLow: headline?.low ?? null,
         estimatedHigh: headline?.high ?? null,
-        basis: headline?.basis ?? null,
       };
     });
-  }
-
-  /**
-   * The one figure the site shows for a game. A worldwide figure a source
-   * actually published always wins over our model — that is what
-   * `buildTotal` does on the game page, and the listing has to agree with it
-   * or the same game shows two different numbers.
-   */
-  private headlineSales(
-    declaredUnits: number | null,
-    estimate: { low: number; high: number } | null,
-  ): { low: number; high: number; basis: 'reported' | 'estimate' } | null {
-    if (declaredUnits != null && declaredUnits > 0) {
-      return { low: declaredUnits, high: declaredUnits, basis: 'reported' };
-    }
-    if (estimate) return { ...estimate, basis: 'estimate' };
-    return null;
-  }
-
-  /**
-   * Latest worldwide declared figure per game, in one query. Mirrors
-   * `buildTotal`: most recent wins, engagement and modelled rows excluded.
-   */
-  private async declaredGlobalByGame(
-    gameIds: string[],
-  ): Promise<Map<string, number>> {
-    const map = new Map<string, number>();
-    if (gameIds.length === 0) return map;
-
-    const rows = await this.milestones
-      .createQueryBuilder('m')
-      .distinctOn(['m.gameId'])
-      .select('m.gameId', 'gameId')
-      .addSelect('m.units', 'units')
-      .where('m.gameId IN (:...gameIds)', { gameIds })
-      .andWhere('m.platform = :platform', { platform: Platform.GLOBAL })
-      .andWhere('m.rejectedAt IS NULL')
-      .andWhere('m.isEngagement = false')
-      .andWhere('m.isEstimate = false')
-      .orderBy('m.gameId')
-      .addOrderBy('m.reportedAt', 'DESC', 'NULLS LAST')
-      .getRawMany<{ gameId: string; units: string }>();
-
-    for (const row of rows) map.set(row.gameId, Number(row.units));
-    return map;
   }
 
   /**
@@ -448,16 +394,10 @@ export class GamesService {
     ]);
 
     const ids = rows.map((r) => r.id);
-    const [latestByGame, declaredByGame] = await Promise.all([
-      this.latestReconciledEstimates(ids),
-      this.declaredGlobalByGame(ids),
-    ]);
+    const latestByGame = await this.latestReconciledEstimates(ids);
 
     const items = rows.map((r) => {
-      const headline = this.headlineSales(
-        declaredByGame.get(r.id) ?? null,
-        latestByGame.get(r.id) ?? null,
-      );
+      const headline = latestByGame.get(r.id) ?? null;
       return {
         id: r.id,
         name: r.name,
@@ -470,7 +410,6 @@ export class GamesService {
         reviews: Number(r.reviews),
         estimatedLow: headline?.low ?? null,
         estimatedHigh: headline?.high ?? null,
-        basis: headline?.basis ?? null,
         weeksCharted: Number(r.weeksCharted),
         peakRank: Number(r.peakRank),
         avgRank: Number(r.avgRank),
@@ -614,16 +553,10 @@ export class GamesService {
     ]);
 
     const ids = rows.map((r) => r.id);
-    const [latestByGame, declaredByGame] = await Promise.all([
-      this.latestReconciledEstimates(ids),
-      this.declaredGlobalByGame(ids),
-    ]);
+    const latestByGame = await this.latestReconciledEstimates(ids);
 
     const items = rows.map((r) => {
-      const headline = this.headlineSales(
-        declaredByGame.get(r.id) ?? null,
-        latestByGame.get(r.id) ?? null,
-      );
+      const headline = latestByGame.get(r.id) ?? null;
       return {
         id: r.id,
         name: r.name,
@@ -636,7 +569,6 @@ export class GamesService {
         reviews: Number(r.reviews),
         estimatedLow: headline?.low ?? null,
         estimatedHigh: headline?.high ?? null,
-        basis: headline?.basis ?? null,
       };
     });
 
@@ -827,12 +759,11 @@ export class GamesService {
       sources: game.sources,
       salesBreakdown: breakdown,
       totalSales: total,
-      // Resolved server-side so the listing, the search panel and this page
-      // can never disagree about a game's number.
-      headline: this.headlineSales(
-        total?.basis === 'reported' ? total.low : null,
-        estimatedToday,
-      ),
+      // Always our model, never a declared milestone: the listing, the search
+      // panel, the admin page and this page all show the same estimate.
+      // Declared worldwide figures stay available as a cross-check through
+      // `totalSales` / `reconciliation`.
+      headline: estimatedToday,
       reconciliation,
       estimatedToday,
       estimateSnapshots,
@@ -1279,8 +1210,9 @@ export class GamesService {
    * later report below an earlier one is noise — enforcing monotonicity
    * prevents the headline from dropping when sources disagree), falling
    * back to an estimate when no concrete figure exists. A GLOBAL worldwide
-   * figure (e.g. Wikipedia) is not a platform line: when present it becomes
-   * the authoritative reported total, overriding the summed breakdown.
+   * figure (e.g. Wikipedia) is not a platform line: it only feeds `total`
+   * (the reported cross-check), never the figure the site displays — that one
+   * is always `estimatedToday`.
    */
   private aggregateSales(
     milestones: Milestone[],
