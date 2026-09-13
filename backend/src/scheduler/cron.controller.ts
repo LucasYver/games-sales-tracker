@@ -55,6 +55,12 @@ export class CronController {
     return this.refresh.captureSteamPrices();
   }
 
+  @Get('xbox-prices')
+  @HttpCode(200)
+  xboxPrices() {
+    return this.refresh.captureXboxPrices();
+  }
+
   @Get('sales-feeds')
   @HttpCode(200)
   salesFeeds() {

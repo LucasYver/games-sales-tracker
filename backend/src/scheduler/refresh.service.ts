@@ -193,6 +193,17 @@ export class RefreshService {
     }
   }
 
+  async captureXboxPrices() {
+    try {
+      const result = await this.ingestion.captureAllXboxPrices();
+      this.logger.log(
+        `Xbox price capture done: ${result.captured} captured, ${result.skipped} skipped, ${result.failed} failed.`,
+      );
+    } catch (error) {
+      this.logger.warn(`Xbox price capture failed: ${error}`);
+    }
+  }
+
   /**
    * Continuously monitor trusted-source RSS feeds: every 30 minutes, ingest
    * any new article that mentions a tracked game and reports a sales figure.

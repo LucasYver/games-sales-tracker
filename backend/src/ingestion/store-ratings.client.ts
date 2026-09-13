@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { Platform, SignalMetric } from '../entities';
+import { XboxCatalogClient } from './xbox-catalog.client';
 
 export interface StoreRating {
   platform: Platform;
@@ -29,6 +30,8 @@ const XBOX_MAX_CANDIDATES = 5;
 export class StoreRatingsClient {
   private readonly logger = new Logger(StoreRatingsClient.name);
 
+  constructor(private readonly xboxCatalog: XboxCatalogClient) {}
+
   /**
    * Collect the number of user ratings for a game on console stores. The
    * count is later turned into a per-platform sales proxy (a console
@@ -36,13 +39,9 @@ export class StoreRatingsClient {
    * nothing rather than throwing.
    *
    * PlayStation uses the concept page, which aggregates every SKU/region
-   * into a single global count. The Xbox Store has no such aggregate —
-   * its rating count is scoped to the current locale's market — so we
-   * deliberately read the US region only (the largest market) and treat
-   * it as a proxy. That single-region count is enough to build a
-   * dedicated Xbox Boxleiter later; until then the Xbox estimate is still
-   * derived from the PS aggregate via `genre-console-split-from-ps-xbox`
-   * (see `EstimationService.aggregateResultsByPlatform`).
+   * into a single global count. Xbox.com pages are per-market, but the
+   * Display Catalog `UsageData` AllTime RatingCount is worldwide — we
+   * resolve the product id (search or a stored URL) then read that JSON.
    */
   async getRatings(
     name: string,
@@ -121,18 +120,10 @@ export class StoreRatingsClient {
   }
 
   /**
-   * Xbox Store lookup (US region). Mirrors the PlayStation flow: resolve
-   * candidate products, open each product page, and only keep a rating
-   * once the product's own title confirms the match — a wrong SKU won't
-   * pass `titleMatches` and yields null rather than a bogus rating.
-   *
-   * The search API returns product ids in relevance order but no titles,
-   * and the first hit is frequently an edition/companion SKU rather than
-   * the base game (e.g. "It Takes Two - Friend's Pass" before
-   * "It Takes Two"). So we scan the top candidates and prefer an exact
-   * title match over a prefix one, falling back to the first prefix match
-   * (which is what console-only edition names like "Hollow Knight:
-   * Voidheart Edition" or "Disco Elysium - The Final Cut" require).
+   * Xbox Store lookup. Search still goes through xbox.com (no titles in the
+   * HTML bucket). Ratings come from Display Catalog AllTime — worldwide,
+   * not the en-US page. We batch the top candidates in one catalog call
+   * and keep a rating only when the catalog title confirms the match.
    */
   private async getXbox(
     name: string,
@@ -147,20 +138,20 @@ export class StoreRatingsClient {
       const productIds = await this.resolveXboxProductIds(name);
       if (productIds.length === 0) return null;
 
+      const catalog = await this.xboxCatalog.getProducts(
+        productIds.slice(0, XBOX_MAX_CANDIDATES),
+        'US',
+      );
+
       let firstPrefixMatch: StoreRating | null = null;
       for (const productId of productIds.slice(0, XBOX_MAX_CANDIDATES)) {
-        const url = `https://www.xbox.com/en-US/games/store/x/${productId}`;
-        const page = await this.fetchOptional(url);
-        if (!page) continue;
+        const product = catalog.get(productId.toUpperCase());
+        if (!product?.title || !product.rating) continue;
+        if (!this.titleMatches(name, product.title)) continue;
 
-        const title = this.extractXboxTitle(page, productId);
-        if (!title || !this.titleMatches(name, title)) continue;
-
-        const rating = this.extractXboxRating(page, productId);
-        if (!rating || rating.ratingCount <= 0) continue;
-
-        const result = this.xboxRatingResult(url, rating);
-        if (this.isExactTitleMatch(name, title)) return result;
+        const url = `https://www.xbox.com/en-US/games/store/x/${product.productId}`;
+        const result = this.xboxRatingResult(url, product.rating);
+        if (this.isExactTitleMatch(name, product.title)) return result;
         if (!firstPrefixMatch) firstPrefixMatch = result;
       }
       return firstPrefixMatch;
@@ -208,18 +199,13 @@ export class StoreRatingsClient {
     name: string,
     url: string,
   ): Promise<StoreRating | null> {
-    const productId = url.split('?')[0].split('/').filter(Boolean).pop();
+    const productId = this.xboxCatalog.xboxProductIdFromUrl(url);
     if (!productId) return null;
-    const page = await this.fetchOptional(url);
-    if (!page) return null;
-
-    const title = this.extractXboxTitle(page, productId);
-    if (!title || !this.titleMatches(name, title)) return null;
-
-    const rating = this.extractXboxRating(page, productId);
-    if (!rating || rating.ratingCount <= 0) return null;
-
-    return this.xboxRatingResult(url.split('?')[0], rating);
+    const catalog = await this.xboxCatalog.getProducts([productId], 'US');
+    const product = catalog.get(productId);
+    if (!product?.title || !product.rating) return null;
+    if (!this.titleMatches(name, product.title)) return null;
+    return this.xboxRatingResult(url.split('?')[0], product.rating);
   }
 
   private xboxRatingResult(
@@ -242,86 +228,6 @@ export class StoreRatingsClient {
       .replace(/[^\p{L}\p{N}\s]/gu, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-  }
-
-  /**
-   * Recover the product's real title. The document `<title>` is a generic
-   * "Buy … | Xbox" (or even "Game Pass") shell, so we prefer the schema
-   * JSON-LD `name`, then the canonical URL slug (`store/<slug>/<id>` — the
-   * `x` slug we request with is our own placeholder and must be skipped),
-   * then the `<title>` as a last resort.
-   */
-  private extractXboxTitle(page: string, productId: string): string | null {
-    const jsonLd = page.match(
-      /"@type":\[[^\]]*"VideoGame"[^\]]*\],"name":"([^"]+)"/,
-    );
-    if (jsonLd) return jsonLd[1];
-
-    const slug = this.extractXboxSlug(page, productId);
-    if (slug) return slug.replace(/-/g, ' ');
-
-    const docTitle = page.match(/<title>([^<]+)<\/title>/);
-    if (docTitle) {
-      return docTitle[1]
-        .replace(/^Buy\s+/i, '')
-        .replace(/\s*\|\s*Xbox.*$/i, '')
-        .trim();
-    }
-    return null;
-  }
-
-  private extractXboxSlug(page: string, productId: string): string | null {
-    // The slug shows up both plain (`store/<slug>/<id>`) and JS-escaped
-    // (`store\u002F<slug>\u002F<id>`).
-    const patterns = [
-      new RegExp(`store/([a-z0-9-]+)/${productId}`, 'g'),
-      new RegExp(`store\\\\u002F([a-z0-9-]+)\\\\u002F${productId}`, 'g'),
-    ];
-    for (const re of patterns) {
-      let match: RegExpExecArray | null;
-      while ((match = re.exec(page))) {
-        if (match[1] !== 'x') return match[1];
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Extract the product's rating. Preferred source is the schema.org
-   * JSON-LD block emitted once per page for the main product (carrying
-   * both figures together). Some pages omit it and only expose the rating
-   * on the React product object, so we fall back to the `ratingCount`
-   * anchored to our product id — stopping before the next `productId` so a
-   * cross-sell tile can't leak in. `averageRating` isn't always present in
-   * that fallback shape.
-   */
-  private extractXboxRating(
-    page: string,
-    productId: string,
-  ): { averageRating: number | null; ratingCount: number } | null {
-    const jsonLd = page.match(
-      /"aggregateRating":\{"@type":"AggregateRating","ratingValue":([\d.]+),"ratingCount":(\d+)/,
-    );
-    if (jsonLd) {
-      return {
-        averageRating: Number(jsonLd[1]),
-        ratingCount: Number(jsonLd[2]),
-      };
-    }
-
-    const anchored = page.match(
-      new RegExp(
-        `"productId":"${productId}"((?:(?!"productId")[\\s\\S]){0,600}?)"ratingCount":(\\d+)`,
-      ),
-    );
-    if (anchored) {
-      const avg = anchored[1].match(/"averageRating":([\d.]+)/);
-      return {
-        averageRating: avg ? Number(avg[1]) : null,
-        ratingCount: Number(anchored[2]),
-      };
-    }
-    return null;
   }
 
   /**

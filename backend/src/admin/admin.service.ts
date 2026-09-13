@@ -96,6 +96,14 @@ const INGESTION_CRONS: IngestionCronConfig[] = [
     target: 'steam',
   },
   {
+    pipeline: 'XBOX_PRICE',
+    cronPath: '/api/cron/xbox-prices',
+    schedule: '40 6,14,22 * * *',
+    cadence: 'Weekly',
+    cycle: 'week',
+    target: 'console',
+  },
+  {
     pipeline: 'STEAM_POPULARITY',
     cronPath: '/api/cron/steam-followers',
     schedule: '0 4,16 * * *',
@@ -914,7 +922,7 @@ export class AdminService {
     }));
 
     const prices = await this.prices.find({
-      where: { gameId: id, country: 'us' },
+      where: { gameId: id, country: 'us', source: SourceType.STEAM },
       order: { capturedAt: 'ASC' },
       take: 500,
     });
@@ -1150,7 +1158,7 @@ export class AdminService {
       series(SignalMetric.XBOX_RATINGS),
       series(SignalMetric.SWITCH_RATINGS),
       this.prices.find({
-        where: { gameId: id, country: 'us' },
+        where: { gameId: id, country: 'us', source: SourceType.STEAM },
         order: { capturedAt: 'ASC' },
         take: 2000,
       }),

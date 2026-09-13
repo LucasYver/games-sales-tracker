@@ -49,6 +49,8 @@ units_high = signal × multiplier_high
 | PS       | `SignalMetric.PS_RATINGS`       |
 | Xbox     | `SignalMetric.XBOX_RATINGS`     |
 
+Xbox ratings are the Display Catalog **worldwide** `UsageData.AllTime.RatingCount` (not the per-locale xbox.com page). They feed `xbox-ratings-boxleiter-default`, blended with `genre-console-split-from-ps-xbox` (or PC→Xbox fallback) the same way PS blends store ratings with the PC split.
+
 `multiplier_low/high` comes from `resolveMultiplier`:
 
 - If the game has a **calibrated multiplier** stored on `Game`

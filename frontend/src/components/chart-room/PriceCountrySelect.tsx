@@ -11,7 +11,7 @@ import {
   SelectTrigger,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import type { RegionalPrice } from '@/lib/api';
+import type { PriceStore, RegionalPrice } from '@/lib/api';
 
 const STORAGE_KEY = 'steam-price-country';
 
@@ -143,6 +143,54 @@ export function PriceCountrySelect({
         ))}
       </SelectContent>
     </Select>
+  );
+}
+
+export function PriceStoreSelect({
+  stores,
+  value,
+}: {
+  stores: PriceStore[];
+  value: PriceStore;
+}) {
+  const t = useTranslations('gamePage');
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  if (stores.length < 2) return null;
+
+  const apply = (store: PriceStore) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('store', store);
+    router.replace(`${pathname}?${params.toString()}` as never);
+  };
+
+  return (
+    <div
+      role="group"
+      aria-label={t('priceStore')}
+      className="flex gap-1 font-mono text-[0.7rem] tracking-wide uppercase"
+    >
+      {stores.map((store) => {
+        const on = store === value;
+        return (
+          <button
+            key={store}
+            type="button"
+            onClick={() => apply(store)}
+            aria-pressed={on}
+            className={`border px-2 py-1.5 ${
+              on
+                ? 'border-primary/40 bg-accent text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {store === 'xbox' ? t('xboxLabel') : t('steamLabel')}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

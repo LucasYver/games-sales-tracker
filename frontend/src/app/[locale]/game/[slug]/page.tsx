@@ -13,7 +13,12 @@ import { Link } from '@/i18n/navigation';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
 import { RangedChart } from '@/components/chart-room/RangedChart';
 import {
+  PlatformCharts,
+  type PlatformChartGroup,
+} from '@/components/chart-room/PlatformCharts';
+import {
   PriceCountrySelect,
+  PriceStoreSelect,
   RegionalPricesTable,
 } from '@/components/chart-room/PriceCountrySelect';
 import { Suspense } from 'react';
@@ -81,11 +86,12 @@ function platformUnits(low: number, high: number): number {
 
 function gamePageHref(
   slug: string,
-  opts: { tab?: string; cc?: string },
+  opts: { tab?: string; cc?: string; store?: string },
 ): string {
   const params = new URLSearchParams();
   if (opts.tab) params.set('tab', opts.tab);
   if (opts.cc) params.set('cc', opts.cc);
+  if (opts.store && opts.store !== 'steam') params.set('store', opts.store);
   const qs = params.toString();
   return qs ? `/game/${slug}?${qs}` : `/game/${slug}`;
 }
@@ -151,6 +157,22 @@ function GameHeader({ game }: { game: GameDetail }) {
             </span>
           ))}
         </div>
+        {game.rank && (
+          <Link
+            href="/ranking"
+            className="mt-2 inline-block font-mono text-[0.68rem] text-muted-foreground hover:text-primary"
+          >
+            {t('rankSummary', {
+              rank: game.rank.peakRank,
+              weeks: game.rank.weeksTopDecile,
+            })}
+          </Link>
+        )}
+        {game.summary && (
+          <p className="mt-3 max-w-[80ch] text-xs leading-relaxed text-muted-foreground">
+            {game.summary}
+          </p>
+        )}
       </div>
     </header>
   );
@@ -171,56 +193,91 @@ function SalesHeadline({ game }: { game: GameDetail }) {
         day: 'numeric',
       })
     : null;
+  const peakDate = game.peakCcu
+    ? format.dateTime(new Date(game.peakCcu.capturedAt), {
+        year: 'numeric',
+        month: 'short',
+      })
+    : null;
+  const recentCcu = game.ccuHistory.at(-1) ?? null;
+  const recentCcuDate = recentCcu
+    ? format.dateTime(new Date(recentCcu.capturedAt), {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      })
+    : null;
+  const showPrice = !game.isFree && game.currentPrice != null;
+  const hasCcuHeadline = recentCcu != null || game.peakCcu != null;
 
   return (
     <section className="border-b border-border px-4 py-5">
-      <p className="font-mono text-[0.68rem] font-semibold tracking-widest text-muted-foreground uppercase">
-        {t('salesTitle')}
-      </p>
-      {game.isFree ? (
-        <>
-          <p className="mt-1 font-mono text-3xl font-bold text-source-official">
-            {tCommon('freeToPlay')}
+      <div
+        className={
+          hasCcuHeadline
+            ? 'grid gap-6 sm:grid-cols-3 sm:items-end'
+            : undefined
+        }
+      >
+        <div>
+          <p className="font-mono text-[0.68rem] font-semibold tracking-widest text-muted-foreground uppercase">
+            {t('salesTitle')}
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t('freeToPlayNote')}
-          </p>
-        </>
-      ) : units ? (
-        <>
-          <p className="mt-1 font-mono text-4xl leading-none font-bold text-primary tabular-nums sm:text-5xl">
-            {format.number(units)}
-          </p>
-          <p className="mt-2 font-mono text-xs text-muted-foreground">
-            {t('allPlatforms')}
-            {asOfLabel ? ` · ${t('asOf', { date: asOfLabel })}` : ''}
-          </p>
-        </>
-      ) : (
-        <p className="mt-1 text-sm text-muted-foreground">{t('noData')}</p>
-      )}
-      <div className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-3 border-t border-border-soft pt-3">
-        <PriceBlock game={game} />
-        {!game.isFree && (
-          <Suspense>
-            <PriceCountrySelect
-              countries={game.regionalPrices}
-              value={game.priceCountry}
-            />
-          </Suspense>
+          {game.isFree ? (
+            <>
+              <p className="mt-1 font-mono text-3xl font-bold text-source-official">
+                {tCommon('freeToPlay')}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t('freeToPlayNote')}
+              </p>
+            </>
+          ) : units ? (
+            <>
+              <p className="mt-1 font-mono text-4xl leading-none font-bold text-primary tabular-nums sm:text-5xl">
+                {format.number(units)}
+              </p>
+              <p className="mt-2 font-mono text-xs text-muted-foreground">
+                {t('allPlatforms')}
+                {asOfLabel ? ` · ${t('asOf', { date: asOfLabel })}` : ''}
+              </p>
+            </>
+          ) : (
+            <p className="mt-1 text-sm text-muted-foreground">{t('noData')}</p>
+          )}
+        </div>
+        {recentCcu && recentCcuDate && (
+          <div>
+            <p className="font-mono text-[0.68rem] font-semibold tracking-widest text-muted-foreground uppercase">
+              {t('recentCcuLabel')}
+            </p>
+            <p className="mt-1 font-mono text-3xl leading-none font-bold tabular-nums sm:text-4xl">
+              {format.number(recentCcu.value)}
+            </p>
+            <p className="mt-2 font-mono text-xs text-muted-foreground">
+              {t('recentCcuHint', { date: recentCcuDate })}
+            </p>
+          </div>
         )}
-        {game.peakCcu && (
-          <span className="font-mono text-xs text-muted-foreground">
-            {t('peakCcu', {
-              value: format.number(game.peakCcu.value),
-              date: format.dateTime(new Date(game.peakCcu.capturedAt), {
-                year: 'numeric',
-                month: 'short',
-              }),
-            })}
-          </span>
+        {game.peakCcu && peakDate && (
+          <div>
+            <p className="font-mono text-[0.68rem] font-semibold tracking-widest text-muted-foreground uppercase">
+              {t('peakCcuLabel')}
+            </p>
+            <p className="mt-1 font-mono text-3xl leading-none font-bold tabular-nums sm:text-4xl">
+              {format.number(game.peakCcu.value)}
+            </p>
+            <p className="mt-2 font-mono text-xs text-muted-foreground">
+              {t('peakCcuHint', { date: peakDate })}
+            </p>
+          </div>
         )}
       </div>
+      {showPrice && (
+        <div className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-3 border-t border-border-soft pt-3">
+          <PriceBlock game={game} />
+        </div>
+      )}
     </section>
   );
 }
@@ -380,12 +437,20 @@ function PriceTab({ game }: { game: GameDetail }) {
         <h2 className="font-mono text-[0.8rem] font-bold tracking-wider uppercase">
           {t('priceTitle')}
         </h2>
-        <Suspense>
-          <PriceCountrySelect
-            countries={game.regionalPrices}
-            value={game.priceCountry}
-          />
-        </Suspense>
+        <div className="flex flex-wrap items-center gap-2">
+          <Suspense>
+            <PriceStoreSelect
+              stores={game.availablePriceStores}
+              value={game.priceStore}
+            />
+          </Suspense>
+          <Suspense>
+            <PriceCountrySelect
+              countries={game.regionalPrices}
+              value={game.priceCountry}
+            />
+          </Suspense>
+        </div>
       </div>
       <div className="flex flex-col gap-5">
         {game.priceHistory.length === 0 ? (
@@ -476,7 +541,7 @@ function TechSheet({ game }: { game: GameDetail }) {
   const t = useTranslations('gamePage');
   const tPlatform = useTranslations('platform');
   const format = useFormatter();
-  const { steam, playstation } = game.storeRatings;
+  const { steam, playstation, xbox } = game.storeRatings;
 
   const rows: [string, string][] = [];
   if (game.developer) rows.push([t('developer'), game.developer]);
@@ -513,6 +578,18 @@ function TechSheet({ game }: { game: GameDetail }) {
           })
         : t('storeRatings', {
             count: format.number(playstation.reviews, { notation: 'compact' }),
+          }),
+    ]);
+  if (xbox)
+    rows.push([
+      t('xboxLabel'),
+      xbox.score != null
+        ? t('storeScoreWithCount', {
+            score: xbox.score.toFixed(1),
+            count: format.number(xbox.reviews, { notation: 'compact' }),
+          })
+        : t('storeRatings', {
+            count: format.number(xbox.reviews, { notation: 'compact' }),
           }),
     ]);
 
@@ -568,12 +645,6 @@ function TechSheet({ game }: { game: GameDetail }) {
           ))}
         </div>
       )}
-
-      {game.summary && (
-        <p className="mt-4 border-t border-border-soft pt-3 text-xs leading-relaxed text-muted-foreground">
-          {game.summary}
-        </p>
-      )}
     </aside>
   );
 }
@@ -589,11 +660,13 @@ function TabNav({
   active,
   showPrice,
   cc,
+  store,
 }: {
   slug: string;
   active: TabKey;
   showPrice: boolean;
   cc?: string;
+  store?: string;
 }) {
   const t = useTranslations('gamePage');
   const tabs: { key: TabKey; label: string }[] = [
@@ -616,6 +689,7 @@ function TabNav({
             href={gamePageHref(slug, {
               tab: tab.key === 'price' ? 'price' : undefined,
               cc,
+              store,
             })}
             aria-current={on ? 'page' : undefined}
             className={`border px-2 py-1.5 font-mono text-[0.7rem] tracking-wide whitespace-nowrap uppercase ${
@@ -640,34 +714,79 @@ function GamePageContent({
   tab: TabKey;
 }) {
   const t = useTranslations('gamePage');
+  const tPlatform = useTranslations('platform');
   const format = useFormatter();
 
   const activeTab: TabKey = game.isFree ? 'overview' : tab;
 
   const asOf = asOfDate(game);
 
-  // Xbox review counts are omitted on purpose: the Xbox store only exposes
-  // ratings from its US storefront, so the number is not comparable with the
-  // worldwide Steam and PlayStation counts sitting next to it.
-  const charts = [
-    { key: 'steam', label: t('reviewsSteam'), points: game.reviewHistory },
+  const platformGroups: PlatformChartGroup[] = [
     {
-      key: 'playstation',
-      label: t('reviewsPlaystation'),
-      points: game.psRatingsHistory,
+      platform: 'PC',
+      label: tPlatform('PC'),
+      store: 'Steam',
+      charts: [
+        { key: 'ccu', label: t('ccuLabel'), points: game.ccuHistory },
+        {
+          key: 'reviews',
+          label: t('reviewsTitle'),
+          points: game.reviewHistory,
+        },
+        {
+          key: 'followers',
+          label: t('followersLabel'),
+          points: game.followersHistory,
+        },
+      ],
     },
     {
-      key: 'switch',
-      label: t('reviewsSwitch'),
-      points: game.switchRatingsHistory,
+      platform: 'PLAYSTATION',
+      label: tPlatform('PLAYSTATION'),
+      store: 'PlayStation Store',
+      charts: [
+        {
+          key: 'ratings',
+          label: t('ratingsLabel'),
+          points: game.psRatingsHistory,
+        },
+      ],
     },
-    { key: 'ccu', label: t('ccuLabel'), points: game.ccuHistory },
     {
-      key: 'followers',
-      label: t('followersSeries'),
-      points: game.followersHistory,
+      platform: 'XBOX',
+      label: tPlatform('XBOX'),
+      store: 'Xbox Store',
+      charts: [
+        {
+          key: 'ratings',
+          label: t('ratingsLabel'),
+          points: game.xboxRatingsHistory,
+        },
+      ],
     },
-  ].filter((c) => c.points.length > 1);
+    {
+      platform: 'SWITCH',
+      label: tPlatform('SWITCH'),
+      store: 'Nintendo eShop',
+      charts: [
+        {
+          key: 'ratings',
+          label: t('ratingsLabel'),
+          points: game.switchRatingsHistory,
+        },
+      ],
+    },
+  ]
+    .map((group) => ({
+      ...group,
+      charts: group.charts.filter((chart) => chart.points.length > 1),
+    }))
+    .filter((group) => group.charts.length > 0);
+
+  // Twitch audience belongs to the game, not to a storefront, so it sits
+  // outside the platform selector rather than under an arbitrary tab.
+  const twitchChart =
+    game.twitchViewersHistory.length > 1 ? game.twitchViewersHistory : null;
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -703,6 +822,7 @@ function GamePageContent({
           active={activeTab}
           showPrice={!game.isFree}
           cc={game.priceCountry}
+          store={game.priceStore}
         />
 
         {/* Details sit top-left on wide screens; on a phone the figures come
@@ -715,16 +835,29 @@ function GamePageContent({
               <>
                 <PlatformBreakdown game={game} />
 
-                {charts.length > 0 && (
-                  <section className="flex flex-col gap-7 border-b border-border px-4 py-5">
-                    {charts.map((chart) => (
-                      <RangedChart
-                        key={chart.key}
-                        points={chart.points}
-                        label={chart.label}
-                        ariaLabel={t('chartAlt', { series: chart.label })}
-                      />
-                    ))}
+                {platformGroups.length > 0 && (
+                  <section className="border-b border-border px-4 py-5">
+                    <PlatformCharts groups={platformGroups} />
+                  </section>
+                )}
+
+                {twitchChart && (
+                  <section className="border-b border-border px-4 py-5">
+                    <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+                      <h2 className="font-mono text-[0.8rem] font-bold tracking-wider uppercase">
+                        {t('crossPlatformTitle')}
+                      </h2>
+                      <span className="font-mono text-[0.68rem] text-muted-foreground">
+                        {t('chartsSource', { store: 'Twitch' })}
+                      </span>
+                    </div>
+                    <RangedChart
+                      points={twitchChart}
+                      label={t('twitchViewersSeries')}
+                      ariaLabel={t('chartAlt', {
+                        series: t('twitchViewersSeries'),
+                      })}
+                    />
                   </section>
                 )}
               </>
@@ -755,14 +888,14 @@ export default async function GamePage({
   searchParams,
 }: {
   params: Promise<{ slug: string; locale: string }>;
-  searchParams: Promise<{ tab?: string; cc?: string }>;
+  searchParams: Promise<{ tab?: string; cc?: string; store?: string }>;
 }) {
-  const [{ slug, locale }, { tab, cc }] = await Promise.all([
+  const [{ slug, locale }, { tab, cc, store }] = await Promise.all([
     params,
     searchParams,
   ]);
   const country = cc?.trim() || defaultPriceCountry(locale);
-  const game = await getGame(slug, country);
+  const game = await getGame(slug, country, store);
 
   if (!game) notFound();
 

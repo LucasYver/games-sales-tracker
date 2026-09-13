@@ -22,6 +22,7 @@ import { SteamClient } from './steam.client';
 import { SteamChartsClient } from './steamcharts.client';
 import { IgdbClient } from './igdb.client';
 import { StoreRatingsClient } from './store-ratings.client';
+import { XboxCatalogClient } from './xbox-catalog.client';
 import { WikipediaClient } from './wikipedia.client';
 import { ArticleClient } from './article.client';
 import { RssClient } from './rss.client';
@@ -58,6 +59,7 @@ import { IngestionStateService } from './ingestion-state.service';
     SteamChartsClient,
     IgdbClient,
     StoreRatingsClient,
+    XboxCatalogClient,
     WikipediaClient,
     ArticleClient,
     RssClient,

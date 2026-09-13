@@ -16,6 +16,7 @@ import {
   SerializedReconciliationEntry,
   SignalMetric,
   SignalSnapshot,
+  SourceType,
 } from '../entities';
 import type { Agreement } from '../entities';
 import {
@@ -163,6 +164,12 @@ export interface PublicRegionalPrice {
   initial: number;
   final: number;
   discountPercent: number;
+}
+
+export type PublicPriceStore = 'steam' | 'xbox';
+
+function sourceForPriceStore(store: PublicPriceStore): SourceType {
+  return store === 'xbox' ? SourceType.XBOX_STORE : SourceType.STEAM;
 }
 
 /**
@@ -615,7 +622,7 @@ export class GamesService {
       .filter((g) => g.length > 0);
   }
 
-  async getBySlug(slug: string, country?: string) {
+  async getBySlug(slug: string, country?: string, store?: string) {
     const priceCountry = normalizeSteamPriceCountry(country);
     const game = await this.games.findOne({
       where: { slug },
@@ -651,26 +658,31 @@ export class GamesService {
       select: { capturedAt: true, value: true },
     });
 
-    const followersHistory = await this.signals.find({
-      where: { gameId: game.id, metric: SignalMetric.STEAM_FOLLOWERS },
-      order: { capturedAt: 'ASC' },
-      select: { capturedAt: true, value: true },
-    });
-
-    // Console store rating counts over time, so the public page can chart
-    // reviews per store side by side. Reconstructed (synthetic) points stay
-    // out: they are a modelling aid, not a measurement. Xbox is absent on
-    // purpose — its store only exposes US-storefront ratings, so the series
-    // would not be comparable with the worldwide counts shown next to it.
-    const [psRatingsHistory, switchRatingsHistory] = await Promise.all(
-      [SignalMetric.PS_RATINGS, SignalMetric.SWITCH_RATINGS].map((metric) =>
-        this.signals.find({
-          where: { gameId: game.id, metric, synthetic: false },
-          order: { capturedAt: 'ASC' },
-          select: { capturedAt: true, value: true },
-        }),
+    const [followersHistory, twitchViewersHistory] = await Promise.all(
+      [SignalMetric.STEAM_FOLLOWERS, SignalMetric.TWITCH_VIEWERS].map(
+        (metric) =>
+          this.signals.find({
+            where: { gameId: game.id, metric },
+            order: { capturedAt: 'ASC' },
+            select: { capturedAt: true, value: true },
+          }),
       ),
     );
+
+    const [psRatingsHistory, xboxRatingsHistory, switchRatingsHistory] =
+      await Promise.all(
+        [
+          SignalMetric.PS_RATINGS,
+          SignalMetric.XBOX_RATINGS,
+          SignalMetric.SWITCH_RATINGS,
+        ].map((metric) =>
+          this.signals.find({
+            where: { gameId: game.id, metric, synthetic: false },
+            order: { capturedAt: 'ASC' },
+            select: { capturedAt: true, value: true },
+          }),
+        ),
+      );
 
     // Concurrent players: the daily series plus the all-time record, which is
     // stored as its own metric (a new row only when the record is beaten, so
@@ -692,10 +704,20 @@ export class GamesService {
       }),
     ]);
 
+    const availablePriceStores = game.isFree
+      ? []
+      : await this.availablePriceStores(game.id);
+    const priceStore = this.resolvePriceStore(store, availablePriceStores);
+    const priceSource = sourceForPriceStore(priceStore);
+
     const priceRows = game.isFree
       ? []
       : await this.prices.find({
-          where: { gameId: game.id, country: priceCountry },
+          where: {
+            gameId: game.id,
+            country: priceCountry,
+            source: priceSource,
+          },
           order: { capturedAt: 'ASC' },
           select: {
             capturedAt: true,
@@ -720,7 +742,7 @@ export class GamesService {
 
     const regionalPrices: PublicRegionalPrice[] = game.isFree
       ? []
-      : await this.latestRegionalPrices(game.id);
+      : await this.latestRegionalPrices(game.id, priceSource);
 
     const rankRow = await this.ranks.findOne({ where: { gameId: game.id } });
     const rank: PublicRank | null = rankRow
@@ -781,7 +803,9 @@ export class GamesService {
       estimateSnapshots,
       reviewHistory,
       followersHistory,
+      twitchViewersHistory,
       psRatingsHistory,
+      xboxRatingsHistory,
       switchRatingsHistory,
       ccuHistory,
       peakCcu: peakCcuRow
@@ -791,6 +815,8 @@ export class GamesService {
       currentPrice,
       lowestPrice,
       priceCountry,
+      priceStore,
+      availablePriceStores,
       regionalPrices,
       rank,
       storeRatings,
@@ -799,16 +825,41 @@ export class GamesService {
 
   private async latestRegionalPrices(
     gameId: string,
+    source: SourceType,
   ): Promise<PublicRegionalPrice[]> {
     const rows: PublicRegionalPrice[] = await this.prices.query(
       `SELECT DISTINCT ON (country)
          country, currency, initial, final, "discountPercent"
        FROM price_snapshot
-       WHERE "gameId" = $1
+       WHERE "gameId" = $1 AND source = $2
        ORDER BY country, "capturedAt" DESC`,
-      [gameId],
+      [gameId, source],
     );
     return rows;
+  }
+
+  private async availablePriceStores(
+    gameId: string,
+  ): Promise<PublicPriceStore[]> {
+    const rows: Array<{ source: SourceType }> = await this.prices.query(
+      `SELECT DISTINCT source FROM price_snapshot WHERE "gameId" = $1`,
+      [gameId],
+    );
+    const stores: PublicPriceStore[] = [];
+    if (rows.some((r) => r.source === SourceType.STEAM)) stores.push('steam');
+    if (rows.some((r) => r.source === SourceType.XBOX_STORE)) stores.push('xbox');
+    return stores;
+  }
+
+  private resolvePriceStore(
+    requested: string | undefined,
+    available: PublicPriceStore[],
+  ): PublicPriceStore {
+    if (requested === 'xbox' && available.includes('xbox')) return 'xbox';
+    if (requested === 'steam' && available.includes('steam')) return 'steam';
+    if (available.includes('steam')) return 'steam';
+    if (available.includes('xbox')) return 'xbox';
+    return 'steam';
   }
 
   private async buildStoreRatings(gameId: string): Promise<StoreRatings> {

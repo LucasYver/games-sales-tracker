@@ -22,6 +22,7 @@ const PIPELINE_LABELS: Record<string, string> = {
   ESTIMATE_REBUILD: 'Estimate rebuild',
   STEAM_CCU: 'Steam CCU',
   STEAM_PRICE: 'Steam prices',
+  XBOX_PRICE: 'Xbox prices',
   TWITCH_VIEWERS: 'Twitch viewers',
   STEAM_POPULARITY: 'Steam followers',
 };

@@ -28,6 +28,8 @@ import { GamesService } from '../games/games.service';
 import { deriveFranchise, deriveLiveService } from '../games/game-features';
 import { slugify } from '../common/slug';
 import { STEAM_STORE_COUNTRIES } from './steam-store-countries';
+import { XBOX_STORE_COUNTRIES } from './xbox-store-countries';
+import { XboxCatalogClient, XBOX_PRODUCT_ID_RE } from './xbox-catalog.client';
 import {
   SteamAppDetails,
   SteamClient,
@@ -254,6 +256,7 @@ export class IngestionService {
     private readonly steamCharts: SteamChartsClient,
     private readonly igdb: IgdbClient,
     private readonly storeRatings: StoreRatingsClient,
+    private readonly xboxCatalog: XboxCatalogClient,
     private readonly wikipedia: WikipediaClient,
     private readonly article: ArticleClient,
     private readonly rss: RssClient,
@@ -1155,8 +1158,9 @@ export class IngestionService {
    * Poll the live Steam concurrent-player count for every tracked Steam game
    * and persist CCU signals. Runs on a short cadence (dedicated cron) so
    * intra-day peaks are captured even though the full refresh only runs
-   * nightly. Free-to-play titles are excluded (no sales estimate). Each game
-   * is best-effort: a failure is logged and the loop continues.
+   * nightly. Paid and free-to-play titles are both polled; F2P still has no
+   * sales estimate. Each game is best-effort: a failure is logged and the
+   * loop continues.
    */
   async pollAllSteamCcu(options: { budgetMs?: number } = {}): Promise<{
     polled: number;
@@ -1176,7 +1180,7 @@ export class IngestionService {
     }
 
     const trackedGames = await this.games.find({
-      where: { id: In(gameIds), isFree: false },
+      where: { id: In(gameIds) },
     });
     const trackedIds = new Set(trackedGames.map((game) => game.id));
     const sourceByGameId = new Map(
@@ -1302,6 +1306,7 @@ export class IngestionService {
 
       const latestByKey = await this.latestPricesByGameCountry(
         chunk.map((game) => game.id),
+        SourceType.STEAM,
       );
 
       let countriesAttempted = 0;
@@ -1371,6 +1376,7 @@ export class IngestionService {
 
   private async latestPricesByGameCountry(
     gameIds: string[],
+    source: SourceType,
   ): Promise<
     Map<string, { initial: number; final: number; discountPercent: number }>
   > {
@@ -1389,9 +1395,9 @@ export class IngestionService {
       `SELECT DISTINCT ON ("gameId", country)
          "gameId", country, initial, final, "discountPercent"
        FROM price_snapshot
-       WHERE "gameId" = ANY($1::uuid[])
+       WHERE "gameId" = ANY($1::uuid[]) AND source = $2
        ORDER BY "gameId", country, "capturedAt" DESC`,
-      [gameIds],
+      [gameIds, source],
     );
     for (const row of rows) {
       latest.set(`${row.gameId}:${row.country}`, {
@@ -1415,6 +1421,7 @@ export class IngestionService {
     const prices = await this.steam.getStorePrices(appIds, country);
     const toInsert: Array<{
       gameId: string;
+      source: SourceType;
       country: string;
       currency: string;
       initial: number;
@@ -1442,6 +1449,220 @@ export class IngestionService {
       }
       toInsert.push({
         gameId,
+        source: SourceType.STEAM,
+        country,
+        currency: price.currency,
+        initial: price.initial,
+        final: price.final,
+        discountPercent: price.discountPercent,
+      });
+      latestByKey.set(`${gameId}:${country}`, {
+        initial: price.initial,
+        final: price.final,
+        discountPercent: price.discountPercent,
+      });
+    }
+    if (toInsert.length > 0) {
+      await this.prices.insert(toInsert);
+    }
+    return { captured: toInsert.length, skipped };
+  }
+
+  /**
+   * Capture Xbox Store prices for paid games with a known product id, one
+   * snapshot per market. Same weekly cadence / 11-minute budget as Steam:
+   * Display Catalog batches ~50 product ids per market.
+   */
+  async captureAllXboxPrices(): Promise<{
+    captured: number;
+    skipped: number;
+    failed: number;
+  }> {
+    const RUN_BUDGET_MS = 11 * 60 * 1000;
+    const APP_BATCH = 50;
+    const COUNTRY_CONCURRENCY = 4;
+    const startedAt = Date.now();
+
+    const xboxSources = await this.gameSources.find({
+      where: { source: SourceType.XBOX_STORE },
+    });
+    const productIdByGameId = new Map<string, string>();
+    for (const source of xboxSources) {
+      const id = this.xboxProductIdFromSource(source);
+      if (id) productIdByGameId.set(source.gameId, id);
+    }
+    const gameIds = [...productIdByGameId.keys()];
+    if (gameIds.length === 0) {
+      this.logger.log('[xbox-price] no Xbox-linked games to poll.');
+      return { captured: 0, skipped: 0, failed: 0 };
+    }
+
+    const trackedGames = await this.games.find({
+      where: { id: In(gameIds), isFree: false },
+    });
+    const gameById = new Map(trackedGames.map((game) => [game.id, game]));
+    const dueGameIds = await this.ingestionState.selectDueForCadence(
+      'XBOX_PRICE',
+      [...gameById.keys()],
+      'week',
+    );
+    const eligibleGames = dueGameIds
+      .map((gameId) => gameById.get(gameId))
+      .filter((game): game is Game => game !== undefined);
+
+    this.logger.log(
+      `[xbox-price] ${eligibleGames.length} due game(s) of ${trackedGames.length} ` +
+        `tracked, ${XBOX_STORE_COUNTRIES.length} countries, ` +
+        `budget ${RUN_BUDGET_MS / 1000}s.`,
+    );
+
+    let captured = 0;
+    let skipped = 0;
+    let failed = 0;
+    let processedGames = 0;
+
+    for (let i = 0; i < eligibleGames.length; i += APP_BATCH) {
+      if (Date.now() - startedAt >= RUN_BUDGET_MS) {
+        this.logger.log(
+          `[xbox-price] run budget reached after ${processedGames} game(s); ` +
+            `${eligibleGames.length - processedGames} left for the next run.`,
+        );
+        break;
+      }
+
+      const chunk = eligibleGames.slice(i, i + APP_BATCH);
+      const productIds = chunk.map(
+        (game) => productIdByGameId.get(game.id)!,
+      );
+      const gameIdByProductId = new Map(
+        chunk.map((game) => [productIdByGameId.get(game.id)!, game.id]),
+      );
+      const latestByKey = await this.latestPricesByGameCountry(
+        chunk.map((game) => game.id),
+        SourceType.XBOX_STORE,
+      );
+
+      let countriesAttempted = 0;
+      let ranOutOfBudget = false;
+      for (
+        let c = 0;
+        c < XBOX_STORE_COUNTRIES.length;
+        c += COUNTRY_CONCURRENCY
+      ) {
+        if (Date.now() - startedAt >= RUN_BUDGET_MS) {
+          ranOutOfBudget = true;
+          break;
+        }
+        const countries = XBOX_STORE_COUNTRIES.slice(
+          c,
+          c + COUNTRY_CONCURRENCY,
+        );
+        const results = await Promise.allSettled(
+          countries.map((country) =>
+            this.captureXboxCountryPrices(
+              country,
+              productIds,
+              gameIdByProductId,
+              latestByKey,
+            ),
+          ),
+        );
+        countriesAttempted += countries.length;
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            captured += result.value.captured;
+            skipped += result.value.skipped;
+          } else {
+            failed += 1;
+            this.logger.warn(
+              `[xbox-price] country batch failed: ${result.reason}`,
+            );
+          }
+        }
+      }
+
+      if (
+        ranOutOfBudget &&
+        countriesAttempted < XBOX_STORE_COUNTRIES.length
+      ) {
+        this.logger.log(
+          `[xbox-price] run budget reached mid-chunk after ${countriesAttempted}/` +
+            `${XBOX_STORE_COUNTRIES.length} countries; chunk not stamped.`,
+        );
+        break;
+      }
+
+      for (const game of chunk) {
+        try {
+          await this.ingestionState.track(game.id, 'XBOX_PRICE', async () => {
+            return 'ok' as const;
+          });
+        } catch (error) {
+          this.logger.warn(
+            `[xbox-price] failed to stamp game ${game.id}: ${error}`,
+          );
+        }
+      }
+      processedGames += chunk.length;
+    }
+
+    this.logger.log(
+      `[xbox-price] capture complete: ${captured} captured, ${skipped} skipped, ` +
+        `${failed} failed, ${processedGames} game(s) stamped.`,
+    );
+    return { captured, skipped, failed };
+  }
+
+  private xboxProductIdFromSource(source: GameSource): string | null {
+    const fromId = source.externalId?.trim().toUpperCase();
+    if (fromId && XBOX_PRODUCT_ID_RE.test(fromId)) return fromId;
+    if (source.url) {
+      return this.xboxCatalog.xboxProductIdFromUrl(source.url);
+    }
+    return null;
+  }
+
+  private async captureXboxCountryPrices(
+    country: (typeof XBOX_STORE_COUNTRIES)[number],
+    productIds: string[],
+    gameIdByProductId: Map<string, string>,
+    latestByKey: Map<
+      string,
+      { initial: number; final: number; discountPercent: number }
+    >,
+  ): Promise<{ captured: number; skipped: number }> {
+    const products = await this.xboxCatalog.getProducts(productIds, country);
+    const toInsert: Array<{
+      gameId: string;
+      source: SourceType;
+      country: string;
+      currency: string;
+      initial: number;
+      final: number;
+      discountPercent: number;
+    }> = [];
+    let skipped = 0;
+    for (const productId of productIds) {
+      const gameId = gameIdByProductId.get(productId);
+      if (!gameId) continue;
+      const price = products.get(productId)?.price;
+      if (!price) {
+        skipped += 1;
+        continue;
+      }
+      const prev = latestByKey.get(`${gameId}:${country}`);
+      if (
+        prev &&
+        prev.initial === price.initial &&
+        prev.final === price.final &&
+        prev.discountPercent === price.discountPercent
+      ) {
+        skipped += 1;
+        continue;
+      }
+      toInsert.push({
+        gameId,
+        source: SourceType.XBOX_STORE,
         country,
         currency: price.currency,
         initial: price.initial,

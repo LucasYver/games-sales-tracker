@@ -55,6 +55,7 @@ import { AddCatalogTierAndHarvestTracking1788730000000 } from './1788730000000-A
 import { AddGameIngestionState1788735000000 } from './1788735000000-AddGameIngestionState';
 import { SplitSignalsRefreshPipelines1788740000000 } from './1788740000000-SplitSignalsRefreshPipelines';
 import { AddPriceSnapshotCountry1788750000000 } from './1788750000000-AddPriceSnapshotCountry';
+import { XboxCatalogRatingsAndPrices1788760000000 } from './1788760000000-XboxCatalogRatingsAndPrices';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -121,4 +122,5 @@ export const migrations: MixedList<Function | string> = [
   AddGameIngestionState1788735000000,
   SplitSignalsRefreshPipelines1788740000000,
   AddPriceSnapshotCountry1788750000000,
+  XboxCatalogRatingsAndPrices1788760000000,
 ];

@@ -130,6 +130,8 @@ export interface StoreRatings {
   xbox: { reviews: number; score: number | null } | null;
 }
 
+export type PriceStore = 'steam' | 'xbox';
+
 export interface GameDetail {
   id: string;
   name: string;
@@ -150,7 +152,9 @@ export interface GameDetail {
   estimateSnapshots: PublicEstimateSnapshot[];
   reviewHistory: ReviewPoint[];
   followersHistory: ReviewPoint[];
+  twitchViewersHistory: ReviewPoint[];
   psRatingsHistory: ReviewPoint[];
+  xboxRatingsHistory: ReviewPoint[];
   switchRatingsHistory: ReviewPoint[];
   ccuHistory: ReviewPoint[];
   peakCcu: { value: number; capturedAt: string } | null;
@@ -158,6 +162,8 @@ export interface GameDetail {
   currentPrice: PricePoint | null;
   lowestPrice: PricePoint | null;
   priceCountry: string;
+  priceStore: PriceStore;
+  availablePriceStores: PriceStore[];
   regionalPrices: RegionalPrice[];
   rank: RankInfo | null;
   storeRatings: StoreRatings;
@@ -294,9 +300,11 @@ export async function getGenres(): Promise<GenreOption[]> {
 export async function getGame(
   slug: string,
   country?: string,
+  store?: string,
 ): Promise<GameDetail | null> {
   const search = new URLSearchParams();
   if (country) search.set('country', country);
+  if (store) search.set('store', store);
   const qs = search.toString();
   const res = await fetch(
     `${API_URL}/games/${encodeURIComponent(slug)}${qs ? `?${qs}` : ''}`,
@@ -315,11 +323,15 @@ export async function getGame(
     estimateSnapshots: game.estimateSnapshots ?? [],
     reviewHistory: game.reviewHistory ?? [],
     followersHistory: game.followersHistory ?? [],
+    twitchViewersHistory: game.twitchViewersHistory ?? [],
     psRatingsHistory: game.psRatingsHistory ?? [],
+    xboxRatingsHistory: game.xboxRatingsHistory ?? [],
     switchRatingsHistory: game.switchRatingsHistory ?? [],
     ccuHistory: game.ccuHistory ?? [],
     priceHistory: game.priceHistory ?? [],
     regionalPrices: game.regionalPrices ?? [],
+    availablePriceStores: game.availablePriceStores ?? [],
     priceCountry: game.priceCountry ?? 'us',
+    priceStore: game.priceStore === 'xbox' ? 'xbox' : 'steam',
   };
 }

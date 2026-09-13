@@ -76,7 +76,11 @@ export class GamesController {
   }
 
   @Get(':slug')
-  getBySlug(@Param('slug') slug: string, @Query('country') country?: string) {
-    return this.games.getBySlug(slug, country);
+  getBySlug(
+    @Param('slug') slug: string,
+    @Query('country') country?: string,
+    @Query('store') store?: string,
+  ) {
+    return this.games.getBySlug(slug, country, store);
   }
 }

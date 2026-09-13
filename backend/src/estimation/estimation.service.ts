@@ -432,10 +432,9 @@ export class EstimationService {
         : null;
     if (psAggregate) aggregates.set(Platform.PLAYSTATION, psAggregate);
 
-    // Phase 4 — ventilate to Xbox. Prefer PS → Xbox (PS is the
-    // closest console proxy and the Xbox Store rating signal has been
-    // retired due to per-locale fragmentation); fall back to PC → Xbox
-    // when no PS aggregate is available (PC-and-Xbox-only titles).
+    // Phase 4 — ventilate to Xbox. Prefer PS → Xbox (closest console
+    // proxy); fall back to PC → Xbox. Blended with xbox-ratings-boxleiter
+    // when that method is enabled (worldwide Display Catalog counts).
     let xboxSplit: EstimateResult | null = null;
     if (psAggregate) {
       xboxSplit = await this.computeGenreSplit(
