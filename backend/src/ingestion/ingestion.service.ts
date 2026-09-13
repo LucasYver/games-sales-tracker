@@ -29,7 +29,9 @@ import { deriveFranchise, deriveLiveService } from '../games/game-features';
 import { slugify } from '../common/slug';
 import { STEAM_STORE_COUNTRIES } from './steam-store-countries';
 import { XBOX_STORE_COUNTRIES } from './xbox-store-countries';
+import { PLAYSTATION_STORE_COUNTRIES } from './playstation-store-countries';
 import { XboxCatalogClient, XBOX_PRODUCT_ID_RE } from './xbox-catalog.client';
+import { PlaystationCatalogClient } from './playstation-catalog.client';
 import {
   SteamAppDetails,
   SteamClient,
@@ -257,6 +259,7 @@ export class IngestionService {
     private readonly igdb: IgdbClient,
     private readonly storeRatings: StoreRatingsClient,
     private readonly xboxCatalog: XboxCatalogClient,
+    private readonly playstationCatalog: PlaystationCatalogClient,
     private readonly wikipedia: WikipediaClient,
     private readonly article: ArticleClient,
     private readonly rss: RssClient,
@@ -523,7 +526,11 @@ export class IngestionService {
   ): Promise<void> {
     const game = await this.upsertGameFromIgdb(candidate, options);
     if (!game) return;
-    await this.scrapeStoreRatings(game.id, game.name, game.platforms);
+    try {
+      await this.scrapeStoreRatings(game.id, game.name, game.platforms);
+    } catch (error) {
+      this.logger.warn(`Store ratings scrape failed for "${game.name}": ${error}`);
+    }
     await this.gamesService.rebuildEstimateHistory(game.id);
   }
 
@@ -624,7 +631,11 @@ export class IngestionService {
     await this.pollSteamReviewerPlaytime(game.id, appId);
     await this.pollSteamCcu(game.id, appId);
 
-    await this.scrapeStoreRatings(game.id, game.name, game.platforms);
+    try {
+      await this.scrapeStoreRatings(game.id, game.name, game.platforms);
+    } catch (error) {
+      this.logger.warn(`Store ratings scrape failed for "${game.name}": ${error}`);
+    }
 
     await Promise.all([
       this.scrapeAchievements(game.id, game.name, Platform.PC),
@@ -911,8 +922,9 @@ export class IngestionService {
   }
 
   /**
-   * Look up console store rating counts, store them as signals, and turn each
-   * into a per-platform sales estimate. Best-effort: failures are logged.
+   * Look up console store rating counts, store them as signals, and persist
+   * store URLs. A PlayStation-tagged game with no resolved concept throws
+   * so the STORE_RATINGS cron records `lastError` instead of a silent success.
    */
   async scrapeStoreRatings(
     gameId: string,
@@ -925,17 +937,15 @@ export class IngestionService {
       return;
     }
 
-    try {
-      const urls = knownUrls ?? (await this.knownStoreUrlsFor(gameId));
-      const ratings = await this.storeRatings.getRatings(name, urls);
-      if (ratings.length === 0) {
-        this.logger.log(`[stores] "${name}" — no ratings found on PS/Xbox`);
-        return;
-      }
-      for (const rating of ratings) {
-        const source = STORE_SOURCE_BY_PLATFORM[rating.platform];
-        if (!source) continue;
+    const urls = knownUrls ?? (await this.knownStoreUrlsFor(gameId));
+    const { ratings, playstationConceptUrl } =
+      await this.storeRatings.getRatings(name, urls);
 
+    for (const rating of ratings) {
+      const source = STORE_SOURCE_BY_PLATFORM[rating.platform];
+      if (!source) continue;
+
+      if (rating.ratingCount > 0) {
         await this.signals.save(
           this.signals.create({
             gameId,
@@ -945,17 +955,34 @@ export class IngestionService {
             averageRating: rating.averageRating,
           }),
         );
-        if (rating.sourceUrl) {
-          await this.ensureStoreSource(gameId, source, rating.sourceUrl);
-        }
       }
-      const summary = ratings
-        .map((r) => `${r.platform}=${r.ratingCount}`)
-        .join(', ');
-      this.logger.log(`[stores] "${name}" — ${summary}`);
-    } catch (error) {
-      this.logger.warn(`Store ratings scrape failed for "${name}": ${error}`);
+      if (rating.sourceUrl) {
+        await this.ensureStoreSource(gameId, source, rating.sourceUrl);
+      }
     }
+    if (playstationConceptUrl) {
+      await this.ensureStoreSource(
+        gameId,
+        SourceType.PS_STORE,
+        playstationConceptUrl,
+      );
+    }
+
+    if (
+      platforms.includes(Platform.PLAYSTATION) &&
+      !playstationConceptUrl
+    ) {
+      throw new Error(`PlayStation concept not found for "${name}"`);
+    }
+
+    if (ratings.length === 0) {
+      this.logger.log(`[stores] "${name}" — no ratings found on PS/Xbox`);
+      return;
+    }
+    const summary = ratings
+      .map((r) => `${r.platform}=${r.ratingCount}`)
+      .join(', ');
+    this.logger.log(`[stores] "${name}" — ${summary}`);
   }
 
   /**
@@ -1679,6 +1706,187 @@ export class IngestionService {
       await this.prices.insert(toInsert);
     }
     return { captured: toInsert.length, skipped };
+  }
+
+  /**
+   * Capture PlayStation Store prices for paid games that already have a
+   * concept id on `GameSource`. One GraphQL call per game × country — no
+   * concept resolution here; that stays on STORE_RATINGS.
+   */
+  async captureAllPlaystationPrices(): Promise<{
+    captured: number;
+    skipped: number;
+    failed: number;
+  }> {
+    const RUN_BUDGET_MS = 11 * 60 * 1000;
+    const COUNTRY_CONCURRENCY = 4;
+    const startedAt = Date.now();
+
+    const psSources = await this.gameSources.find({
+      where: { source: SourceType.PS_STORE },
+    });
+    const conceptIdByGameId = new Map<string, string>();
+    for (const source of psSources) {
+      const id = this.playstationConceptIdFromSource(source);
+      if (id) conceptIdByGameId.set(source.gameId, id);
+    }
+    const gameIds = [...conceptIdByGameId.keys()];
+    if (gameIds.length === 0) {
+      this.logger.log('[ps-price] no PlayStation-linked games to poll.');
+      return { captured: 0, skipped: 0, failed: 0 };
+    }
+
+    const trackedGames = await this.games.find({
+      where: { id: In(gameIds), isFree: false },
+    });
+    const gameById = new Map(trackedGames.map((game) => [game.id, game]));
+    const dueGameIds = await this.ingestionState.selectDueForCadence(
+      'PS_PRICE',
+      [...gameById.keys()],
+      'week',
+    );
+    const eligibleGames = dueGameIds
+      .map((gameId) => gameById.get(gameId))
+      .filter((game): game is Game => game !== undefined);
+
+    this.logger.log(
+      `[ps-price] ${eligibleGames.length} due game(s) of ${trackedGames.length} ` +
+        `tracked, ${PLAYSTATION_STORE_COUNTRIES.length} countries, ` +
+        `budget ${RUN_BUDGET_MS / 1000}s.`,
+    );
+
+    let captured = 0;
+    let skipped = 0;
+    let failed = 0;
+    let processedGames = 0;
+
+    for (const game of eligibleGames) {
+      if (Date.now() - startedAt >= RUN_BUDGET_MS) {
+        this.logger.log(
+          `[ps-price] run budget reached after ${processedGames} game(s); ` +
+            `${eligibleGames.length - processedGames} left for the next run.`,
+        );
+        break;
+      }
+
+      const conceptId = conceptIdByGameId.get(game.id)!;
+      const latestByKey = await this.latestPricesByGameCountry(
+        [game.id],
+        SourceType.PS_STORE,
+      );
+
+      let countriesAttempted = 0;
+      let ranOutOfBudget = false;
+      for (
+        let c = 0;
+        c < PLAYSTATION_STORE_COUNTRIES.length;
+        c += COUNTRY_CONCURRENCY
+      ) {
+        if (Date.now() - startedAt >= RUN_BUDGET_MS) {
+          ranOutOfBudget = true;
+          break;
+        }
+        const countries = PLAYSTATION_STORE_COUNTRIES.slice(
+          c,
+          c + COUNTRY_CONCURRENCY,
+        );
+        const results = await Promise.allSettled(
+          countries.map((country) =>
+            this.capturePlaystationCountryPrice(
+              country,
+              conceptId,
+              game.id,
+              latestByKey,
+            ),
+          ),
+        );
+        countriesAttempted += countries.length;
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            captured += result.value.captured;
+            skipped += result.value.skipped;
+          } else {
+            failed += 1;
+            this.logger.warn(
+              `[ps-price] country request failed: ${result.reason}`,
+            );
+          }
+        }
+      }
+
+      if (
+        ranOutOfBudget &&
+        countriesAttempted < PLAYSTATION_STORE_COUNTRIES.length
+      ) {
+        this.logger.log(
+          `[ps-price] run budget reached mid-game after ${countriesAttempted}/` +
+            `${PLAYSTATION_STORE_COUNTRIES.length} countries; game not stamped.`,
+        );
+        break;
+      }
+
+      try {
+        await this.ingestionState.track(game.id, 'PS_PRICE', async () => {
+          return 'ok' as const;
+        });
+      } catch (error) {
+        this.logger.warn(`[ps-price] failed to stamp game ${game.id}: ${error}`);
+      }
+      processedGames += 1;
+    }
+
+    this.logger.log(
+      `[ps-price] capture complete: ${captured} captured, ${skipped} skipped, ` +
+        `${failed} failed, ${processedGames} game(s) stamped.`,
+    );
+    return { captured, skipped, failed };
+  }
+
+  private playstationConceptIdFromSource(source: GameSource): string | null {
+    if (source.url) {
+      const fromUrl = this.playstationCatalog.conceptIdFromUrl(source.url);
+      if (fromUrl) return fromUrl;
+    }
+    const fromId = source.externalId?.trim();
+    if (fromId && /^\d+$/.test(fromId)) return fromId;
+    return null;
+  }
+
+  private async capturePlaystationCountryPrice(
+    country: (typeof PLAYSTATION_STORE_COUNTRIES)[number],
+    conceptId: string,
+    gameId: string,
+    latestByKey: Map<
+      string,
+      { initial: number; final: number; discountPercent: number }
+    >,
+  ): Promise<{ captured: number; skipped: number }> {
+    const price = await this.playstationCatalog.getPrice(conceptId, country);
+    if (!price) return { captured: 0, skipped: 1 };
+    const prev = latestByKey.get(`${gameId}:${country}`);
+    if (
+      prev &&
+      prev.initial === price.initial &&
+      prev.final === price.final &&
+      prev.discountPercent === price.discountPercent
+    ) {
+      return { captured: 0, skipped: 1 };
+    }
+    await this.prices.insert({
+      gameId,
+      source: SourceType.PS_STORE,
+      country,
+      currency: price.currency,
+      initial: price.initial,
+      final: price.final,
+      discountPercent: price.discountPercent,
+    });
+    latestByKey.set(`${gameId}:${country}`, {
+      initial: price.initial,
+      final: price.final,
+      discountPercent: price.discountPercent,
+    });
+    return { captured: 1, skipped: 0 };
   }
 
   /**
@@ -3016,9 +3224,14 @@ export class IngestionService {
         }
       }
       if (item.ratings) {
-        // scrapeStoreRatings never throws (best-effort, logs internally).
-        await this.scrapeStoreRatings(item.gameId, item.name, item.platforms);
-        done.ratings += 1;
+        try {
+          await this.scrapeStoreRatings(item.gameId, item.name, item.platforms);
+          done.ratings += 1;
+        } catch (error) {
+          this.logger.warn(
+            `[backfill-all] ratings failed for "${item.name}": ${String(error)}`,
+          );
+        }
       }
     }
 
@@ -3421,7 +3634,13 @@ export class IngestionService {
       await this.ensureIgdbLink(game);
 
       this.logger.log(`[signals] "${game.name}" — store ratings (PS/Xbox)…`);
-      await this.scrapeStoreRatings(game.id, game.name, game.platforms);
+      try {
+        await this.scrapeStoreRatings(game.id, game.name, game.platforms);
+      } catch (error) {
+        this.logger.warn(
+          `Store ratings scrape failed for "${game.name}": ${error}`,
+        );
+      }
 
       this.logger.log(
         `[signals] "${game.name}" — achievements (Exophase Steam / PSN / Xbox + Steam official %)…`,

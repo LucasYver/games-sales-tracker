@@ -9,6 +9,7 @@ import {
   AchievementSnapshot,
   EstimateSnapshot,
   EstimationDiscrepancy,
+  CatalogTier,
   Game,
   GameIngestionState,
   GameRank,
@@ -99,6 +100,14 @@ const INGESTION_CRONS: IngestionCronConfig[] = [
     pipeline: 'XBOX_PRICE',
     cronPath: '/api/cron/xbox-prices',
     schedule: '40 6,14,22 * * *',
+    cadence: 'Weekly',
+    cycle: 'week',
+    target: 'console',
+  },
+  {
+    pipeline: 'PS_PRICE',
+    cronPath: '/api/cron/ps-prices',
+    schedule: '0 6,14,22 * * *',
     cadence: 'Weekly',
     cycle: 'week',
     target: 'console',
@@ -207,6 +216,7 @@ export interface AdminGameSummary {
   slug: string;
   releaseDate: Date | null;
   isFree: boolean;
+  catalogTier: CatalogTier;
   platforms: Platform[];
   hasMilestone: boolean;
   hasEstimate: boolean;
@@ -316,6 +326,7 @@ export interface AdminGameSummary2 {
   releaseDate: Date | null;
   platforms: Platform[];
   isFree: boolean;
+  catalogTier: CatalogTier;
   developer: string | null;
   publisher: string | null;
   publisherRecord: {
@@ -716,6 +727,7 @@ export class AdminService {
     hasSales?: boolean;
     hasEstimates?: boolean;
     needsRefresh?: boolean;
+    catalogTier?: CatalogTier;
     sort?: 'updated' | 'releaseDate' | 'lastRefreshed';
     direction?: 'asc' | 'desc';
     offset?: number;
@@ -786,6 +798,11 @@ export class AdminService {
       } else if (opts.needsRefresh === false) {
         builder.andWhere(`NOT (${needsRefreshExpr})`);
       }
+      if (opts.catalogTier) {
+        builder.andWhere('g.catalogTier = :catalogTier', {
+          catalogTier: opts.catalogTier,
+        });
+      }
       return builder;
     };
 
@@ -797,6 +814,7 @@ export class AdminService {
         'g.slug AS slug',
         'g.releaseDate AS "releaseDate"',
         'g.isFree AS "isFree"',
+        'g.catalogTier AS "catalogTier"',
         'g.platforms AS platforms',
         'g.lastRefreshedAt AS "lastRefreshedAt"',
         'g.createdAt AS "createdAt"',
@@ -828,6 +846,7 @@ export class AdminService {
         slug: string;
         releaseDate: Date | null;
         isFree: boolean;
+        catalogTier: CatalogTier;
         platforms: string | Platform[];
         lastRefreshedAt: Date | null;
         createdAt: Date;
@@ -844,6 +863,7 @@ export class AdminService {
       slug: r.slug,
       releaseDate: r.releaseDate,
       isFree: r.isFree,
+      catalogTier: r.catalogTier,
       platforms: parsePlatforms(r.platforms),
       hasMilestone: Boolean(r.hasMilestone),
       hasEstimate: Boolean(r.hasEstimate),
@@ -949,6 +969,7 @@ export class AdminService {
       slug: game.slug,
       releaseDate: game.releaseDate,
       isFree: game.isFree,
+      catalogTier: game.catalogTier,
       platforms: game.platforms,
       hasMilestone: visibleMilestones.length > 0,
       hasEstimate: game.estimates.length > 0,
@@ -1066,6 +1087,7 @@ export class AdminService {
       releaseDate: game.releaseDate,
       platforms: game.platforms,
       isFree: game.isFree,
+      catalogTier: game.catalogTier,
       developer: game.developer,
       publisher: game.publisher,
       publisherRecord: game.publisherRecord

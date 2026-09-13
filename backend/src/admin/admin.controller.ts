@@ -14,7 +14,7 @@ import {
 import { AdminService } from './admin.service';
 import { MilestoneConsistencyService } from './milestone-consistency.service';
 import { AdminTokenGuard } from './admin-token.guard';
-import { SalesSource } from '../entities';
+import { CatalogTier, SalesSource } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
 import { PublishersService } from '../publishers/publishers.service';
 import { GenresService } from '../genres/genres.service';
@@ -54,6 +54,7 @@ export class AdminController {
     @Query('hasSales') hasSales?: string,
     @Query('hasEstimates') hasEstimates?: string,
     @Query('needsRefresh') needsRefresh?: string,
+    @Query('catalogTier') catalogTier?: string,
     @Query('sort') sort?: string,
     @Query('direction') direction?: string,
     @Query('offset') offset?: string,
@@ -77,6 +78,11 @@ export class AdminController {
           : needsRefresh === 'false'
             ? false
             : undefined,
+      catalogTier:
+        catalogTier === CatalogTier.CORE ||
+        catalogTier === CatalogTier.EXTENDED
+          ? catalogTier
+          : undefined,
       sort:
         sort === 'releaseDate' || sort === 'lastRefreshed' ? sort : undefined,
       direction: direction === 'asc' ? 'asc' : undefined,

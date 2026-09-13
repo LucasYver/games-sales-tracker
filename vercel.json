@@ -28,6 +28,7 @@
         { "path": "/api/cron/twitch-viewers", "schedule": "15,45 * * * *" },
         { "path": "/api/cron/steam-prices", "schedule": "20 6,14,22 * * *" },
         { "path": "/api/cron/xbox-prices", "schedule": "40 6,14,22 * * *" },
+        { "path": "/api/cron/ps-prices", "schedule": "0 6,14,22 * * *" },
         { "path": "/api/cron/sales-feeds", "schedule": "*/30 * * * *" },
         { "path": "/api/cron/game-discovery", "schedule": "0 2 * * *" },
         { "path": "/api/cron/steam-followers", "schedule": "0 4,16 * * *" },

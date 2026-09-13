@@ -204,6 +204,17 @@ export class RefreshService {
     }
   }
 
+  async capturePlaystationPrices() {
+    try {
+      const result = await this.ingestion.captureAllPlaystationPrices();
+      this.logger.log(
+        `PlayStation price capture done: ${result.captured} captured, ${result.skipped} skipped, ${result.failed} failed.`,
+      );
+    } catch (error) {
+      this.logger.warn(`PlayStation price capture failed: ${error}`);
+    }
+  }
+
   /**
    * Continuously monitor trusted-source RSS feeds: every 30 minutes, ingest
    * any new article that mentions a tracked game and reports a sales figure.

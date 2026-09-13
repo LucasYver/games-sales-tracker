@@ -186,7 +186,11 @@ export function PriceStoreSelect({
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            {store === 'xbox' ? t('xboxLabel') : t('steamLabel')}
+            {store === 'xbox'
+              ? t('xboxLabel')
+              : store === 'playstation'
+                ? t('playstationLabel')
+                : t('steamLabel')}
           </button>
         );
       })}

@@ -113,6 +113,7 @@ export default async function AdminGamesPage({
     hasSales?: string;
     hasEstimates?: string;
     needsRefresh?: string;
+    catalogTier?: string;
     sort?: string;
     direction?: string;
     page?: string;
@@ -124,6 +125,7 @@ export default async function AdminGamesPage({
     hasSales,
     hasEstimates,
     needsRefresh,
+    catalogTier,
     sort,
     direction,
     page: pageParam,
@@ -138,6 +140,7 @@ export default async function AdminGamesPage({
   if (hasSales) filters.hasSales = hasSales;
   if (hasEstimates) filters.hasEstimates = hasEstimates;
   if (needsRefresh) filters.needsRefresh = needsRefresh;
+  if (catalogTier) filters.catalogTier = catalogTier;
   if (sort) filters.sort = sort;
   if (direction) filters.direction = direction;
 
@@ -249,6 +252,19 @@ export default async function AdminGamesPage({
                 <option value="false">Up to date</option>
               </select>
             </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="catalogTier">Catalog</Label>
+              <select
+                id="catalogTier"
+                name="catalogTier"
+                defaultValue={catalogTier ?? ''}
+                className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs"
+              >
+                <option value="">Any</option>
+                <option value="CORE">Core</option>
+                <option value="EXTENDED">Extended</option>
+              </select>
+            </div>
             <Button type="submit">Apply</Button>
             <Button asChild variant="ghost">
               <Link href="/admin/games">Reset</Link>
@@ -293,6 +309,12 @@ export default async function AdminGamesPage({
                   >
                     {g.name}
                   </Link>
+                  <Badge
+                    variant={g.catalogTier === 'CORE' ? 'default' : 'outline'}
+                    className="ml-2 text-xs"
+                  >
+                    {g.catalogTier === 'CORE' ? 'Core' : 'Extended'}
+                  </Badge>
                   {g.isFree && (
                     <Badge variant="outline" className="ml-2 text-xs">
                       F2P

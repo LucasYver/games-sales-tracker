@@ -12,7 +12,7 @@ export const DISCOVERY_RELEASE_FLOOR = new Date('2012-01-01T00:00:00Z');
 // review count is high — Steam ratings move far faster than IGDB's right after
 // launch.
 export const STEAM_CATALOG_MIN_REVIEWS = 500;
-export const STEAM_CORE_MIN_REVIEWS = 2500;
+export const STEAM_CORE_MIN_REVIEWS = 5000;
 
 // How far back the "recent releases" discovery query looks. These candidates
 // skip the IGDB rating bar and are admitted via the Steam review signal.

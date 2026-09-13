@@ -11,6 +11,11 @@ export interface StoreRating {
   sourceUrl: string;
 }
 
+export interface StoreLookupResult {
+  ratings: StoreRating[];
+  playstationConceptUrl: string | null;
+}
+
 export interface KnownStoreUrls {
   playstationUrl?: string;
   xboxUrl?: string;
@@ -33,34 +38,35 @@ export class StoreRatingsClient {
   constructor(private readonly xboxCatalog: XboxCatalogClient) {}
 
   /**
-   * Collect the number of user ratings for a game on console stores. The
-   * count is later turned into a per-platform sales proxy (a console
-   * Boxleiter). Each store is best-effort: a failure or a no-match yields
-   * nothing rather than throwing.
-   *
-   * PlayStation uses the concept page, which aggregates every SKU/region
-   * into a single global count. Xbox.com pages are per-market, but the
-   * Display Catalog `UsageData` AllTime RatingCount is worldwide — we
-   * resolve the product id (search or a stored URL) then read that JSON.
+   * Collect console store lookups. Xbox remains best-effort (no-match →
+   * omitted). PlayStation always reports whether a concept page was
+   * confirmed so the caller can persist the URL without ratings and
+   * fail the cron when the concept is missing.
    */
   async getRatings(
     name: string,
     known: KnownStoreUrls = {},
-  ): Promise<StoreRating[]> {
+  ): Promise<StoreLookupResult> {
     const [ps, xbox] = await Promise.all([
       this.getPlaystation(name, known.playstationUrl),
       this.getXbox(name, known.xboxUrl),
     ]);
-    return [ps, xbox].filter((r): r is StoreRating => r !== null);
+    const ratings: StoreRating[] = [];
+    if (ps?.rating) ratings.push(ps.rating);
+    if (xbox) ratings.push(xbox);
+    return {
+      ratings,
+      playstationConceptUrl: ps?.sourceUrl ?? null,
+    };
   }
 
   private async getPlaystation(
     name: string,
     knownUrl?: string,
-  ): Promise<StoreRating | null> {
+  ): Promise<{ sourceUrl: string; rating: StoreRating | null } | null> {
     try {
       if (knownUrl) {
-        const cached = await this.playstationRatingFromUrl(name, knownUrl);
+        const cached = await this.playstationFromUrl(name, knownUrl);
         if (cached) return cached;
       }
       // Resolve the parent concept rather than a single SKU. PSN exposes
@@ -90,32 +96,38 @@ export class StoreRatingsClient {
       if (!conceptId) return null;
 
       const url = `https://store.playstation.com/en-us/concept/${conceptId}`;
-      return this.playstationRatingFromUrl(name, url);
+      return this.playstationFromUrl(name, url);
     } catch (error) {
       this.logger.warn(`PlayStation lookup failed for "${name}": ${error}`);
       return null;
     }
   }
 
-  private async playstationRatingFromUrl(
+  private async playstationFromUrl(
     name: string,
     url: string,
-  ): Promise<StoreRating | null> {
+  ): Promise<{ sourceUrl: string; rating: StoreRating | null } | null> {
     const page = await this.fetchOptional(url);
     if (!page) return null;
 
     const title = this.extractPsTitle(page);
     if (!title || !this.titleMatches(name, title)) return null;
 
+    const sourceUrl = url.split('?')[0];
     const rating = this.extractPsStarRating(page);
-    if (!rating || rating.ratingCount <= 0) return null;
+    if (!rating || rating.ratingCount <= 0) {
+      return { sourceUrl, rating: null };
+    }
 
     return {
-      platform: Platform.PLAYSTATION,
-      metric: SignalMetric.PS_RATINGS,
-      ratingCount: rating.ratingCount,
-      averageRating: rating.averageRating,
-      sourceUrl: url.split('?')[0],
+      sourceUrl,
+      rating: {
+        platform: Platform.PLAYSTATION,
+        metric: SignalMetric.PS_RATINGS,
+        ratingCount: rating.ratingCount,
+        averageRating: rating.averageRating,
+        sourceUrl,
+      },
     };
   }
 

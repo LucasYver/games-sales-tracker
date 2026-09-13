@@ -146,6 +146,15 @@ export default async function AdminGameDetailPage({
                     {p}
                   </Badge>
                 ))}
+                <Badge
+                  className={
+                    s.catalogTier === 'CORE'
+                      ? 'border-transparent bg-white/90 text-[10px] text-neutral-900'
+                      : 'border-white/30 bg-white/15 text-[10px] text-white'
+                  }
+                >
+                  {s.catalogTier === 'CORE' ? 'Core' : 'Extended'}
+                </Badge>
                 {s.isFree && (
                   <Badge className="border-white/30 bg-white/15 text-[10px] text-white">
                     Free-to-play
@@ -315,6 +324,9 @@ function OverviewTab({ s }: { s: AdminGamePageSummary }) {
             <Meta label="Developer">{s.developer ?? '—'}</Meta>
             <Meta label="Publisher">
               {s.publisherRecord ? s.publisherRecord.name : (s.publisher ?? '—')}
+            </Meta>
+            <Meta label="Catalog">
+              {s.catalogTier === 'CORE' ? 'Core' : 'Extended'}
             </Meta>
             <Meta label="Released">
               {fmtDate(s.releaseDate)}

@@ -61,6 +61,12 @@ export class CronController {
     return this.refresh.captureXboxPrices();
   }
 
+  @Get('ps-prices')
+  @HttpCode(200)
+  psPrices() {
+    return this.refresh.capturePlaystationPrices();
+  }
+
   @Get('sales-feeds')
   @HttpCode(200)
   salesFeeds() {

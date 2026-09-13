@@ -23,6 +23,7 @@ const PIPELINE_LABELS: Record<string, string> = {
   STEAM_CCU: 'Steam CCU',
   STEAM_PRICE: 'Steam prices',
   XBOX_PRICE: 'Xbox prices',
+  PS_PRICE: 'PlayStation prices',
   TWITCH_VIEWERS: 'Twitch viewers',
   STEAM_POPULARITY: 'Steam followers',
 };

@@ -166,10 +166,12 @@ export interface PublicRegionalPrice {
   discountPercent: number;
 }
 
-export type PublicPriceStore = 'steam' | 'xbox';
+export type PublicPriceStore = 'steam' | 'xbox' | 'playstation';
 
 function sourceForPriceStore(store: PublicPriceStore): SourceType {
-  return store === 'xbox' ? SourceType.XBOX_STORE : SourceType.STEAM;
+  if (store === 'xbox') return SourceType.XBOX_STORE;
+  if (store === 'playstation') return SourceType.PS_STORE;
+  return SourceType.STEAM;
 }
 
 /**
@@ -848,6 +850,8 @@ export class GamesService {
     const stores: PublicPriceStore[] = [];
     if (rows.some((r) => r.source === SourceType.STEAM)) stores.push('steam');
     if (rows.some((r) => r.source === SourceType.XBOX_STORE)) stores.push('xbox');
+    if (rows.some((r) => r.source === SourceType.PS_STORE))
+      stores.push('playstation');
     return stores;
   }
 
@@ -855,10 +859,14 @@ export class GamesService {
     requested: string | undefined,
     available: PublicPriceStore[],
   ): PublicPriceStore {
+    if (requested === 'playstation' && available.includes('playstation')) {
+      return 'playstation';
+    }
     if (requested === 'xbox' && available.includes('xbox')) return 'xbox';
     if (requested === 'steam' && available.includes('steam')) return 'steam';
     if (available.includes('steam')) return 'steam';
     if (available.includes('xbox')) return 'xbox';
+    if (available.includes('playstation')) return 'playstation';
     return 'steam';
   }
 

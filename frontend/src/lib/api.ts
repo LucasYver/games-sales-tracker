@@ -130,7 +130,7 @@ export interface StoreRatings {
   xbox: { reviews: number; score: number | null } | null;
 }
 
-export type PriceStore = 'steam' | 'xbox';
+export type PriceStore = 'steam' | 'xbox' | 'playstation';
 
 export interface GameDetail {
   id: string;
@@ -332,6 +332,9 @@ export async function getGame(
     regionalPrices: game.regionalPrices ?? [],
     availablePriceStores: game.availablePriceStores ?? [],
     priceCountry: game.priceCountry ?? 'us',
-    priceStore: game.priceStore === 'xbox' ? 'xbox' : 'steam',
+    priceStore:
+      game.priceStore === 'xbox' || game.priceStore === 'playstation'
+        ? game.priceStore
+        : 'steam',
   };
 }

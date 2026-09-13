@@ -65,6 +65,8 @@ import type {
 
 export type SalesSource = Exclude<SalesSourceLabel, 'ESTIMATE'>;
 
+export type CatalogTier = 'CORE' | 'EXTENDED';
+
 export interface AdminStats {
   games: {
     total: number;
@@ -102,6 +104,7 @@ export interface AdminGameSummary {
   slug: string;
   releaseDate: string | null;
   isFree: boolean;
+  catalogTier: CatalogTier;
   platforms: Platform[];
   hasMilestone: boolean;
   hasEstimate: boolean;
@@ -248,6 +251,7 @@ export interface AdminGamePageSummary {
   releaseDate: string | null;
   platforms: Platform[];
   isFree: boolean;
+  catalogTier: CatalogTier;
   developer: string | null;
   publisher: string | null;
   publisherRecord: {
