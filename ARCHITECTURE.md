@@ -180,7 +180,6 @@ ratings. Free-to-play titles are blocked.
 | `DELETE /admin/milestones/:id` | Single delete |
 | `GET /admin/trusted-sources` | Registry list |
 | `DELETE /admin/trusted-sources/:id` | Remove source |
-| `GET /admin/issues` | 6 issue buckets (undated, suspect quotes, calibration outliers, stale, no signal, inactive sources) |
 | `POST /admin/games/:id/import-ccu-history` | Scrape SteamCharts for the all-time peak CCU and seed a `STEAM_PEAK_CCU` snapshot at the peak's historical month (closes the gap for hits that spiked before we started polling) |
 | `POST /admin/backfill/igdb` | Start full-catalog IGDB backfill |
 | `GET /admin/backfill/igdb` | Backfill progress |
@@ -220,7 +219,6 @@ approach.
 | `/admin/games/[id]` | Full detail: metadata, milestones, estimates, signals, external sources |
 | `/admin/milestones` | Filter by source / platform / undated / suspect quote, delete |
 | `/admin/trusted-sources` | Registry with RSS / search capabilities, delete |
-| `/admin/issues` | 6 actionable groups: undated milestones, suspect quotes, calibration outliers, stale (30 days without Steam signal), zero-signal games, inactive trusted sources |
 
 ---
 

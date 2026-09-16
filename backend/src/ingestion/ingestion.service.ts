@@ -807,7 +807,7 @@ export class IngestionService {
    * a buyer — the count is effectively PC copies sold (owners), NOT an
    * engagement metric. It is tagged `platform='PC'` (Steam-only, not
    * worldwide), which keeps it out of the GLOBAL calibration / breakdown
-   * headline / discrepancy paths (all filter to platform='GLOBAL'). Idempotent
+   * headline paths (all filter to platform='GLOBAL'). Idempotent
    * and rejection-aware: a single active leak milestone per game, never
    * resurrected after an admin rejects it.
    */

@@ -207,7 +207,6 @@ export async function createMilestone(
     body: JSON.stringify(payload),
   });
   revalidatePath('/admin/milestones');
-  revalidatePath('/admin/issues');
   revalidatePath(`/admin/games/${gameId}`);
 }
 
@@ -221,16 +220,12 @@ export async function updateMilestone(
     body: JSON.stringify(payload),
   });
   revalidatePath('/admin/milestones');
-  revalidatePath('/admin/milestones/consistency');
-  revalidatePath('/admin/issues');
   revalidatePath(`/admin/games/${gameId}`);
 }
 
 export async function deleteMilestone(id: string): Promise<void> {
   await adminFetch(`/milestones/${id}`, { method: 'DELETE' });
   revalidatePath('/admin/milestones');
-  revalidatePath('/admin/milestones/consistency');
-  revalidatePath('/admin/issues');
 }
 
 export async function deleteSignal(id: string, gameId: string): Promise<void> {

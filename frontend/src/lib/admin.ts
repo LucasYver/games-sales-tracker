@@ -148,41 +148,6 @@ export interface AdminMilestoneWithGame extends AdminMilestone {
   gameName: string;
 }
 
-// ─── Milestone consistency triage (GET /admin/milestones/consistency) ───────
-
-export type ConsistencyRule =
-  | 'PRE_RELEASE'
-  | 'NON_MONOTONIC'
-  | 'PLATFORM_SUM_EXCEEDS_GLOBAL'
-  | 'PLATFORM_EXCEEDS_GLOBAL'
-  | 'MAGNITUDE_OUTLIER';
-
-export type ConsistencySeverity = 'high' | 'medium';
-
-export interface ConsistencyFlag {
-  rule: ConsistencyRule;
-  severity: ConsistencySeverity;
-  message: string;
-  relatedMilestoneIds: string[];
-}
-
-export interface ConsistencyGameGroup {
-  gameId: string;
-  gameName: string;
-  releaseDate: string | null;
-  milestones: AdminMilestone[];
-  flags: Record<string, ConsistencyFlag[]>;
-  highFlagCount: number;
-  totalFlagCount: number;
-}
-
-export interface ConsistencyIssuesResult {
-  gamesFlagged: number;
-  milestonesFlagged: number;
-  byRule: Record<ConsistencyRule, number>;
-  games: ConsistencyGameGroup[];
-}
-
 export interface AdminEstimate {
   id: string;
   gameId: string;
@@ -412,32 +377,13 @@ export interface AdminTrustedSource {
   createdAt: string;
   // Number of non-rejected milestones linked to this source via the URL
   // hostname (exact host or subdomain match). Populated by the admin
-  // listing endpoint; absent from the issue payload (inactive sources
-  // don't carry it).
+  // listing endpoint.
   recordCount?: number;
 }
 
 export interface PaginatedAdmin<T> {
   items: T[];
   total: number;
-}
-
-export interface IssueGroup<T> {
-  count: number;
-  items: T[];
-}
-
-export interface AdminIssues {
-  undatedMilestones: IssueGroup<AdminMilestoneWithGame>;
-  suspectQuotes: IssueGroup<AdminMilestoneWithGame>;
-  staleGames: IssueGroup<{
-    gameId: string;
-    gameName: string;
-    lastSignalAt: string | null;
-  }>;
-  inactiveTrustedSources: IssueGroup<AdminTrustedSource>;
-  gamesWithoutAnySignal: IssueGroup<{ id: string; name: string; slug: string }>;
-  estimationDiscrepancies: IssueGroup<AdminEstimationDiscrepancy>;
 }
 
 export type GenreSourceLabel = 'IGDB' | 'STEAM' | 'MANUAL';
@@ -592,19 +538,6 @@ export interface AdminGenreIgdbSyncResult {
   inserted: number;
   updated: number;
   skipped: number;
-}
-
-export interface AdminEstimationDiscrepancy {
-  gameId: string;
-  gameName: string;
-  platform: Platform;
-  declaredUnits: number;
-  declaredSource: SalesSource;
-  declaredAt: string | null;
-  priorEstimateLow: number;
-  priorEstimateHigh: number;
-  ratio: number;
-  detectedAt: string;
 }
 
 // ─── Estimate breakdown (diagnostic) ────────────────────────────────────────

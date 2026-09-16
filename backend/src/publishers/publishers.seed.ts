@@ -95,7 +95,7 @@ export const PUBLISHER_HEURISTICS: PublisherHeuristic[] = [
   },
   {
     name: 'Warner Bros. Interactive Entertainment',
-    patterns: [/warner bros/i],
+    patterns: [/warner bros/i, /^wb games\b/i],
   },
   {
     name: 'THQ Nordic',
@@ -124,6 +124,218 @@ export const PUBLISHER_HEURISTICS: PublisherHeuristic[] = [
   {
     name: 'Team17',
     patterns: [/team\s?17/i],
+  },
+  {
+    name: 'Daedalic Entertainment',
+    patterns: [/daedalic/i],
+  },
+  {
+    name: 'tinyBuild',
+    patterns: [/\btinybuild\b/i],
+  },
+  {
+    name: 'Raw Fury',
+    patterns: [/raw fury/i],
+  },
+  {
+    name: 'Plug In Digital',
+    patterns: [/plug\s*in digital/i],
+  },
+  {
+    name: 'NIS America',
+    patterns: [/nis america/i],
+  },
+  {
+    name: 'Konami',
+    patterns: [/\bkonami\b/i],
+  },
+  {
+    name: 'Headup Games',
+    patterns: [/headup games/i],
+  },
+  {
+    name: 'Artifex Mundi',
+    patterns: [/artifex mundi/i],
+  },
+  {
+    name: 'Curve Digital',
+    patterns: [/^curve (digital|games|studios)\b/i],
+  },
+  {
+    name: 'PLAYISM',
+    patterns: [/^playism\b/i],
+  },
+  {
+    name: 'Good Shepherd Entertainment',
+    patterns: [/good shepherd entertainment/i],
+  },
+  {
+    name: 'Codemasters',
+    patterns: [/^codemasters\b/i],
+  },
+  {
+    name: 'Koei Tecmo',
+    patterns: [/koei\s*tecmo/i, /tecmo\s*koei/i],
+  },
+  {
+    name: 'Nacon',
+    patterns: [/^nacon\b/i, /bigben interactive/i],
+  },
+  {
+    name: 'Humble Games',
+    patterns: [/^humble games\b/i],
+  },
+  {
+    name: 'Iceberg Interactive',
+    patterns: [/iceberg interactive/i],
+  },
+  {
+    name: 'PQube',
+    patterns: [/^pqube\b/i],
+  },
+  {
+    name: 'Atlus',
+    patterns: [/^atlus\b/i],
+  },
+  {
+    name: 'Valve',
+    patterns: [/^valve\b/i],
+  },
+  {
+    name: '11 bit studios',
+    patterns: [/11 bit studios/i],
+  },
+  {
+    name: 'Milestone',
+    patterns: [/^milestone(\s+srl)?$/i],
+  },
+  {
+    name: 'Microids',
+    patterns: [/^microids\b/i],
+  },
+  {
+    name: 'Double Fine Productions',
+    patterns: [/double fine/i],
+  },
+  {
+    name: 'Fellow Traveller',
+    patterns: [/fellow traveller/i],
+  },
+  {
+    name: 'Kalypso Media',
+    patterns: [/kalypso media/i],
+  },
+  {
+    name: 'XSEED Games',
+    patterns: [/xseed games/i],
+  },
+  {
+    name: 'Adult Swim Games',
+    patterns: [/adult swim games/i],
+  },
+  {
+    name: 'Versus Evil',
+    patterns: [/versus evil/i],
+  },
+  {
+    name: 'Sekai Project',
+    patterns: [/sekai project/i],
+  },
+  {
+    name: 'Outright Games',
+    patterns: [/outright games/i],
+  },
+  {
+    name: 'Jackbox Games',
+    patterns: [/jackbox games/i],
+  },
+  {
+    name: 'PlayWay',
+    patterns: [/playway/i],
+  },
+  {
+    name: 'Thunderful',
+    patterns: [/^thunderful\b/i],
+  },
+  {
+    name: 'Modus Games',
+    patterns: [/^modus games\b/i],
+  },
+  {
+    name: 'Arc System Works',
+    patterns: [/arc system works/i],
+  },
+  {
+    name: 'Hooded Horse',
+    patterns: [/hooded horse/i],
+  },
+  {
+    name: 'Spike Chunsoft',
+    patterns: [/spike chunsoft/i],
+  },
+  {
+    name: 'Gearbox Publishing',
+    patterns: [/gearbox (publishing|software)/i],
+  },
+  {
+    name: 'NetEase Games',
+    patterns: [/^netease games\b/i],
+  },
+  {
+    name: 'Kepler Interactive',
+    patterns: [/kepler interactive/i],
+  },
+  {
+    name: 'No More Robots',
+    patterns: [/no more robots/i],
+  },
+  {
+    name: 'Assemble Entertainment',
+    patterns: [/assemble entertainment/i],
+  },
+  {
+    name: 'SOEDESCO',
+    patterns: [/soedesco/i],
+  },
+  {
+    name: 'CI Games',
+    patterns: [/^ci games\b/i],
+  },
+  {
+    name: 'Funcom',
+    patterns: [/^funcom\b/i],
+  },
+  {
+    name: 'Idea Factory',
+    patterns: [/idea factory/i],
+  },
+  {
+    name: 'DANGEN Entertainment',
+    patterns: [/dangen entertainment/i],
+  },
+  {
+    name: 'Nintendo',
+    patterns: [/^nintendo\b/i],
+  },
+  {
+    name: 'Coffee Stain Publishing',
+    patterns: [/coffee stain/i],
+  },
+  {
+    name: 'Private Division',
+    patterns: [/private division/i],
+  },
+  {
+    name: 'Larian Studios',
+    patterns: [/larian studios/i],
+  },
+  {
+    name: 'FromSoftware',
+    patterns: [/fromsoftware/i],
+  },
+  {
+    name: 'HoYoverse',
+    patterns: [/hoyoverse|mihoyo/i],
   },
 ];
 

@@ -3,7 +3,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   AchievementSnapshot,
   EstimateSnapshot,
-  EstimationDiscrepancy,
   Game,
   GameRank,
   Milestone,
@@ -23,7 +22,6 @@ import { GamesService } from './games.service';
       AchievementSnapshot,
       SalesEstimate,
       EstimateSnapshot,
-      EstimationDiscrepancy,
       Milestone,
       PriceSnapshot,
       GameRank,

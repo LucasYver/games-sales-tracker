@@ -77,8 +77,8 @@ export class Milestone {
   // including subscription-service users like Ubisoft+/Game Pass) that are
   // adjacent to sales but NOT a copies-sold count. Kept on the same table so
   // they share the provenance/quote/rejection workflow, but excluded from
-  // calibration, the breakdown headline and discrepancy evaluation — they
-  // exist purely as an informational signal.
+  // calibration and the breakdown headline — they exist purely as an
+  // informational signal.
   @Column({ type: 'boolean', default: false })
   isEngagement: boolean;
 

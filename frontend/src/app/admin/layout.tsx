@@ -5,13 +5,11 @@ import {
   LayoutDashboard,
   Library,
   Receipt,
-  ShieldCheck,
   Globe,
   Building2,
   Tags,
   Boxes,
   Trophy,
-  AlertTriangle,
   LogOut,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -48,12 +46,6 @@ const NAV_ITEMS = [
     exact: true,
   },
   {
-    href: '/admin/milestones/consistency',
-    label: 'Consistency',
-    icon: ShieldCheck,
-    exact: false,
-  },
-  {
     href: '/admin/trusted-sources',
     label: 'Trusted sources',
     icon: Globe,
@@ -81,12 +73,6 @@ const NAV_ITEMS = [
     href: '/admin/ranks',
     label: 'Ranks',
     icon: Trophy,
-    exact: false,
-  },
-  {
-    href: '/admin/issues',
-    label: 'Issues',
-    icon: AlertTriangle,
     exact: false,
   },
 ];

@@ -8,7 +8,6 @@ import { Not, Repository, IsNull } from 'typeorm';
 import {
   AchievementSnapshot,
   EstimateSnapshot,
-  EstimationDiscrepancy,
   CatalogTier,
   Game,
   GameIngestionState,
@@ -401,38 +400,6 @@ export interface AdminRankRow {
   computedAt: Date;
 }
 
-export interface IssueGroup<T> {
-  count: number;
-  items: T[];
-}
-
-export interface AdminIssues {
-  undatedMilestones: IssueGroup<Milestone & { gameName: string }>;
-  suspectQuotes: IssueGroup<Milestone & { gameName: string }>;
-  staleGames: IssueGroup<{
-    gameId: string;
-    gameName: string;
-    lastSignalAt: Date | null;
-  }>;
-  inactiveTrustedSources: IssueGroup<TrustedSource>;
-  gamesWithoutAnySignal: IssueGroup<{ id: string; name: string; slug: string }>;
-  estimationDiscrepancies: IssueGroup<{
-    gameId: string;
-    gameName: string;
-    platform: Platform;
-    declaredUnits: number;
-    declaredSource: SalesSource;
-    declaredAt: Date | null;
-    priorEstimateLow: number;
-    priorEstimateHigh: number;
-    ratio: number;
-    detectedAt: Date;
-  }>;
-}
-
-const STALE_DAYS = 30;
-const ISSUE_PREVIEW_LIMIT = 50;
-
 @Injectable()
 export class AdminService {
   constructor(
@@ -455,8 +422,6 @@ export class AdminService {
     private readonly achievements: Repository<AchievementSnapshot>,
     @InjectRepository(EstimateSnapshot)
     private readonly estimateSnapshots: Repository<EstimateSnapshot>,
-    @InjectRepository(EstimationDiscrepancy)
-    private readonly discrepancies: Repository<EstimationDiscrepancy>,
     @InjectRepository(GameRank)
     private readonly gameRanks: Repository<GameRank>,
     @InjectRepository(GameIngestionState)
@@ -1547,175 +1512,6 @@ export class AdminService {
   async deleteTrustedSource(id: string): Promise<{ deleted: boolean }> {
     const result = await this.trustedSources.delete(id);
     return { deleted: (result.affected ?? 0) > 0 };
-  }
-
-  async issues(): Promise<AdminIssues> {
-    const [undatedRows, undatedCount] = await this.milestones
-      .createQueryBuilder('m')
-      .innerJoin('m.game', 'g')
-      .addSelect('g.name', 'gameName')
-      .where('m.reportedAt IS NULL')
-      .andWhere('m.rejectedAt IS NULL')
-      .orderBy('m.capturedAt', 'DESC')
-      .limit(ISSUE_PREVIEW_LIMIT)
-      .getManyAndCount();
-    const undatedNames = await this.gameNameMap(
-      undatedRows.map((r) => r.gameId),
-    );
-
-    // Suspect quotes: pull a bounded recent window and apply the regex
-    // filter in-memory. We deliberately limit this scan to avoid scanning
-    // the full table on every dashboard refresh.
-    const recentForScan = await this.milestones
-      .createQueryBuilder('m')
-      .innerJoin('m.game', 'g')
-      .where('m.note IS NOT NULL')
-      .andWhere('m.rejectedAt IS NULL')
-      .orderBy('m.capturedAt', 'DESC')
-      .limit(2000)
-      .getMany();
-    const suspectAll = recentForScan.filter(
-      (m) => m.note && isPeriodicQuote(m.note),
-    );
-    const suspectNames = await this.gameNameMap(
-      suspectAll.map((s) => s.gameId),
-    );
-
-    // Stale games: no STEAM_REVIEWS signal in the last STALE_DAYS.
-    const staleCutoff = new Date(Date.now() - STALE_DAYS * 24 * 3600 * 1000);
-    const staleRows = await this.games
-      .createQueryBuilder('g')
-      .leftJoin('g.signals', 's', 's.metric = :m', {
-        m: SignalMetric.STEAM_REVIEWS,
-      })
-      .select(['g.id AS "gameId"', 'g.name AS "gameName"'])
-      .addSelect('MAX(s.capturedAt)', 'lastSignalAt')
-      .groupBy('g.id')
-      .having('MAX(s.capturedAt) IS NULL OR MAX(s.capturedAt) < :cutoff', {
-        cutoff: staleCutoff,
-      })
-      .limit(ISSUE_PREVIEW_LIMIT)
-      .getRawMany<{
-        gameId: string;
-        gameName: string;
-        lastSignalAt: Date | null;
-      }>();
-    const staleTotalRow = await this.games
-      .createQueryBuilder('g')
-      .leftJoin('g.signals', 's', 's.metric = :m', {
-        m: SignalMetric.STEAM_REVIEWS,
-      })
-      .select('COUNT(DISTINCT g.id)', 'c')
-      .groupBy('g.id')
-      .having('MAX(s.capturedAt) IS NULL OR MAX(s.capturedAt) < :cutoff', {
-        cutoff: staleCutoff,
-      })
-      .getRawMany<{ c: string }>();
-    const staleTotal = staleTotalRow.length;
-
-    // Inactive trusted sources: never produced any milestone.
-    const inactiveRows = await this.trustedSources
-      .createQueryBuilder('ts')
-      .leftJoin(
-        Milestone,
-        'm',
-        // Heuristic: match by sourceUrl host or matching tier — we don't
-        // have a direct FK from milestone to trusted_source. Fall back to
-        // entries flagged inactive in the registry.
-        "ts.host IS NOT NULL AND m.sourceUrl ILIKE '%' || ts.host || '%'",
-      )
-      .where('ts.active = false OR m.id IS NULL')
-      .andWhere('ts.host IS NOT NULL')
-      .groupBy('ts.id')
-      .having('COUNT(m.id) = 0')
-      .orderBy('ts.name', 'ASC')
-      .getMany();
-
-    // Estimation discrepancies: declared figures that were >=2× off (or
-    // <=0.5×) from the prior estimate at the time they arrived. Rows are
-    // frozen at detection so recalibration doesn't hide past misses.
-    const [discrepancyRows, discrepancyCount] = await this.discrepancies
-      .createQueryBuilder('d')
-      .innerJoin('d.game', 'g')
-      .addSelect('g.name', 'gameName')
-      .orderBy('GREATEST(d.ratio, 1.0 / NULLIF(d.ratio, 0))', 'DESC')
-      .limit(ISSUE_PREVIEW_LIMIT)
-      .getManyAndCount();
-    const discrepancyNames = await this.gameNameMap(
-      discrepancyRows.map((d) => d.gameId),
-    );
-
-    // Games tracked but never received a single signal snapshot.
-    const noSignalRows = await this.games
-      .createQueryBuilder('g')
-      .leftJoin('g.signals', 's')
-      .select(['g.id AS id', 'g.name AS name', 'g.slug AS slug'])
-      .groupBy('g.id')
-      .having('COUNT(s.id) = 0')
-      .limit(ISSUE_PREVIEW_LIMIT)
-      .getRawMany<{ id: string; name: string; slug: string }>();
-    const noSignalTotalRows = await this.games
-      .createQueryBuilder('g')
-      .leftJoin('g.signals', 's')
-      .select('g.id')
-      .groupBy('g.id')
-      .having('COUNT(s.id) = 0')
-      .getRawMany();
-    const noSignalTotal = noSignalTotalRows.length;
-
-    return {
-      undatedMilestones: {
-        count: undatedCount,
-        items: undatedRows.slice(0, ISSUE_PREVIEW_LIMIT).map((r) => ({
-          ...r,
-          gameName: undatedNames.get(r.gameId) ?? '',
-        })),
-      },
-      suspectQuotes: {
-        count: suspectAll.length,
-        items: suspectAll.slice(0, ISSUE_PREVIEW_LIMIT).map((r) => ({
-          ...r,
-          gameName: suspectNames.get(r.gameId) ?? '',
-        })),
-      },
-      staleGames: {
-        count: staleTotal,
-        items: staleRows.slice(0, ISSUE_PREVIEW_LIMIT),
-      },
-      inactiveTrustedSources: {
-        count: inactiveRows.length,
-        items: inactiveRows.slice(0, ISSUE_PREVIEW_LIMIT),
-      },
-      gamesWithoutAnySignal: {
-        count: noSignalTotal,
-        items: noSignalRows,
-      },
-      estimationDiscrepancies: {
-        count: discrepancyCount,
-        items: discrepancyRows.map((d) => ({
-          gameId: d.gameId,
-          gameName: discrepancyNames.get(d.gameId) ?? '',
-          platform: d.platform,
-          declaredUnits: d.declaredUnits,
-          declaredSource: d.declaredSource,
-          declaredAt: d.declaredAt,
-          priorEstimateLow: d.priorEstimateLow,
-          priorEstimateHigh: d.priorEstimateHigh,
-          ratio: d.ratio,
-          detectedAt: d.detectedAt,
-        })),
-      },
-    };
-  }
-
-  private async gameNameMap(ids: string[]): Promise<Map<string, string>> {
-    if (ids.length === 0) return new Map();
-    const rows = await this.games
-      .createQueryBuilder('g')
-      .select(['g.id AS id', 'g.name AS name'])
-      .where('g.id IN (:...ids)', { ids: [...new Set(ids)] })
-      .getRawMany<{ id: string; name: string }>();
-    return new Map(rows.map((r) => [r.id, r.name]));
   }
 }
 

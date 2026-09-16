@@ -1,11 +1,10 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, LessThan, LessThanOrEqual, Or, Repository } from 'typeorm';
+import { In, IsNull, LessThanOrEqual, Or, Repository } from 'typeorm';
 import {
   AchievementSnapshot,
   ConfidenceLevel,
   EstimateSnapshot,
-  EstimationDiscrepancy,
   Game,
   GameRank,
   Milestone,
@@ -27,8 +26,6 @@ import { EstimationService } from '../estimation/estimation.service';
 import {
   AGREEMENT_GROWTH_PER_YEAR,
   AGREEMENT_OVERSHOOT_RATIO,
-  DISCREPANCY_RATIO_HIGH,
-  DISCREPANCY_RATIO_LOW,
   FALLBACK_ANNUAL_GROWTH,
   FALLBACK_GROWTH_CAP_YEARS,
   FIRST_WEEK_PEAK_CCU_WINDOW_DAYS,
@@ -234,8 +231,6 @@ export class GamesService {
     private readonly estimates: Repository<SalesEstimate>,
     @InjectRepository(EstimateSnapshot)
     private readonly estimateSnapshots: Repository<EstimateSnapshot>,
-    @InjectRepository(EstimationDiscrepancy)
-    private readonly discrepancies: Repository<EstimationDiscrepancy>,
     @InjectRepository(Milestone)
     private readonly milestones: Repository<Milestone>,
     @InjectRepository(PriceSnapshot)
@@ -952,119 +947,6 @@ export class GamesService {
   }
 
   /**
-   * Detect "model misses": records whose declared figure diverges by more
-   * than DISCREPANCY_RATIO_HIGH (or less than DISCREPANCY_RATIO_LOW) from
-   * the prior estimate that pre-dates the record.
-   *
-   * Each record produces at most one discrepancy row (unique on recordId).
-   * Once written, the row is **never updated** — even if a later
-   * recalibration aligns the live estimate with the figure, the frozen
-   * miss remains as a paper trail of past model error.
-   *
-   * Lookup strategy for "prior estimate":
-   *  - Reference moment T = record.reportedAt ?? record.capturedAt.
-   *  - For platform = GLOBAL → take the latest EstimateSnapshot with
-   *    computedAt < T (snapshot stores the aggregated total band).
-   *  - For per-platform records → take the latest SalesEstimate for the
-   *    same platform with computedAt < T (more precise than reading the
-   *    snapshot JSON, which only contains entries for platforms that had
-   *    a declared figure at T).
-   *
-   * Skipped silently when no prior estimate exists at T (e.g. first
-   * declared figure ever for a brand-new game).
-   */
-  async evaluateDiscrepanciesForGame(gameId: string): Promise<number> {
-    const milestones = await this.milestones.find({
-      where: {
-        gameId,
-        rejectedAt: IsNull(),
-        isEngagement: false,
-        platform: Platform.GLOBAL,
-      },
-    });
-    if (milestones.length === 0) return 0;
-
-    let created = 0;
-    for (const milestone of milestones) {
-      const existing = await this.discrepancies.findOne({
-        where: { milestoneId: milestone.id },
-      });
-      if (existing) continue;
-
-      const referenceMoment = milestone.reportedAt ?? milestone.capturedAt;
-      if (!referenceMoment) continue;
-
-      const prior = await this.findPriorEstimateBand(
-        gameId,
-        Platform.GLOBAL,
-        referenceMoment,
-      );
-      if (!prior) continue;
-
-      const mid = (prior.low + prior.high) / 2;
-      if (mid <= 0) continue;
-      const ratio = milestone.units / mid;
-
-      if (ratio >= DISCREPANCY_RATIO_LOW && ratio <= DISCREPANCY_RATIO_HIGH) {
-        continue;
-      }
-
-      await this.discrepancies.save(
-        this.discrepancies.create({
-          gameId,
-          platform: Platform.GLOBAL,
-          milestoneId: milestone.id,
-          declaredUnits: milestone.units,
-          declaredSource: milestone.source,
-          declaredAt: milestone.reportedAt,
-          priorEstimateLow: prior.low,
-          priorEstimateHigh: prior.high,
-          priorEstimateAt: prior.computedAt,
-          ratio,
-        }),
-      );
-      created++;
-    }
-
-    if (created > 0) {
-      this.logger.warn(
-        `[discrepancy] ${gameId}: ${created} new estimation miss(es) recorded`,
-      );
-    }
-    return created;
-  }
-
-  private async findPriorEstimateBand(
-    gameId: string,
-    platform: Platform,
-    before: Date,
-  ): Promise<{ low: number; high: number; computedAt: Date } | null> {
-    if (platform === Platform.GLOBAL) {
-      const snap = await this.estimateSnapshots.findOne({
-        where: { gameId, computedAt: LessThan(before) },
-        order: { computedAt: 'DESC' },
-      });
-      if (!snap) return null;
-      return {
-        low: snap.estimatedTodayLow,
-        high: snap.estimatedTodayHigh,
-        computedAt: snap.computedAt,
-      };
-    }
-
-    const estimate = await this.estimates.findOne({
-      where: { gameId, platform, computedAt: LessThan(before) },
-      order: { computedAt: 'DESC' },
-    });
-    if (!estimate) return null;
-    return {
-      low: estimate.estimatedLow,
-      high: estimate.estimatedHigh,
-      computedAt: estimate.computedAt,
-    };
-  }
-
-  /**
    * Replay the entire estimate history for a game using current
    * multipliers and constants. This is the canonical recompute pathway:
    * the refresh flow calls it after every scrape (so a freshly arrived
@@ -1150,11 +1032,6 @@ export class GamesService {
     //   const after = await this.estimateSnapshots.count({ where: { gameId } });
     //   snapshots += after - before;
     // }
-
-    // After rebuilding, some records may now have a prior estimate band
-    // to compare against. We never delete or rewrite existing
-    // discrepancies, so this only fills the gaps.
-    await this.evaluateDiscrepanciesForGame(gameId);
 
     return { points: moments.length, estimates, snapshots };
   }

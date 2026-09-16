@@ -3,7 +3,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   AchievementSnapshot,
   EstimateSnapshot,
-  EstimationDiscrepancy,
   Game,
   GameIngestionState,
   GameRank,
@@ -17,7 +16,6 @@ import {
 } from '../entities';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
-import { MilestoneConsistencyService } from './milestone-consistency.service';
 import { IngestionModule } from '../ingestion/ingestion.module';
 import { GamesModule } from '../games/games.module';
 import { PublishersModule } from '../publishers/publishers.module';
@@ -40,7 +38,6 @@ import { ReferenceProfilesModule } from '../reference-profiles/reference-profile
       ProcessedArticle,
       AchievementSnapshot,
       EstimateSnapshot,
-      EstimationDiscrepancy,
     ]),
     IngestionModule,
     GamesModule,
@@ -50,6 +47,6 @@ import { ReferenceProfilesModule } from '../reference-profiles/reference-profile
     ReferenceProfilesModule,
   ],
   controllers: [AdminController],
-  providers: [AdminService, MilestoneConsistencyService],
+  providers: [AdminService],
 })
 export class AdminModule {}

@@ -12,7 +12,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
-import { MilestoneConsistencyService } from './milestone-consistency.service';
 import { AdminTokenGuard } from './admin-token.guard';
 import { CatalogTier, SalesSource } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
@@ -32,7 +31,6 @@ import { CreateMilestoneDto } from './dto/create-milestone.dto';
 export class AdminController {
   constructor(
     private readonly admin: AdminService,
-    private readonly consistency: MilestoneConsistencyService,
     private readonly ingestion: IngestionService,
     private readonly publishers: PublishersService,
     private readonly genres: GenresService,
@@ -217,13 +215,6 @@ export class AdminController {
     });
   }
 
-  // Deterministic consistency triage: milestones that contradict their game's
-  // own sales trajectory (or a hard invariant). Recomputed on demand.
-  @Get('milestones/consistency')
-  milestoneConsistency(@Query('gameId') gameId?: string) {
-    return this.consistency.findIssues(gameId);
-  }
-
   @Post('games/:id/milestones')
   @HttpCode(200)
   createMilestone(
@@ -263,11 +254,6 @@ export class AdminController {
   @HttpCode(200)
   deleteTrustedSource(@Param('id', ParseUUIDPipe) id: string) {
     return this.admin.deleteTrustedSource(id);
-  }
-
-  @Get('issues')
-  issues() {
-    return this.admin.issues();
   }
 
   @Get('publishers')

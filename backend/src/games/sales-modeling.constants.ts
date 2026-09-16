@@ -180,23 +180,6 @@ export const EXOPHASE_COVERAGE_PS_HIGH = 28;
 export const EXOPHASE_COVERAGE_XBOX_LOW = 8;
 export const EXOPHASE_COVERAGE_XBOX_HIGH = 22;
 
-// ─── Estimation discrepancy detector ────────────────────────────────────────
-//
-// When a new Milestone arrives, we compare its `units` against the
-// midpoint of our most recent estimate that pre-dates the milestone. If
-// the ratio `declaredUnits / midPriorEstimate` falls outside the band
-// below, we persist an `EstimationDiscrepancy` row so the miss is
-// surfaced in /admin/issues even after the model recalibrates.
-//
-// 2.0 / 0.5 = "the model was off by 2× in either direction" — clear
-// signal without flooding on every minor wobble. Tighten to catch more,
-// loosen to focus on the worst cases.
-//
-// Used by `GamesService.evaluateDiscrepanciesForGame`.
-
-export const DISCREPANCY_RATIO_HIGH = 2.0;
-export const DISCREPANCY_RATIO_LOW = 0.5;
-
 // ─── PC dominance guardrail ─────────────────────────────────────────────────
 //
 // Used by `reconcile` to protect against the Steam-only blind spot: many

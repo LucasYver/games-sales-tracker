@@ -536,8 +536,6 @@ All numbers live in `backend/src/games/sales-modeling.constants.ts`.
 | `RECENT_RELEASE_DAYS`             | `14`       | confidence (recent → LOW)              |
 | `CALIBRATION_WINDOW_DAYS`         | `365`      | recalibration (max age delta)          |
 | `GLOBAL_SPLIT_MIN_PLATFORM_SHARE` | `0.05`     | min share to calibrate from a GLOBAL record |
-| `DISCREPANCY_RATIO_HIGH`          | `2.0`      | discrepancy detector (under-estimate)  |
-| `DISCREPANCY_RATIO_LOW`           | `0.5`      | discrepancy detector (over-estimate)   |
 
 ---
 
@@ -604,54 +602,7 @@ Milestones without `reportedAt` are now rejected at ingestion time
 (calibration needs a date). Any legacy undated rows still present are
 kept in the reconciliation regardless of `T`.
 
-## 10. Estimation discrepancy detector — model error tracking
-
-> `GamesService.evaluateDiscrepanciesForGame(gameId)`, called after every
-> `snapshotReconcile` in `IngestionService` and once again at the end of
-> `rebuildEstimateHistory`. Persisted in the `EstimationDiscrepancy`
-> table, surfaced in `/admin/issues` under "Estimation misses".
-
-When a new `Milestone` lands, we compare its `units` to the **prior**
-estimate band that pre-dated the milestone:
-
-```
-referenceMoment = milestone.reportedAt ?? milestone.capturedAt
-priorBand       = latest estimate for (gameId, milestone.platform) with
-                  computedAt < referenceMoment
-                  ├── GLOBAL platform → EstimateSnapshot (aggregated headline)
-                  └── per-platform   → SalesEstimate row
-ratio           = milestone.units / midpoint(priorBand)
-```
-
-If `ratio` falls outside `[DISCREPANCY_RATIO_LOW, DISCREPANCY_RATIO_HIGH]
-= [0.5, 2.0]`, we insert one `EstimationDiscrepancy` row. The detector
-is **idempotent** thanks to a unique index on `milestoneId`: each
-milestone produces at most one miss, and re-running the evaluation is a
-no-op for milestones already evaluated.
-
-Crucially the row is **frozen** at insertion:
-
-- `priorEstimateLow/High/At` capture what the model said at the time the
-  evidence arrived;
-- a later recalibration that aligns the live estimate with the figure
-  won't delete or rewrite the miss — the historical error stays as
-  evidence of model behaviour at that point in time.
-
-This is intentional vs. the alternative ("just surface live
-`agreement = conflict` from the current reconcile"): the live conflict
-disappears the moment we recalibrate, which would visually erase the
-miss without it actually being explained.
-
-### Constants
-
-| Constant                 | Value | Meaning                                |
-| ------------------------ | ----- | -------------------------------------- |
-| `DISCREPANCY_RATIO_HIGH` | `2.0` | declared ≥ 2× mid prior estimate → log |
-| `DISCREPANCY_RATIO_LOW`  | `0.5` | declared ≤ 0.5× mid prior estimate → log |
-
----
-
-## 11. What we explicitly don't model (yet)
+## 10. What we explicitly don't model (yet)
 
 - **Nintendo Switch** and **Mobile** have no achievement signal and no
   rating signal we trust enough; no estimation runs for them.
