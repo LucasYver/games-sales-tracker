@@ -67,12 +67,6 @@ export class CronController {
     return this.refresh.capturePlaystationPrices();
   }
 
-  @Get('sales-feeds')
-  @HttpCode(200)
-  salesFeeds() {
-    return this.refresh.pollTrustedFeeds();
-  }
-
   @Get('game-discovery')
   @HttpCode(200)
   gameDiscovery() {

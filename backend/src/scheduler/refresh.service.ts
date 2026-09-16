@@ -216,18 +216,6 @@ export class RefreshService {
   }
 
   /**
-   * Continuously monitor trusted-source RSS feeds: every 30 minutes, ingest
-   * any new article that mentions a tracked game and reports a sales figure.
-   */
-  async pollTrustedFeeds() {
-    try {
-      await this.ingestion.pollFeeds();
-    } catch (error) {
-      this.logger.warn(`Feed poll failed: ${error}`);
-    }
-  }
-
-  /**
    * Daily refresh of Steam followers from games-popularity.com. Recent-window
    * only (the multi-year history is seeded once by the backfill script); a
    * wall-clock budget keeps the run under the Vercel `maxDuration`, and

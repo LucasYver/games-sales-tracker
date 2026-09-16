@@ -49,8 +49,7 @@ export class TrustedSource {
   @Column({ type: 'varchar', nullable: true })
   searchUrlTemplate: string | null;
 
-  // RSS/Atom feed URL polled by the continuous monitor to ingest new articles
-  // as they publish. Null = no feed monitored.
+  // Optional RSS/Atom URL, kept on the registry for reference. Not polled.
   @Column({ type: 'varchar', nullable: true })
   feedUrl: string | null;
 

@@ -166,7 +166,6 @@ ratings. Free-to-play titles are blocked.
 |---|---|
 | 02:00 daily | `discoverIgdbGames()` — add new titles (IGDB + Steam admission) |
 | 03:00 daily | Refresh all known Steam apps (signals + estimates) |
-| Every 30 min | `pollFeeds()` — ingest new articles from RSS |
 
 ### Admin API (`/admin`, protected by `X-Admin-Token` header)
 

@@ -17,7 +17,7 @@ export interface TavilyResult {
 
 /**
  * Thin wrapper around Tavily's web search API. Used to discover backlog
- * articles (sales coverage published before we started polling feeds) and
+ * sales articles for tracked games and
  * return their full page text so the existing grounded LLM extractor can run
  * on it. Disabled (returns []) when no API key is configured.
  */

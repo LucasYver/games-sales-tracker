@@ -26,7 +26,6 @@ import { XboxCatalogClient } from './xbox-catalog.client';
 import { PlaystationCatalogClient } from './playstation-catalog.client';
 import { WikipediaClient } from './wikipedia.client';
 import { ArticleClient } from './article.client';
-import { RssClient } from './rss.client';
 import { TavilyClient } from './tavily.client';
 import { PerplexityClient } from './perplexity.client';
 import { ExophaseClient } from './exophase.client';
@@ -64,7 +63,6 @@ import { IngestionStateService } from './ingestion-state.service';
     PlaystationCatalogClient,
     WikipediaClient,
     ArticleClient,
-    RssClient,
     TavilyClient,
     PerplexityClient,
     ExophaseClient,

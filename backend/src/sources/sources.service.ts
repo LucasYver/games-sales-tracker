@@ -61,17 +61,6 @@ export class SourcesService implements OnApplicationBootstrap {
     }
   }
 
-  // Active sources that expose an RSS/Atom feed, polled by the continuous
-  // monitor to ingest new articles.
-  feedSources(): Promise<TrustedSource[]> {
-    return this.sources
-      .createQueryBuilder('s')
-      .where('s.active = true')
-      .andWhere('s.feedUrl IS NOT NULL')
-      .orderBy('s.name', 'ASC')
-      .getMany();
-  }
-
   list(activeOnly = false): Promise<TrustedSource[]> {
     return this.sources.find({
       where: activeOnly ? { active: true } : {},

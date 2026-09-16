@@ -79,11 +79,6 @@ export class IngestionController {
     return this.ingestion.refreshGame(gameId);
   }
 
-  @Post('poll-feeds')
-  async pollFeeds() {
-    return this.ingestion.pollFeeds();
-  }
-
   @Post('discover-backlog')
   async discoverBacklog(@Body('gameId') gameId: string) {
     return this.ingestion.discoverBacklogByGameId(gameId);

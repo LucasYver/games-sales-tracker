@@ -21,7 +21,6 @@ import {
   SignalMetric,
   SignalSnapshot,
   SourceType,
-  TrustedSource,
 } from '../entities';
 import { EstimationService } from '../estimation/estimation.service';
 import { GamesService } from '../games/games.service';
@@ -42,7 +41,6 @@ import { IgdbClient, IgdbGame } from './igdb.client';
 import { KnownStoreUrls, StoreRatingsClient } from './store-ratings.client';
 import { WikipediaClient } from './wikipedia.client';
 import { ArticleClient, ArticleSales } from './article.client';
-import { RssClient } from './rss.client';
 import { TavilyClient, TavilyResult } from './tavily.client';
 import { PerplexityClient } from './perplexity.client';
 import { ExophaseClient } from './exophase.client';
@@ -259,7 +257,6 @@ export class IngestionService {
     private readonly playstationCatalog: PlaystationCatalogClient,
     private readonly wikipedia: WikipediaClient,
     private readonly article: ArticleClient,
-    private readonly rss: RssClient,
     private readonly tavily: TavilyClient,
     private readonly perplexity: PerplexityClient,
     private readonly exophase: ExophaseClient,
@@ -4126,101 +4123,6 @@ export class IngestionService {
       sales,
     );
     return { matchedSource: trusted?.name ?? null, tier, milestonesStored };
-  }
-
-  /**
-   * Poll every trusted source's RSS feed, match each new article to a tracked
-   * game by title, and run the grounded LLM extraction on the feed content.
-   * Already-seen URLs are skipped so the LLM only runs once per article.
-   * Best-effort: each feed/article logs and continues.
-   */
-  async pollFeeds(): Promise<{
-    feeds: number;
-    seen: number;
-    ingested: number;
-    records: number;
-  }> {
-    const sources = await this.sources.feedSources();
-    let seen = 0;
-    let ingested = 0;
-    let records = 0;
-
-    for (const source of sources) {
-      if (!source.feedUrl) continue;
-      const articles = await this.rss.fetchArticles(source.feedUrl);
-      for (const item of articles) {
-        if (
-          await this.processedArticles.findOne({ where: { url: item.url } })
-        ) {
-          continue;
-        }
-        seen += 1;
-
-        let matchedGameId: string | null = null;
-        let hadFigure = false;
-        try {
-          const result = await this.processFeedArticle(item, source);
-          matchedGameId = result.gameId;
-          if (result.records > 0) {
-            hadFigure = true;
-            ingested += 1;
-            records += result.records;
-          }
-        } catch (error) {
-          this.logger.warn(`Feed article failed (${item.url}): ${error}`);
-        }
-
-        await this.processedArticles.save(
-          this.processedArticles.create({
-            url: item.url,
-            matchedGameId,
-            hadFigure,
-          }),
-        );
-      }
-    }
-
-    this.logger.log(
-      `Feed poll: ${sources.length} feed(s), ${seen} new, ${ingested} ingested, ${records} record(s).`,
-    );
-    return { feeds: sources.length, seen, ingested, records };
-  }
-
-  private async processFeedArticle(
-    item: {
-      title: string;
-      url: string;
-      contentHtml: string;
-      publishedAt?: Date | null;
-    },
-    source: TrustedSource,
-  ): Promise<{ gameId: string | null; records: number }> {
-    const game = await this.gamesService.matchByTitle(item.title);
-    if (!game) return { gameId: null, records: 0 };
-    if (game.isFree) return { gameId: game.id, records: 0 };
-
-    const fallbackDate = item.publishedAt ?? null;
-    const text = item.contentHtml
-      ? this.article.htmlToText(item.contentHtml)
-      : '';
-    let sales =
-      text.length >= 200
-        ? await this.article.extractFromText(text, item.url, game.name, {
-            fallbackDate,
-          })
-        : null;
-    // Feeds that only carry a short summary: fall back to fetching the page.
-    if (!sales) sales = await this.article.extract(item.url, game.name);
-    if (!sales) return { gameId: game.id, records: 0 };
-
-    const records = await this.storeArticleSales(
-      game.id,
-      item.url,
-      source.salesSource,
-      DEFAULT_CONFIDENCE_SCORE[source.salesSource],
-      sales,
-    );
-    return { gameId: game.id, records };
   }
 
   // Replace a game's milestones for one source URL with the freshly extracted
