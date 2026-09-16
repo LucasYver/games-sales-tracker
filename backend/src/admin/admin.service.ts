@@ -1471,7 +1471,7 @@ export class AdminService {
     (TrustedSource & { recordCount: number })[]
   > {
     const sources = await this.trustedSources.find({
-      order: { active: 'DESC', weight: 'DESC', name: 'ASC' },
+      order: { active: 'DESC', name: 'ASC' },
     });
 
     // Aggregate non-rejected milestones by the hostname of their sourceUrl,

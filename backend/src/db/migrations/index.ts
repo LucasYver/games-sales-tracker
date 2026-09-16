@@ -58,6 +58,7 @@ import { AddPriceSnapshotCountry1788750000000 } from './1788750000000-AddPriceSn
 import { XboxCatalogRatingsAndPrices1788760000000 } from './1788760000000-XboxCatalogRatingsAndPrices';
 import { RaiseSteamCoreMinReviews1788770000000 } from './1788770000000-RaiseSteamCoreMinReviews';
 import { DropEstimationDiscrepancy1788780000000 } from './1788780000000-DropEstimationDiscrepancy';
+import { DropTrustedSourceWeight1788790000000 } from './1788790000000-DropTrustedSourceWeight';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -127,4 +128,5 @@ export const migrations: MixedList<Function | string> = [
   XboxCatalogRatingsAndPrices1788760000000,
   RaiseSteamCoreMinReviews1788770000000,
   DropEstimationDiscrepancy1788780000000,
+  DropTrustedSourceWeight1788790000000,
 ];

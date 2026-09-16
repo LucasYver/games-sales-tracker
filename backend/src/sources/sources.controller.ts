@@ -1,11 +1,8 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import {
   IsEnum,
-  IsInt,
   IsOptional,
   IsString,
-  Max,
-  Min,
 } from 'class-validator';
 import { SalesSource, SourceCategory } from '../entities';
 import { SourcesService } from './sources.service';
@@ -46,11 +43,6 @@ class AddSourceDto {
   @IsOptional()
   @IsString()
   language?: string;
-
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  weight: number;
 }
 
 @Controller('sources')

@@ -371,7 +371,6 @@ export interface AdminTrustedSource {
   searchUrlTemplate: string | null;
   feedUrl: string | null;
   language: string;
-  weight: number;
   active: boolean;
   autoCreated: boolean;
   createdAt: string;

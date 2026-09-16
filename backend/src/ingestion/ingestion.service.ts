@@ -93,11 +93,8 @@ interface BackfillWorkItem {
   ratings: boolean;
 }
 
-// Default `confidenceScore` (0–100) assigned to milestones when no
-// TrustedSource weight is available (manual inputs, Wikipedia, or unknown
-// hosts falling back to the MEDIA tier). For sources matched in the
-// trusted-source registry, the source's `weight` is written directly to
-// `confidenceScore`.
+// Default `confidenceScore` (0–100) assigned to milestones from their
+// `SalesSource` tier. Copied onto `confidenceScore` at ingest; display-only.
 export const DEFAULT_CONFIDENCE_SCORE: Record<SalesSource, number> = {
   [SalesSource.OFFICIAL]: 100,
   [SalesSource.ANNOUNCEMENT]: 70,
@@ -3400,7 +3397,14 @@ export class IngestionService {
         return { checked, ingested, records };
       }
 
+      const blockedHosts = await this.sources.listBlockedHosts();
       for (const result of results) {
+        if (this.sources.urlIsBlocked(result.url, blockedHosts)) {
+          this.logger.debug(
+            `[backlog] "${name}" — skip (blacklisted host): ${result.url}`,
+          );
+          continue;
+        }
         if (
           await this.processedArticles.findOne({ where: { url: result.url } })
         ) {
@@ -3565,14 +3569,18 @@ export class IngestionService {
     });
     if (!tracked || tracked.isFree) return 0;
 
+    if (this.sources.urlIsBlocked(url, await this.sources.listBlockedHosts())) {
+      return 0;
+    }
+
     // Read-only lookup here: a fresh host has no entry yet, so we use the
-    // MEDIA / weight=40 fallback. The actual TrustedSource row is created
+    // MEDIA fallback. The actual TrustedSource row is created
     // only once we know the URL produced a usable record (in
     // `storeArticleSales`), so unknown hosts that yield nothing never pollute
     // the registry.
     const trusted = await this.sources.findByUrl(url);
     const tier = trusted?.salesSource ?? SalesSource.MEDIA;
-    const confidenceScore = trusted?.weight ?? DEFAULT_CONFIDENCE_SCORE[tier];
+    const confidenceScore = DEFAULT_CONFIDENCE_SCORE[tier];
 
     let sales =
       text && text.length >= 200
@@ -4087,11 +4095,19 @@ export class IngestionService {
       };
     }
 
+    if (this.sources.urlIsBlocked(url, await this.sources.listBlockedHosts())) {
+      return {
+        matchedSource: null,
+        tier: SalesSource.MEDIA,
+        milestonesStored: 0,
+      };
+    }
+
     // See `ingestArticleFromText`: registry insertion is deferred until we
     // know the article produced at least one accepted milestone.
     const trusted = await this.sources.findByUrl(url);
     const tier = trusted?.salesSource ?? SalesSource.MEDIA;
-    const confidenceScore = trusted?.weight ?? DEFAULT_CONFIDENCE_SCORE[tier];
+    const confidenceScore = DEFAULT_CONFIDENCE_SCORE[tier];
 
     const sales = await this.article.extract(url, game.name);
     if (!sales) {
@@ -4201,7 +4217,7 @@ export class IngestionService {
       game.id,
       item.url,
       source.salesSource,
-      source.weight,
+      DEFAULT_CONFIDENCE_SCORE[source.salesSource],
       sales,
     );
     return { gameId: game.id, records };
@@ -4224,6 +4240,9 @@ export class IngestionService {
       select: ['id', 'isFree'],
     });
     if (!tracked || tracked.isFree) return 0;
+    if (this.sources.urlIsBlocked(url, await this.sources.listBlockedHosts())) {
+      return 0;
+    }
 
     // Preserve admin-rejected fingerprints: a rejected milestone stays in
     // place so the fingerprint guard below can skip the matching re-extract.

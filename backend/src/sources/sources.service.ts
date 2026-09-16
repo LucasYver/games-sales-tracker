@@ -4,14 +4,13 @@ import { Repository } from 'typeorm';
 import { SalesSource, SourceCategory, TrustedSource } from '../entities';
 import { SeedSource, TRUSTED_SOURCES } from './sources.seed';
 
-// Default tier/weight applied to auto-created sources. MEDIA + 40 is the same
-// fallback `ingestArticleFromText` used to hardcode for unknown hosts, so the
+// Default tier applied to auto-created sources. MEDIA is the same fallback
+// `ingestArticleFromText` used to hardcode for unknown hosts, so the
 // behavior is unchanged from the record's perspective — the difference is that
 // the host now becomes a visible, curatable row instead of being silently
 // classified each time.
 const AUTO_CREATED_TIER = SalesSource.MEDIA;
 const AUTO_CREATED_CATEGORY = SourceCategory.MEDIA;
-const AUTO_CREATED_WEIGHT = 40;
 
 @Injectable()
 export class SourcesService implements OnApplicationBootstrap {
@@ -49,13 +48,16 @@ export class SourcesService implements OnApplicationBootstrap {
       );
     }).map((s) => {
       const row = bySlug.get(s.slug)!;
-      row.searchUrlTemplate = row.searchUrlTemplate ?? s.searchUrlTemplate ?? null;
+      row.searchUrlTemplate =
+        row.searchUrlTemplate ?? s.searchUrlTemplate ?? null;
       row.feedUrl = row.feedUrl ?? s.feedUrl ?? null;
       return row;
     });
     if (backfill.length > 0) {
       await this.sources.save(backfill);
-      this.logger.log(`Backfilled search/feed URLs on ${backfill.length} source(s).`);
+      this.logger.log(
+        `Backfilled search/feed URLs on ${backfill.length} source(s).`,
+      );
     }
   }
 
@@ -66,18 +68,20 @@ export class SourcesService implements OnApplicationBootstrap {
       .createQueryBuilder('s')
       .where('s.active = true')
       .andWhere('s.feedUrl IS NOT NULL')
-      .orderBy('s.weight', 'DESC')
+      .orderBy('s.name', 'ASC')
       .getMany();
   }
 
   list(activeOnly = false): Promise<TrustedSource[]> {
     return this.sources.find({
       where: activeOnly ? { active: true } : {},
-      order: { weight: 'DESC', name: 'ASC' },
+      order: { active: 'DESC', name: 'ASC' },
     });
   }
 
-  add(input: SeedSource & Partial<Pick<TrustedSource, 'active'>>): Promise<TrustedSource> {
+  add(
+    input: SeedSource & Partial<Pick<TrustedSource, 'active'>>,
+  ): Promise<TrustedSource> {
     return this.sources.save(this.sources.create(input));
   }
 
@@ -89,25 +93,42 @@ export class SourcesService implements OnApplicationBootstrap {
 
     const candidates = await this.sources.find({
       where: { active: true },
-      order: { weight: 'DESC' },
     });
-    return (
-      candidates.find(
-        (s) =>
-          s.host !== null &&
-          (host === s.host || host.endsWith(`.${s.host}`)),
-      ) ?? null
+    return this.matchHost(host, candidates);
+  }
+
+  // Hostnames of deactivated sources. Search/ingest must skip these so a
+  // blacklist is not undone by Perplexity/Tavily/`ensureForUrl`.
+  async listBlockedHosts(): Promise<string[]> {
+    const rows = await this.sources.find({
+      where: { active: false },
+      select: ['host'],
+    });
+    return rows
+      .map((s) => s.host)
+      .filter((h): h is string => h != null && h.length > 0);
+  }
+
+  hostIsBlocked(host: string, blockedHosts: string[]): boolean {
+    return blockedHosts.some(
+      (blocked) => host === blocked || host.endsWith(`.${blocked}`),
     );
+  }
+
+  urlIsBlocked(url: string, blockedHosts: string[]): boolean {
+    const host = this.extractHost(url);
+    if (!host) return false;
+    return this.hostIsBlocked(host, blockedHosts);
   }
 
   /**
    * Resolve a URL to a trusted source, auto-creating an entry for the
    * hostname if no existing row matches. Auto-created rows default to
-   * `tier=MEDIA / weight=40 / active=true / autoCreated=true` — the admin
-   * can review them under the registry and adjust their tier or weight.
+   * `tier=MEDIA / active=true / autoCreated=true` — the admin
+   * can review them under the registry and adjust their tier.
    *
-   * URLs that don't parse to a valid hostname (rare; ingestion already
-   * normalizes most URLs upstream) fall back to `findByUrl`, returning null.
+   * Inactive (blacklisted) hosts are left untouched and return null so
+   * ingestion cannot revive them.
    */
   async ensureForUrl(url: string): Promise<TrustedSource | null> {
     const existing = await this.findByUrl(url);
@@ -115,6 +136,8 @@ export class SourcesService implements OnApplicationBootstrap {
 
     const host = this.extractHost(url);
     if (!host) return null;
+
+    if (await this.isHostBlockedInRegistry(host)) return null;
 
     const slug = `auto-${host.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
     // Concurrency guard: two parallel refreshes can race on the same unknown
@@ -132,13 +155,12 @@ export class SourcesService implements OnApplicationBootstrap {
         searchUrlTemplate: null,
         feedUrl: null,
         language: 'en',
-        weight: AUTO_CREATED_WEIGHT,
         active: true,
         autoCreated: true,
       });
       const saved = await this.sources.save(row);
       this.logger.log(
-        `[sources] auto-created trusted source for "${host}" (tier=${AUTO_CREATED_TIER}, weight=${AUTO_CREATED_WEIGHT})`,
+        `[sources] auto-created trusted source for "${host}" (tier=${AUTO_CREATED_TIER})`,
       );
       return saved;
     } catch {
@@ -147,11 +169,37 @@ export class SourcesService implements OnApplicationBootstrap {
     }
   }
 
-  private extractHost(url: string): string | null {
+  extractHost(url: string): string | null {
     try {
       return new URL(url).hostname.replace(/^www\./, '').toLowerCase();
     } catch {
       return null;
     }
+  }
+
+  private matchHost(
+    host: string,
+    candidates: TrustedSource[],
+  ): TrustedSource | null {
+    const withHost = candidates.filter((s) => s.host !== null);
+    const exact = withHost.find((s) => host === s.host);
+    if (exact) return exact;
+    const suffixes = withHost
+      .filter((s) => host.endsWith(`.${s.host}`))
+      .sort((a, b) => (b.host?.length ?? 0) - (a.host?.length ?? 0));
+    return suffixes[0] ?? null;
+  }
+
+  private async isHostBlockedInRegistry(host: string): Promise<boolean> {
+    const blocked = await this.sources.find({
+      where: { active: false },
+      select: ['host'],
+    });
+    return this.hostIsBlocked(
+      host,
+      blocked
+        .map((s) => s.host)
+        .filter((h): h is string => h != null && h.length > 0),
+    );
   }
 }

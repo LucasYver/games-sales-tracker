@@ -13,8 +13,8 @@ import { Game } from './game.entity';
 // A dated sales-related figure for a game, coming from a single source.
 // Officially-declared totals, press announcements, Wikipedia citations all
 // share this row — the source is kept for traceability and the
-// `confidenceScore` (derived from the trusted source's weight) is purely
-// informational. `platform` scopes the figure: `GLOBAL` is a worldwide,
+// `confidenceScore` (copied from `DEFAULT_CONFIDENCE_SCORE[salesSource]`
+// at ingest) is purely informational. `platform` scopes the figure: `GLOBAL` is a worldwide,
 // all-platforms-combined total; `PC`/`PLAYSTATION`/`XBOX`/`SWITCH` are
 // single-platform totals used to learn the PC-vs-console split.
 //
@@ -49,10 +49,9 @@ export class Milestone {
   @Column({ type: 'boolean', default: false })
   isEstimate: boolean;
 
-  // 0–100 numeric score derived from the trusted source's weight. Purely
-  // informational: never used to weight calibration, spread, or aggregation.
-  // Surfaced verbatim in the admin so an operator can judge a figure's
-  // trustworthiness at a glance.
+  // 0–100 numeric score from the sales-source default table at ingest.
+  // Purely informational: never used to weight calibration, spread, or
+  // aggregation. Surfaced in the admin so an operator can judge a figure.
   @Column({ type: 'int', nullable: true })
   confidenceScore: number | null;
 

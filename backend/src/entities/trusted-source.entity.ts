@@ -10,7 +10,7 @@ import { SalesSource, SourceCategory } from './enums';
 // A curated, trusted source of sales information (media outlet, analyst, X
 // account, official channel). The registry drives the LLM extraction pipeline:
 // only figures coming from a known source are trusted, each mapped to a sales
-// tier and weighted by reliability.
+// tier.
 @Entity('trusted_source')
 export class TrustedSource {
   @PrimaryGeneratedColumn('uuid')
@@ -57,17 +57,13 @@ export class TrustedSource {
   @Column({ type: 'varchar', default: 'en' })
   language: string;
 
-  // Reliability weight, 1-100. Higher = more trustworthy.
-  @Column({ type: 'int', default: 50 })
-  weight: number;
-
   @Column({ type: 'boolean', default: true })
   active: boolean;
 
   // True when the row was inserted automatically by the ingestion pipeline
   // (a sales record arrived from a hostname that wasn't yet in the registry).
-  // Auto-created rows default to tier=MEDIA / weight=40 so they get a usable
-  // classification immediately; the admin can promote/demote them after review.
+  // Auto-created rows default to tier=MEDIA; the admin can promote/demote
+  // them after review.
   @Column({ type: 'boolean', default: false })
   autoCreated: boolean;
 

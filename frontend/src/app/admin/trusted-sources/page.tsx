@@ -10,6 +10,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DeleteButton } from '../_components/DeleteButton';
 import { deleteTrustedSource } from '../actions';
 
@@ -37,134 +38,161 @@ export default async function AdminTrustedSourcesPage() {
         </p>
       </header>
 
-      <Card>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead>Tier</TableHead>
-              <TableHead>Host / Handle</TableHead>
-              <TableHead>Lang</TableHead>
-              <TableHead className="text-right">Weight</TableHead>
-              <TableHead className="text-right">Records</TableHead>
-              <TableHead>Capabilities</TableHead>
-              <TableHead>Active</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sources.map((ts) => (
-              <TableRow key={ts.id}>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{ts.name}</span>
-                    {ts.autoCreated && (
-                      <Badge
-                        variant="outline"
-                        className="border-amber-300 bg-amber-50 text-[10px] tracking-wide text-amber-800 uppercase dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200"
-                        title="Auto-created by the ingestion pipeline. Review the tier and weight before relying on it."
-                      >
-                        auto
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="text-muted-foreground font-mono text-xs">
-                    {ts.slug}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline">{ts.category}</Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="secondary">{ts.salesSource}</Badge>
-                </TableCell>
-                <TableCell className="text-muted-foreground font-mono text-xs">
-                  {ts.host ?? (ts.handle ? `@${ts.handle}` : '—')}
-                </TableCell>
-                <TableCell className="text-muted-foreground text-xs">
-                  {ts.language}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {ts.weight}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {ts.recordCount ? (
-                    <span className="font-medium">
-                      {ts.recordCount.toLocaleString()}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">0</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-1">
-                    {ts.feedUrl && (
-                      <Badge variant="outline" className="gap-1 text-xs">
-                        <Rss aria-hidden="true" className="size-3" />
-                        RSS
-                      </Badge>
-                    )}
-                    {ts.searchUrlTemplate && (
-                      <Badge variant="outline" className="gap-1 text-xs">
-                        <Search aria-hidden="true" className="size-3" />
-                        Search
-                      </Badge>
-                    )}
-                    {ts.url && (
-                      <a
-                        href={ts.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary inline-flex items-center gap-1 text-xs hover:underline"
-                      >
-                        site
-                        <ExternalLink aria-hidden="true" className="size-3" />
-                      </a>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  {ts.active ? (
-                    <Badge>active</Badge>
-                  ) : (
-                    <Badge variant="outline">inactive</Badge>
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  <DeleteButton
-                    action={deleteTrustedSource.bind(null, ts.id)}
-                    confirmMessage={`Delete trusted source "${ts.name}"?`}
-                    iconOnly
-                    label={`Delete ${ts.name}`}
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-            {sources.length === 0 && (
-              <TableRow>
-                <TableCell
-                  colSpan={10}
-                  className="text-muted-foreground py-12 text-center"
-                >
-                  No trusted sources registered.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+      <Tabs defaultValue="active">
+        <TabsList>
+          <TabsTrigger value="active">
+            Active
+            <Badge variant="secondary" className="ml-1.5">
+              {active.length}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="inactive">
+            Inactive
+            <Badge variant="secondary" className="ml-1.5">
+              {inactive.length}
+            </Badge>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="active">
+          <SourcesTable
+            sources={active}
+            emptyMessage="No active trusted sources."
+          />
+        </TabsContent>
+        <TabsContent value="inactive">
+          <SourcesTable
+            sources={inactive}
+            emptyMessage="No inactive trusted sources."
+          />
+        </TabsContent>
+      </Tabs>
 
       <Card>
         <CardContent className="text-muted-foreground pt-6 text-sm">
           Auto-created entries appear with an{' '}
           <span className="font-semibold">auto</span> badge and default to tier{' '}
-          <span className="font-mono">MEDIA</span> / weight{' '}
-          <span className="font-mono">40</span>. Review them after the ingestion
-          pipeline discovers a new host and bump the weight or change the tier
-          if appropriate.
+          <span className="font-mono">MEDIA</span>. Review them after the
+          ingestion pipeline discovers a new host and change the tier if
+          appropriate. Inactive hosts are skipped by Perplexity and RSS ingest.
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function SourcesTable({
+  sources,
+  emptyMessage,
+}: {
+  sources: AdminTrustedSource[];
+  emptyMessage: string;
+}) {
+  return (
+    <Card>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Category</TableHead>
+            <TableHead>Tier</TableHead>
+            <TableHead>Host / Handle</TableHead>
+            <TableHead>Lang</TableHead>
+            <TableHead className="text-right">Records</TableHead>
+            <TableHead>Capabilities</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sources.map((ts) => (
+            <TableRow key={ts.id}>
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{ts.name}</span>
+                  {ts.autoCreated && (
+                    <Badge
+                      variant="outline"
+                      className="border-amber-300 bg-amber-50 text-[10px] tracking-wide text-amber-800 uppercase dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200"
+                      title="Auto-created by the ingestion pipeline. Review the tier before relying on it."
+                    >
+                      auto
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-muted-foreground font-mono text-xs">
+                  {ts.slug}
+                </div>
+              </TableCell>
+              <TableCell>
+                <Badge variant="outline">{ts.category}</Badge>
+              </TableCell>
+              <TableCell>
+                <Badge variant="secondary">{ts.salesSource}</Badge>
+              </TableCell>
+              <TableCell className="text-muted-foreground font-mono text-xs">
+                {ts.host ?? (ts.handle ? `@${ts.handle}` : '—')}
+              </TableCell>
+              <TableCell className="text-muted-foreground text-xs">
+                {ts.language}
+              </TableCell>
+              <TableCell className="text-right tabular-nums">
+                {ts.recordCount ? (
+                  <span className="font-medium">
+                    {ts.recordCount.toLocaleString()}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">0</span>
+                )}
+              </TableCell>
+              <TableCell>
+                <div className="flex flex-wrap gap-1">
+                  {ts.feedUrl && (
+                    <Badge variant="outline" className="gap-1 text-xs">
+                      <Rss aria-hidden="true" className="size-3" />
+                      RSS
+                    </Badge>
+                  )}
+                  {ts.searchUrlTemplate && (
+                    <Badge variant="outline" className="gap-1 text-xs">
+                      <Search aria-hidden="true" className="size-3" />
+                      Search
+                    </Badge>
+                  )}
+                  {ts.url && (
+                    <a
+                      href={ts.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary inline-flex items-center gap-1 text-xs hover:underline"
+                    >
+                      site
+                      <ExternalLink aria-hidden="true" className="size-3" />
+                    </a>
+                  )}
+                </div>
+              </TableCell>
+              <TableCell className="text-right">
+                <DeleteButton
+                  action={deleteTrustedSource.bind(null, ts.id)}
+                  confirmMessage={`Delete trusted source "${ts.name}"?`}
+                  iconOnly
+                  label={`Delete ${ts.name}`}
+                />
+              </TableCell>
+            </TableRow>
+          ))}
+          {sources.length === 0 && (
+            <TableRow>
+              <TableCell
+                colSpan={8}
+                className="text-muted-foreground py-12 text-center"
+              >
+                {emptyMessage}
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </Card>
   );
 }
