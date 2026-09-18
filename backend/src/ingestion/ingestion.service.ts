@@ -1112,10 +1112,13 @@ export class IngestionService {
    *    with the SteamCharts month as `capturedAt`.
    *
    * Best-effort: a fetch failure leaves the value already on record in place.
+   * Returns false when Steam reported no player count — either a transient
+   * failure or an app that has none at all (playtest, demo, delisted title),
+   * which the caller surfaces instead of silently recording a no-op success.
    */
-  async pollSteamCcu(gameId: string, appId: number): Promise<void> {
+  async pollSteamCcu(gameId: string, appId: number): Promise<boolean> {
     const current = await this.steam.getCurrentPlayerCount(appId);
-    if (current === null) return;
+    if (current === null) return false;
 
     // Keep a single STEAM_CONCURRENT row per UTC day = that day's peak.
     // Upsert: replace the day's row when the new reading is higher, do
@@ -1173,6 +1176,8 @@ export class IngestionService {
           `(prior ${priorPeak?.value.toLocaleString() ?? 'n/a'})`,
       );
     }
+
+    return true;
   }
 
   /**
@@ -1229,9 +1234,13 @@ export class IngestionService {
         if (!Number.isFinite(appId)) return;
 
         try {
-          await this.ingestionState.track(gameId, 'STEAM_CCU', () =>
-            this.pollSteamCcu(gameId, appId),
-          );
+          await this.ingestionState.track(gameId, 'STEAM_CCU', async () => {
+            if (!(await this.pollSteamCcu(gameId, appId))) {
+              throw new Error(
+                `Steam returned no player count for appId ${appId}`,
+              );
+            }
+          });
         } catch (error) {
           this.logger.warn(`[ccu] poll failed for game ${gameId}: ${error}`);
           throw error;

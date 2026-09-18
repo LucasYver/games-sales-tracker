@@ -61,11 +61,17 @@ const IGDB_FIELDS = [
   'release_dates.status.name',
   'external_games.external_game_source',
   'external_games.uid',
+  'external_games.name',
   'involved_companies.company.name',
   'involved_companies.developer',
   'involved_companies.publisher',
   'genres.name',
 ].join(', ');
+
+// Steam apps that accompany a game rather than being the game itself. Matched
+// against the store name IGDB reports for an `external_games` entry.
+const STEAM_COMPANION_APP_PATTERN =
+  /\b(playtest|demo|beta|alpha|test(ing)? server|dedicated server|soundtrack|ost|art ?book|trailer|benchmark|closed test|open test|public test)\b/i;
 
 // IGDB platform name (lowercased) → our internal Platform enum.
 // Substring match: any IGDB platform whose name contains one of these tokens
@@ -373,7 +379,11 @@ export class IgdbClient {
         platform?: { name?: string };
         status?: { name?: string };
       }[];
-      external_games?: { external_game_source?: number; uid?: string }[];
+      external_games?: {
+        external_game_source?: number;
+        uid?: string;
+        name?: string;
+      }[];
       involved_companies?: {
         company?: { name?: string };
         developer?: boolean;
@@ -384,8 +394,14 @@ export class IgdbClient {
 
     // external_game_source = 1 identifies the Steam store entry (the old
     // `category` field was renamed). uid is the Steam app id.
-    const steamExternal = (g.external_games ?? []).find(
-      (e) => e.external_game_source === 1 && e.uid,
+    const steamAppId = this.pickSteamAppId(
+      g.name,
+      (g.external_games ?? []).filter(
+        (
+          e,
+        ): e is { external_game_source: number; uid: string; name?: string } =>
+          e.external_game_source === 1 && Boolean(e.uid),
+      ),
     );
 
     const platforms = this.mapPlatforms(g.platforms);
@@ -414,7 +430,7 @@ export class IgdbClient {
       coverUrl: g.cover?.image_id
         ? `https://images.igdb.com/igdb/image/upload/t_cover_big/${g.cover.image_id}.jpg`
         : null,
-      steamAppId: steamExternal?.uid ? parseInt(steamExternal.uid, 10) : null,
+      steamAppId,
       platforms,
       developer,
       publisher,
@@ -423,6 +439,37 @@ export class IgdbClient {
         typeof g.total_rating_count === 'number' ? g.total_rating_count : 0,
       platformReleaseDates,
     };
+  }
+
+  /**
+   * IGDB often lists several Steam apps for one game: the store page plus its
+   * playtest, demo or dedicated-server app. Array order is not meaningful, so
+   * taking the first entry can link the game to an app that has a handful of
+   * reviews and no concurrent-player data at all. Prefer the entry whose store
+   * name matches the game, then any non-companion app, and only fall back to
+   * the first entry when every candidate looks like a companion app.
+   */
+  private pickSteamAppId(
+    gameName: string,
+    entries: { uid: string; name?: string }[],
+  ): number | null {
+    if (entries.length === 0) return null;
+
+    const usable = entries.filter((e) => Number.isFinite(Number(e.uid)));
+    if (usable.length === 0) return null;
+
+    const isCompanion = (name: string | undefined): boolean =>
+      name !== undefined && STEAM_COMPANION_APP_PATTERN.test(name);
+    const normalize = (value: string): string =>
+      value.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    const target = normalize(gameName);
+    const exact = usable.find(
+      (e) => e.name !== undefined && normalize(e.name) === target,
+    );
+    const standalone = usable.find((e) => !isCompanion(e.name));
+
+    return Number((exact ?? standalone ?? usable[0]).uid);
   }
 
   private mapPlatforms(raw: { name?: string }[] | undefined): Platform[] {
