@@ -26,6 +26,7 @@ import { ImportReviewsCsvDto } from './dto/import-reviews-csv.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
 import { UpdateMilestoneDto } from './dto/update-milestone.dto';
 import { CreateMilestoneDto } from './dto/create-milestone.dto';
+import { UpdateTrustedSourceDto } from './dto/update-trusted-source.dto';
 @Controller('admin')
 @UseGuards(AdminTokenGuard)
 export class AdminController {
@@ -248,6 +249,14 @@ export class AdminController {
   @Get('trusted-sources')
   listTrustedSources() {
     return this.admin.listTrustedSources();
+  }
+
+  @Patch('trusted-sources/:id')
+  updateTrustedSource(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateTrustedSourceDto,
+  ) {
+    return this.admin.updateTrustedSource(id, body);
   }
 
   @Delete('trusted-sources/:id')

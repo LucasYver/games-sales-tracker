@@ -1,18 +1,8 @@
-import { ExternalLink, Rss, Search } from 'lucide-react';
 import { adminFetch, type AdminTrustedSource } from '@/lib/admin';
 import { Card, CardContent } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { DeleteButton } from '../_components/DeleteButton';
-import { deleteTrustedSource } from '../actions';
+import { SourcesTable } from './SourcesTable';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,121 +68,5 @@ export default async function AdminTrustedSourcesPage() {
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-function SourcesTable({
-  sources,
-  emptyMessage,
-}: {
-  sources: AdminTrustedSource[];
-  emptyMessage: string;
-}) {
-  return (
-    <Card>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Category</TableHead>
-            <TableHead>Tier</TableHead>
-            <TableHead>Host / Handle</TableHead>
-            <TableHead>Lang</TableHead>
-            <TableHead className="text-right">Records</TableHead>
-            <TableHead>Capabilities</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sources.map((ts) => (
-            <TableRow key={ts.id}>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{ts.name}</span>
-                  {ts.autoCreated && (
-                    <Badge
-                      variant="outline"
-                      className="border-amber-300 bg-amber-50 text-[10px] tracking-wide text-amber-800 uppercase dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200"
-                      title="Auto-created by the ingestion pipeline. Review the tier before relying on it."
-                    >
-                      auto
-                    </Badge>
-                  )}
-                </div>
-                <div className="text-muted-foreground font-mono text-xs">
-                  {ts.slug}
-                </div>
-              </TableCell>
-              <TableCell>
-                <Badge variant="outline">{ts.category}</Badge>
-              </TableCell>
-              <TableCell>
-                <Badge variant="secondary">{ts.salesSource}</Badge>
-              </TableCell>
-              <TableCell className="text-muted-foreground font-mono text-xs">
-                {ts.host ?? (ts.handle ? `@${ts.handle}` : '—')}
-              </TableCell>
-              <TableCell className="text-muted-foreground text-xs">
-                {ts.language}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {ts.recordCount ? (
-                  <span className="font-medium">
-                    {ts.recordCount.toLocaleString()}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">0</span>
-                )}
-              </TableCell>
-              <TableCell>
-                <div className="flex flex-wrap gap-1">
-                  {ts.feedUrl && (
-                    <Badge variant="outline" className="gap-1 text-xs">
-                      <Rss aria-hidden="true" className="size-3" />
-                      RSS
-                    </Badge>
-                  )}
-                  {ts.searchUrlTemplate && (
-                    <Badge variant="outline" className="gap-1 text-xs">
-                      <Search aria-hidden="true" className="size-3" />
-                      Search
-                    </Badge>
-                  )}
-                  {ts.url && (
-                    <a
-                      href={ts.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary inline-flex items-center gap-1 text-xs hover:underline"
-                    >
-                      site
-                      <ExternalLink aria-hidden="true" className="size-3" />
-                    </a>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell className="text-right">
-                <DeleteButton
-                  action={deleteTrustedSource.bind(null, ts.id)}
-                  confirmMessage={`Delete trusted source "${ts.name}"?`}
-                  iconOnly
-                  label={`Delete ${ts.name}`}
-                />
-              </TableCell>
-            </TableRow>
-          ))}
-          {sources.length === 0 && (
-            <TableRow>
-              <TableCell
-                colSpan={8}
-                className="text-muted-foreground py-12 text-center"
-              >
-                {emptyMessage}
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-    </Card>
   );
 }

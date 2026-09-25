@@ -233,6 +233,17 @@ export async function deleteSignal(id: string, gameId: string): Promise<void> {
   revalidatePath(`/admin/games/${gameId}`);
 }
 
+export async function setTrustedSourceActive(
+  id: string,
+  active: boolean,
+): Promise<void> {
+  await adminFetch(`/trusted-sources/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ active }),
+  });
+  revalidatePath('/admin/trusted-sources');
+}
+
 export async function deleteTrustedSource(id: string): Promise<void> {
   await adminFetch(`/trusted-sources/${id}`, { method: 'DELETE' });
   revalidatePath('/admin/trusted-sources');

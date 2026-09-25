@@ -1509,6 +1509,18 @@ export class AdminService {
     });
   }
 
+  async updateTrustedSource(
+    id: string,
+    patch: { active: boolean },
+  ): Promise<TrustedSource> {
+    const source = await this.trustedSources.findOne({ where: { id } });
+    if (!source) {
+      throw new NotFoundException(`Trusted source ${id} not found`);
+    }
+    source.active = patch.active;
+    return this.trustedSources.save(source);
+  }
+
   async deleteTrustedSource(id: string): Promise<{ deleted: boolean }> {
     const result = await this.trustedSources.delete(id);
     return { deleted: (result.affected ?? 0) > 0 };
