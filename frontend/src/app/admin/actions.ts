@@ -249,6 +249,18 @@ export async function deleteTrustedSource(id: string): Promise<void> {
   revalidatePath('/admin/trusted-sources');
 }
 
+export async function rejectTrustedSourceMilestones(
+  id: string,
+): Promise<{ rejected: number }> {
+  const result = await adminFetch<{ rejected: number }>(
+    `/trusted-sources/${id}/milestones`,
+    { method: 'DELETE' },
+  );
+  revalidatePath('/admin/trusted-sources');
+  revalidatePath('/admin/milestones');
+  return result;
+}
+
 export async function runPublisherBackfill(): Promise<{
   linked: number;
   alreadyLinked: number;

@@ -1,11 +1,17 @@
 import {
   Column,
   CreateDateColumn,
+  DeleteDateColumn,
   Entity,
   Index,
+  IsNull,
   JoinColumn,
   ManyToOne,
+  Not,
   PrimaryGeneratedColumn,
+  type FindOptionsWhere,
+  type ObjectLiteral,
+  type SelectQueryBuilder,
 } from 'typeorm';
 import { Platform, SalesSource } from './enums';
 import { Game } from './game.entity';
@@ -84,15 +90,36 @@ export class Milestone {
   @CreateDateColumn()
   capturedAt: Date;
 
-  // Set when an admin manually drops the row. We keep it (soft-delete) so
-  // the ingestion pipeline can recognize it on subsequent refreshes and
-  // refuse to re-insert the same figure (matched by gameId + source +
-  // sourceUrl + units + reportedAt). All reads exclude rejected rows.
+  // Soft-delete marker. Stays in the DB as an ingest fingerprint so a
+  // refresh cannot resurrect a figure the admin dropped (matched by
+  // gameId + source + sourceUrl + units + reportedAt). TypeORM hides
+  // these rows from every standard read; `select: false` keeps the
+  // column off API payloads. Use `withDeleted` only in the fingerprint
+  // guard. Raw SQL must call `Milestone.applyDefault` / `notRejectedSql`.
   @Index()
-  @Column({ type: 'timestamptz', nullable: true })
+  @DeleteDateColumn({ type: 'timestamptz', nullable: true, select: false })
   rejectedAt: Date | null;
 
   @ManyToOne(() => Game, (game) => game.milestones, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'gameId' })
   game: Game;
+
+  static notRejected(): FindOptionsWhere<Milestone> {
+    return { rejectedAt: IsNull() };
+  }
+
+  static rejected(): FindOptionsWhere<Milestone> {
+    return { rejectedAt: Not(IsNull()) };
+  }
+
+  static applyDefault<T extends ObjectLiteral>(
+    qb: SelectQueryBuilder<T>,
+    alias: string,
+  ): SelectQueryBuilder<T> {
+    return qb.andWhere(`${alias}.rejectedAt IS NULL`);
+  }
+
+  static notRejectedSql(alias: string): string {
+    return `${alias}."rejectedAt" IS NULL`;
+  }
 }

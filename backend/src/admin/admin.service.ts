@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Not, Repository, IsNull } from 'typeorm';
+import { Not, Repository, IsNull, In } from 'typeorm';
 import {
   AchievementSnapshot,
   EstimateSnapshot,
@@ -494,7 +494,7 @@ export class AdminService {
       this.games.count(),
       this.games
         .createQueryBuilder('g')
-        .innerJoin('g.milestones', 'm', 'm.rejectedAt IS NULL')
+        .innerJoin('g.milestones', 'm', Milestone.notRejectedSql('m'))
         .select('COUNT(DISTINCT g.id)', 'c')
         .getRawOne<{ c: string }>(),
       this.games
@@ -502,13 +502,11 @@ export class AdminService {
         .innerJoin('g.estimates', 'e')
         .select('COUNT(DISTINCT g.id)', 'c')
         .getRawOne<{ c: string }>(),
-      this.milestones.count({ where: { rejectedAt: IsNull() } }),
+      this.milestones.count(),
       this.milestones.count({
-        where: { reportedAt: IsNull(), rejectedAt: IsNull() },
+        where: { reportedAt: IsNull() },
       }),
-      this.milestones
-        .createQueryBuilder('m')
-        .where('m.rejectedAt IS NULL')
+      Milestone.applyDefault(this.milestones.createQueryBuilder('m'), 'm')
         .select('m.source', 'source')
         .addSelect('COUNT(*)', 'c')
         .groupBy('m.source')
@@ -708,7 +706,7 @@ export class AdminService {
     // take minutes. EXISTS short-circuits on the per-game indexes.
     const hasMilestoneExpr =
       'EXISTS (SELECT 1 FROM milestone m ' +
-      'WHERE m."gameId" = g.id AND m."rejectedAt" IS NULL)';
+      `WHERE m."gameId" = g.id AND ${Milestone.notRejectedSql('m')})`;
     const hasEstimateExpr =
       'EXISTS (SELECT 1 FROM sales_estimate e WHERE e."gameId" = g.id)';
 
@@ -852,9 +850,7 @@ export class AdminService {
       },
     });
     if (!game) throw new NotFoundException(`Game ${id} not found`);
-    const visibleMilestones = game.milestones.filter(
-      (m) => m.rejectedAt == null,
-    );
+    const visibleMilestones = game.milestones;
 
     const signals = await this.signals.find({
       where: { gameId: id },
@@ -1012,7 +1008,7 @@ export class AdminService {
         },
       }),
       this.milestones.find({
-        where: { gameId: id, rejectedAt: IsNull() },
+        where: { gameId: id },
         order: { reportedAt: 'DESC' },
       }),
       this.gameRanks.findOne({ where: { gameId: id } }),
@@ -1338,11 +1334,12 @@ export class AdminService {
     const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
     const offset = Math.max(opts.offset ?? 0, 0);
 
-    const qb = this.milestones
-      .createQueryBuilder('m')
+    const qb = Milestone.applyDefault(
+      this.milestones.createQueryBuilder('m'),
+      'm',
+    )
       .innerJoin('m.game', 'g')
       .addSelect('g.name', 'gameName')
-      .where('m.rejectedAt IS NULL')
       .orderBy('m.capturedAt', 'DESC');
 
     if (opts.gameId) qb.andWhere('m.gameId = :gid', { gid: opts.gameId });
@@ -1440,10 +1437,10 @@ export class AdminService {
    * it.
    */
   async deleteMilestone(id: string): Promise<{ deleted: boolean }> {
-    const result = await this.milestones.update(
-      { id, rejectedAt: IsNull() },
-      { rejectedAt: new Date() },
-    );
+    const result = await this.milestones.softDelete({
+      id,
+      ...Milestone.notRejected(),
+    });
     return { deleted: (result.affected ?? 0) > 0 };
   }
 
@@ -1477,30 +1474,26 @@ export class AdminService {
     // Aggregate non-rejected milestones by the hostname of their sourceUrl,
     // then sum the counts of hostnames matching each source's host (exact
     // or subdomain — same rule as SourcesService.findByUrl).
-    const rows = await this.milestones
-      .createQueryBuilder('m')
+    const rows = await Milestone.applyDefault(
+      this.milestones.createQueryBuilder('m'),
+      'm',
+    )
       .select('m.sourceUrl', 'sourceUrl')
-      .where('m.rejectedAt IS NULL')
       .andWhere('m.sourceUrl IS NOT NULL')
       .getRawMany<{ sourceUrl: string }>();
 
     const countsByHost = new Map<string, number>();
     for (const r of rows) {
-      try {
-        const host = new URL(r.sourceUrl).hostname
-          .replace(/^www\./, '')
-          .toLowerCase();
-        countsByHost.set(host, (countsByHost.get(host) ?? 0) + 1);
-      } catch {
-        // skip URLs that don't parse — they can't be matched to a host anyway
-      }
+      const host = hostnameOf(r.sourceUrl);
+      if (!host) continue;
+      countsByHost.set(host, (countsByHost.get(host) ?? 0) + 1);
     }
 
     return sources.map((s) => {
       let recordCount = 0;
       if (s.host) {
         for (const [host, count] of countsByHost) {
-          if (host === s.host || host.endsWith(`.${s.host}`)) {
+          if (hostMatchesSource(host, s.host)) {
             recordCount += count;
           }
         }
@@ -1525,10 +1518,59 @@ export class AdminService {
     const result = await this.trustedSources.delete(id);
     return { deleted: (result.affected ?? 0) > 0 };
   }
+
+  /**
+   * Soft-delete (reject) every non-rejected milestone whose sourceUrl host
+   * matches this trusted source — same matching rule as `recordCount`.
+   * Rejected rows stay as an ingest fingerprint so refresh cannot recreate
+   * them.
+   */
+  async rejectMilestonesForTrustedSource(
+    id: string,
+  ): Promise<{ rejected: number }> {
+    const source = await this.trustedSources.findOne({ where: { id } });
+    if (!source) {
+      throw new NotFoundException(`Trusted source ${id} not found`);
+    }
+    if (!source.host) {
+      throw new BadRequestException(
+        'This source has no host to match milestones against',
+      );
+    }
+
+    const rows = await this.milestones.find({
+      select: ['id', 'sourceUrl'],
+    });
+
+    const ids = rows
+      .filter((m) => {
+        if (!m.sourceUrl) return false;
+        const host = hostnameOf(m.sourceUrl);
+        return host != null && hostMatchesSource(host, source.host!);
+      })
+      .map((m) => m.id);
+
+    if (ids.length === 0) return { rejected: 0 };
+
+    await this.milestones.softDelete({ id: In(ids) });
+    return { rejected: ids.length };
+  }
 }
 
 // Raw queries return enum[] columns as the Postgres array literal
 // "{PC,SWITCH}". Normalize it back to a string[] for the API payload.
+function hostnameOf(url: string): string | null {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function hostMatchesSource(urlHost: string, sourceHost: string): boolean {
+  return urlHost === sourceHost || urlHost.endsWith(`.${sourceHost}`);
+}
+
 function parsePlatforms(value: Platform[] | string | null): Platform[] {
   if (Array.isArray(value)) return value;
   if (!value) return [];

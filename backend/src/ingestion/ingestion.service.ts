@@ -830,7 +830,7 @@ export class IngestionService {
     await this.milestones.delete({
       gameId,
       source: SalesSource.STEAM_LEAK,
-      rejectedAt: IsNull(),
+      ...Milestone.notRejected(),
     });
     await this.milestones.save(accepted);
   }
@@ -856,7 +856,7 @@ export class IngestionService {
       await this.milestones.delete({
         gameId,
         source: SalesSource.WIKIPEDIA,
-        rejectedAt: IsNull(),
+        ...Milestone.notRejected(),
       });
 
       const figures = toPlatformFigures(sales);
@@ -4160,7 +4160,7 @@ export class IngestionService {
     await this.milestones.delete({
       gameId,
       sourceUrl: url,
-      rejectedAt: IsNull(),
+      ...Milestone.notRejected(),
     });
 
     const releaseDate = await this.getReleaseDate(gameId);
@@ -4226,7 +4226,8 @@ export class IngestionService {
     if (rows.length === 0) return rows;
     const gameIds = [...new Set(rows.map((r) => r.gameId))];
     const rejected = await this.milestones.find({
-      where: { gameId: In(gameIds), rejectedAt: Not(IsNull()) },
+      withDeleted: true,
+      where: { gameId: In(gameIds), ...Milestone.rejected() },
       select: {
         gameId: true,
         source: true,

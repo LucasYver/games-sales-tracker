@@ -259,6 +259,12 @@ export class AdminController {
     return this.admin.updateTrustedSource(id, body);
   }
 
+  @Delete('trusted-sources/:id/milestones')
+  @HttpCode(200)
+  rejectMilestonesForTrustedSource(@Param('id', ParseUUIDPipe) id: string) {
+    return this.admin.rejectMilestonesForTrustedSource(id);
+  }
+
   @Delete('trusted-sources/:id')
   @HttpCode(200)
   deleteTrustedSource(@Param('id', ParseUUIDPipe) id: string) {

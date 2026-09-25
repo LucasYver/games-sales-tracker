@@ -4,6 +4,7 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../app.module';
+import { Milestone } from '../entities';
 
 /**
  * Read-only analysis: mines the free-text `milestone.note` field to build a
@@ -211,7 +212,7 @@ async function main(): Promise<void> {
                 AND s.metric = 'STEAM_PLAYERS_LEAK') AS "leakUnits"
        FROM milestone m
        JOIN game g ON g.id = m."gameId"
-      WHERE m."rejectedAt" IS NULL
+      WHERE ${Milestone.notRejectedSql('m')}
         AND g."deletedAt" IS NULL
         AND m."isEngagement" = false`,
   );

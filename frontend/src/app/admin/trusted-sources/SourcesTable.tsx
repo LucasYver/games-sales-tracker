@@ -12,10 +12,12 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { ClearSourceMilestonesButton } from '../_components/ClearSourceMilestonesButton';
 import { DeleteButton } from '../_components/DeleteButton';
 import { ToggleSourceActiveButton } from '../_components/ToggleSourceActiveButton';
 import {
   deleteTrustedSource,
+  rejectTrustedSourceMilestones,
   setTrustedSourceActive,
 } from '../actions';
 
@@ -292,6 +294,11 @@ export function SourcesTable({
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex items-center justify-end gap-0.5">
+                  <ClearSourceMilestonesButton
+                    action={rejectTrustedSourceMilestones.bind(null, ts.id)}
+                    name={ts.name}
+                    recordCount={ts.recordCount ?? 0}
+                  />
                   <ToggleSourceActiveButton
                     action={setTrustedSourceActive.bind(
                       null,

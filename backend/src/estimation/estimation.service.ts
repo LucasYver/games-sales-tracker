@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, IsNull, LessThanOrEqual, Repository } from 'typeorm';
+import { Between, LessThanOrEqual, Repository } from 'typeorm';
 import {
   AchievementSnapshot,
   EstimationMethod,
@@ -1068,7 +1068,6 @@ export class EstimationService {
     const milestones = await this.milestones.find({
       where: {
         gameId,
-        rejectedAt: IsNull(),
         isEngagement: false,
         platform: Platform.GLOBAL,
       },

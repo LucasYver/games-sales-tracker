@@ -374,7 +374,7 @@ export interface AdminTrustedSource {
   active: boolean;
   autoCreated: boolean;
   createdAt: string;
-  // Number of non-rejected milestones linked to this source via the URL
+  // Number of milestones linked to this source via the URL hostname
   // hostname (exact host or subdomain match). Populated by the admin
   // listing endpoint.
   recordCount?: number;

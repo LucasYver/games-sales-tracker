@@ -328,7 +328,7 @@ export class ReferenceProfileService {
       .leftJoin(
         Milestone,
         'm',
-        'm."gameId" = g.id AND m."rejectedAt" IS NULL AND m."isEngagement" = false AND m."reportedAt" IS NOT NULL',
+        `m."gameId" = g.id AND ${Milestone.notRejectedSql('m')} AND m."isEngagement" = false AND m."reportedAt" IS NOT NULL`,
       )
       .leftJoin(
         SignalSnapshot,
@@ -366,10 +366,12 @@ export class ReferenceProfileService {
    * which drops the anchor.
    */
   private async pickAnchor(gameId: string): Promise<AnchorSelection | null> {
-    const milestones = await this.milestones
-      .createQueryBuilder('m')
-      .where('m."gameId" = :gameId', { gameId })
-      .andWhere('m."rejectedAt" IS NULL')
+    const milestones = await Milestone.applyDefault(
+      this.milestones
+        .createQueryBuilder('m')
+        .where('m."gameId" = :gameId', { gameId }),
+      'm',
+    )
       .andWhere('m."isEngagement" = false')
       .andWhere('m."reportedAt" IS NOT NULL')
       .andWhere("m.source <> 'STEAM_LEAK'")

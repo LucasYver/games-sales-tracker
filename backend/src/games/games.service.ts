@@ -628,9 +628,7 @@ export class GamesService {
 
     if (!game) throw new NotFoundException(`Game "${slug}" not found`);
 
-    const visibleMilestones = game.isFree
-      ? []
-      : game.milestones.filter((m) => m.rejectedAt == null);
+    const visibleMilestones = game.isFree ? [] : game.milestones;
 
     const latestEstimates = game.isFree
       ? new Map<Platform, SalesEstimate>()
@@ -1084,7 +1082,7 @@ export class GamesService {
     });
 
     const milestones = await this.milestones.find({
-      where: { gameId, rejectedAt: IsNull(), isEngagement: false },
+      where: { gameId, isEngagement: false },
       select: { reportedAt: true },
     });
 
@@ -1151,7 +1149,6 @@ export class GamesService {
       return this.milestones.find({
         where: {
           gameId,
-          rejectedAt: IsNull(),
           isEngagement: false,
           platform: Platform.GLOBAL,
         },
@@ -1160,7 +1157,6 @@ export class GamesService {
     return this.milestones.find({
       where: {
         gameId,
-        rejectedAt: IsNull(),
         isEngagement: false,
         platform: Platform.GLOBAL,
         reportedAt: Or(LessThanOrEqual(asOf), IsNull()),

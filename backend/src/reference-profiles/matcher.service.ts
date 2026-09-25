@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Platform, ReferenceProfile } from '../entities';
+import { Platform, Milestone, ReferenceProfile } from '../entities';
 
 /**
  * Number of nearest neighbours the matcher pulls before aggregating.
@@ -866,7 +866,7 @@ export class MatcherService {
          FROM game g
          INNER JOIN milestone m
            ON m."gameId" = g.id
-          AND m."rejectedAt" IS NULL
+          AND ${Milestone.notRejectedSql('m')}
           AND m."isEngagement" = false
         WHERE g.developer IS NOT NULL
           AND g."deletedAt" IS NULL
