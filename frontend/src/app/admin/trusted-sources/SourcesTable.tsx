@@ -1,7 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { ExternalLink, Rss, Search } from 'lucide-react';
+import { Fragment, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { ExternalLink, Pencil, Rss, Search } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
   Table,
@@ -14,6 +16,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { ClearSourceMilestonesButton } from '../_components/ClearSourceMilestonesButton';
 import { DeleteButton } from '../_components/DeleteButton';
+import { EditTrustedSourceForm } from '../_components/EditTrustedSourceForm';
 import { ToggleSourceActiveButton } from '../_components/ToggleSourceActiveButton';
 import {
   deleteTrustedSource,
@@ -150,6 +153,7 @@ export function SourcesTable({
 }) {
   const [sort, setSort] = useState<SortColumn>('name');
   const [direction, setDirection] = useState<SortDirection>('asc');
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   function onSort(column: SortColumn) {
     if (sort === column) {
@@ -226,97 +230,128 @@ export function SourcesTable({
         </TableHeader>
         <TableBody>
           {sorted.map((ts) => (
-            <TableRow key={ts.id}>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{ts.name}</span>
-                  {ts.autoCreated && (
-                    <Badge
-                      variant="outline"
-                      className="border-amber-300 bg-amber-50 text-[10px] tracking-wide text-amber-800 uppercase dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200"
-                      title="Auto-created by the ingestion pipeline. Review the tier before relying on it."
+            <Fragment key={ts.id}>
+              <TableRow>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/admin/trusted-sources/${ts.id}`}
+                      className="hover:text-primary font-medium hover:underline"
                     >
-                      auto
-                    </Badge>
-                  )}
-                </div>
-                <div className="text-muted-foreground font-mono text-xs">
-                  {ts.slug}
-                </div>
-              </TableCell>
-              <TableCell>
-                <Badge variant="outline">{ts.category}</Badge>
-              </TableCell>
-              <TableCell>
-                <Badge variant="secondary">{ts.salesSource}</Badge>
-              </TableCell>
-              <TableCell className="text-muted-foreground font-mono text-xs">
-                {hostLabel(ts) || '—'}
-              </TableCell>
-              <TableCell className="text-muted-foreground text-xs">
-                {ts.language}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {ts.recordCount ? (
-                  <span className="font-medium">
-                    {ts.recordCount.toLocaleString()}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">0</span>
-                )}
-              </TableCell>
-              <TableCell>
-                <div className="flex flex-wrap gap-1">
-                  {ts.feedUrl && (
-                    <Badge variant="outline" className="gap-1 text-xs">
-                      <Rss aria-hidden="true" className="size-3" />
-                      RSS
-                    </Badge>
-                  )}
-                  {ts.searchUrlTemplate && (
-                    <Badge variant="outline" className="gap-1 text-xs">
-                      <Search aria-hidden="true" className="size-3" />
-                      Search
-                    </Badge>
-                  )}
-                  {ts.url && (
-                    <a
-                      href={ts.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary inline-flex items-center gap-1 text-xs hover:underline"
-                    >
-                      site
-                      <ExternalLink aria-hidden="true" className="size-3" />
-                    </a>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex items-center justify-end gap-0.5">
-                  <ClearSourceMilestonesButton
-                    action={rejectTrustedSourceMilestones.bind(null, ts.id)}
-                    name={ts.name}
-                    recordCount={ts.recordCount ?? 0}
-                  />
-                  <ToggleSourceActiveButton
-                    action={setTrustedSourceActive.bind(
-                      null,
-                      ts.id,
-                      !ts.active,
+                      {ts.name}
+                    </Link>
+                    {ts.autoCreated && (
+                      <Badge
+                        variant="outline"
+                        className="border-amber-300 bg-amber-50 text-[10px] tracking-wide text-amber-800 uppercase dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200"
+                        title="Auto-created by the ingestion pipeline. Review the tier before relying on it."
+                      >
+                        auto
+                      </Badge>
                     )}
-                    active={ts.active}
-                    name={ts.name}
-                  />
-                  <DeleteButton
-                    action={deleteTrustedSource.bind(null, ts.id)}
-                    confirmMessage={`Delete trusted source "${ts.name}"?`}
-                    iconOnly
-                    label={`Delete ${ts.name}`}
-                  />
-                </div>
-              </TableCell>
-            </TableRow>
+                  </div>
+                  <div className="text-muted-foreground font-mono text-xs">
+                    {ts.slug}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline">{ts.category}</Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="secondary">{ts.salesSource}</Badge>
+                </TableCell>
+                <TableCell className="text-muted-foreground font-mono text-xs">
+                  {hostLabel(ts) || '—'}
+                </TableCell>
+                <TableCell className="text-muted-foreground text-xs">
+                  {ts.language}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {ts.recordCount ? (
+                    <span className="font-medium">
+                      {ts.recordCount.toLocaleString()}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">0</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1">
+                    {ts.feedUrl && (
+                      <Badge variant="outline" className="gap-1 text-xs">
+                        <Rss aria-hidden="true" className="size-3" />
+                        RSS
+                      </Badge>
+                    )}
+                    {ts.searchUrlTemplate && (
+                      <Badge variant="outline" className="gap-1 text-xs">
+                        <Search aria-hidden="true" className="size-3" />
+                        Search
+                      </Badge>
+                    )}
+                    {ts.url && (
+                      <a
+                        href={ts.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary inline-flex items-center gap-1 text-xs hover:underline"
+                      >
+                        site
+                        <ExternalLink aria-hidden="true" className="size-3" />
+                      </a>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end gap-0.5">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() =>
+                        setEditingId((current) =>
+                          current === ts.id ? null : ts.id,
+                        )
+                      }
+                      aria-label={`Edit ${ts.name}`}
+                      aria-expanded={editingId === ts.id}
+                    >
+                      <Pencil aria-hidden="true" className="size-4" />
+                    </Button>
+                    <ClearSourceMilestonesButton
+                      action={rejectTrustedSourceMilestones.bind(null, ts.id)}
+                      name={ts.name}
+                      recordCount={ts.recordCount ?? 0}
+                    />
+                    <ToggleSourceActiveButton
+                      action={setTrustedSourceActive.bind(
+                        null,
+                        ts.id,
+                        !ts.active,
+                      )}
+                      active={ts.active}
+                      name={ts.name}
+                    />
+                    <DeleteButton
+                      action={deleteTrustedSource.bind(null, ts.id)}
+                      confirmMessage={`Delete trusted source "${ts.name}"?`}
+                      iconOnly
+                      label={`Delete ${ts.name}`}
+                    />
+                  </div>
+                </TableCell>
+              </TableRow>
+              {editingId === ts.id && (
+                <TableRow>
+                  <TableCell colSpan={8} className="bg-muted/20">
+                    <EditTrustedSourceForm
+                      source={ts}
+                      onClose={() => setEditingId(null)}
+                    />
+                  </TableCell>
+                </TableRow>
+              )}
+            </Fragment>
           ))}
           {sorted.length === 0 && (
             <TableRow>

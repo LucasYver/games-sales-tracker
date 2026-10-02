@@ -259,6 +259,18 @@ export class AdminController {
     return this.admin.updateTrustedSource(id, body);
   }
 
+  @Get('trusted-sources/:id/milestones')
+  listMilestonesForTrustedSource(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.admin.listMilestonesForTrustedSource(id, {
+      offset: offset ? Number(offset) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
   @Delete('trusted-sources/:id/milestones')
   @HttpCode(200)
   rejectMilestonesForTrustedSource(@Param('id', ParseUUIDPipe) id: string) {

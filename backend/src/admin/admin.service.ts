@@ -1504,19 +1504,116 @@ export class AdminService {
 
   async updateTrustedSource(
     id: string,
-    patch: { active: boolean },
+    patch: {
+      active?: boolean;
+      name?: string;
+      category?: TrustedSource['category'];
+      salesSource?: TrustedSource['salesSource'];
+      host?: string | null;
+      handle?: string | null;
+      url?: string | null;
+      searchUrlTemplate?: string | null;
+      feedUrl?: string | null;
+      language?: string;
+    },
   ): Promise<TrustedSource> {
     const source = await this.trustedSources.findOne({ where: { id } });
     if (!source) {
       throw new NotFoundException(`Trusted source ${id} not found`);
     }
-    source.active = patch.active;
+
+    if (patch.name !== undefined) source.name = patch.name.trim();
+    if (patch.category !== undefined) source.category = patch.category;
+    if (patch.salesSource !== undefined) source.salesSource = patch.salesSource;
+    if (patch.host !== undefined)
+      source.host = normalizeTrustedHost(patch.host);
+    if (patch.handle !== undefined) {
+      const handle = patch.handle?.trim().replace(/^@/, '') ?? '';
+      source.handle = handle || null;
+    }
+    if (patch.url !== undefined) source.url = emptyToNull(patch.url);
+    if (patch.feedUrl !== undefined)
+      source.feedUrl = emptyToNull(patch.feedUrl);
+    if (patch.searchUrlTemplate !== undefined) {
+      const template = emptyToNull(patch.searchUrlTemplate);
+      if (template && !/^https?:\/\/.+$/.test(template)) {
+        throw new BadRequestException(
+          'searchUrlTemplate must be an http(s) URL',
+        );
+      }
+      if (template && !template.includes('{q}')) {
+        throw new BadRequestException(
+          'searchUrlTemplate must contain the {q} placeholder',
+        );
+      }
+      source.searchUrlTemplate = template;
+    }
+    if (patch.language !== undefined) {
+      source.language = patch.language.trim().toLowerCase();
+    }
+    if (patch.active !== undefined) source.active = patch.active;
+
     return this.trustedSources.save(source);
   }
 
   async deleteTrustedSource(id: string): Promise<{ deleted: boolean }> {
     const result = await this.trustedSources.delete(id);
     return { deleted: (result.affected ?? 0) > 0 };
+  }
+
+  /**
+   * Non-rejected milestones whose sourceUrl host matches this trusted
+   * source — same rule as `recordCount` (exact host or subdomain).
+   */
+  async listMilestonesForTrustedSource(
+    id: string,
+    opts: { offset?: number; limit?: number },
+  ): Promise<
+    PaginatedAdmin<Milestone & { gameName: string }> & {
+      source: TrustedSource;
+    }
+  > {
+    const source = await this.trustedSources.findOne({ where: { id } });
+    if (!source) {
+      throw new NotFoundException(`Trusted source ${id} not found`);
+    }
+
+    const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
+    const offset = Math.max(opts.offset ?? 0, 0);
+
+    if (!source.host) {
+      return { source, items: [], total: 0 };
+    }
+
+    const host = source.host.replace(/^www\./i, '').toLowerCase();
+    const hostExpr = milestoneSourceHostSql('m');
+    const qb = Milestone.applyDefault(
+      this.milestones.createQueryBuilder('m'),
+      'm',
+    )
+      .innerJoin('m.game', 'g')
+      .addSelect('g.name', 'gameName')
+      .andWhere('m.sourceUrl IS NOT NULL')
+      .andWhere(
+        `(${hostExpr} = :host OR right(${hostExpr}, char_length(:host) + 1) = '.' || :host)`,
+        { host },
+      )
+      .orderBy('m.capturedAt', 'DESC');
+
+    const [entities, raws, total] = await Promise.all([
+      qb.clone().offset(offset).limit(limit).getMany(),
+      qb.clone().offset(offset).limit(limit).getRawMany<{ gameName: string }>(),
+      qb.clone().getCount(),
+    ]);
+
+    return {
+      source,
+      items: entities.map((m, i) => ({
+        ...m,
+        gameName: raws[i]?.gameName ?? '',
+      })),
+      total,
+    };
   }
 
   /**
@@ -1559,6 +1656,43 @@ export class AdminService {
 
 // Raw queries return enum[] columns as the Postgres array literal
 // "{PC,SWITCH}". Normalize it back to a string[] for the API payload.
+// Hostname of a milestone sourceUrl, aligned with `hostnameOf`: lowercase,
+// no userinfo, no port, leading "www." stripped. Used so the source detail
+// list matches the recordCount shown on the registry.
+function milestoneSourceHostSql(alias: string): string {
+  return `regexp_replace(split_part(split_part(regexp_replace(lower(${alias}."sourceUrl"), '^https?://([^@/]+@)?', ''), '/', 1), ':', 1), '^www\\.', '')`;
+}
+
+function emptyToNull(value: string | null): string | null {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
+function normalizeTrustedHost(value: string | null): string | null {
+  const raw = emptyToNull(value);
+  if (!raw) return null;
+  const host = raw
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .split('/')[0]
+    .split('?')[0]
+    .split(':')[0]
+    .replace(/^www\./, '');
+  if (
+    !host ||
+    !/^[a-z0-9.-]+$/.test(host) ||
+    host.includes('..') ||
+    host.startsWith('.') ||
+    host.endsWith('.')
+  ) {
+    throw new BadRequestException(
+      'host must be a hostname, e.g. gamesindustry.biz',
+    );
+  }
+  return host;
+}
+
 function hostnameOf(url: string): string | null {
   try {
     return new URL(url).hostname.replace(/^www\./, '').toLowerCase();

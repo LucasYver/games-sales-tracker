@@ -221,16 +221,41 @@ export async function updateMilestone(
   });
   revalidatePath('/admin/milestones');
   revalidatePath(`/admin/games/${gameId}`);
+  revalidatePath('/admin/trusted-sources', 'layout');
 }
 
 export async function deleteMilestone(id: string): Promise<void> {
   await adminFetch(`/milestones/${id}`, { method: 'DELETE' });
   revalidatePath('/admin/milestones');
+  revalidatePath('/admin/trusted-sources', 'layout');
 }
 
 export async function deleteSignal(id: string, gameId: string): Promise<void> {
   await adminFetch(`/signals/${id}`, { method: 'DELETE' });
   revalidatePath(`/admin/games/${gameId}`);
+}
+
+export interface UpdateTrustedSourcePayload {
+  name?: string;
+  category?: string;
+  salesSource?: string;
+  host?: string | null;
+  handle?: string | null;
+  url?: string | null;
+  searchUrlTemplate?: string | null;
+  feedUrl?: string | null;
+  language?: string;
+}
+
+export async function updateTrustedSource(
+  id: string,
+  payload: UpdateTrustedSourcePayload,
+): Promise<void> {
+  await adminFetch(`/trusted-sources/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+  revalidatePath('/admin/trusted-sources', 'layout');
 }
 
 export async function setTrustedSourceActive(
@@ -256,7 +281,7 @@ export async function rejectTrustedSourceMilestones(
     `/trusted-sources/${id}/milestones`,
     { method: 'DELETE' },
   );
-  revalidatePath('/admin/trusted-sources');
+  revalidatePath('/admin/trusted-sources', 'layout');
   revalidatePath('/admin/milestones');
   return result;
 }

@@ -380,6 +380,12 @@ export interface AdminTrustedSource {
   recordCount?: number;
 }
 
+export interface AdminTrustedSourceMilestones {
+  source: AdminTrustedSource;
+  items: AdminMilestoneWithGame[];
+  total: number;
+}
+
 export interface PaginatedAdmin<T> {
   items: T[];
   total: number;
