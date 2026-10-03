@@ -3,12 +3,12 @@
 Plateforme qui **estime les ventes de jeux vidéo** en agrégeant des signaux
 publics, parce que les éditeurs divulguent rarement leurs chiffres unitaires.
 
-Au lieu d’afficher un nombre exact inventé, le modèle :
+Le chiffre affiché est toujours la fourchette du modèle (`estimatedToday`), pas un total déclaré. Le modèle :
 
-1. Collecte des **snapshots de signaux** datés (avis Steam, notes PS/Xbox, etc.).
-2. Applique un **multiplicateur Boxleiter** calibré (copies vendues par avis).
-3. Retourne une **fourchette + niveau de confiance**.
-4. Conserve les **chiffres officiels** à part, comme vérité terrain pour la calibration.
+1. Collecte des **snapshots de signaux** datés (avis Steam, notes PS/Xbox, CCU, etc.).
+2. Dérive un **profil** depuis les jeux voisins (matcher), sinon des constantes globales.
+3. Combine Boxleiter, extrapolation first-week PC et splits console.
+4. Conserve les **chiffres déclarés** à part, comme cross-check. Ils ne calibrent plus un multiplicateur par jeu.
 
 ## Prérequis
 
@@ -32,8 +32,8 @@ Ports utilisés en local :
 ### 1. Cloner le dépôt
 
 ```bash
-git clone <url-du-repo> games-sales-tracker
-cd games-sales-tracker
+git clone <url-du-repo> game-sales-tracker
+cd game-sales-tracker
 ```
 
 ### 2. Démarrer PostgreSQL et Redis
@@ -43,7 +43,8 @@ docker compose up -d
 ```
 
 Cela lance Postgres (`gamesales` / `gamesales` / base `gamesales` sur le port
-**5433**) et Redis sur **6380**.
+**5433**) et Redis sur **6380**. Redis est démarré pour le compose, mais le
+backend ne s’en sert pas.
 
 ### 3. Restaurer le dump de prod (obligatoire pour avoir des données)
 
@@ -51,10 +52,10 @@ Le schéma et le catalogue de jeux ne se bootstrapent pas à partir de zéro :
 **il faut importer un dump SQL** pour travailler avec des données réalistes
 (jeux, signaux, estimations, milestones, etc.).
 
-Le fichier attendu se trouve dans `backend/dumps/` (ex. `prod-2026-08-22.sql`,
-~330 Mo). Ce dossier est gitignoré — récupérez le dump auprès d’un collègue ou
-générez-le depuis la prod avec `pg_dump` (connexion directe Neon, pas le
-pooler).
+Le fichier attendu se trouve dans `backend/dumps/` (gitignoré). Récupérez un
+dump auprès d’un collègue ou générez-le depuis la prod avec `pg_dump`
+(connexion directe Neon, pas le pooler). Les commandes ci-dessous utilisent
+`prod-2026-08-22.sql` comme exemple : remplacez par le nom du fichier réel.
 
 **Première installation** — volume Postgres vierge, restauration directe :
 
@@ -152,28 +153,24 @@ seuls l’ingestion live et certains crons sont ignorés.
 | Backend | NestJS (TypeScript) + TypeORM |
 | Base | PostgreSQL 16 |
 | Frontend | Next.js 16 (App Router) + Tailwind CSS |
-| Infra locale | Docker Compose (Postgres + Redis) |
-| Sources | IGDB, Steam, scraping PS/Xbox Store |
+| Infra locale | Docker Compose (Postgres 16 ; Redis inutilisé) |
+| Prod crons | `vercel.json` (routes HTTP sous `/api/cron`) |
+| Sources | IGDB, Steam, stores PS/Xbox, Twitch, Wikipedia, presse |
 
 ## Structure du projet
 
 ```
-games-sales-tracker/
+game-sales-tracker/
 ├── backend/              API NestJS + ingestion + estimation
 │   ├── dumps/            Dumps SQL prod (gitignoré)
-│   └── src/
-│       ├── entities/     Entités TypeORM
-│       ├── db/migrations/ Migrations TypeORM
-│       ├── games/        Recherche + fiches jeux
-│       ├── ingestion/    Clients IGDB / Steam / stores
-│       ├── estimation/   Modèle Boxleiter calibré
-│       ├── scheduler/    Crons (refresh signaux, backlog…)
-│       └── scripts/      Scripts one-shot (backfill, diagnostic…)
-├── frontend/             UI Next.js (recherche + fiche jeu + admin)
-└── docker-compose.yml    Postgres (5433) + Redis (6380)
+│   └── src/              modules Nest (games, ingestion, estimation, …)
+├── frontend/             UI Next.js (catalogue, fiche, classement, admin)
+├── docker-compose.yml    Postgres (5433) + Redis (6380)
+└── vercel.json           Routes prod + schedules des crons
 ```
 
-Documentation complémentaire : `ARCHITECTURE.md`, `ESTIMATION.md`.
+Documentation : `ARCHITECTURE.md` (carte), `ESTIMATION.md` (formules),
+`DATA_DRIVEN_PROFILES.md` (matcher). Vérifiées contre le commit `5f0cae0`.
 
 ## API (aperçu)
 
@@ -182,8 +179,11 @@ Documentation complémentaire : `ARCHITECTURE.md`, `ESTIMATION.md`.
 | GET | `/api/games/search?q=` | Recherche dans le catalogue local |
 | GET | `/api/games/:slug` | Détail jeu + dernière estimation + historique |
 | GET | `/api/games/popular` | Jeux populaires (page d’accueil) |
+| GET | `/api/games/ranked` | Classement review-velocity |
 | POST | `/api/ingestion/steam` | Ingérer un app Steam (`{ "appId": 1145360 }`) |
 | POST | `/api/ingestion/igdb` | Importer depuis IGDB (`{ "query": "Hades" }`) |
+
+La liste complète est dans les controllers (`games`, `ingestion`, `admin`, `cron`).
 
 Exemple — ingérer Hades sans clé IGDB :
 
@@ -212,8 +212,8 @@ docker compose down -v     # arrêter + effacer les données Postgres
 
 ## Note sur la précision
 
-Un jeu tout juste sorti a peu de signaux : l’estimation est volontairement
-affichée avec **faible confiance et une fourchette large**.
+Un jeu tout juste sorti a peu de signaux : la fourchette reste **large**.
+Il n’y a pas de badge de confiance sur l’estimation elle-même.
 
 Les **jeux free-to-play** (flag Steam `is_free`) n’ont pas d’estimation de
 ventes : les avis ne sont pas un proxy fiable quand il n’y a pas d’unité vendue.

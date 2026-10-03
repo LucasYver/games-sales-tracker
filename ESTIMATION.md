@@ -1,614 +1,261 @@
 # Estimation method — source of truth
 
-> **Contract.** This file is the single source of truth for how we estimate
-> game sales. If a formula here changes, the code must change (and vice
-> versa). Every formula links to the file/symbol that implements it.
+> Verified against commit `5f0cae0` (2026-10-03).
+>
+> **Contract.** This file describes how sales are estimated. If a formula
+> here changes, the code must change, and the reverse. Numeric constants
+> live in `backend/src/games/sales-modeling.constants.ts`. Method weights
+> live in the `estimation_method` table. Do not treat a removed design as
+> still active just because an old migration created it.
 
-We never know the real number of copies a game has sold. We **guess** from
-public signals (reviews, ratings, achievements) and **cross-check** with
-**milestones** (dated declared figures from publisher IR, Wikipedia, press
-coverage). Each guess comes with a range and a confidence level.
+We never know the real number of copies sold. We **guess** from public
+signals and from the observed behaviour of similar games. Each guess is a
+range. A dated declared figure is kept beside the guess as a cross-check.
+It does not rewrite the guess.
 
 ```
-public signal ──► per-platform estimate ─┐
-                                         ├─► reconcile ─► "today" range
-milestone (dated declared figure) ───────┘
+signals ──► matcher profile (or global constants)
+              │
+              ├─ PC Boxleiter (reviews × band)
+              ├─ PC first-week (launch CCU × curve)
+              └─ console splits (share ratios) + store-rating Boxleiter
+                                │
+                                ▼
+                    per-platform aggregate ──► estimatedToday
+declared GLOBAL milestone ──► cross-check only (totalSales / reconciliation)
 ```
 
-A **milestone** is a single dated sales-related figure for one platform,
-attached to a `note` (verbatim source quote) and a `sourceUrl` for
-provenance. Stored in `milestone` (entity `Milestone`). Each milestone
-carries a `confidenceScore` (0–100, derived from the trusted source's
-`weight`) which is **purely informational**: it surfaces to the operator
-in the admin but is never used by calibration, spread or aggregation.
-Milestones flagged `isEngagement = true` ("players reached", typically
-including Game Pass / Ubisoft+ subscribers) are kept for context but
-excluded from calibration and the headline breakdown.
+## Removed on purpose
 
----
+Do not reintroduce these without an explicit product decision:
 
-## 1. Per-platform estimate — Boxleiter
+- Per-game `calibratedMultiplier*` / `calibrationSource*` (dropped by
+  `1783780000000-DropCalibrationAndPureEstimate`).
+- `estimate_snapshot.pureEstimatedToday*` (same migration). The headline
+  **is** the model; there is no second "pure" column.
+- `GenreProfile`, `game.genreProfileId`, `game.genreProfileManual`
+  (dropped by `1782700000000-DropGenreProfile`). The matcher replaced them.
+- Using a milestone as a floor or freshness cap on `estimatedToday`.
 
-> Implemented in `EstimationService.estimateForPlatform`
-> (`backend/src/estimation/estimation.service.ts`).
+`freshnessCap` and the PC-marginality guardrail are still in
+`GamesService.reconcile`, but per-platform declared milestones are no longer
+loaded into that map, so neither path runs. Worldwide figures never enter
+the headline.
 
-For each platform, "a public signal" (Steam reviews, PSN ratings, Xbox
-ratings) is roughly proportional to units sold. Multiply the signal by a
-**multiplier** to get units.
+## 1. Profile
+
+> `SalesProfileResolverService.resolveForGame`
+> (`backend/src/reference-profiles/sales-profile-resolver.service.ts`).
+
+`USE_MATCHER_PROFILE` defaults **on**. Set it to `false` / `0` / `off` /
+`no` to force global constants.
+
+The matcher (`MatcherService`, k = 15, minimum 3 neighbours) returns a
+`ResolvedGenreProfile`. The name is historical; the values come from
+neighbour anchors in `reference_profile`, not from a genre row.
+
+| Field | Source | Fallback |
+| ----- | ------ | -------- |
+| PC Boxleiter band | log-space blend of `reviewsToUnits` and `globalReviewsToUnits × pcShare`, then ±25 % | `25–65` |
+| PS Boxleiter band | that PC midpoint × (PS default midpoint / PC default midpoint), then ±25 % | `40–100` |
+| Xbox Boxleiter band | not derived from the matcher | `35–90` |
+| `peakCcuToWeekOne` | `peakCcuRatio` ±30 % | `3–7` |
+| `m1` | `1 / curve.s1` | `2.5` |
+| `tailY2` / `tailY5` | `curve.a2` and `a2^1.5` | `1.25` / `1.5` |
+| Platform shares | similarity-weighted neighbour shares | `0.50 / 0.25 / 0.15 / 0.10` (PC/PS/Xbox/Switch) |
+
+`null` only when the flag is off or the corpus has zero anchors. A thin
+neighbourhood falls through to the matcher's global mean inside
+`MatcherService`, not to a genre bucket.
+
+Similarity weights, play-mode hard filter, and anchor construction:
+`DATA_DRIVEN_PROFILES.md` and `matcher.service.ts`. Weights are hand-set
+in code and are **not** a database column.
+
+## 2. Boxleiter
+
+> `EstimationService.estimateForPlatform`.
 
 ```
 units_low  = signal × multiplier_low
 units_high = signal × multiplier_high
 ```
 
-`signal` is the most recent `SignalSnapshot` row for that game/metric:
+`signal` is the latest **non-synthetic** `SignalSnapshot` for that metric.
 
-| Platform | Signal metric                   |
-| -------- | ------------------------------- |
-| PC       | `SignalMetric.STEAM_REVIEWS`    |
-| PS       | `SignalMetric.PS_RATINGS`       |
-| Xbox     | `SignalMetric.XBOX_RATINGS`     |
+| Platform | Metric | Global low | Global high | Plausible min | Plausible max |
+| -------- | ------ | ---------- | ----------- | ------------- | ------------- |
+| PC | `STEAM_REVIEWS` | `25` | `65` | `5` | `500` |
+| PlayStation | `PS_RATINGS` | `40` | `100` | `8` | `600` |
+| Xbox | `XBOX_RATINGS` | `35` | `90` | `6` | `600` |
 
-Xbox ratings are the Display Catalog **worldwide** `UsageData.AllTime.RatingCount` (not the per-locale xbox.com page). They feed `xbox-ratings-boxleiter-default`, blended with `genre-console-split-from-ps-xbox` (or PC→Xbox fallback) the same way PS blends store ratings with the PC split.
+The method tag is always `boxleiter-default`,
+`ps-ratings-boxleiter-default`, or `xbox-ratings-boxleiter-default`,
+including when the matcher supplied the band. `multiplierSource` on the
+breakdown trace says `matcher` or `global`.
 
-`multiplier_low/high` comes from `resolveMultiplier`:
+Xbox ratings are the Display Catalog worldwide
+`UsageData.AllTime.RatingCount`. `xbox-ratings-boxleiter-default` is
+enabled (`1788760000000-XboxCatalogRatingsAndPrices`).
 
-- If the game has a **calibrated multiplier** stored on `Game`
-  (`calibratedMultiplier`, `calibratedPsMultiplier`,
-  `calibratedXboxMultiplier`), use it with the **single uniform spread**
-  `CALIBRATED_MULTIPLIER_SPREAD = 0.3` (±30 %). The source of the
-  milestone that produced the multiplier is still stored on
-  `Game.calibrationSource{Pc,Ps,Xbox}` for traceability but does not
-  influence the spread. Method tag: `…-calibrated` (e.g.
-  `boxleiter-calibrated`, `ps-ratings-boxleiter-calibrated`,
-  `xbox-ratings-boxleiter-calibrated`).
-- Otherwise, use the platform's default range. Method tag: `…-default`.
+Legacy `*-calibrated*` rows stay in `estimation_method` so old
+`sales_estimate` rows still resolve. Nothing new is written with those codes.
 
-| Platform | Default low | Default high | Plausible min | Plausible max |
-| -------- | ----------- | ------------ | ------------- | ------------- |
-| PC       | `25`        | `70`         | `5`           | `500`         |
-| PS       | `40`        | `100`        | `8`           | `600`         |
-| Xbox     | `35`        | `90`         | `6`           | `600`         |
+## 3. First-week extrapolation (PC)
 
-Source: `sales-modeling.constants.ts` (`*_BOXLEITER_*`).
-`CALIBRATED_MULTIPLIER_SPREAD = 0.3` (±30 %, uniform).
+> `EstimationService.estimateFirstWeekExtrapolationForPc`.
+> Method code: `first-week-extrapolation-pc` (family `LIFECYCLE`, default
+> weight `0.6`).
 
-### How calibration learns the multiplier
+Independent of the review multiplier. Needs a PC release date and age > 0.
 
-> `EstimationService.recalibratePlatform`.
+### Launch peak
 
-If we have at least one **dated milestone** for that platform
-(excluding engagement milestones), we pick the milestone with the
-**most recent `reportedAt`** — regardless of source. All sources are
-eligible (OFFICIAL, ANNOUNCEMENT, MEDIA, WIKIPEDIA): the simplifying
-assumption is that the latest dated figure is the closest to the
-current truth, and source reliability is already captured (and surfaced
-to the operator) by the milestone's `confidenceScore` without driving
-calibration. We then look for the signal snapshot **closest in time** to
-that milestone's date and compute:
+Largest `STEAM_CONCURRENT` from the first day of the PC release month
+through `LAUNCH_PEAK_CCU_WINDOW_MONTHS` (2) months later, capped at the
+as-of date. Leak-era CCU is one point per calendar month, so a 14-day
+window would miss it. `FIRST_WEEK_PEAK_CCU_WINDOW_DAYS` (14) is only the
+rebuild downsampling window, not this peak.
 
 ```
-multiplier = milestone.units / signal.value
+weekOneLow  = peak × peakCcuToWeekOneLow
+weekOneHigh = peak × peakCcuToWeekOneHigh
 ```
 
-We persist this multiplier on `Game.calibrated*Multiplier` together
-with the milestone's source on `Game.calibrationSource*` (kept for
-traceability only — no spread or weight is derived from it). We only
-keep the multiplier if:
+Launch reviews are not mixed in. Publisher Steam-share scaling is not
+applied on this path.
 
-- the snapshot is within `CALIBRATION_WINDOW_DAYS = 365` days of the
-  milestone's date (otherwise we'd mix points from different times), and
-- `multiplier` is inside the platform's plausible range (otherwise we
-  treat it as a data error and fall back to defaults).
+### Projection to today
 
-### Fallback: calibration from a worldwide figure
-
-> `EstimationService.recalibrateFromGlobal`.
-
-In practice, the press almost always quotes a worldwide total ("X
-million copies sold across all platforms") rather than per-platform
-breakdowns. Without a fallback, those `platform = GLOBAL` milestones
-can't calibrate anything and we stay on defaults forever.
-
-The fallback picks the **most recent dated GLOBAL milestone** (any
-source) and splits it proportionally to each platform's **proxy
-estimate** (signal × default-multiplier midpoint), then calibrates each
-platform with its allocated share. Per-platform calibration always
-takes precedence — GLOBAL split only fills the platforms that pass 1
-left untouched.
+With a profile, `genreProjectionMultiplier(m1, tailY2, tailY5, ageDays)`:
 
 ```
-proxy_p          = signal_p × midpoint(default_mult_p)
-share_p          = proxy_p / Σ proxy
-allocated_p      = milestone.global × share_p
-multiplier_p     = allocated_p / signal_p           // = global × midpoint(default_p) / Σ proxy
+day 7    → 1
+day 30   → 1 + 0.425 × (m1 − 1)
+day 90   → 1 + 0.661 × (m1 − 1)
+day 180  → 1 + 0.847 × (m1 − 1)
+day 365  → m1
+day 730  → m1 × tailY2
+day 1825 → m1 × tailY5
+day 3650 → m1 × tailY5^(1.85/1.5)
 ```
 
-Crucially we use the **static defaults** (not the calibrated values) as
-weights — otherwise calibration would feed back on itself.
+Ages 0–7 ramp linearly from 0 to 1. Past the last anchor the curve clamps.
 
-Guards (same spirit as the per-platform pass):
+Without a profile, `firstWeekProjectionMultiplier` picks
+`FIRST_WEEK_PROJECTION_CURVE_LARGE` (year-1 `2.68`) or `_SMALL`
+(year-1 `3.77`) at `FIRST_WEEK_BUCKET_THRESHOLD` (100_000 week-1 units).
+Both curves continue, decelerating, through year 15.
 
-- Platform's signal must exist within `CALIBRATION_WINDOW_DAYS = 365`
-  days of the milestone's date.
-- Platform's share must be at least
-  `GLOBAL_SPLIT_MIN_PLATFORM_SHARE = 5 %`. Splitting a worldwide figure
-  over a marginal platform (e.g. Xbox at 1 %) yields volatile
-  multipliers we don't trust.
-- Resulting multiplier still has to land inside
-  `[plausibleMin, plausibleMax]`.
+The estimate is dropped outside
+`[FIRST_WEEK_ESTIMATE_MIN_UNITS, FIRST_WEEK_ESTIMATE_MAX_UNITS]` =
+`[5_000, 200_000_000]`.
 
-The persisted `calibrationSource*` is the GLOBAL milestone's source,
-recorded for traceability. The same uniform spread
-(`CALIBRATED_MULTIPLIER_SPREAD = 0.3`) applies at read time regardless
-of which source produced the multiplier.
+## 4. Console splits
 
----
-
-## 2. Per-platform estimate — Achievement-based (dormant)
-
-> `EstimationService.estimateFromAchievementsForPlatform`. **Currently
-> disabled** at the call site: the method is kept intact and
-> `AchievementSnapshot` rows keep flowing in (Exophase + Steam official
-> percentages, scraped on every refresh), but no `SalesEstimate` is
-> produced from them today. Reactivation is a one-line change once the
-> coverage constants below have been calibrated against publisher IR —
-> see `BACKLOG.md`.
->
-> When re-enabled, this adds a second `SalesEstimate` per platform
-> (different `method`); it never replaces the Boxleiter one.
-
-The "most common achievement" of a game is a strong proxy for "players who
-actually launched the game". Exophase exposes:
-
-- `playersTracked` — how many Exophase users own the game on that platform
-  (a **sample** of the real playerbase),
-- `mostCommonPercent` — % of that sample who unlocked the easiest
-  achievement.
-
-**Step 1 — sample players who launched the game:**
+> `EstimationService.aggregateResultsByPlatform` /
+> `computeGenreSplit`.
 
 ```
-exo_players = playersTracked × mostCommonPercent / 100
+target = sourceAggregate × (targetShare / sourceShare)
 ```
 
-**Step 2 (PC only) — remove Exophase's completionist bias.**
-Steam's public API gives us the same `mostCommonPercent` but over the
-**entire** Steam playerbase. Exophase users unlock things faster, so:
+Skipped when the game is not released on the target, a share is 0, or
+there is no profile.
 
-```
-bias = exo.mostCommonPercent / steam.mostCommonPercent     # ~1.15–1.30
-exo_players /= bias                                        # PC only
-```
+1. Aggregate PC (Boxleiter + first-week).
+2. `genre-console-split-from-pc-playstation` (weight `0.4`).
+3. Aggregate PlayStation (PS Boxleiter + that split).
+4. Prefer `genre-console-split-from-ps-xbox`; else
+   `genre-console-split-from-pc-xbox` (weight `0.4`).
+5. Aggregate Xbox (split + Xbox Boxleiter).
 
-Method tag becomes `achievements-exophase-pc-steam-corrected` instead of
-`achievements-exophase-pc` when this correction applies.
+## 5. Aggregation
 
-**Step 3 — scale Exophase sample to the whole platform:**
+> `EstimationService.aggregateMethodsForPlatform`.
+> `α = AGGREGATION_DISAGREEMENT_ALPHA = 0.5`.
 
-```
-units_low  = exo_players × coverage_low
-units_high = exo_players × coverage_high
-```
-
-| Platform | coverage_low | coverage_high |
-| -------- | ------------ | ------------- |
-| PC       | `12`         | `30`          |
-| PS       | `10`         | `28`          |
-| Xbox     | `8`          | `22`          |
-
-Source: `sales-modeling.constants.ts` (`EXOPHASE_COVERAGE_*`).
-
-> **Status of these coverage numbers.** They are *defaults*, not
-> calibrated. They will be fitted per-game once the publisher IR pipeline
-> lands (see `BACKLOG.md`). Until then, every achievement-based estimate
-> is forced to `ConfidenceLevel.LOW`.
-
-**Step 4 — sanity check.** The estimate is dropped if:
-
-- `playersTracked < ACHIEVEMENT_MIN_PLAYERS_TRACKED` (`500`) — sample too
-  small,
-- `units_low < ACHIEVEMENT_ESTIMATE_MIN_UNITS` (`1_000`) — implausibly
-  low,
-- `units_high > ACHIEVEMENT_ESTIMATE_MAX_UNITS` (`500_000_000`) —
-  implausibly high.
-
----
-
-## 3. Confidence
-
-> `EstimationService.resolveConfidence`.
-
-For Boxleiter estimates:
-
-- `LOW` if released less than `RECENT_RELEASE_DAYS = 14` days ago.
-- Otherwise based on signal size:
-  - PC (Steam reviews dense): `< 50` LOW, `< 500` MEDIUM, else HIGH.
-  - PS / Xbox (ratings sparser): `< 10` LOW, `< 100` MEDIUM, else HIGH.
-
-For achievement-based estimates: always `LOW` (coverage is uncalibrated).
-
----
-
-## 2bis. Per-platform estimate — First-week extrapolation (PC)
-
-> Implemented in `EstimationService.estimateFirstWeekExtrapolationForPc`.
-> Method code: `first-week-extrapolation-pc` (family `LIFECYCLE`).
-> Active by default with `defaultWeight = 0.6` in the aggregation.
-
-A second, **independent** PC estimate that does not rely on a calibrated
-Boxleiter multiplier. Empirically grounded on an industry observation:
-
-> Games with > 100k week-1 PC sales reach a median year-1 of **2.68×**
-> their week-1; games with ≤ 100k week-1 reach **3.77×** (smaller
-> launches have a longer tail proportionally). Both follow a
-> **degressive** curve — most of the additional sales accrue in the
-> first month.
-
-### Step 1 — estimate week-1 units
-
-From the all-time Steam peak CCU snapshot
-(`SignalSnapshot.STEAM_PEAK_CCU`, ordered by `value DESC` because the
-historical-import path stores peaks with the SteamCharts month as
-`capturedAt`):
-
-```
-ccuScale    = launcherFactorFromSteamShare(publisher steam share)
-weekOneLow  = peak × FIRST_WEEK_PEAK_CCU_LOW  × ccuScale.low
-weekOneHigh = peak × FIRST_WEEK_PEAK_CCU_HIGH × ccuScale.high
-```
-
-`ccuScale` corrects the Steam-only peak up to total PC using the
-publisher's editable Steam-share range (`factor = 100 / steamShare`); a
-publisher selling all of its PC on Steam (`100/100`, the default) yields a
-neutral `×1.0`.
-
-The week-1 baseline is derived from the peak CCU alone. Launch-window
-reviews are **not** mixed in here — the reviews signal lives in the
-Boxleiter method and is combined at the aggregation step instead.
-
-### Step 2 — bucket on launch size + degressive projection to today
-
-```
-bucket    = weekOneMid > FIRST_WEEK_BUCKET_THRESHOLD (100_000)
-            ? FIRST_WEEK_PROJECTION_CURVE_LARGE   // hits 2.68 at day 365
-            : FIRST_WEEK_PROJECTION_CURVE_SMALL   // hits 3.77 at day 365
-multiplier(age) = piecewise-linear interpolation over the chosen curve
-                  (`firstWeekProjectionMultiplier`)
-
-projectedLow  = weekOneLow  × multiplier(age)
-projectedHigh = weekOneHigh × multiplier(age)
-```
-
-Curves (multiplier of week-1 sales):
-
-| Age (days)         | LARGE bucket | SMALL bucket |
-| ------------------ | ------------ | ------------ |
-| 7 (week 1)         | `1.00`       | `1.00`       |
-| 30 (month 1)       | `1.70`       | `2.20`       |
-| 90 (Q1)            | `2.10`       | `2.85`       |
-| 180 (half-year)    | `2.45`       | `3.30`       |
-| 365 (year 1)       | `2.68`       | `3.77`       |
-| 730 (year 2)       | `3.00`       | `4.50`       |
-| 1825 (year 5+)     | `3.40`       | `5.50`       |
-
-Ages between 0 and 7 days ramp linearly from 0 to week-1 (pre-launch
-returns 0).
-
-### Step 3 — sanity check
-
-The estimate is dropped if it falls outside
-`[FIRST_WEEK_ESTIMATE_MIN_UNITS, FIRST_WEEK_ESTIMATE_MAX_UNITS] =
-[5_000, 200_000_000]`. Tightens against peak-CCU outliers and
-date-of-release glitches.
-
-### Confidence
-
-- `LOW` if released less than `RECENT_RELEASE_DAYS = 14` days ago, OR
-  if peak CCU < 10k (sample too small to project from).
-- `MEDIUM` otherwise. The peak-CCU signal alone never reaches `HIGH`
-  (capped at MEDIUM, then further reduced by the publisher's Steam share).
-
-All capped by `launcherConfidenceCapFromShare(publisher steam share)`
-identically to the Boxleiter path: a full Steam share keeps the natural
-cap, a mid share (multi-store regime) caps at MEDIUM, a low share
-(launcher-primary regime) caps at LOW.
-
-### Why a separate method (vs. patching `LIFETIME_SALES_CURVE`)
-
-The existing `LIFETIME_SALES_CURVE` says `year1/week1 ≈ 0.58/0.13 ≈
-4.46×`, larger than both empirical buckets. Rather than retrofit one
-curve to two regimes (large vs small launches), the lifecycle method
-encodes the empirical buckets directly and lets the aggregator average
-it with Boxleiter — the two methods disagree precisely where the
-existing curve was a poor fit, so the aggregate's disagreement
-inflation surfaces the uncertainty rather than hiding it.
-
----
-
-## 3bis. Method registry and aggregation
-
-> Source of truth: the `estimation_method` table, cached in memory by
-> `EstimationMethodService`. Inputs are wired in
-> `EstimationService.persistEstimates`, output is computed by
-> `EstimateService.aggregateMethodsForPlatform`.
-
-Every `SalesEstimate` row is linked to a canonical method through
-`SalesEstimate.methodId` (FK to `estimation_method.id`). The free-form
-`SalesEstimate.method` string survives for backward compatibility and
-carries dynamic modifier suffixes (`+multi-store`, `+launcher-primary`,
-derived from the publisher's Steam share via `launcherMethodTagFromShare`)
-that aren't yet first-class methods. It will be dropped in a follow-up
-migration once nothing reads it.
-
-### Method codes (seeded by migration `AddEstimationMethodRegistry`)
-
-| Code                                            | Family       | Default weight | Enabled |
-| ----------------------------------------------- | ------------ | -------------- | ------- |
-| `boxleiter-default`                             | BOXLEITER    | `0.5`          | ✅      |
-| `boxleiter-calibrated`                          | BOXLEITER    | `1.0`          | ✅      |
-| `ps-ratings-boxleiter-default`                  | BOXLEITER    | `0.5`          | ✅      |
-| `ps-ratings-boxleiter-calibrated`               | BOXLEITER    | `1.0`          | ✅      |
-| `xbox-ratings-boxleiter-default`                | BOXLEITER    | `0.5`          | ✅      |
-| `xbox-ratings-boxleiter-calibrated`             | BOXLEITER    | `1.0`          | ✅      |
-| `boxleiter-calibrated-{official,announcement,media,wikipedia}`     | BOXLEITER | `0`         | ⛔ legacy |
-| `ps-ratings-boxleiter-calibrated-{official,announcement,media,wikipedia}` | BOXLEITER | `0`  | ⛔ legacy |
-| `xbox-ratings-boxleiter-calibrated-{official,announcement,media,wikipedia}` | BOXLEITER | `0` | ⛔ legacy |
-| `achievements-exophase-pc`                      | ACHIEVEMENTS | `0.3`          | ⛔ dormant |
-| `achievements-exophase-pc-steam-corrected`      | ACHIEVEMENTS | `0.3`          | ⛔ dormant |
-| `achievements-exophase-playstation`             | ACHIEVEMENTS | `0.3`          | ⛔ dormant |
-| `achievements-exophase-xbox`                    | ACHIEVEMENTS | `0.3`          | ⛔ dormant |
-| `first-week-extrapolation-pc`                   | LIFECYCLE    | `0.6`          | ✅      |
-| `aggregated`                                    | AGGREGATE    | `1.0`          | ✅ (output) |
-
-The per-source `*-calibrated-{official,…}` rows are kept (disabled)
-because historical `SalesEstimate` rows reference them; the new
-calibrated rows are uniform-weight regardless of which milestone source
-produced the calibration.
-
-Adding a new method = inserting a row in `estimation_method` (via a
-migration) and producing `SalesEstimate` rows that reference it. The
-aggregator picks it up automatically as soon as `isEnabled = true` and
-`defaultWeight > 0`.
-
-### Aggregation formula
-
-`aggregateMethodsForPlatform` combines every input method for a single
-`(gameId, platform, computedAt)` tuple into one synthetic
-`method = 'aggregated'` row. It is **append-only**: the inputs are kept
-as-is alongside the aggregate so we can inspect each method's
-contribution after the fact.
+Only enabled, non-aggregate methods with `defaultWeight > 0` contribute.
+Weight is the static method weight. There is no per-estimate confidence.
 
 ```
 weightedLow  = Σ (low_i  × w_i) / Σ w_i
 weightedHigh = Σ (high_i × w_i) / Σ w_i
 disagreement = (max(mid_i) − min(mid_i)) / weightedMid
-aggLow  = max(0, weightedLow  × (1 − α × disagreement))
-aggHigh = weightedHigh × (1 + α × disagreement)
+aggLow       = max(0, weightedLow  × (1 − α × disagreement))
+aggHigh      = weightedHigh × (1 + α × disagreement)
 ```
 
-with `α = AGGREGATION_DISAGREEMENT_ALPHA = 0.5` and `w_i =
-method.defaultWeight` (per-game confidence does **not** modulate the
-weight). Aggregate confidence is the **lowest** confidence among
-contributing methods, reported for display only.
+One input → the aggregate copies it. Disagreeing midpoints widen the band
+on purpose. The `aggregated` row is what the headline reads. Inputs and
+splits are kept beside it.
 
-Properties:
-- **One method active** (today's reality) → `disagreement = 0`, the
-  aggregate copies the input band byte-for-byte. The refactor is a no-op
-  on the headline range.
-- **Multiple methods, agreeing midpoints** → near-zero `disagreement`,
-  the aggregate is a weighted average that narrows the band relative to
-  the constituents.
-- **Multiple methods, conflicting midpoints** → spread inflates
-  proportionally so the headline range honestly reflects the model's
-  internal uncertainty rather than picking a winner.
+`GamesService.latestEstimatesByPlatform` prefers the latest `aggregated`
+row per platform, then any other latest row if no aggregate exists.
 
-### How the reconcile step picks an estimate
+Adding a method means a migration that inserts `estimation_method` **and**
+a producer in `EstimationService`. A row with `isEnabled = false` is ignored
+even if the code emits the tag.
 
-`GamesService.latestEstimatesByPlatform` prefers the latest
-`aggregated` row per platform. If no aggregate exists (historical row
-predating this refactor, or future platform with no enabled method),
-it falls back on whatever non-aggregate row is most recent so the
-headline never goes blank. Rebuilding history with
-`POST /admin/games/:id/rebuild-estimates` regenerates aggregates for
-every capture point.
+## 6. Headline vs declared figure
 
----
+> `GamesService.aggregateSales` / `reconcile` / `buildTotal`.
 
-## 4. Reconcile to one "today" range
+`milestonesAsOf` loads **GLOBAL**, non-engagement milestones only.
 
-> `GamesService.reconcile`.
+- `estimatedToday` = sum of per-platform aggregate ranges. This is
+  `headline` on the public game payload and the value stored on
+  `estimate_snapshot`. Listing cards use the same snapshot.
+- `reconciliation` adds one GLOBAL entry comparing that sum to the
+  **largest** declared units (`isMoreAuthoritative`). Agreement does not
+  change the sum.
+- `totalSales` is different: when any GLOBAL milestone exists it is the
+  **latest-dated** figure (`isLater`), with confidence derived from
+  `confidenceScore` and then nudged by agreement. It is the reported
+  cross-check, not the chart.
 
-For each platform we have at most one milestone (`bestByPlatform`,
-selected as the **latest-dated wins** across every source — dated
-milestones beat undated ones, the most recent `reportedAt` wins among
-dated ones, larger units wins among undated) and one estimate (the
-Boxleiter one — achievement estimates are stored side-by-side but not
-used here yet). We pick a `[low, high]` per platform:
+Free-to-play games (`Game.isFree`) get no estimate.
 
-- **Both declared + estimate** →
-  `low = max(declared, min(estimate.low, freshnessCap))`,
-  `high = max(declared, min(estimate.high, freshnessCap))`.
-  Declared is a floor (sales only grow); `freshnessCap` is an age-aware
-  ceiling (see §5).
-- **Declared only** → `low = high = declared`.
-- **Estimate only** → use it raw, except the PC guardrail below.
-- **Neither** → platform skipped.
+## 7. Agreement label
 
-**PC dominance guardrail** (`isPcMarginal`). If a game has declared
-console figures but only a PC estimate, and the PC estimate represents
-less than `PC_DOMINANCE_RATIO_THRESHOLD = 20 %` of the cross-checked
-total, we **drop** the PC estimate (PS-exclusive with a tiny PC port,
-Switch port with rounding-error Steam sales, etc.). Without this,
-Boxleiter PC on its own would set the headline number for those games and
-be very wrong.
+> `GamesService.classifyAgreement`. Presentation only.
 
-**Sum to today.** We sum the per-platform `[low, high]` to a global
-`todayLow / todayHigh`. If a **worldwide** declared figure exists, we
-clamp the sum to it: floor at `globalDeclared`, ceiling at the freshness
-cap of `globalDeclared`.
+- Declared inside `[estLow, estHigh]` → **strong**.
+- Declared above `estHigh`: within `AGREEMENT_OVERSHOOT_RATIO` (`1.5×`)
+  → **weak**, else **conflict**.
+- Declared below `estLow`: growth budget
+  `1 + AGREEMENT_GROWTH_PER_YEAR × ageYears` with
+  `AGREEMENT_GROWTH_PER_YEAR = 0.6`. Within budget → **weak**, within
+  2× budget → **weak**, beyond → **conflict**.
 
----
+## 8. Achievements
 
-## 5. Freshness cap
+Exophase and Steam achievement snapshots are still collected. No
+`SalesEstimate` is produced from them. Coverage constants
+(`EXOPHASE_COVERAGE_*`) remain in `sales-modeling.constants.ts` for a
+possible later method. There is no `BACKLOG.md`.
 
-> `GamesService.freshnessCap`.
+## 9. Time series and rebuild
 
-A declared figure dated 6 months ago doesn't allow infinite growth today.
-Sales follow a **front-loaded curve** stored in `LIFETIME_SALES_CURVE`
-(cumulative % of lifetime revenue at age in days):
+| Entity | Timestamp | What it holds |
+| ------ | --------- | ------------- |
+| `SignalSnapshot` | `capturedAt` | Raw public counts. `synthetic = true` rows are display-only and never feed an estimate. |
+| `AchievementSnapshot` | `capturedAt` | Unlock sample. Not an estimate input today. |
+| `SalesEstimate` | `computedAt` | Per-method ranges plus one `aggregated` row per platform. Append-only. |
+| `EstimationMethod` | registry | Code, family, `defaultWeight`, `isEnabled`. |
+| `EstimateSnapshot` | `computedAt` | Frozen `estimatedToday` range and reconciliation JSON. |
+| `Milestone` | `reportedAt` | Dated declared figure. Engagement rows are excluded from the headline. Undated rows are rejected at ingest. |
+| `ReferenceProfile` | `observedAt` | Matcher anchor. Not an estimate row. |
 
-```
-[0,0] [7,0.13] [90,0.33] [365,0.58] [730,0.75]
-[1095,0.87] [1460,0.95] [1825,1.0]
-```
+`POST /admin/games/:id/rebuild` replays capture moments through
+`computeAndStoreAt` + `snapshotReconcile` using **today's** matcher
+profile and constants. It does not re-derive a historical profile per
+point. `STEAM_REVIEWS` moments are downsampled after the launch window
+(`REVIEWS_REBUILD_*` in the constants file).
 
-With release date known:
+## 10. Out of scope
 
-```
-declaredPct  = lifetimeSalesPct(ageInDays(release, declared.date))
-todayPct     = lifetimeSalesPct(ageInDays(release, now))
-expectedRatio = todayPct / declaredPct
-cap          = declared.units × (1 + (expectedRatio - 1) × FRESHNESS_VARIANCE_BUFFER)
-cap          = max(cap, declared.units × FRESHNESS_MIN_HEADROOM)
-```
-
-`FRESHNESS_VARIANCE_BUFFER = 1.5` (50 % above median growth, covers the
-~95th percentile of long-tail outliers).
-`FRESHNESS_MIN_HEADROOM = 1.01` (floor so the cap is never *below* the
-declared figure due to rounding).
-
-Fallback when release date is unknown:
-
-```
-cap = declared.units × (1 + FALLBACK_ANNUAL_GROWTH × ageYears)
-```
-
-with `FALLBACK_ANNUAL_GROWTH = 0.6` and no cap once
-`ageYears >= FALLBACK_GROWTH_CAP_YEARS = 3`.
-
----
-
-## 6. Agreement label (declared vs estimate)
-
-> `GamesService.classifyAgreement`. Pure presentation: doesn't change any
-> number, just labels the cross-check `strong | weak | conflict` with a
-> human-readable detail.
-
-- `declared` inside `[estLow, estHigh]` → **strong**.
-- `declared > estHigh`:
-  - within `AGREEMENT_OVERSHOOT_RATIO = 1.5×` of `estHigh` → **weak**
-    (model undershoots a bit);
-  - beyond → **conflict** (figure or estimate is likely wrong).
-- `declared < estLow`: we expect growth since `declared.date`. Allowed
-  budget = `1 + AGREEMENT_GROWTH_PER_YEAR × ageYears` with
-  `AGREEMENT_GROWTH_PER_YEAR = 0.6`. Within budget → **weak**, within 2×
-  budget → **weak with caution**, beyond → **conflict**.
-
----
-
-## 7. Constants index
-
-All numbers live in `backend/src/games/sales-modeling.constants.ts`.
-
-| Constant                          | Value      | Used in                                |
-| --------------------------------- | ---------- | -------------------------------------- |
-| `LIFETIME_SALES_CURVE`            | (8 points) | freshness cap                          |
-| `FRESHNESS_VARIANCE_BUFFER`       | `1.5`      | freshness cap                          |
-| `FRESHNESS_MIN_HEADROOM`          | `1.01`     | freshness cap                          |
-| `FALLBACK_ANNUAL_GROWTH`          | `0.6`      | freshness cap fallback, agreement      |
-| `FALLBACK_GROWTH_CAP_YEARS`       | `3`        | freshness cap fallback                 |
-| `AGREEMENT_OVERSHOOT_RATIO`       | `1.5`      | agreement classifier                   |
-| `AGREEMENT_GROWTH_PER_YEAR`       | `0.6`      | agreement classifier                   |
-| `PC_BOXLEITER_DEFAULT_LOW/HIGH`   | `25 / 70`  | Boxleiter PC default range             |
-| `PC_BOXLEITER_PLAUSIBLE_MIN/MAX`  | `5 / 500`  | Boxleiter PC calibration sanity        |
-| `PS_BOXLEITER_DEFAULT_LOW/HIGH`   | `40 / 100` | Boxleiter PS default range             |
-| `PS_BOXLEITER_PLAUSIBLE_MIN/MAX`  | `8 / 600`  | Boxleiter PS calibration sanity        |
-| `XBOX_BOXLEITER_DEFAULT_LOW/HIGH` | `35 / 90`  | Boxleiter Xbox default range           |
-| `XBOX_BOXLEITER_PLAUSIBLE_MIN/MAX`| `6 / 600`  | Boxleiter Xbox calibration sanity      |
-| `CALIBRATED_MULTIPLIER_SPREAD`    | `0.3`      | uniform ±30 % spread around any calibrated multiplier |
-| `PC_DOMINANCE_RATIO_THRESHOLD`    | `0.2`      | reconcile PC marginality guardrail     |
-| `EXOPHASE_COVERAGE_PC_LOW/HIGH`   | `12 / 30`  | achievement-based PC range             |
-| `EXOPHASE_COVERAGE_PS_LOW/HIGH`   | `10 / 28`  | achievement-based PS range             |
-| `EXOPHASE_COVERAGE_XBOX_LOW/HIGH` | `8 / 22`   | achievement-based Xbox range           |
-| `ACHIEVEMENT_MIN_PLAYERS_TRACKED` | `500`      | achievement sanity (sample size)       |
-| `ACHIEVEMENT_ESTIMATE_MIN/MAX_UNITS` | `1_000 / 500_000_000` | achievement sanity (range)  |
-| `RECENT_RELEASE_DAYS`             | `14`       | confidence (recent → LOW)              |
-| `CALIBRATION_WINDOW_DAYS`         | `365`      | recalibration (max age delta)          |
-| `GLOBAL_SPLIT_MIN_PLATFORM_SHARE` | `0.05`     | min share to calibrate from a GLOBAL record |
-
----
-
-## 8. Time series — what is persisted vs computed live
-
-Three layers, each with a different timestamp:
-
-| Entity | Timestamp | Written by | What it holds |
-| --- | --- | --- | --- |
-| `SignalSnapshot` | `capturedAt` | scrapers (Steam, IGDB, store ratings) | raw public counts (reviews, ratings) |
-| `AchievementSnapshot` | `capturedAt` | Exophase / Steam API scrapers | per-achievement unlock % + sample size |
-| `SalesEstimate` | `computedAt` | `EstimationService.computeAndStore` | per-platform per-method ranges, FK to `estimation_method` via `methodId`. Includes the synthetic `aggregated` row (one per platform per `computedAt`). |
-| `EstimationMethod` | `createdAt` / `updatedAt` | seeded by migration | registry of canonical method codes, default weights, enabled flag |
-| `EstimateSnapshot` | `computedAt` | `GamesService.snapshotReconcile` (called after every `computeAndStore`) | the reconciled headline `[estimatedTodayLow, estimatedTodayHigh]` + serialized `ReconciliationEntry[]` |
-| `Milestone` | `reportedAt` + `capturedAt` | scrapers (Wikipedia, articles, official IR) | dated declared figures (sales or engagement), never overwritten; rejected if `reportedAt` is missing |
-
-`SalesEstimate` and `EstimateSnapshot` are **append-only** time series: every
-refresh inserts a new row, none are updated in place. That's what makes a
-sales-over-time chart possible without replaying everything from scratch.
-
-The freshness cap, agreement classifier and `isPcMarginal` guardrail are
-**re-evaluated live** on every public read in `GamesService.compose`, but
-their *combined output* — the headline range and per-platform
-reconciliation — is **also frozen** into `EstimateSnapshot` so the
-historical view is consistent without recomputing.
-
-`SalesEstimate.computedAt` and `EstimateSnapshot.computedAt` are plain
-timestamp columns (no `@CreateDateColumn`) so historical rebuilds can
-backfill them to past dates.
-
-## 9. Historical rebuild
-
-> `GamesService.rebuildEstimateHistory(gameId)`, exposed at
-> `POST /admin/games/:id/rebuild-estimates`.
-
-When constants in `sales-modeling.constants.ts` change, or a fresh
-publisher figure recalibrates a multiplier, **past** estimates become
-stale (they were computed with the old parameters). The rebuild replays
-the entire history against the current parameters:
-
-1. Collect every distinct `capturedAt` across `SignalSnapshot` and
-   `AchievementSnapshot` for the game, deduped at **minute** granularity
-   (one cron run writes several signals in the same second; we want one
-   rebuild point per refresh, not one per signal).
-2. `DELETE` all `SalesEstimate` and `EstimateSnapshot` rows for the
-   game (estimates are derivatives — never primary data, always safe to
-   regenerate).
-3. For each capture moment `T` (ascending):
-   - `EstimationService.computeAndStoreAt(gameId, T)` — uses signals
-     ≤ T, current multipliers, writes `SalesEstimate` rows with
-     `computedAt = T`.
-   - `GamesService.snapshotReconcile(gameId, T)` — re-runs `aggregateSales`
-     filtering declared figures by `reportedAt <= T || reportedAt IS NULL`,
-     writes one `EstimateSnapshot` with `computedAt = T`.
-
-The rebuild **does not** re-derive the calibrated multiplier per
-historical point: it uses the multiplier as it currently stands on
-`Game`. That's deliberate — "today's best knowledge applied to past
-signals" is the cleanest mental model for the chart. Re-deriving the
-multiplier per point would chase its own tail (each rebuild moment
-would shift the multiplier, which would shift the next moment…).
-
-Milestones without `reportedAt` are now rejected at ingestion time
-(calibration needs a date). Any legacy undated rows still present are
-kept in the reconciliation regardless of `T`.
-
-## 10. What we explicitly don't model (yet)
-
-- **Nintendo Switch** and **Mobile** have no achievement signal and no
-  rating signal we trust enough; no estimation runs for them.
-- **Bundles / DLC / free weekends** inflate Steam reviews and Exophase
-  samples without selling copies; not corrected for.
-- **Refunds** are ignored — Steam reports gross.
-- **Regional pricing** and **revenue** are out of scope; we estimate
-  copies sold, not money earned.
-- **Free-to-play** games are skipped entirely (`Game.isFree`).
+- Nintendo Switch and mobile: no trusted unit signal, no estimate.
+- Bundles, DLC, free weekends, and refunds are not removed from reviews.
+- Revenue and regional price are collected for display, not converted into units.
+- Free-to-play is skipped (`Game.isFree`).

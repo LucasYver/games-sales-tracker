@@ -18,6 +18,10 @@ export const STEAM_CORE_MIN_REVIEWS = 5000;
 // skip the IGDB rating bar and are admitted via the Steam review signal.
 export const RECENT_WINDOW_DAYS = 180;
 
+// Unreleased games inside this window are admitted without ratings or reviews:
+// those signals do not exist yet. Ranked by IGDB follows ("hypes").
+export const UPCOMING_WINDOW_DAYS = 90;
+
 // IGDB platform ids we track. Switch / mobile are intentionally excluded: we
 // have no reliable sales signal for them.
 //   6   PC (Microsoft Windows)
@@ -33,3 +37,4 @@ export const IGDB_PLATFORM_IDS = [6, 9, 48, 167, 12, 49, 169];
 export const IGDB_DISCOVERY_PAGE_SIZE = 500;
 export const IGDB_DISCOVERY_MAX_PAGES = 16;
 export const IGDB_RECENT_LIMIT = 300;
+export const IGDB_UPCOMING_LIMIT = 300;

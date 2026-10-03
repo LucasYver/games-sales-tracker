@@ -9,7 +9,9 @@ import {
   IGDB_DISCOVERY_PAGE_SIZE,
   IGDB_PLATFORM_IDS,
   IGDB_RECENT_LIMIT,
+  IGDB_UPCOMING_LIMIT,
   RECENT_WINDOW_DAYS,
+  UPCOMING_WINDOW_DAYS,
 } from './discovery.constants';
 
 export interface IgdbGame {
@@ -191,9 +193,10 @@ export class IgdbClient {
    * Discover catalog candidates from IGDB, deduplicated by IGDB id. Combines:
    *   A — established hits released since the date floor, ranked by popularity;
    *   B — fresh releases, regardless of IGDB rating (admitted downstream via
-   *       the live Steam review signal).
+   *       the live Steam review signal);
+   *   C — unreleased games inside the upcoming window, ranked by IGDB follows.
    * Pre-2012 titles are never candidates. Caller applies the final admission
-   * rule (IGDB rating OR Steam reviews).
+   * rule (IGDB rating, Steam reviews, or an upcoming release date).
    */
   async discoverCandidates(): Promise<IgdbGame[]> {
     if (!this.isConfigured()) {
@@ -205,8 +208,12 @@ export class IgdbClient {
 
     const platforms = IGDB_PLATFORM_IDS.join(',');
     const floorUnix = Math.floor(DISCOVERY_RELEASE_FLOOR.getTime() / 1000);
+    const nowUnix = Math.floor(Date.now() / 1000);
     const recentUnix = Math.floor(
       (Date.now() - RECENT_WINDOW_DAYS * 24 * 3600 * 1000) / 1000,
+    );
+    const upcomingUnix = Math.floor(
+      (Date.now() + UPCOMING_WINDOW_DAYS * 24 * 3600 * 1000) / 1000,
     );
 
     const byId = new Map<number, IgdbGame>();
@@ -239,6 +246,18 @@ export class IgdbClient {
       `limit ${IGDB_RECENT_LIMIT};`,
     ].join(' ');
     add(await this.queryGames(recentBody));
+
+    // C — unreleased games. `hypes` is IGDB's pre-release follow count, the
+    // only popularity signal available before ratings and reviews exist.
+    const upcomingBody = [
+      `where game_type = 0 & first_release_date >= ${nowUnix}`,
+      `& first_release_date <= ${upcomingUnix}`,
+      `& platforms = (${platforms});`,
+      `fields ${IGDB_FIELDS}, hypes;`,
+      `sort hypes desc;`,
+      `limit ${IGDB_UPCOMING_LIMIT};`,
+    ].join(' ');
+    add(await this.queryGames(upcomingBody));
 
     const all = [...byId.values()];
     this.logger.log(`IGDB discovery: ${all.length} unique candidate(s).`);

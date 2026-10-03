@@ -1,275 +1,221 @@
 ---
 name: diagnose-estimate-divergence
 description: >-
-  Diagnose why a game's pure-algo sales estimate diverges from its declared
-  milestone in the game-sales-tracker model. The pure algo (pureEstimatedTodayLow/High)
-  is the model running without any data derived from milestones — it is the
-  true measure of model quality. Given one or more games of the same genre
-  (PC-only or PC+console), each with a declared milestone, recompute every
-  pure-algo factor step by step, quantify the divergence vs the declared figure,
-  locate which default parameter is at fault, and propose a fix. Use when the
-  user says an estimate is wrong / "on diverge" / "on est loin", passes games
-  to validate against a declared figure, or asks to audit/recompute the
-  first-week or Boxleiter estimate.
+  Diagnose why a game's sales estimate diverges from its declared worldwide
+  milestone in game-sales-tracker. The headline (estimatedToday) is the
+  matcher-driven model sum and is never adjusted by that milestone. Given one
+  or more games, recompute Boxleiter, first-week PC, console splits, and the
+  aggregate, locate the shared parameter or anchor at fault, and propose a
+  fix. Use when the user says an estimate is wrong / "on diverge" / "on est
+  loin", passes games to validate against a declared figure, or asks to
+  audit/recompute the first-week or Boxleiter estimate.
 ---
 
-# Diagnose pure-algo estimate divergence
+# Diagnose estimate vs declared milestone
 
-## What "pure algo" means — read this first
+Read `ESTIMATION.md` first. It is the contract. This skill is the workflow.
 
-`pureEstimatedTodayLow/High` (stored in `estimate_snapshot`) is the estimate
-computed with **all calibrated multipliers disabled** (`ignoreCalibration: true`
-in `computePureAggregatesByPlatform`). It is a raw sum of per-platform
-aggregates with **no declared-figure floor, no freshness cap, no reconcile
-step** applied.
+## What the headline is
 
-This is the **only metric that tells us whether the model itself is good**. If
-the pure algo lands close to the milestone, the model is sound and the
-calibrated + reconciled headline will also be good. If it diverges, the default
-parameters must be fixed — never by adjusting `calibratedMultiplier` (that
-would make the pure algo circular, defeating its purpose).
+`estimate_snapshot.estimatedTodayLow/High` is the sum of per-platform
+**aggregated** estimates. Declared milestones do **not** floor, cap, or
+calibrate it.
 
-The declared milestone is the **validation truth**. The fix target is always a
-**shared parameter** (default Boxleiter range, genre profile value, global
-constant) — never a per-game calibrated multiplier.
+There is no `pureEstimatedToday*`, no `calibratedMultiplier*`, and no
+`genreProfileId`. Those columns were dropped. Do not query them and do not
+propose restoring per-game calibration to "fix" a divergence.
+
+The declared **GLOBAL** milestone (largest `units`, `isEngagement = false`,
+`rejectedAt IS NULL`) is the validation truth. The fix target is a **shared**
+knob: a constant in `sales-modeling.constants.ts`, a matcher weight, or bad
+anchor data. Never a one-game multiplier.
 
 ## Inputs
 
-One or more games of the **same genre**. Each must have at least one declared
-milestone (the ground truth). Games may be PC-only or PC+console.
+One or more games, ideally the same gameplay family. Each needs a dated
+worldwide milestone.
 
 ## Workflow
 
 ```
-- [ ] 1. Pull all data for each game from the prod DB
-- [ ] 2. Resolve the active genre profile (override vs genre-name)
-- [ ] 3. Recompute pure first-week extrapolation step by step
-- [ ] 4. Recompute pure Boxleiter + console (default ranges only — NO calibratedMultiplier)
-- [ ] 5. Aggregate pure per platform, sum to total (NO reconcile / floor / cap)
-- [ ] 6. Compare pureEstimatedTodayLow/High vs declared milestone
-- [ ] 7. If diverging, walk the default-parameter checklist to locate the fault
-- [ ] 8. Propose a fix on shared/global defaults; ask before changing them
+- [ ] 1. Pull the stored headline, the declared milestone, and the live breakdown
+- [ ] 2. Read the resolved matcher profile (neighbours, shares, ratios)
+- [ ] 3. Recompute PC Boxleiter and first-week from that profile
+- [ ] 4. Recompute console splits and aggregates
+- [ ] 5. Sum platforms and compare to the declared milestone
+- [ ] 6. Walk the checklist to locate the fault
+- [ ] 7. Propose a shared fix and ask before changing it
 ```
 
-## Step 1 — Pull data (read DB)
+## Step 1 — Pull data
 
-Read `DATABASE_URL` from `backend/.env` (never hardcode it). Query, per game:
-`releaseDate`, `platforms`, `genres`, `genreProfileId`, `genreProfileManual`,
-and the signals + milestones + latest `estimate_snapshot`.
+Read `DATABASE_URL` from `backend/.env`. Never hardcode it.
 
-Do **not** pull `calibratedMultiplier` — it plays no role in pure-algo
-diagnosis. Fetching it just for reference is fine, but never use it in the
-pure recomputation.
+Prefer `EstimationService.computeBreakdown` (admin
+`GET /admin/games/:id/estimate-breakdown`). It already traces signals,
+multiplier source (`matcher` or `global`), first-week inputs, splits, and
+aggregates. Use SQL when the API is down.
 
-Key rows to fetch:
-- Peak CCU in the launch window: `max(value)` of `STEAM_CONCURRENT` where
-  `capturedAt BETWEEN releaseDate AND releaseDate + FIRST_WEEK_PEAK_CCU_WINDOW_DAYS`.
-- Latest signals: `STEAM_REVIEWS`, `STEAM_PEAK_CCU`, `PS_RATINGS` at `max(capturedAt)`.
-- Declared milestones: `milestone WHERE rejectedAt IS NULL` (the validation truth).
-- Latest `estimate_snapshot`: `pureEstimatedTodayLow/High` at `max(computedAt)`.
-
-## Step 2 — Resolve the genre profile
-
-The profile is **persisted** on the game (single profile, no blending). It is
-auto-assigned at ingestion from the **first** genre (in `genres` order) that
-maps to a profile — `GenresService.applyAutoGenreProfile` /
-`resolveFirstProfileId` — and stored in `game.genreProfileId`. An admin can pin
-a different profile, which sets `genreProfileManual = true` and protects the
-value from being overwritten on the next refresh.
-
-`GenresService.resolveProfileForGame` (`backend/src/genres/genres.service.ts`)
-reads `game.genreProfileId` first; only when it is null does it fall back to
-resolving the first matching genre on the fly. Either way it yields a single
-profile via `buildResolvedProfile([profile])`.
-
-Fetch the active profile's: `peakCcuToWeekOneLow/High`, `firstWeekToYearOneMultiplier`
-(m1), `year2Retention`, `pcShare`, `playstationShare`, `xboxShare`. Confirm it
-is the genre the user expects — if not, check whether `genreProfileManual` is
-set (admin pin) or whether the first matching genre is the wrong one.
-
-## Step 3 — Pure first-week extrapolation (recompute)
-
-Source: `estimateFirstWeekExtrapolationForPc`
-(`backend/src/estimation/estimation.service.ts`). Constants:
-`backend/src/games/sales-modeling.constants.ts`.
-
-This method uses **only the launch-window peak CCU** — it never touches
-`calibratedMultiplier`, so it is naturally pure. Launch reviews are no
-longer mixed in (they live in the Boxleiter method, Step 4).
-
-```
-peak        = max STEAM_CONCURRENT in [release, release + FIRST_WEEK_PEAK_CCU_WINDOW_DAYS], capped at asOf
-ccuScale    = launcherFactorFromSteamShare(publisher steam share)   (100/100 share = ×1.0; factor = 100 / steamShare)
-weekOne{Low,High} = peak × peakCcuToWeekOne{Low,High} × ccuScale{low,high}
-
-projection  = genreProjectionMultiplier(m1, tailY2, tailY5, ageDays)
-projected{Low,High} = weekOne{Low,High} × projection
-abstain if outside [FIRST_WEEK_ESTIMATE_MIN_UNITS, FIRST_WEEK_ESTIMATE_MAX_UNITS]
-```
-
-Projection curve (`genreProjectionMultiplier` / `buildGenreProjectionCurve`):
-anchors `[7,1.0]`, `[30,..]`, `[90,..]`, `[180,..]` (from `GENRE_INTRA_YEAR_SHAPE`),
-`[365, m1]`, `[730, m1×tailY2]`, `[1825, m1×tailY5]`, linearly interpolated at
-`ageDays`. `tailY2/tailY5` come from `YEAR2_TAIL_FACTOR[year2Retention]`
-(`backend/src/genres/genres.service.ts`). Below day 7 it ramps `ageDays/7`.
-
-Show every intermediate number.
-
-## Step 4 — Pure Boxleiter + console (default ranges only)
-
-In pure mode (`ignoreCalibration: true`) `resolveMultiplier` always falls back
-to `cfg.defaultLow / cfg.defaultHigh`. **Never use `calibratedMultiplier` here**
-— that is what makes this "pure".
-
-Constants from `backend/src/games/sales-modeling.constants.ts`:
-```
-PC  Boxleiter default: [PC_BOXLEITER_DEFAULT_LOW, PC_BOXLEITER_DEFAULT_HIGH]   (25 / 65)
-PS  Boxleiter default: [PS_BOXLEITER_DEFAULT_LOW, PS_BOXLEITER_DEFAULT_HIGH]   (40 / 100)
-Xbox Boxleiter default: [XBOX_BOXLEITER_DEFAULT_LOW, XBOX_BOXLEITER_DEFAULT_HIGH] (35 / 90)
-```
-
-PC Boxleiter pure (no CCU intersection — peak CCU only feeds the first-week
-lifecycle estimate, see Step 3):
-```
-reviewsLow/High = latest STEAM_REVIEWS × default{Low,High}
-finalLow/High   = reviewsLow/High × launcherFactorFromSteamShare(steam share){low,high}
-```
-
-Console:
-- PS Boxleiter pure: `PS_RATINGS × [PS_BOXLEITER_DEFAULT_LOW, PS_BOXLEITER_DEFAULT_HIGH]`
-- Genre-console-split (PC → PS, PS → Xbox): uses `playstationShare/pcShare` and
-  `xboxShare/playstationShare` from the resolved profile.
-
-## Step 5 — Pure aggregate (no reconcile, no floor, no cap)
-
-Aggregation (`aggregateMethodsForPlatform`) is a **weighted average with
-disagreement inflation** (α = `AGGREGATION_DISAGREEMENT_ALPHA = 0.5`).
-Weight = `method.defaultWeight` only — per-game confidence no longer
-modulates the blend (it is still reported as the lowest contributor for
-display).
-
-```
-weightedLow/High = Σ(result × weight) / Σ(weight)
-disagreement     = (maxMid − minMid) / weightedMid
-inflate          = 0.5 × disagreement
-aggHigh          = weightedHigh × (1 + inflate)   ← can be >> any individual method's high
-aggLow           = max(0, weightedLow × (1 − inflate))
-```
-
-**The disagreement inflation is a major amplifier when two methods produce very
-different mids** (e.g. Boxleiter default vs first-week). The wider the spread,
-the more the aggregate high overshoots.
-
-Pure total = Σ per-platform aggHigh (PC + PS + Xbox, **excluding GLOBAL**).
-`pureEstimatedTodayHigh` = this sum.
-
-There is **no reconcile step**, no milestone floor, no freshness cap in the pure
-path.
-
-## Step 6 — Compare pure algo vs declared milestone
-
-```
-ratio = pureEstimatedTodayHigh / bestDeclaredMilestone
-```
-
-Target: ratio ≈ 1 (±30–50% is acceptable given model uncertainty). A ratio
-well above 2 or below 0.5 signals a default-parameter problem.
-
-Also check the stored value directly:
 ```sql
-SELECT "pureEstimatedTodayLow", "pureEstimatedTodayHigh", "computedAt"
-FROM estimate_snapshot WHERE "gameId" = '<id>'
-ORDER BY "computedAt" DESC LIMIT 1;
+SELECT "estimatedTodayLow", "estimatedTodayHigh", "computedAt", reconciliation
+FROM estimate_snapshot
+WHERE "gameId" = '<id>'
+ORDER BY "computedAt" DESC
+LIMIT 1;
+
+SELECT units, source, platform, "reportedAt", "isEstimate"
+FROM milestone
+WHERE "gameId" = '<id>'
+  AND "rejectedAt" IS NULL
+  AND "isEngagement" = false
+  AND platform = 'GLOBAL'
+ORDER BY units DESC
+LIMIT 5;
 ```
 
-## Step 7 — Locate the fault (default-parameter checklist)
+Also fetch `releaseDate`, `platforms`, `genres`, `steamTags`, `developer`,
+`franchiseSlug`, `liveService`, `isAnnualIteration`, `dlc`, and the publisher
+row. Latest non-synthetic signals: `STEAM_REVIEWS`, `PS_RATINGS`,
+`XBOX_RATINGS`.
 
-For each game, quantify divergence = `pureHigh / declared`, then test factors
-top-down. The fault is always in a **default parameter**, never in
-`calibratedMultiplier` (fixing that would make pure algo circular).
+Launch peak is **not** `STEAM_PEAK_CCU` and **not** a 14-day window. It is
+`max(STEAM_CONCURRENT)` from the first day of the PC release month through
+`LAUNCH_PEAK_CCU_WINDOW_MONTHS` (2) months later, capped at the as-of date.
+See `estimateFirstWeekExtrapolationForPc`.
+
+## Step 2 — Resolve the matcher profile
+
+`SalesProfileResolverService.resolveForGame` is the only profile source.
+`USE_MATCHER_PROFILE` defaults to on. `GET /admin/games/:id/matcher` shows
+neighbours and feature contributions.
+
+Record: `neighboursUsed`, `reviewsToUnits`, `globalReviewsToUnits`,
+`peakCcuRatio`, platform shares, curve `s1` / `a2`, and the resulting
+`pcDefaultBoxleiter*`, `psDefaultBoxleiter*`, `peakCcuToWeekOne*`,
+`firstWeekToYearOneMultiplier`, `tailFactorY2`, `tailFactorY5`.
+
+`null` profile means the corpus is empty or the flag is off. The estimator
+then uses global constants (`PC 25–65`, `PS 40–100`, `Xbox 35–90`, peak-CCU
+`3–7`, size-bucket projection).
+
+## Step 3 — Recompute PC
+
+Boxleiter (`estimateForPlatform`). `synthetic = false` only.
 
 ```
-- [ ] releaseDate correct? (wrong age skews window AND projection)
-- [ ] Launch peak CCU captured? (daily STEAM_CONCURRENT present in window;
-      CSV import not zeroed/missing; window = FIRST_WEEK_PEAK_CCU_WINDOW_DAYS = 14d)
-- [ ] Right genre profile persisted? (`genreProfileId` = expected genre;
-      manual pin vs first-matched genre; stale value from before a genre change)
-- [ ] peakCcuToWeekOne ratio realistic for this genre's concurrency?
-      (if CCU-derived week-1 is already off, everything downstream is off)
-- [ ] Publisher Steam share correct? (`steamSharePctLow/High` on the publisher;
-      a low share inflates the factor ×1.4–7 via 100/share — only fix if the
-      publisher is truly multi-store / launcher-primary)
-- [ ] Reviews-near-launch present & sane? combination dragging the band?
-- [ ] Projection multiplier (m1 + tails) — too high/low for the lifecycle?
-      (front-loaded viral hits over-project; heavy-tail live-service under-project)
-- [ ] PC_BOXLEITER_DEFAULT_LOW/HIGH too wide? (default 25/65 is a broad prior;
-      if calibrated games of this genre consistently land at lower multipliers,
-      the default range for that genre needs tightening)
-- [ ] PS/Xbox default Boxleiter range too wide? same logic as PC
-- [ ] Genre platform shares (pcShare/psShare/xboxShare) realistic?
-      (wrong shares skew the console splits and cascade into the total)
-- [ ] Disagreement inflation cascade: large gap between Boxleiter default
-      and first-week? That gap × α = 0.5 inflates the aggregate high beyond
-      both individual highs. Narrowing the default range reduces disagreement.
+reviewsLow/High = latest STEAM_REVIEWS × multiplierLow/High
 ```
 
-Compute the implied "correct" default multiplier by inverting the formula:
+`multiplier*` comes from the matcher band when present
+(`reviewsToUnits` blended in log space with `globalReviewsToUnits × pcShare`,
+then ±25 %). Otherwise `PC_BOXLEITER_DEFAULT_LOW/HIGH` (25 / 65). The method
+tag stays `boxleiter-default` either way.
+
+First-week (`estimateFirstWeekExtrapolationForPc`):
+
 ```
-requiredDefaultHigh = declaredTotal × targetPlatformShare / latestReviews
+peak        = max STEAM_CONCURRENT in the launch-month window
+weekOne     = peak × peakCcuToWeekOne{Low,High}
+projection  = genreProjectionMultiplier(m1, tailY2, tailY5, ageDays)   # matcher
+              or firstWeekProjectionMultiplier(weekOneMid, ageDays)    # no profile
+projected   = weekOne × projection
+abstain outside [5_000, 200_000_000]
 ```
-Then compare to the current `PC_BOXLEITER_DEFAULT_HIGH` and the calibrated
-multiplier (×1.3) to understand how far off the default is.
 
-## Step 8 — Propose a fix on shared/global defaults
+Below day 7 the projection ramps `ageDays / 7`. Show every intermediate.
 
-State which default parameter diverges, by how much, and the proposed change.
+## Step 4 — Console and aggregate
 
-**Never fix pure-algo divergence by adjusting `calibratedMultiplier`.** That
-multiplier is derived from the milestone itself — using it in the pure algo
-would mean the milestone is both the input and the validation target, making
-the diagnostic meaningless.
+Order matters (`aggregateResultsByPlatform`):
 
-Scope rules:
-- **Per-game** knob: `genreProfileId` override → safe to set for a specific
-  game (assigns a different genre profile whose defaults better fit this title).
-- **Shared** knobs (genre profile `m1`/tails/`peakCcuToWeekOne`/shares, global
-  constants `PC_BOXLEITER_DEFAULT_*` in `sales-modeling.constants.ts`) → impact
-  every game using that profile or every uncalibrated game. **Ask the user** for
-  scope (one genre vs all) and target level before editing.
+1. Aggregate PC (Boxleiter weight `0.5`, first-week weight `0.6`, from
+   `estimation_method.defaultWeight`).
+2. Split PC → PlayStation: `pc × (playstationShare / pcShare)`.
+3. Aggregate PS (PS Boxleiter + that split).
+4. Split PS → Xbox when a PS aggregate exists, else PC → Xbox.
+5. Aggregate Xbox (split + `xbox-ratings-boxleiter-default` when enabled).
 
-Ship genre-profile changes as a TypeORM migration when persisted in the DB
-(`.cursor/rules/typeorm-migrations.mdc`), or note they are admin-editable.
-Global constant changes go in `backend/src/games/sales-modeling.constants.ts`
-and require a backend redeploy.
-After any change, the game must be **rebuilt** (`snapshotReconcile`) to see
-new pure snapshots.
+Aggregation (`α = 0.5`):
+
+```
+weightedLow/High = Σ(value × weight) / Σ(weight)
+disagreement     = (maxMid − minMid) / weightedMid
+aggLow           = max(0, weightedLow × (1 − α × disagreement))
+aggHigh          = weightedHigh × (1 + α × disagreement)
+```
+
+A large gap between Boxleiter and first-week inflates `aggHigh` past both
+inputs. That inflation is often the visible overshoot.
+
+Headline high = PC agg + PS agg + Xbox agg. No freshness cap, no declared floor.
+
+## Step 5 — Compare
+
+```
+ratio = estimatedTodayHigh / bestGlobalMilestone.units
+```
+
+About ×1 is the target. ×0.5–×1.5 can be normal uncertainty. Well above ×2
+or below ×0.5 means a shared parameter or a bad anchor, not a display bug.
+
+`totalSales` on the public payload is a different number: the latest-dated
+GLOBAL milestone when one exists. Do not compare the UI "reported" total
+to the model. Compare `headline` / `estimatedToday`.
+
+## Step 6 — Checklist
+
+```
+- [ ] PC release date correct? (wrong age skews the launch window and the projection)
+- [ ] Launch-month STEAM_CONCURRENT present? (monthly leak points count; a 14-day window does not)
+- [ ] Matcher neighbours actually similar? (gameplay tags, franchise, live-service)
+- [ ] peakCcuRatio realistic for this concurrency? (a generic ~30× ratio inflates week-1)
+- [ ] reviewsToUnits band realistic versus this genre's known copies-per-review?
+- [ ] Platform shares realistic? (wrong shares cascade through both splits)
+- [ ] m1 / tails too high or too low for the lifecycle?
+- [ ] Disagreement inflation between Boxleiter and first-week?
+- [ ] Stale reference_profile row the current gates never rebuilt?
+```
+
+Invert a suspicious PC multiplier only as a diagnostic, not as a stored fix:
+
+```
+implied = declaredUnits × expectedPcShare / latestReviews
+```
+
+## Step 7 — Propose, then ask
+
+State the factor, the observed vs expected value, and the blast radius.
+
+- Matcher weights, `k`, or constants in `sales-modeling.constants.ts` affect
+  every similar or uncalibrated game. **Ask before editing.**
+- A bad anchor is a data fix (`rebuild:reference-profiles` for that game),
+  not a constant tweak.
+- After a constant or profile change, rebuild the game
+  (`POST /admin/games/:id/rebuild`) before judging the new headline.
 
 ## Output template
 
 ```markdown
-## <Game> — pure algo vs declared
+## <Game> — model vs declared
 
-**Declared (truth):** <platform> <units> (<source>, <date>)
-**Pure algo:** pureHigh = <value>  → ratio ×<pureHigh/declared>
+**Declared (truth):** GLOBAL <units> (<source>, <date>)
+**Model:** estimatedTodayHigh = <value> → ratio ×<high/declared>
+**Profile:** matcher (<n> neighbours) | global constants
 
-### Pure recompute (step by step)
-peak(window) = … ; ccuBand = … ; reviews = … ; weekOne = … ; projection(age=…d) = … ;
-firstWeek projected = [low, high]
+### Recompute
+peak(launch window) = … ; peakCcu band = … ; weekOne = … ; projection(age=…d, m1=…) = …
+first-week = [low, high]
+Boxleiter: reviews × [low, high] = [low, high] (source: matcher | global)
 
-Boxleiter default: reviews × [defaultLow, defaultHigh] = […, …]
+PC aggregate (disagreement=…, inflate=…): [low, high]
+PS = boxleiter [low, high] + split [low, high] → [low, high]
+Xbox split → [low, high]
 
-PC aggregate (weighted, disagreement=…, inflate=…%): [low, high]
-PS Boxleiter default: ratings × [defaultLow, defaultHigh] = [low, high]
-PS genre-split from PC: [low, high]
-PS aggregate: [low, high]
-Xbox genre-split from PS: [low, high]
-
-Pure total high = PC + PS + Xbox = …
+Model high = PC + PS + Xbox = …
 
 ### Diverging factor(s)
 - <factor>: <observed> vs <expected>, contributes ×<n>
 
 ### Proposed fix
-<change> (scope: <genre | global>) → new pure estimate ≈ <…>
-⚠ Do NOT adjust calibratedMultiplier — that would make the pure algo circular.
+<change> (scope: <family | global | one anchor>) → new high ≈ <…>
 ```

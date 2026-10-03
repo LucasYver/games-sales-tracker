@@ -381,9 +381,10 @@ export class IngestionService {
 
   /**
    * Decide whether a discovery candidate is worth tracking. Established titles
-   * pass on IGDB popularity alone. A live Steam review lookup is paid only for
-   * fresh releases that have not yet cleared the IGDB catalog bar — every
-   * other Steam call is deferred to the signal crons.
+   * pass on IGDB popularity alone. Upcoming releases inside the discovery
+   * window are admitted as extended without a signal. A live Steam review
+   * lookup is paid only for fresh releases that have not yet cleared the IGDB
+   * catalog bar — every other Steam call is deferred to the signal crons.
    */
   private async classifyCandidate(
     candidate: IgdbGame,

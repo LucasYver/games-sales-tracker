@@ -1,260 +1,163 @@
-# Game Sales Tracker — Architecture & What We Built
+# Game Sales Tracker — architecture
+
+> Verified against commit `5f0cae0` (2026-10-03).
+>
+> Map of the system. Estimation formulas live in `ESTIMATION.md`.
+> The matcher lives in `DATA_DRIVEN_PROFILES.md`. Schedules live in
+> `vercel.json`, not in this file. When a list here and the code disagree,
+> the code wins — then fix this file.
 
 ## Purpose
 
-A public SaaS prototype that aggregates video game sales figures from multiple
-sources (official publisher reports, Wikipedia, specialist press, Steam signals,
-store ratings) and exposes the most reliable estimate for each title, per
-platform, with a confidence score.
+Estimate video-game unit sales from public signals, per platform, as a
+range. The number the site shows (`headline` / `estimatedToday`) is always
+that model. Dated publisher, Wikipedia, and press figures are stored as
+milestones and shown as a cross-check. They do not calibrate a per-game
+multiplier.
 
----
-
-## Monorepo Structure
+## Layout
 
 ```
 game-sales-tracker/
-├── backend/          NestJS API (TypeScript, TypeORM, PostgreSQL)
-├── frontend/         Next.js 16 (App Router, TypeScript, Tailwind, Shadcn/ui)
-└── docker-compose.yml  PostgreSQL 15 + Redis (ports 5433 / 6380 to avoid conflicts)
+├── backend/             NestJS API (TypeScript, TypeORM, PostgreSQL 16)
+├── frontend/            Next.js 16 (App Router, next-intl, Tailwind, shadcn/ui)
+├── docker-compose.yml   PostgreSQL 16 + Redis (ports 5433 / 6380)
+└── vercel.json          Production routes and cron schedules
 ```
 
----
+Redis is started locally and is not used by the backend. PostgreSQL is
+the only datastore. Local credentials and the migration workflow:
+`.cursor/skills/database-connection/SKILL.md`.
 
 ## Backend
 
-### Database entities
+NestJS modules under `backend/src/`. Entry points worth knowing:
 
-| Entity | Purpose |
-|---|---|
-| `Game` | Core catalog entry. Holds name, slug, cover, platforms, release date, developer, publisher, genres, `igdbId`, 3 per-platform calibrated Boxleiter multipliers. |
-| `GameSource` | Maps a game to an external ID on a given source system (Steam appId, IGDB id…). |
-| `SignalSnapshot` | Time-series of raw public signals: Steam reviews, PS Store rating count, Xbox Store rating count. |
-| `SalesEstimate` | Computed Boxleiter estimate (low / high / confidence / method) per platform, stored on each computation cycle. |
-| `Milestone` | A dated declared or extracted sales-related figure with full provenance: platform, source tier, units, `reportedAt`, source URL, verbatim quote, numeric `confidenceScore` (0–100, informational). Flag `isEngagement` marks players-reached figures (excluded from calibration). Replaces the legacy `SalesRecord` entity; the database table was renamed from `sales_record` to `milestone`. |
-| `TrustedSource` | Curated whitelist of media outlets / analysts / X accounts that feed the LLM extraction pipeline. |
-| `ProcessedArticle` | Deduplication table of already-processed article URLs. |
+| Area | File |
+| ---- | ---- |
+| Public API | `games/games.controller.ts` |
+| Ingestion API | `ingestion/ingestion.controller.ts` |
+| Admin API | `admin/admin.controller.ts` (`X-Admin-Token`) |
+| Vercel crons | `scheduler/cron.controller.ts` + `scheduler/refresh.service.ts` |
+| Estimation | `estimation/estimation.service.ts` |
+| Matcher | `reference-profiles/` |
+| Schema | `entities/` + `db/migrations/` (explicit registry in `db/migrations/index.ts`) |
 
-### Source tiers (most → least reliable)
+`synchronize` is off. Schema changes ship as TypeORM migrations
+(`.cursor/rules/typeorm-migrations.mdc`). Boot applies pending migrations
+on `DATABASE_URL_DIRECT`, then `DATABASE_URL`.
 
-```
-OFFICIAL   Publisher IR / financial report
-WIKIPEDIA  Citation-backed figure extracted from Wikipedia
-ANNOUNCEMENT  Social / PR press release
-MEDIA      Trusted media outlet / analyst report
-ESTIMATE   Boxleiter / ratings-based model output
-```
+### Entities
 
-### Signal metrics
+| Entity | Table | Role |
+| ------ | ----- | ---- |
+| `Game` | `game` | Catalog row: identity, platforms, genres, Steam tags, franchise / live-service flags, free-to-play, catalog tier. |
+| `GameSource` | `game_source` | External id (Steam app, IGDB, store, Twitch). |
+| `GamePlatformReleaseDate` | `game_platform_release_date` | Per-platform launch date used by estimation. |
+| `GameIngestionState` | `game_ingestion_state` | Per-pipeline attempt / success, so budgeted crons resume stalest-first. |
+| `GameRank` | `game_rank` | Home-grown review-velocity rank. |
+| `Publisher` | `publisher` | Publisher identity used by the matcher. |
+| `Genre` | `genre` | IGDB genre dictionary. Not an estimation profile. |
+| `SignalSnapshot` | `signal_snapshot` | Dated public counts (reviews, CCU, ratings, followers, Twitch, leak, playtime). |
+| `PriceSnapshot` | `price_snapshot` | Regional store price. Display only. |
+| `AchievementSnapshot` | `achievement_snapshot` | Exophase / Steam unlock sample. Collected, not estimated from. |
+| `SalesEstimate` | `sales_estimate` | Append-only per-method range, plus the `aggregated` row. |
+| `EstimateSnapshot` | `estimate_snapshot` | Append-only headline range (`estimatedToday`) and reconciliation JSON. |
+| `EstimationMethod` | `estimation_method` | Method code, family, weight, enabled flag. |
+| `Milestone` | `milestone` | Dated declared figure with provenance. Soft-deleted via `rejectedAt`. |
+| `TrustedSource` | `trusted_source` | Outlet registry for article extraction. `feedUrl` is reference data; RSS is not polled. |
+| `ProcessedArticle` | `processed_article` | URL dedup for extraction. |
+| `ReferenceProfile` | `reference_profile` | Observed vector for one matcher anchor. |
 
-| Metric | Source |
-|---|---|
-| `STEAM_REVIEWS` | Steam storefront review API |
-| `STEAM_CONCURRENT` | Steam `GetNumberOfCurrentPlayers` — raw daily reading |
-| `STEAM_PEAK_CCU` | Running all-time max of `STEAM_CONCURRENT`, written only on a new high. Used by the PC first-week lifecycle estimate (`estimateFirstWeekExtrapolationForPc`) to derive a week-1 baseline. |
-| `PS_RATINGS` | PlayStation Store scraping |
-| `XBOX_RATINGS` | Xbox Store scraping |
+`SalesRecord` was renamed to `Milestone`. `GenreProfile` and the per-game
+calibration columns are gone.
 
-The only two data providers are **Steam** and **IGDB**. SteamSpy has been
-removed (its owner estimate duplicated our own Boxleiter model). We track
-**PC, PlayStation and Xbox only** — Switch and mobile are excluded for lack of
-a reliable sales signal.
+### Signals that feed the model
 
-### Estimation pipeline (Boxleiter)
+| Metric | Used for |
+| ------ | -------- |
+| `STEAM_REVIEWS` | PC Boxleiter. Synthetic rows are ignored. |
+| `STEAM_CONCURRENT` | Launch-window peak for the PC first-week method. |
+| `PS_RATINGS` / `XBOX_RATINGS` | Console Boxleiter. Xbox is the worldwide Display Catalog count. |
+| `STEAM_PLAYERS_LEAK` | July 2018 ground truth for anchors and holdout. Not a live estimate input. |
 
-Each supported platform has its own signal → units model:
+Followers, Twitch viewers, prices, reviewer playtime, and peak-CCU history
+are collected for charts, rank, or matching features. They are not multiplied
+into units by themselves. The full enum is `entities/enums.ts` (`SignalMetric`).
 
-| Platform | Signal | Default range | Plausible bounds |
-|---|---|---|---|
-| PC | Steam reviews | 25–70× | 5–500× |
-| PlayStation | PS Store rating count | 40–100× | 8–600× |
-| Xbox | Xbox Store rating count | 35–90× | 6–600× |
+### Ingestion
 
-**Calibration**: when at least one **dated milestone** exists for a
-platform (any source — OFFICIAL, ANNOUNCEMENT, MEDIA, WIKIPEDIA), we
-pick the latest `reportedAt` and pair it with the closest signal
-snapshot within 365 days to derive the per-game multiplier. The result
-is persisted on `Game` (`calibratedMultiplier`, `calibratedPsMultiplier`,
-`calibratedXboxMultiplier`). All calibrated estimates use the single
-uniform ±30 % spread (`CALIBRATED_MULTIPLIER_SPREAD = 0.3`); the
-milestone's `confidenceScore` is surfaced to operators but does not
-affect calibration. See `ESTIMATION.md` §1 for the full algorithm.
+Discovery is IGDB-led (`ingestion/discovery.constants.ts`): catalog vs core
+rating thresholds, a Steam review floor for recent releases, PC / PlayStation
+/ Xbox only. Switch and mobile are not estimated.
 
-**PC first-week lifecycle estimate**: peak CCU is no longer mixed into the
-reviews-based Boxleiter range. Instead, `STEAM_PEAK_CCU` (and reviews
-captured close to launch when available) feeds a separate week-1 estimate
-in `estimateFirstWeekExtrapolationForPc`, projected to "today" via a
-genre-aware degressive curve. The Boxleiter range stays a pure
-reviews × multiplier estimate.
+Other clients in `ingestion/`:
 
-**PC guardrail (Option A)**: when console declared figures show that PC is < 20%
-of the total, the Boxleiter PC estimate is excluded from `estimatedToday` to
-avoid grossly understating console-heavy titles.
+- Steam store, reviews, CCU, prices, tags.
+- PlayStation and Xbox ratings and prices.
+- Twitch viewers.
+- games-popularity.com followers (`GAMES_POPULARITY_API_KEY`).
+- Wikipedia and backlog search (Perplexity by default, Tavily optional).
+- Exophase achievements.
+- LLM extraction (`llm/llm-extractor.service.ts`): grounded tool call on
+  fetched text. `OPENAI_MODEL` in `backend/.env.example` is `gpt-4o-mini`.
+  If that variable is unset, the code falls back to `gpt-5.6-luna`.
 
-**Reconciliation**: for each platform with both a declared figure and an
-estimate, we classify agreement as `strong / weak / conflict` and adjust the
-headline confidence accordingly. A `GLOBAL` declared figure (e.g. "30M copies
-worldwide") acts as a floor and a freshness-aware cap on the summed estimate.
+Trusted-source matching still gates article milestones. RSS polling was
+removed; discovery of articles is search plus on-site templates.
 
-**Freshness cap**: `estimatedToday` is bounded by a piecewise-linear sales decay
-curve (industry benchmark: 13% in week 1, 33% Q1, 58% Y1, 75% Y2, 100% Y5).
-All constants live in `backend/src/games/sales-modeling.constants.ts`.
+### Scheduler
 
-### Data ingestion
+Production crons are HTTP routes in `vercel.json`, authorized with
+`CRON_SECRET` (`scheduler/vercel-cron.guard.ts`). Each run has a wall-clock
+budget and continues from the stalest games on the next invocation. Do not
+copy the cron expressions into this file.
 
-#### Catalog discovery (IGDB-driven, hybrid IGDB + Steam)
-IGDB is the discovery backbone because it's the only source that can rank games
-by cross-platform popularity and filter by release date / platform (the Steam
-Web API offers no review-based ranking). `IgdbClient.discoverCandidates()` runs
-three queries, deduplicated by IGDB id:
-- **A — established hits**: `total_rating_count >= 80`, released since 2012,
-  on PC/PS/Xbox, ranked by popularity.
-- **B — landmark classics**: pre-2012 titles with `total_rating_count >= 500`
-  (Skyrim, GTA IV, Mass Effect 2…).
-- **C — fresh releases**: last 180 days, no rating bar.
+Rough groups: hourly CCU and Twitch, several-times-daily reviews / store
+ratings / milestone harvest / prices / followers, nightly IGDB discovery,
+weekly estimate rebuild and rank, slower playtime and achievement passes.
 
-Admission rule (`admitCandidate`): a candidate is tracked when
-`total_rating_count >= 80` **OR** its live Steam review count `>= 2500` (the
-Steam lookup is done only for sub-threshold candidates, so brand-new hits like
-Battlefield 6 are caught before IGDB accumulates ratings). All thresholds live
-in `backend/src/ingestion/discovery.constants.ts`.
+### Admin
 
-Admitted games with a Steam app go through the full Steam ingest path;
-console-only games are created from IGDB data and seeded with PS/Xbox store
-ratings. Free-to-play titles are blocked.
-
-#### Steam (per-app signals & metadata)
-- Per-app Steam storefront API: metadata + total review count (the PC Boxleiter
-  signal). No API key required for these endpoints.
-- **Deduplication**: `GameSource(STEAM, appId)` as pivot.
-
-#### IGDB enrichment
-- Per-game lookup via Steam app ID (2-step: `/external_games` → `/games`)
-  with fallback to name search.
-- Enriches: `igdbId`, `platforms` (real list), `coverUrl`, `summary`,
-  `releaseDate`, `developer`, `publisher`, `genres`.
-- **Backfill**: admin endpoint `POST /admin/backfill/igdb` runs the full
-  catalog at ~4 req/s (Twitch rate limit) with progress polled from the UI.
-
-#### Wikipedia
-- Wikipedia API (search → page text).
-- OpenAI (GPT-4o-mini) extracts sales figures grounded on verbatim quotes.
-- Global total takes priority over per-platform sum.
-- Rate-limit (429) handled with exponential backoff; no figure extracted
-  without a confirmed date.
-
-#### Trusted media sources (RSS + on-site search)
-- Curated registry in `sources.seed.ts` (seeded idempotently at boot).
-- Continuous RSS polling every 30 min → LLM extraction → `Milestone(MEDIA)`.
-- On-site search templates used by the manual discovery flow.
-
-#### Tavily (backlog discovery)
-- Fires only for historical content (pre-RSS era) when manually triggered
-  (`refreshGame`).
-- `TAVILY_EXCLUDED_DOMAINS` blocks aggregators, forums, UGC sites.
-- Same grounded LLM extraction as RSS; undated figures are rejected.
-
-#### LLM extraction rules (both Wikipedia and articles)
-- `temperature: 0`, JSON schema output.
-- Rejects: monetary figures (`$3.9M`), periodic/fiscal-year figures (`FY2024`),
-  player/download/subscriber counts, subscription-service engagement.
-- `isPeriodicQuote()` regex filter in `sales-figure.utils.ts` acts as a safety
-  net after LLM extraction.
-
-### Scheduler (crons)
-
-| Cron | Job |
-|---|---|
-| 02:00 daily | `discoverIgdbGames()` — add new titles (IGDB + Steam admission) |
-| 03:00 daily | Refresh all known Steam apps (signals + estimates) |
-
-### Admin API (`/admin`, protected by `X-Admin-Token` header)
-
-| Endpoint | Description |
-|---|---|
-| `GET /admin/stats` | Dashboard totals |
-| `GET /admin/games` | Filterable paginated list |
-| `GET /admin/games/:id` | Full detail (sources, milestones, estimates, signals) |
-| `DELETE /admin/games/:id` | Cascade delete |
-| `GET /admin/milestones` | Filterable (source, platform, undated, suspect) |
-| `DELETE /admin/milestones/:id` | Single delete |
-| `GET /admin/trusted-sources` | Registry list |
-| `DELETE /admin/trusted-sources/:id` | Remove source |
-| `POST /admin/games/:id/import-ccu-history` | Scrape SteamCharts for the all-time peak CCU and seed a `STEAM_PEAK_CCU` snapshot at the peak's historical month (closes the gap for hits that spiked before we started polling) |
-| `POST /admin/backfill/igdb` | Start full-catalog IGDB backfill |
-| `GET /admin/backfill/igdb` | Backfill progress |
-
-Token configured via `ADMIN_TOKEN` env var; fail-closed if unset.
-
----
+`/admin` is English-only, behind `ADMIN_TOKEN` (fail-closed when unset).
+Pages: dashboard, games, milestones, trusted sources, publishers, genres,
+reference profiles, ranks. The controller is the endpoint list; the UI
+covers refresh, CSV import, histogram / SteamCharts backfill, follower
+backfill, estimate rebuild, and matcher inspection.
 
 ## Frontend
 
-### Public site (`/[locale]/`)
+`frontend/src/app/`. Locales `fr` and `en` via `next-intl`. Admin is outside
+the locale prefix.
 
-| Route | Content |
-|---|---|
-| `/` | Hero + search bar + filterable / sortable paginated game list |
-| `/game/[slug]` | Headline estimate with confidence badge, sales history timeline, methodology card, refresh button |
+| Route | Role |
+| ----- | ---- |
+| `/[locale]` | Search and filterable catalog |
+| `/[locale]/ranking` | Review-velocity ranking |
+| `/[locale]/game/[slug]` | Headline estimate, history, signals, regional prices |
+| `/admin/*` | Back-office |
 
-**Internationalization**: `next-intl` with `fr` and `en` locales.
+The public game page shows `headline` (the model range). `totalSales` is
+the reported milestone when one exists. Source URLs and verbatim quotes are
+not shown on the public page.
 
-**SEO**: dynamic `generateMetadata`, Open Graph, JSON-LD `VideoGame` schema,
-`sitemap.ts`, `robots.ts`.
+Default API base: `NEXT_PUBLIC_API_URL` or `http://localhost:3001/api`
+(`frontend/src/lib/api.ts`). Fonts are Inter and JetBrains Mono.
 
-**Theme**: Inter (body) + JetBrains Mono (code), custom primary color
-`oklch(0.52 0.21 275)` (indigo/violet) via Shadcn CSS variables.
+## Environment
 
-**Source masking**: no source URL, badge, or verbatim quote is shown to end
-users. A `MethodologyCard` provides a generic explanation of the multi-source
-approach.
+Copy `backend/.env.example`. Required for local API after a dump restore:
+`DATABASE_URL`, plus `PORT` / `CORS_ORIGINS` if you leave the defaults.
+`DATABASE_URL_DIRECT` is for migrations when `DATABASE_URL` is a
+transaction-mode pooler. Every other key degrades to "skip that client".
 
-### Back-office (`/admin`, English-only, excluded from i18n routing)
+## Design choices still in force
 
-| Page | Content |
-|---|---|
-| `/admin/login` | Token input → HttpOnly session cookie (7 days) |
-| `/admin` | Stats dashboard + IGDB backfill card with progress bar |
-| `/admin/games` | Searchable / filterable table, all 3 calibrated multipliers, delete |
-| `/admin/games/[id]` | Full detail: metadata, milestones, estimates, signals, external sources |
-| `/admin/milestones` | Filter by source / platform / undated / suspect quote, delete |
-| `/admin/trusted-sources` | Registry with RSS / search capabilities, delete |
-
----
-
-## Environment variables
-
-| Variable | Purpose |
-|---|---|
-| `DATABASE_URL` | PostgreSQL connection |
-| `IGDB_CLIENT_ID` / `IGDB_CLIENT_SECRET` | Twitch / IGDB API credentials |
-| `STEAM_API_KEY` | Optional — some Steam endpoints work unauthenticated |
-| `OPENAI_API_KEY` | GPT-4o-mini for LLM extraction |
-| `OPENAI_MODEL` | Default `gpt-4o-mini` |
-| `TAVILY_API_KEY` | Backlog article discovery |
-| `ADMIN_TOKEN` | Back-office shared secret |
-| `CORS_ORIGINS` | Comma-separated allowed origins |
-
----
-
-## Key design decisions
-
-- **LLM as reader, not inventor**: OpenAI is used only to extract figures
-  already present verbatim in a fetched page. `temperature: 0`, strict JSON
-  schema, grounding check enforced at prompt level and backed by regex filters.
-- **Whitelist trust model**: a `Milestone` from media/press is only accepted
-  when the source URL matches a host registered in `TrustedSource`. This
-  prevents arbitrary web content from polluting the dataset.
-- **No VGChartz**: removed for unreliability. Domain is blocked from Tavily
-  results.
-- **No subscription sales**: PSN/Game Pass/Ubisoft+ engagement figures are
-  explicitly rejected by LLM prompt and `isPeriodicQuote` regex.
-- **No free-to-play**: Steam F2P titles are skipped at ingestion and blocked
-  from future discovery. Reviews ≠ sales for F2P.
-- **Calibration is conservative**: a per-game multiplier is only stored when
-  the signal snapshot is within `CALIBRATION_WINDOW_DAYS = 365` days of the
-  milestone's `reportedAt` and the resulting multiplier is within plausible
-  bounds (5–500× for PC, etc.). Latest-dated milestone wins, regardless of
-  source — the milestone's `confidenceScore` is purely informational.
-- **Honest confidence**: the confidence badge is downgraded when Boxleiter PC
-  conflicts with console declared figures, or when the PC estimate represents
-  < 20% of the total.
+- The model never invents a sales figure from model memory. The LLM only
+  extracts a number that appears in fetched text.
+- A press milestone is accepted when its URL matches `TrustedSource`.
+- VGChartz is not a source.
+- Subscription "players reached" figures are stored as `isEngagement` and
+  excluded from the headline and from anchors.
+- Free-to-play titles are not estimated.
+- Similarity replaces hand-written genre buckets. See `ESTIMATION.md`.

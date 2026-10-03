@@ -5,7 +5,22 @@ import {
   IGDB_CORE_MIN_RATING_COUNT,
   STEAM_CATALOG_MIN_REVIEWS,
   STEAM_CORE_MIN_REVIEWS,
+  UPCOMING_WINDOW_DAYS,
 } from './discovery.constants';
+
+const DAY_MS = 24 * 3600 * 1000;
+
+function isUpcomingRelease(
+  releaseDate: Date | null,
+  now = new Date(),
+): boolean {
+  if (!releaseDate) return false;
+  const releaseMs = releaseDate.getTime();
+  const nowMs = now.getTime();
+  return (
+    releaseMs >= nowMs && releaseMs <= nowMs + UPCOMING_WINDOW_DAYS * DAY_MS
+  );
+}
 
 export function classifyCatalogTier(
   totalRatingCount: number,
@@ -27,6 +42,7 @@ export function classifyCatalogTier(
   ) {
     return CatalogTier.EXTENDED;
   }
+  if (isUpcomingRelease(releaseDate)) return CatalogTier.EXTENDED;
   return null;
 }
 
@@ -46,5 +62,6 @@ export function needsLiveSteamReviewLookup(
 ): boolean {
   if (!steamAppId) return false;
   if (releaseDate && releaseDate < DISCOVERY_RELEASE_FLOOR) return false;
+  if (isUpcomingRelease(releaseDate)) return false;
   return totalRatingCount < IGDB_CATALOG_MIN_RATING_COUNT;
 }

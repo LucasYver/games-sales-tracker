@@ -1,0 +1,31 @@
+---
+description: Core project context, source-of-truth map, and invariants
+alwaysApply: true
+---
+
+# Project context
+
+Use these sources before changing the corresponding area:
+
+- `ARCHITECTURE.md`: system boundaries, entry points, data model, and active design choices.
+- `ESTIMATION.md`: estimation formulas and removed designs.
+- `DATA_DRIVEN_PROFILES.md`: matcher features, anchors, and similarity behavior.
+- `vercel.json`: production routes and cron schedules.
+- `backend/src/games/sales-modeling.constants.ts`: numeric estimation constants.
+- `backend/src/entities/` and `backend/src/db/migrations/index.ts`: database schema and migration registry.
+
+When documentation and code disagree, treat the code as the current behavior, report the discrepancy, and update both when the requested change affects them.
+
+## Invariants
+
+- The public headline (`estimatedToday`) is the sum of per-platform model estimates.
+- Declared milestones are cross-checks; they never floor, cap, or calibrate the model.
+- Do not reintroduce per-game calibration, `GenreProfile`, or `pureEstimatedToday`.
+- Free-to-play games are not estimated.
+- Nintendo Switch and mobile estimation are out of scope.
+- Schema changes require a TypeORM migration registered explicitly in `backend/src/db/migrations/index.ts`.
+- Do not add or modify tests unless the user explicitly requests tests in the current message. Verify with typecheck, lint, build, or targeted runtime checks instead.
+
+## Workflows
+
+Use the relevant project skill for database access, estimate-divergence diagnosis, catalog discovery, and Vercel cron management. Read the source-of-truth document named by that skill before making changes.
