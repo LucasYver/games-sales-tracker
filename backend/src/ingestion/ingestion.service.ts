@@ -1714,8 +1714,10 @@ export class IngestionService {
 
   /**
    * Capture PlayStation Store prices for paid games that already have a
-   * concept id on `GameSource`. One GraphQL call per game × country — no
-   * concept resolution here; that stays on STORE_RATINGS.
+   * concept id on `GameSource`. Unlike Steam/Xbox there is no multi-id
+   * pricing op — still one GraphQL call per concept × country — so we fan
+   * out games carefully (see concurrency caps below) and batch DB work like
+   * the other store crons. Concept resolution stays on STORE_RATINGS.
    */
   async captureAllPlaystationPrices(): Promise<{
     captured: number;
@@ -1723,7 +1725,13 @@ export class IngestionService {
     failed: number;
   }> {
     const RUN_BUDGET_MS = 11 * 60 * 1000;
-    const COUNTRY_CONCURRENCY = 4;
+    // Smaller than Steam/Xbox (50): each game still needs its own HTTP call.
+    const GAME_BATCH = 12;
+    // Peak in-flight HTTP = COUNTRY_CONCURRENCY × GAME_HTTP_CONCURRENCY.
+    // Kept at 6 (was 4 countries × 1 game) so we gain throughput without a
+    // large jump that would trip storefront throttling; client retries 429.
+    const COUNTRY_CONCURRENCY = 2;
+    const GAME_HTTP_CONCURRENCY = 3;
     const startedAt = Date.now();
 
     const psSources = await this.gameSources.find({
@@ -1756,7 +1764,8 @@ export class IngestionService {
     this.logger.log(
       `[ps-price] ${eligibleGames.length} due game(s) of ${trackedGames.length} ` +
         `tracked, ${PLAYSTATION_STORE_COUNTRIES.length} countries, ` +
-        `budget ${RUN_BUDGET_MS / 1000}s.`,
+        `budget ${RUN_BUDGET_MS / 1000}s ` +
+        `(peak HTTP ${COUNTRY_CONCURRENCY * GAME_HTTP_CONCURRENCY}).`,
     );
 
     let captured = 0;
@@ -1764,7 +1773,7 @@ export class IngestionService {
     let failed = 0;
     let processedGames = 0;
 
-    for (const game of eligibleGames) {
+    for (let i = 0; i < eligibleGames.length; i += GAME_BATCH) {
       if (Date.now() - startedAt >= RUN_BUDGET_MS) {
         this.logger.log(
           `[ps-price] run budget reached after ${processedGames} game(s); ` +
@@ -1773,9 +1782,15 @@ export class IngestionService {
         break;
       }
 
-      const conceptId = conceptIdByGameId.get(game.id)!;
+      const chunk = eligibleGames.slice(i, i + GAME_BATCH);
+      const conceptIds = chunk.map(
+        (game) => conceptIdByGameId.get(game.id)!,
+      );
+      const gameIdByConceptId = new Map(
+        chunk.map((game) => [conceptIdByGameId.get(game.id)!, game.id]),
+      );
       const latestByKey = await this.latestPricesByGameCountry(
-        [game.id],
+        chunk.map((game) => game.id),
         SourceType.PS_STORE,
       );
 
@@ -1796,11 +1811,12 @@ export class IngestionService {
         );
         const results = await Promise.allSettled(
           countries.map((country) =>
-            this.capturePlaystationCountryPrice(
+            this.capturePlaystationCountryPrices(
               country,
-              conceptId,
-              game.id,
+              conceptIds,
+              gameIdByConceptId,
               latestByKey,
+              GAME_HTTP_CONCURRENCY,
             ),
           ),
         );
@@ -1812,7 +1828,7 @@ export class IngestionService {
           } else {
             failed += 1;
             this.logger.warn(
-              `[ps-price] country request failed: ${result.reason}`,
+              `[ps-price] country batch failed: ${result.reason}`,
             );
           }
         }
@@ -1823,20 +1839,24 @@ export class IngestionService {
         countriesAttempted < PLAYSTATION_STORE_COUNTRIES.length
       ) {
         this.logger.log(
-          `[ps-price] run budget reached mid-game after ${countriesAttempted}/` +
-            `${PLAYSTATION_STORE_COUNTRIES.length} countries; game not stamped.`,
+          `[ps-price] run budget reached mid-chunk after ${countriesAttempted}/` +
+            `${PLAYSTATION_STORE_COUNTRIES.length} countries; chunk not stamped.`,
         );
         break;
       }
 
-      try {
-        await this.ingestionState.track(game.id, 'PS_PRICE', async () => {
-          return 'ok' as const;
-        });
-      } catch (error) {
-        this.logger.warn(`[ps-price] failed to stamp game ${game.id}: ${error}`);
+      for (const game of chunk) {
+        try {
+          await this.ingestionState.track(game.id, 'PS_PRICE', async () => {
+            return 'ok' as const;
+          });
+        } catch (error) {
+          this.logger.warn(
+            `[ps-price] failed to stamp game ${game.id}: ${error}`,
+          );
+        }
       }
-      processedGames += 1;
+      processedGames += chunk.length;
     }
 
     this.logger.log(
@@ -1856,41 +1876,79 @@ export class IngestionService {
     return null;
   }
 
-  private async capturePlaystationCountryPrice(
+  /**
+   * Fetch prices for many concepts in one storefront country, with a small
+   * in-country concurrency cap so peak HTTP stays bounded when several
+   * countries run in parallel.
+   */
+  private async capturePlaystationCountryPrices(
     country: (typeof PLAYSTATION_STORE_COUNTRIES)[number],
-    conceptId: string,
-    gameId: string,
+    conceptIds: string[],
+    gameIdByConceptId: Map<string, string>,
     latestByKey: Map<
       string,
       { initial: number; final: number; discountPercent: number }
     >,
+    gameHttpConcurrency: number,
   ): Promise<{ captured: number; skipped: number }> {
-    const price = await this.playstationCatalog.getPrice(conceptId, country);
-    if (!price) return { captured: 0, skipped: 1 };
-    const prev = latestByKey.get(`${gameId}:${country}`);
-    if (
-      prev &&
-      prev.initial === price.initial &&
-      prev.final === price.final &&
-      prev.discountPercent === price.discountPercent
-    ) {
-      return { captured: 0, skipped: 1 };
+    const toInsert: Array<{
+      gameId: string;
+      source: SourceType;
+      country: string;
+      currency: string;
+      initial: number;
+      final: number;
+      discountPercent: number;
+    }> = [];
+    let skipped = 0;
+
+    for (let i = 0; i < conceptIds.length; i += gameHttpConcurrency) {
+      const batch = conceptIds.slice(i, i + gameHttpConcurrency);
+      const prices = await Promise.all(
+        batch.map((conceptId) =>
+          this.playstationCatalog.getPrice(conceptId, country),
+        ),
+      );
+      for (let j = 0; j < batch.length; j++) {
+        const conceptId = batch[j];
+        const gameId = gameIdByConceptId.get(conceptId);
+        if (!gameId) continue;
+        const price = prices[j];
+        if (!price) {
+          skipped += 1;
+          continue;
+        }
+        const prev = latestByKey.get(`${gameId}:${country}`);
+        if (
+          prev &&
+          prev.initial === price.initial &&
+          prev.final === price.final &&
+          prev.discountPercent === price.discountPercent
+        ) {
+          skipped += 1;
+          continue;
+        }
+        toInsert.push({
+          gameId,
+          source: SourceType.PS_STORE,
+          country,
+          currency: price.currency,
+          initial: price.initial,
+          final: price.final,
+          discountPercent: price.discountPercent,
+        });
+        latestByKey.set(`${gameId}:${country}`, {
+          initial: price.initial,
+          final: price.final,
+          discountPercent: price.discountPercent,
+        });
+      }
     }
-    await this.prices.insert({
-      gameId,
-      source: SourceType.PS_STORE,
-      country,
-      currency: price.currency,
-      initial: price.initial,
-      final: price.final,
-      discountPercent: price.discountPercent,
-    });
-    latestByKey.set(`${gameId}:${country}`, {
-      initial: price.initial,
-      final: price.final,
-      discountPercent: price.discountPercent,
-    });
-    return { captured: 1, skipped: 0 };
+
+    if (toInsert.length > 0) {
+      await this.prices.insert(toInsert);
+    }
+    return { captured: toInsert.length, skipped };
   }
 
   /**
@@ -2940,6 +2998,11 @@ export class IngestionService {
    * Games are processed stalest-TWITCH_VIEWERS-first so a run truncated by
    * `budgetMs` (the Vercel cron wall-clock) still makes forward progress across
    * invocations. Skipped entirely when Twitch credentials are missing.
+   *
+   * Concurrency is capped at 3 (not the CCU's 6): Helix app tokens get
+   * 800 points/min, and each game can spend up to 5 `/streams` pages. With
+   * batch size 3 + per-page throttle, sustained load stays under the bucket;
+   * TwitchClient also retries HTTP 429 with backoff.
    */
   async pollAllTwitchViewers(
     options: { budgetMs?: number } = {},
@@ -2951,6 +3014,8 @@ export class IngestionService {
 
     const budgetMs = options.budgetMs ?? Number.POSITIVE_INFINITY;
     const startedAt = Date.now();
+    // Keep well under Helix's 800 req/min app-access bucket (see doc above).
+    const TWITCH_CONCURRENCY = 3;
 
     // Stalest-first: games whose latest TWITCH_VIEWERS snapshot is oldest (or
     // missing) sort ahead, guaranteeing forward progress if the run is capped.
@@ -2969,24 +3034,30 @@ export class IngestionService {
           ORDER BY l.last ASC NULLS FIRST`,
       );
 
-    let polled = 0;
-    let failed = 0;
-    for (const row of rows) {
-      if (Date.now() - startedAt >= budgetMs) break;
-      try {
-        await this.ingestionState.track(row.gameId, 'TWITCH_VIEWERS', () =>
-          this.pollTwitchViewers(row.gameId, row.name),
-        );
-        polled += 1;
-      } catch (error) {
-        failed += 1;
-        this.logger.warn(
-          `[twitch] poll failed for game ${row.gameId}: ${error}`,
-        );
-      }
-    }
+    const {
+      succeeded: polled,
+      failed,
+      attempted,
+    } = await this.runInBatches(
+      rows,
+      TWITCH_CONCURRENCY,
+      budgetMs,
+      startedAt,
+      async (row) => {
+        try {
+          await this.ingestionState.track(row.gameId, 'TWITCH_VIEWERS', () =>
+            this.pollTwitchViewers(row.gameId, row.name),
+          );
+        } catch (error) {
+          this.logger.warn(
+            `[twitch] poll failed for game ${row.gameId}: ${error}`,
+          );
+          throw error;
+        }
+      },
+    );
 
-    const leftover = rows.length - polled - failed;
+    const leftover = rows.length - attempted;
     this.logger.log(
       `[twitch] poll complete: ${polled} polled, ${failed} failed` +
         (leftover > 0 ? `, ${leftover} left for next run` : ''),

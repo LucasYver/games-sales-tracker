@@ -31,6 +31,13 @@ const USER_AGENT =
 // a no-match (e.g. a PlayStation exclusive) bounded.
 const XBOX_MAX_CANDIDATES = 5;
 
+// Chihiro tumbler search still returns product ids when the storefront
+// HTML search page is a client-only SPA shell. Cap probes the same way.
+const PS_MAX_CANDIDATES = 5;
+
+const CHIHIRO_SEARCH_URL =
+  'https://store.playstation.com/store/api/chihiro/00_09_000/tumbler/US/en/999';
+
 @Injectable()
 export class StoreRatingsClient {
   private readonly logger = new Logger(StoreRatingsClient.name);
@@ -77,30 +84,39 @@ export class StoreRatingsClient {
       // PSN displays (e.g. 159k for EA SPORTS FC 24).
       //
       // Two resolution paths, tried in order:
-      //  1. Portal page `playstation.com/en-us/games/{slug}` — much
-      //     more precise than the store search (which can return zero
-      //     concepts for the queried title, e.g. Crusader Kings III
-      //     surfaces 4 unrelated concepts and never its real one).
-      //     The slug derives deterministically from the game name with
-      //     PSN-specific rules (apostrophes stripped without a dash,
-      //     `&` → `and`).
-      //  2. Store search fallback for games whose portal URL doesn't
-      //     resolve (older titles, redirects, hub pages). The trailing
-      //     `extractPsTitle` + `titleMatches` check on the concept page
-      //     is the safety net: a wrong concept page won't match the
-      //     queried name and we'll bail with null rather than persist
-      //     bogus ratings.
-      const conceptId =
-        (await this.resolvePsConceptIdFromPortal(name)) ??
-        (await this.resolvePsConceptIdFromSearch(name));
-      if (!conceptId) return null;
+      //  1. Portal page `playstation.com/en-us/games/{slug}` — precise
+      //     when the slug matches (apostrophes stripped, `&` → `and`,
+      //     thousand-separators collapsed, common roman numerals → digits).
+      //  2. Chihiro tumbler search → product page → parent conceptId.
+      //     The HTML `/search/...` page is a client-only SPA shell and no
+      //     longer inlines `/product/...` links, so we cannot scrape it.
+      //     Title match on the concept page is the safety net against a
+      //     wrong Chihiro hit.
+      const portalId = await this.resolvePsConceptIdFromPortal(name);
+      if (portalId) {
+        const fromPortal = await this.playstationFromUrl(
+          name,
+          this.psConceptUrl(portalId),
+        );
+        if (fromPortal) return fromPortal;
+      }
 
-      const url = `https://store.playstation.com/en-us/concept/${conceptId}`;
-      return this.playstationFromUrl(name, url);
+      for (const conceptId of await this.resolvePsConceptIdsFromSearch(name)) {
+        const result = await this.playstationFromUrl(
+          name,
+          this.psConceptUrl(conceptId),
+        );
+        if (result) return result;
+      }
+      return null;
     } catch (error) {
       this.logger.warn(`PlayStation lookup failed for "${name}": ${error}`);
       return null;
     }
+  }
+
+  private psConceptUrl(conceptId: string): string {
+    return `https://store.playstation.com/en-us/concept/${conceptId}`;
   }
 
   private async playstationFromUrl(
@@ -256,51 +272,164 @@ export class StoreRatingsClient {
   private async resolvePsConceptIdFromPortal(
     name: string,
   ): Promise<string | null> {
-    const slug = this.psnPortalSlug(name);
-    if (!slug) return null;
-    const page = await this.fetchOptional(
-      `https://www.playstation.com/en-us/games/${slug}/`,
-    );
-    if (!page) return null;
-    return this.extractPsConceptId(page);
+    for (const slug of this.psnPortalSlugs(name)) {
+      const page = await this.fetchOptional(
+        `https://www.playstation.com/en-us/games/${slug}/`,
+      );
+      if (!page) continue;
+      const conceptId = this.extractPsConceptId(page);
+      if (conceptId) return conceptId;
+    }
+    return null;
   }
 
   /**
-   * Fallback resolver via the store search. PSN's search page is a SPA
-   * shell that no longer inlines `/concept/...` links reliably (and
-   * sometimes returns wrong concepts entirely — see Crusader Kings
-   * III), but it still server-renders `/product/...` tiles. We fetch
-   * the first SKU and read its parent `conceptId` from the embedded
-   * telemetry payload. The caller validates the resulting concept's
-   * title before persisting anything.
+   * Fallback resolver via Chihiro tumbler search. Returns candidate
+   * concept ids in relevance order; the caller title-checks each one.
+   * Query variants matter: Chihiro returns zero hits for bare `:` or
+   * thousands-separators (`Clair Obscur: Expedition 33`,
+   * `Warhammer 40,000: …`), so we also try a punctuation-stripped form
+   * and the subtitle after `:`.
    */
-  private async resolvePsConceptIdFromSearch(
+  private async resolvePsConceptIdsFromSearch(
     name: string,
-  ): Promise<string | null> {
-    const search = await this.fetchOptional(
-      `https://store.playstation.com/en-us/search/${encodeURIComponent(name)}`,
-    );
-    if (!search) return null;
-
-    const productLink = search.match(/\/product\/[A-Z0-9_-]+/);
-    if (!productLink) return null;
-
-    const productUrl = `https://store.playstation.com/en-us${productLink[0]}`;
-    const productPage = await this.fetchOptional(productUrl);
-    if (!productPage) return null;
-
-    return this.extractPsConceptId(productPage);
+  ): Promise<string[]> {
+    const productIds = await this.searchPsProductIds(name);
+    const conceptIds: string[] = [];
+    const seen = new Set<string>();
+    for (const productId of productIds.slice(0, PS_MAX_CANDIDATES)) {
+      const productPage = await this.fetchOptional(
+        `https://store.playstation.com/en-us/product/${productId}`,
+      );
+      if (!productPage) continue;
+      const conceptId = this.extractPsConceptId(productPage);
+      if (!conceptId || seen.has(conceptId)) continue;
+      seen.add(conceptId);
+      conceptIds.push(conceptId);
+    }
+    return conceptIds;
   }
 
-  private psnPortalSlug(name: string): string {
-    return name
+  private async searchPsProductIds(name: string): Promise<string[]> {
+    const seen = new Set<string>();
+    const matched: string[] = [];
+    // Keep the first non-empty raw tumbler list as a last resort when no
+    // variant produced a title-plausible hit (over-strict normalize edge
+    // cases). Prefer continuing across query variants before using it —
+    // e.g. "Warhammer 40000 …" ranks unrelated 40k titles, while the
+    // subtitle "Space Marine 2" hits the right SKU.
+    let rawFallback: string[] = [];
+    for (const query of this.psSearchQueries(name)) {
+      const batch = await this.chihiroSearchProductIds(query, name);
+      for (const id of batch.matched) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        matched.push(id);
+      }
+      if (rawFallback.length === 0 && batch.raw.length > 0) {
+        rawFallback = batch.raw;
+      }
+      if (matched.length > 0) break;
+    }
+    return matched.length > 0 ? matched : rawFallback;
+  }
+
+  private psSearchQueries(name: string): string[] {
+    const queries: string[] = [];
+    const add = (raw: string) => {
+      const q = raw.replace(/\s+/g, ' ').trim();
+      if (q.length >= 2 && !queries.includes(q)) queries.push(q);
+    };
+    add(name);
+    add(this.simplifyPsQuery(name));
+    const colonParts = name.split(':').map((p) => p.trim()).filter(Boolean);
+    if (colonParts.length > 1) {
+      add(colonParts[0]);
+      add(this.simplifyPsQuery(colonParts[0]));
+      add(colonParts[colonParts.length - 1]);
+      add(this.simplifyPsQuery(colonParts[colonParts.length - 1]));
+    }
+    return queries;
+  }
+
+  private simplifyPsQuery(name: string): string {
+    let value = name
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .replace(/[\u2018\u2019\u201A\u201B'`]/g, '')
-      .replace(/&/g, ' and ')
+      .replace(/[Δδ]/g, 'delta');
+    // Collapse 40,000 → 40000 (Chihiro treats the comma as a hard miss).
+    while (/(\d),(\d{3})\b/.test(value)) {
+      value = value.replace(/(\d),(\d{3})\b/g, '$1$2');
+    }
+    return value
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private async chihiroSearchProductIds(
+    query: string,
+    gameName: string,
+  ): Promise<{ matched: string[]; raw: string[] }> {
+    try {
+      const { data } = await axios.get<{
+        links?: Array<{ id?: string; name?: string; container_type?: string }>;
+      }>(`${CHIHIRO_SEARCH_URL}/${encodeURIComponent(query)}`, {
+        params: { suggested_size: 10, offset: 0 },
+        headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+        timeout: 20000,
+      });
+      const matched: string[] = [];
+      const raw: string[] = [];
+      for (const link of data.links ?? []) {
+        if (!link.id || link.container_type !== 'product') continue;
+        raw.push(link.id);
+        // Edition suffixes still pass via prefix titleMatches.
+        if (!link.name || this.titleMatches(gameName, link.name)) {
+          matched.push(link.id);
+        }
+      }
+      return { matched, raw };
+    } catch (error) {
+      this.logger.warn(`Chihiro search failed for "${query}": ${error}`);
+      return { matched: [], raw: [] };
+    }
+  }
+
+  /**
+   * Candidate portal slugs. PSN is inconsistent on sequel numerals
+   * (`hades-2` vs occasionally `…-ii`) and on greek letters (`delta`),
+   * so we try a small set rather than a single guess.
+   */
+  private psnPortalSlugs(name: string): string[] {
+    const base = this.psnPortalSlugBase(name);
+    if (!base) return [];
+    const withDigits = base
+      .replace(/\bviii\b/g, '8')
+      .replace(/\bvii\b/g, '7')
+      .replace(/\bvi\b/g, '6')
+      .replace(/\biv\b/g, '4')
+      .replace(/\biii\b/g, '3')
+      .replace(/\bii\b/g, '2')
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
+    const asRoman = base.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    return [...new Set([withDigits, asRoman].filter(Boolean))];
+  }
+
+  private psnPortalSlugBase(name: string): string {
+    let value = name
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[Δδ]/g, ' delta ')
+      .replace(/[™®]/g, '');
+    while (/(\d),(\d{3})\b/.test(value)) {
+      value = value.replace(/(\d),(\d{3})\b/g, '$1$2');
+    }
+    return value
+      .toLowerCase()
+      .replace(/[\u2018\u2019\u201A\u201B'`]/g, '')
+      .replace(/&/g, ' and ');
   }
 
   /**

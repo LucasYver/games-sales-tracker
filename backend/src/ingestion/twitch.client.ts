@@ -19,6 +19,11 @@ const MAX_STREAM_PAGES = 5;
 // Politeness delay between paginated stream requests for the same game.
 const PAGE_THROTTLE_MS = 100;
 
+// Helix app-access bucket is 800 points/min (most GETs cost 1). Retries
+// absorb transient 429s when the cron fans out a few games in parallel.
+const HELIX_MAX_ATTEMPTS = 4;
+const HELIX_RETRY_BASE_MS = 1000;
+
 interface CachedToken {
   accessToken: string;
   expiresAt: number;
@@ -57,6 +62,8 @@ interface HelixResponse<T> {
 export class TwitchClient {
   private readonly logger = new Logger(TwitchClient.name);
   private token: CachedToken | null = null;
+  /** In-flight token refresh — coalesces concurrent callers (parallel polls). */
+  private tokenRefresh: Promise<string> | null = null;
 
   constructor(private readonly config: ConfigService) {}
 
@@ -146,32 +153,75 @@ export class TwitchClient {
   ): Promise<HelixResponse<T> | null> {
     const clientId = this.config.get<string>('IGDB_CLIENT_ID')!;
 
-    try {
-      const token = await this.getAccessToken();
-      const { data } = await axios.get<HelixResponse<T>>(
-        `${HELIX_BASE}${path}`,
-        {
-          headers: {
-            'Client-ID': clientId,
-            Authorization: `Bearer ${token}`,
+    for (let attempt = 1; attempt <= HELIX_MAX_ATTEMPTS; attempt++) {
+      try {
+        const token = await this.getAccessToken();
+        const { data } = await axios.get<HelixResponse<T>>(
+          `${HELIX_BASE}${path}`,
+          {
+            headers: {
+              'Client-ID': clientId,
+              Authorization: `Bearer ${token}`,
+            },
+            params,
+            timeout: 15000,
           },
-          params,
-          timeout: 15000,
-        },
-      );
-      return data;
-    } catch (error) {
-      const detail = axios.isAxiosError(error)
-        ? JSON.stringify(error.response?.data ?? error.message)
-        : String(error);
-      this.logger.warn(
-        `Twitch Helix ${path} failed (params=${JSON.stringify(params)}): ${detail}`,
-      );
-      return null;
+        );
+        return data;
+      } catch (error) {
+        if (
+          axios.isAxiosError(error) &&
+          error.response?.status === 429 &&
+          attempt < HELIX_MAX_ATTEMPTS
+        ) {
+          const retryAfter = Number(error.response.headers?.['retry-after']);
+          const resetSec = Number(error.response.headers?.['ratelimit-reset']);
+          const untilResetMs =
+            Number.isFinite(resetSec) && resetSec > 0
+              ? Math.max(0, resetSec * 1000 - Date.now())
+              : NaN;
+          const backoffMs = Number.isFinite(retryAfter)
+            ? retryAfter * 1000
+            : Number.isFinite(untilResetMs)
+              ? Math.min(untilResetMs + 250, 60_000)
+              : HELIX_RETRY_BASE_MS * attempt;
+          this.logger.warn(
+            `Twitch Helix 429 on ${path} (attempt ${attempt}/${HELIX_MAX_ATTEMPTS}); ` +
+              `retrying in ${Math.round(backoffMs)}ms`,
+          );
+          await this.sleep(backoffMs);
+          continue;
+        }
+
+        const detail = axios.isAxiosError(error)
+          ? JSON.stringify(error.response?.data ?? error.message)
+          : String(error);
+        this.logger.warn(
+          `Twitch Helix ${path} failed (params=${JSON.stringify(params)}): ${detail}`,
+        );
+        return null;
+      }
     }
+
+    return null;
   }
 
   private async getAccessToken(): Promise<string> {
+    if (this.token && this.token.expiresAt > Date.now() + 60_000) {
+      return this.token.accessToken;
+    }
+
+    if (!this.tokenRefresh) {
+      this.tokenRefresh = this.refreshAccessToken().finally(() => {
+        this.tokenRefresh = null;
+      });
+    }
+    return this.tokenRefresh;
+  }
+
+  private async refreshAccessToken(): Promise<string> {
+    // Re-check after waiting on a coalesced refresh: another caller may have
+    // already populated a still-valid token.
     if (this.token && this.token.expiresAt > Date.now() + 60_000) {
       return this.token.accessToken;
     }

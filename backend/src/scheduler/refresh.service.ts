@@ -239,11 +239,11 @@ export class RefreshService {
   }
 
   /**
-   * Poll live Twitch viewers for every tracked game on a short cadence so
-   * intra-day peaks are captured. Mirrors the CCU poll but is platform-
-   * agnostic (Twitch viewership exists for console-only games too). A
-   * wall-clock budget keeps the run under the Vercel `maxDuration`, and
-   * stalest-first ordering drains any leftover on the next run.
+   * Poll live Twitch viewers for every tracked game during US/EU prime
+   * windows only (see vercel.json: every 30 min at 16–03 UTC — EU evening
+   * + US East evening; quiet 04–15 UTC skipped). Mirrors the CCU poll but
+   * is platform-agnostic. A wall-clock budget keeps the run under the
+   * Vercel `maxDuration`, and stalest-first ordering drains leftovers.
    */
   async captureTwitchViewers() {
     const RUN_BUDGET_MS = 11 * 60 * 1000;

@@ -18,6 +18,11 @@ const PRICING_BY_CONCEPT_HASH =
 
 const CONCEPT_ID_RE = /\/concept\/(\d+)/i;
 
+// Storefront GraphQL has no published budget; keep retries short and back off
+// hard on 429 so parallel price polls don't amplify a throttle window.
+const MAX_ATTEMPTS = 4;
+const RETRY_BASE_MS = 1000;
+
 export interface PlaystationCatalogPrice {
   currency: string;
   initial: number;
@@ -49,40 +54,80 @@ export class PlaystationCatalogClient {
     return match?.[1] ?? null;
   }
 
+  /**
+   * One concept × country GraphQL call (no multi-id batch on this op).
+   * Retries HTTP 429; other failures return null so the cron can skip.
+   */
   async getPrice(
     conceptId: string,
     country: PlaystationStoreCountry,
   ): Promise<PlaystationCatalogPrice | null> {
     const locale = PLAYSTATION_COUNTRY_LOCALE[country];
-    const { data } = await axios.get<PricingJson>(GRAPHQL_URL, {
-      params: {
-        operationName: 'metGetPricingDataByConceptId',
-        variables: JSON.stringify({ conceptId }),
-        extensions: JSON.stringify({
-          persistedQuery: {
-            version: 1,
-            sha256Hash: PRICING_BY_CONCEPT_HASH,
-          },
-        }),
-      },
-      headers: {
-        'User-Agent': USER_AGENT,
-        Accept: 'application/json',
-        'content-type': 'application/json',
-        Origin: 'https://store.playstation.com',
-        Referer: 'https://store.playstation.com/',
-        'x-psn-store-locale-override': locale,
-      },
-      timeout: 20000,
-    });
 
-    if (data.errors?.length && !data.data?.conceptRetrieve) {
-      this.logger.warn(
-        `PS pricing GraphQL error for ${conceptId} ${country}: ${data.errors[0]?.message}`,
-      );
-      return null;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const { data } = await axios.get<PricingJson>(GRAPHQL_URL, {
+          params: {
+            operationName: 'metGetPricingDataByConceptId',
+            variables: JSON.stringify({ conceptId }),
+            extensions: JSON.stringify({
+              persistedQuery: {
+                version: 1,
+                sha256Hash: PRICING_BY_CONCEPT_HASH,
+              },
+            }),
+          },
+          headers: {
+            'User-Agent': USER_AGENT,
+            Accept: 'application/json',
+            'content-type': 'application/json',
+            Origin: 'https://store.playstation.com',
+            Referer: 'https://store.playstation.com/',
+            'x-psn-store-locale-override': locale,
+          },
+          timeout: 20000,
+        });
+
+        if (data.errors?.length && !data.data?.conceptRetrieve) {
+          this.logger.warn(
+            `PS pricing GraphQL error for ${conceptId} ${country}: ${data.errors[0]?.message}`,
+          );
+          return null;
+        }
+
+        return this.parsePrice(data);
+      } catch (error) {
+        if (
+          axios.isAxiosError(error) &&
+          error.response?.status === 429 &&
+          attempt < MAX_ATTEMPTS
+        ) {
+          const retryAfter = Number(error.response.headers?.['retry-after']);
+          const backoffMs = Number.isFinite(retryAfter)
+            ? retryAfter * 1000
+            : RETRY_BASE_MS * attempt;
+          this.logger.warn(
+            `PS pricing 429 for ${conceptId} ${country} ` +
+              `(attempt ${attempt}/${MAX_ATTEMPTS}); retrying in ${Math.round(backoffMs)}ms`,
+          );
+          await this.sleep(backoffMs);
+          continue;
+        }
+
+        const detail = axios.isAxiosError(error)
+          ? JSON.stringify(error.response?.data ?? error.message)
+          : String(error);
+        this.logger.warn(
+          `PS pricing failed for ${conceptId} ${country}: ${detail}`,
+        );
+        return null;
+      }
     }
 
+    return null;
+  }
+
+  private parsePrice(data: PricingJson): PlaystationCatalogPrice | null {
     const raw = data.data?.conceptRetrieve?.defaultProduct?.price;
     const initial = Number(raw?.basePriceValue);
     const final = Number(raw?.discountedValue);
@@ -107,5 +152,9 @@ export class PlaystationCatalogClient {
       final: storedFinal,
       discountPercent,
     };
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((r) => setTimeout(r, ms));
   }
 }

@@ -153,7 +153,9 @@ export class SourcesService implements OnApplicationBootstrap {
       );
       return saved;
     } catch {
-      // Race lost — another request just created the same row. Re-read.
+      // Race lost, or unique slug already held by an inactive (blocked)
+      // row. Never revive a blacklist entry: re-check block, then active only.
+      if (await this.isHostBlockedInRegistry(host)) return null;
       return this.findByUrl(url);
     }
   }
