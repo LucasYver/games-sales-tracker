@@ -177,6 +177,7 @@ export interface AdminStats {
   };
   milestones: {
     total: number;
+    rejected: number;
     bySource: Record<SalesSource, number>;
     undated: number;
   };
@@ -479,6 +480,7 @@ export class AdminService {
       gamesWithSales,
       gamesWithEstimate,
       salesTotal,
+      salesRejected,
       salesUndated,
       bySourceRows,
       latestSteamSignal,
@@ -503,6 +505,10 @@ export class AdminService {
         .select('COUNT(DISTINCT g.id)', 'c')
         .getRawOne<{ c: string }>(),
       this.milestones.count(),
+      this.milestones.count({
+        withDeleted: true,
+        where: Milestone.rejected(),
+      }),
       this.milestones.count({
         where: { reportedAt: IsNull() },
       }),
@@ -666,6 +672,7 @@ export class AdminService {
       },
       milestones: {
         total: salesTotal,
+        rejected: salesRejected,
         bySource,
         undated: salesUndated,
       },

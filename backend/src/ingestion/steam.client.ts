@@ -17,6 +17,12 @@ export interface SteamPrice {
   discountPercent: number;
 }
 
+/** Result of `GetNumberOfCurrentPlayers` — see {@link SteamClient.getCurrentPlayerCount}. */
+export type SteamPlayerCountResult =
+  | { kind: 'ok'; players: number }
+  | { kind: 'unsupported' }
+  | { kind: 'transient'; detail: string };
+
 export interface SteamAppDetails {
   appId: number;
   name: string;
@@ -250,30 +256,91 @@ export class SteamClient {
   /**
    * Current number of concurrent players on Steam, via the public
    * `ISteamUserStats/GetNumberOfCurrentPlayers` endpoint. No API key
-   * required. Polled daily to maintain a `STEAM_CONCURRENT` time series and
+   * required. Polled hourly to maintain a `STEAM_CONCURRENT` time series and
    * a running `STEAM_PEAK_CCU` peak per game. The peak CCU is a second,
    * largely independent signal of installed base used to tighten the
    * Boxleiter-based PC estimate via range intersection.
+   *
+   * Distinguishes permanent "no stats for this app" (HTTP 404 / result 42)
+   * from transient rate-limits and transport failures so the CCU cron does
+   * not stamp the whole catalog as failed when Steam throttles the egress IP.
    */
-  async getCurrentPlayerCount(appId: number): Promise<number | null> {
-    try {
-      const { data } = await axios.get(
-        'https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/',
-        { params: { appid: appId, format: 'json' }, timeout: 15000 },
-      );
-      const players = data?.response?.player_count;
-      if (
-        typeof players !== 'number' ||
-        !Number.isFinite(players) ||
-        players < 0
-      ) {
-        return null;
+  async getCurrentPlayerCount(appId: number): Promise<SteamPlayerCountResult> {
+    const maxAttempts = 3;
+    let lastError = 'unknown error';
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const { data, status } = await axios.get(
+          'https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/',
+          {
+            params: { appid: appId, format: 'json' },
+            timeout: 15000,
+            validateStatus: () => true,
+          },
+        );
+
+        const players = data?.response?.player_count;
+        if (
+          status === 200 &&
+          typeof players === 'number' &&
+          Number.isFinite(players) &&
+          players >= 0
+        ) {
+          return { kind: 'ok', players };
+        }
+
+        // HTTP 404 + result 42 usually means the app has no player-count
+        // stats — but Steam also serves this shape while throttling an IP,
+        // so retry once with a short backoff before concluding unsupported.
+        const result = data?.response?.result;
+        const looksUnsupported = status === 404 || result === 42;
+        lastError = `HTTP ${status}, result=${String(result)}`;
+
+        if (looksUnsupported) {
+          if (attempt < 2) {
+            const backoffMs = 2000;
+            this.logger.warn(
+              `getCurrentPlayerCount ${appId}: ${lastError} ` +
+                `(attempt ${attempt}/2); retrying in ${backoffMs}ms`,
+            );
+            await new Promise((r) => setTimeout(r, backoffMs));
+            continue;
+          }
+          return { kind: 'unsupported' };
+        }
+
+        if (
+          (status === 429 || status === 503 || status >= 500) &&
+          attempt < maxAttempts
+        ) {
+          const backoffMs = attempt * 5000;
+          this.logger.warn(
+            `getCurrentPlayerCount ${appId}: ${lastError} ` +
+              `(attempt ${attempt}/${maxAttempts}); retrying in ${backoffMs}ms`,
+          );
+          await new Promise((r) => setTimeout(r, backoffMs));
+          continue;
+        }
+        break;
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : String(error);
+        if (attempt < maxAttempts) {
+          const backoffMs = attempt * 5000;
+          this.logger.warn(
+            `getCurrentPlayerCount ${appId}: ${lastError} ` +
+              `(attempt ${attempt}/${maxAttempts}); retrying in ${backoffMs}ms`,
+          );
+          await new Promise((r) => setTimeout(r, backoffMs));
+          continue;
+        }
       }
-      return players;
-    } catch (error) {
-      this.logger.warn(`getCurrentPlayerCount failed for ${appId}: ${error}`);
-      return null;
     }
+
+    this.logger.warn(
+      `getCurrentPlayerCount failed for ${appId} after retries: ${lastError}`,
+    );
+    return { kind: 'transient', detail: lastError };
   }
 
   /**

@@ -1112,14 +1112,17 @@ export class IngestionService {
    *    (NOT capturedAt) because the historical-import path persists peaks
    *    with the SteamCharts month as `capturedAt`.
    *
-   * Best-effort: a fetch failure leaves the value already on record in place.
-   * Returns false when Steam reported no player count — either a transient
-   * failure or an app that has none at all (playtest, demo, delisted title),
-   * which the caller surfaces instead of silently recording a no-op success.
+   * Never throws: ingest callers treat CCU as best-effort. The batch cron
+   * inspects the outcome to decide success vs retryable failure.
    */
-  async pollSteamCcu(gameId: string, appId: number): Promise<boolean> {
-    const current = await this.steam.getCurrentPlayerCount(appId);
-    if (current === null) return false;
+  async pollSteamCcu(
+    gameId: string,
+    appId: number,
+  ): Promise<'saved' | 'unsupported' | 'transient'> {
+    const result = await this.steam.getCurrentPlayerCount(appId);
+    if (result.kind === 'unsupported') return 'unsupported';
+    if (result.kind === 'transient') return 'transient';
+    const current = result.players;
 
     // Keep a single STEAM_CONCURRENT row per UTC day = that day's peak.
     // Upsert: replace the day's row when the new reading is higher, do
@@ -1178,7 +1181,7 @@ export class IngestionService {
       );
     }
 
-    return true;
+    return 'saved';
   }
 
   /**
@@ -1187,7 +1190,9 @@ export class IngestionService {
    * intra-day peaks are captured even though the full refresh only runs
    * nightly. Paid and free-to-play titles are both polled; F2P still has no
    * sales estimate. Each game is best-effort: a failure is logged and the
-   * loop continues.
+   * loop continues. Apps with no CCU endpoint are recorded as successes
+   * (unsupported). A flood of failures after successes trips a circuit
+   * breaker so a Steam throttle does not stamp the whole catalog failed.
    */
   async pollAllSteamCcu(options: { budgetMs?: number } = {}): Promise<{
     polled: number;
@@ -1196,6 +1201,12 @@ export class IngestionService {
   }> {
     const budgetMs = options.budgetMs ?? Number.POSITIVE_INFINITY;
     const startedAt = Date.now();
+    // Keep sustained request rate under Steam's public Web API budget.
+    // Concurrency 6 with no gap burned ~6k apps in ~1 min and tripped a
+    // throttle that returned empty player counts for the rest of the run.
+    const CCU_CONCURRENCY = 3;
+    const CCU_BATCH_GAP_MS = 100;
+    const CCU_CIRCUIT_AFTER = 25;
     const steamSources = await this.gameSources.find({
       where: { source: SourceType.STEAM },
     });
@@ -1219,13 +1230,17 @@ export class IngestionService {
       ...sourceByGameId.keys(),
     ]);
 
+    let savedCount = 0;
+    let consecutiveBad = 0;
+    let circuitOpen = false;
+
     const {
       succeeded: polled,
       failed,
       attempted,
     } = await this.runInBatches(
       orderedGameIds,
-      6,
+      CCU_CONCURRENCY,
       budgetMs,
       startedAt,
       async (gameId) => {
@@ -1236,18 +1251,50 @@ export class IngestionService {
 
         try {
           await this.ingestionState.track(gameId, 'STEAM_CCU', async () => {
-            if (!(await this.pollSteamCcu(gameId, appId))) {
-              throw new Error(
-                `Steam returned no player count for appId ${appId}`,
-              );
+            const outcome = await this.pollSteamCcu(gameId, appId);
+            if (outcome === 'saved') {
+              savedCount += 1;
+              consecutiveBad = 0;
+              return;
             }
+            if (outcome === 'unsupported') {
+              // Permanent no-CCU apps are fine — but a sudden flood of
+              // "unsupported" right after real successes is Steam throttling
+              // with 404/result 42. Trip the circuit instead of greenwashing.
+              consecutiveBad += 1;
+              if (savedCount > 0 && consecutiveBad >= CCU_CIRCUIT_AFTER) {
+                circuitOpen = true;
+                throw new Error(
+                  `Steam CCU rate limit suspected (unsupported flood) for appId ${appId}`,
+                );
+              }
+              return;
+            }
+            consecutiveBad += 1;
+            if (consecutiveBad >= CCU_CIRCUIT_AFTER) {
+              circuitOpen = true;
+            }
+            throw new Error(
+              `Steam CCU unavailable for appId ${appId}`,
+            );
           });
         } catch (error) {
           this.logger.warn(`[ccu] poll failed for game ${gameId}: ${error}`);
           throw error;
         }
       },
+      {
+        shouldStop: () => circuitOpen,
+        delayBetweenBatchesMs: CCU_BATCH_GAP_MS,
+      },
     );
+
+    if (circuitOpen) {
+      this.logger.warn(
+        `[ccu] circuit open after ${consecutiveBad} consecutive failures; ` +
+          `leaving remaining games for the next run.`,
+      );
+    }
 
     const leftover = orderedGameIds.length - attempted;
     this.logger.log(
@@ -4839,18 +4886,32 @@ export class IngestionService {
     budgetMs: number,
     startedAt: number,
     work: (item: T) => Promise<void>,
+    options: {
+      shouldStop?: () => boolean;
+      delayBetweenBatchesMs?: number;
+    } = {},
   ): Promise<{ succeeded: number; failed: number; attempted: number }> {
     let succeeded = 0;
     let failed = 0;
     let attempted = 0;
+    const delayMs = options.delayBetweenBatchesMs ?? 0;
     for (let i = 0; i < items.length; i += concurrency) {
       if (Date.now() - startedAt >= budgetMs) break;
+      if (options.shouldStop?.()) break;
       const batch = items.slice(i, i + concurrency);
       const results = await Promise.allSettled(batch.map((item) => work(item)));
       for (const result of results) {
         attempted += 1;
         if (result.status === 'fulfilled') succeeded += 1;
         else failed += 1;
+      }
+      if (
+        delayMs > 0 &&
+        i + concurrency < items.length &&
+        Date.now() - startedAt < budgetMs &&
+        !options.shouldStop?.()
+      ) {
+        await new Promise((r) => setTimeout(r, delayMs));
       }
     }
     return { succeeded, failed, attempted };

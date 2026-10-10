@@ -67,8 +67,13 @@ function StatCard({
 }: {
   label: string;
   value: string | number;
-  sublabel?: string;
+  sublabel?: string | string[];
 }) {
+  const sublabels = sublabel
+    ? Array.isArray(sublabel)
+      ? sublabel
+      : [sublabel]
+    : [];
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -78,9 +83,11 @@ function StatCard({
       </CardHeader>
       <CardContent className="pt-0">
         <p className="text-3xl font-bold tabular-nums">{value}</p>
-        {sublabel && (
-          <p className="text-muted-foreground mt-1 text-xs">{sublabel}</p>
-        )}
+        {sublabels.map((line) => (
+          <p key={line} className="text-muted-foreground mt-1 text-xs">
+            {line}
+          </p>
+        ))}
       </CardContent>
     </Card>
   );
@@ -121,7 +128,10 @@ export default async function AdminDashboard() {
         <StatCard
           label="Milestones"
           value={compactNumber(stats.milestones.total)}
-          sublabel={`${stats.milestones.undated} undated`}
+          sublabel={[
+            `${stats.milestones.undated} undated`,
+            `${stats.milestones.rejected.toLocaleString()} rejected`,
+          ]}
         />
         <StatCard
           label="Estimates"

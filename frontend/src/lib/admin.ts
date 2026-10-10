@@ -75,6 +75,7 @@ export interface AdminStats {
   };
   milestones: {
     total: number;
+    rejected: number;
     bySource: Record<SalesSource, number>;
     undated: number;
   };
