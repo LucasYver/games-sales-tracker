@@ -436,7 +436,7 @@ export class GamesService {
   async listPopular(
     options: {
       limit?: number;
-      sort?: 'popular' | 'recent' | 'oldest';
+      sort?: 'popular' | 'recent' | 'oldest' | 'sales';
       platform?: string;
       offset?: number;
       genre?: string;
@@ -530,7 +530,26 @@ export class GamesService {
       qb.having('COALESCE(MAX(s.value), 0) >= :minReviews', { minReviews });
     }
 
-    if (sort === 'recent') {
+    if (sort === 'sales') {
+      // Latest headline snapshot per game — same source as listingUnits().
+      qb.leftJoin(
+        `(
+          SELECT DISTINCT ON ("gameId")
+            "gameId",
+            "estimatedTodayLow" AS low,
+            "estimatedTodayHigh" AS high
+          FROM estimate_snapshot
+          ORDER BY "gameId", "computedAt" DESC
+        )`,
+        'snap',
+        'snap."gameId" = g.id',
+      );
+      qb.addSelect(
+        'MAX((COALESCE(snap.low, 0) + COALESCE(snap.high, 0)) / 2.0)',
+        'salesMid',
+      );
+      qb.orderBy('salesMid', 'DESC');
+    } else if (sort === 'recent') {
       qb.orderBy('g.releaseDate', 'DESC', 'NULLS LAST');
     } else if (sort === 'oldest') {
       qb.orderBy('g.releaseDate', 'ASC', 'NULLS LAST');

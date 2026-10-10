@@ -1,0 +1,29 @@
+---
+description: Alinea Analytics / Rhys Elliot milestones are high-value — never reject or junk-flag them as low-trust estimates
+alwaysApply: true
+---
+
+# Alinea / Rhys Elliot milestones are keepers
+
+**Alinea Analytics** and **Rhys Elliot** (analyst at Alinea) are the same high-value source family. Figures attributed to either — including press echoes that only name Rhys Elliot — are **precise and precious** for the model. Treat them as keepers, not junk third-party noise.
+
+## Do
+
+- Keep Alinea- and Rhys-Elliot-attributed milestones visible (`rejectedAt` null).
+- Prefer them over vague MEDIA echos of the same claim when deduping or resolving same-day conflicts.
+- When cleaning “estimates”, exclude **both** Alinea and Rhys Elliot from soft-reject / deactivate lists.
+- Preserve when host or attribution matches any of:
+  - hosts: `alineaanalytics.com`, `alineaanalytics.substack.com`
+  - names: `Alinea`, `Alinea Analytics`, `Rhys Elliot`, `Rhys Elliott` (spelling variants)
+
+## Do not
+
+- Soft-reject or hard-delete because the note/publisher cites Alinea **or** Rhys Elliot alone.
+- Treat “Rhys Elliot” as a generic industry analyst to junk (he is Alinea).
+- Lump this family with SteamSpy / SteamDB / Sensor Tower / VG Insights / “third-party statistics”.
+- Blacklist Alinea hosts or block them in discovery/ingest.
+- Assume `isEstimate=true` means “discard” for this family — they remain useful for the algo.
+
+## Contrast (OK to treat as low-trust estimates)
+
+SteamSpy, SteamDB owners, Sensor Tower, VG Insights, generic “third-party statistics” without Alinea/Rhys Elliot — these may be flagged or soft-rejected when clearly non-declared.

@@ -1,83 +1,106 @@
 'use client';
 
-import { useRef, useState } from 'react';
 import { useFormatter } from 'next-intl';
-import type { ReviewPoint } from '@/lib/api';
 import {
-  BASELINE,
-  PLOT_LEFT,
-  PLOT_RIGHT,
-  VB_H,
-  VB_W,
-  downsample,
-  niceMax,
-  scaleX,
-  scaleY,
-} from '@/lib/chart';
+  Area,
+  AreaChart,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import type { ReviewPoint } from '@/lib/api';
+import { downsample } from '@/lib/chart';
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from '@/components/ui/chart';
 
 export type SeriesKind = 'count' | 'money';
 
+export interface ChartSeries {
+  key: string;
+  label: string;
+  points: ReviewPoint[];
+}
+
+const SERIES_COLORS = [
+  'var(--chart-1)',
+  'var(--chart-2)',
+  'var(--chart-3)',
+  'var(--chart-4)',
+  'var(--chart-5)',
+] as const;
+
+function buildChartConfig(series: ChartSeries[]): ChartConfig {
+  const config: ChartConfig = {};
+  series.forEach((s, i) => {
+    config[s.key] = {
+      label: s.label,
+      color: SERIES_COLORS[i % SERIES_COLORS.length],
+    };
+  });
+  return config;
+}
+
 /**
- * A measured series over time (reviews, concurrent players, price…). These are
- * observed on a schedule, so a continuous line is honest here — unlike sales,
- * which we only know at the dates a figure was published.
- *
- * Money series are drawn as steps: a price holds until the next observation,
- * it does not drift between two captures.
- *
- * Hovering reads out the nearest observation — its exact value and date —
- * because a shape alone never answers "how much, and when".
+ * Measured series over time (reviews, CCU, price…). Money uses step curves:
+ * a price holds until the next observation. Multiple series share one area chart.
  */
 export function SeriesChart({
-  points,
-  label,
+  series,
   ariaLabel,
   kind = 'count',
   currency = 'USD',
+  animationKey,
 }: {
-  points: ReviewPoint[];
-  /** Omit when the surrounding UI already names the series (e.g. tabs). */
-  label?: string;
+  series: ChartSeries[];
   ariaLabel: string;
   kind?: SeriesKind;
-  /** ISO code for money series; amounts are expected in cents. */
   currency?: string;
+  /** Change this to replay the enter animation (range / series switch). */
+  animationKey?: string;
 }) {
   const format = useFormatter();
-  const svgRef = useRef<SVGSVGElement>(null);
-  const [hover, setHover] = useState<number | null>(null);
 
-  const clean = downsample(
-    points
-      .map((p) => ({ t: new Date(p.capturedAt).getTime(), v: p.value }))
-      .filter((p) => Number.isFinite(p.t) && p.v > 0)
-      .sort((a, b) => a.t - b.t),
+  const prepared = series
+    .map((s) => ({
+      ...s,
+      samples: downsample(
+        s.points
+          .map((p) => ({
+            t: new Date(p.capturedAt).getTime(),
+            value: p.value,
+          }))
+          .filter((p) => Number.isFinite(p.t) && p.value > 0)
+          .sort((a, b) => a.t - b.t),
+      ),
+    }))
+    .filter((s) => s.samples.length > 1);
+
+  if (prepared.length === 0) return null;
+
+  const chartConfig = buildChartConfig(prepared);
+
+  const byT = new Map<number, Record<string, number>>();
+  for (const s of prepared) {
+    for (const p of s.samples) {
+      const row = byT.get(p.t) ?? { t: p.t };
+      row[s.key] = p.value;
+      byT.set(p.t, row);
+    }
+  }
+  const data = Array.from(byT.values()).sort(
+    (a, b) => (a.t as number) - (b.t as number),
   );
 
-  if (clean.length < 2) return null;
+  const tMin = data[0].t as number;
+  const tMax = data[data.length - 1].t as number;
+  const xDomain: [number, number] = [tMin, tMax];
 
-  const tMin = clean[0].t;
-  const tMax = clean[clean.length - 1].t;
-  const max = niceMax(Math.max(...clean.map((p) => p.v)));
-
-  const coords = clean.map((p) => ({
-    x: scaleX(p.t, tMin, tMax),
-    y: scaleY(p.v, max),
-  }));
-
-  // Steps for money, a plain polyline otherwise.
-  const line =
-    kind === 'money'
-      ? coords
-          .flatMap((c, i) =>
-            i === 0 ? [c] : [{ x: c.x, y: coords[i - 1].y }, c],
-          )
-          .map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`)
-      : coords.map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`);
-  const area = `M${line.join(' L')} L${PLOT_RIGHT},${BASELINE} L${PLOT_LEFT},${BASELINE} Z`;
-  const last = coords[coords.length - 1];
-
-  const ticks = [0, max / 2, max];
   const value = (n: number) =>
     kind === 'money'
       ? format.number(n / 100, {
@@ -86,151 +109,94 @@ export function SeriesChart({
           maximumFractionDigits: 0,
         })
       : format.number(n, { notation: 'compact', maximumFractionDigits: 1 });
+
   const exactValue = (n: number) =>
     kind === 'money'
       ? format.number(n / 100, { style: 'currency', currency })
       : format.number(n);
-  const month = (t: number) =>
-    format.dateTime(new Date(t), { year: 'numeric', month: 'short' });
+
+  const tickDate = (t: number) =>
+    format.dateTime(new Date(t), { month: 'short', day: 'numeric' });
+
   const fullDay = (t: number) =>
     format.dateTime(new Date(t), {
       year: 'numeric',
-      month: 'long',
+      month: 'short',
       day: 'numeric',
     });
 
-  /** Nearest observation to the pointer, in viewBox space. */
-  const trackPointer = (event: React.PointerEvent<SVGSVGElement>) => {
-    const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect || rect.width === 0) return;
-    const vbX = ((event.clientX - rect.left) / rect.width) * VB_W;
-    let nearest = 0;
-    for (let i = 1; i < coords.length; i++) {
-      if (Math.abs(coords[i].x - vbX) < Math.abs(coords[nearest].x - vbX)) {
-        nearest = i;
-      }
-    }
-    setHover(nearest);
-  };
-
-  const active = hover != null ? coords[hover] : null;
-  const activePoint = hover != null ? clean[hover] : null;
-  // Keep the readout inside the frame instead of letting it hang off an edge.
-  const tooltipLeft = active
-    ? Math.min(92, Math.max(8, (active.x / VB_W) * 100))
-    : 0;
-
   return (
-    <figure className="m-0 flex flex-col gap-2">
-      {label && (
-        <figcaption className="font-mono text-[0.7rem] tracking-wider text-muted-foreground uppercase">
-          {label}
-        </figcaption>
-      )}
-      <div className="relative border border-border bg-surface-alt p-2">
-        <svg
-          ref={svgRef}
-          viewBox={`0 0 ${VB_W} ${VB_H}`}
-          className="h-auto w-full"
-          role="img"
-          aria-label={ariaLabel}
-          onPointerMove={trackPointer}
-          onPointerLeave={() => setHover(null)}
-        >
-          {ticks.map((tick) => (
-            <g key={tick}>
-              <line
-                x1={PLOT_LEFT}
-                x2={PLOT_RIGHT}
-                y1={scaleY(tick, max)}
-                y2={scaleY(tick, max)}
-                stroke={tick === 0 ? 'var(--border)' : 'var(--border-soft)'}
-                strokeWidth="1"
-              />
-              <text
-                x={PLOT_LEFT - 8}
-                y={scaleY(tick, max) + 3.5}
-                textAnchor="end"
-                className="fill-muted-foreground font-mono text-[10px]"
-              >
-                {value(tick)}
-              </text>
-            </g>
-          ))}
-
-          <path d={area} fill="var(--primary)" fillOpacity="0.14" />
-          <polyline
-            points={line.join(' ')}
-            fill="none"
-            stroke="var(--primary)"
-            strokeWidth="2.2"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-          <circle
-            cx={last.x}
-            cy={last.y}
-            r="4"
-            fill="var(--primary)"
-            stroke="var(--background)"
-            strokeWidth="1.5"
-          />
-
-          {active && (
-            <g pointerEvents="none">
-              <line
-                x1={active.x}
-                x2={active.x}
-                y1={0}
-                y2={BASELINE}
-                stroke="var(--muted-foreground)"
-                strokeWidth="1"
-                strokeDasharray="3 3"
-              />
-              <circle
-                cx={active.x}
-                cy={active.y}
-                r="5"
-                fill="var(--primary)"
-                stroke="var(--background)"
-                strokeWidth="2"
-              />
-            </g>
-          )}
-
-          <text
-            x={PLOT_LEFT}
-            y={VB_H - 8}
-            textAnchor="start"
-            className="fill-text-faint font-mono text-[10px]"
-          >
-            {month(tMin)}
-          </text>
-          <text
-            x={PLOT_RIGHT}
-            y={VB_H - 8}
-            textAnchor="end"
-            className="fill-text-faint font-mono text-[10px]"
-          >
-            {month(tMax)}
-          </text>
-        </svg>
-
-        {activePoint && (
-          <div
-            aria-hidden
-            style={{ left: `${tooltipLeft}%` }}
-            className="pointer-events-none absolute top-2 -translate-x-1/2 border border-border bg-card px-2 py-1 text-center shadow-lg"
-          >
-            <div className="font-mono text-sm font-bold tabular-nums">
-              {exactValue(activePoint.v)}
-            </div>
-            <div className="font-mono text-[0.66rem] whitespace-nowrap text-muted-foreground">
-              {fullDay(activePoint.t)}
-            </div>
-          </div>
+    <ChartContainer
+      config={chartConfig}
+      className="aspect-auto h-[250px] w-full"
+      aria-label={ariaLabel}
+    >
+      <AreaChart
+        key={animationKey}
+        accessibilityLayer
+        data={data}
+        margin={{ left: 8, right: 12, top: 8, bottom: 0 }}
+      >
+        <CartesianGrid vertical={false} />
+        <XAxis
+          dataKey="t"
+          type="number"
+          domain={xDomain}
+          scale="time"
+          tickLine={false}
+          axisLine={false}
+          tickMargin={8}
+          minTickGap={32}
+          tickFormatter={tickDate}
+        />
+        <YAxis
+          tickLine={false}
+          axisLine={false}
+          width={48}
+          tickFormatter={value}
+        />
+        <ChartTooltip
+          cursor={{ strokeDasharray: '3 3' }}
+          content={
+            <ChartTooltipContent
+              labelFormatter={(_, payload) => {
+                const t = payload?.[0]?.payload?.t;
+                return typeof t === 'number' ? fullDay(t) : '';
+              }}
+              formatter={(v, name) => {
+                const label =
+                  chartConfig[String(name)]?.label ?? String(name);
+                return (
+                  <div className="flex w-full items-center justify-between gap-4 leading-none">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className="text-foreground font-mono font-medium tabular-nums">
+                      {exactValue(Number(v))}
+                    </span>
+                  </div>
+                );
+              }}
+            />
+          }
+        />
+        {prepared.length > 1 && (
+          <ChartLegend content={<ChartLegendContent />} />
         )}
-      </div>
-    </figure>
+        {prepared.map((s) => (
+          <Area
+            key={s.key}
+            dataKey={s.key}
+            type={kind === 'money' ? 'stepAfter' : 'monotone'}
+            fill={`var(--color-${s.key})`}
+            fillOpacity={prepared.length > 1 ? 0.08 : 0.18}
+            stroke={`var(--color-${s.key})`}
+            strokeWidth={2}
+            dot={false}
+            connectNulls
+            isAnimationActive
+            animationDuration={450}
+          />
+        ))}
+      </AreaChart>
+    </ChartContainer>
   );
 }

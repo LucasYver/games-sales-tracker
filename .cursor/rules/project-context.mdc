@@ -21,6 +21,7 @@ When documentation and code disagree, treat the code as the current behavior, re
 - The public headline (`estimatedToday`) is the sum of per-platform model estimates.
 - Declared milestones are cross-checks; they never floor, cap, or calibrate the model.
 - Do not reintroduce per-game calibration, `GenreProfile`, or `pureEstimatedToday`.
+- Alinea Analytics / Rhys Elliot milestones are high-value: never soft-reject or junk-clean them as low-trust estimates (see `alinea-milestones` rule).
 - Free-to-play games are not estimated.
 - Nintendo Switch and mobile estimation are out of scope.
 - Schema changes require a TypeORM migration registered explicitly in `backend/src/db/migrations/index.ts`.

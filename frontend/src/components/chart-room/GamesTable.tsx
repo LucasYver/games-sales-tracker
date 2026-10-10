@@ -1,12 +1,58 @@
 import Image from 'next/image';
 import { useFormatter, useTranslations } from 'next-intl';
-import { listingUnits, type PopularGame } from '@/lib/api';
+import {
+  listingUnits,
+  type PopularGame,
+  type SortOption,
+} from '@/lib/api';
 import { Link } from '@/i18n/navigation';
 
 function year(iso: string | null): string | null {
   if (!iso) return null;
   const y = new Date(iso).getFullYear();
   return Number.isNaN(y) ? null : String(y);
+}
+
+function SortableTh({
+  label,
+  sortKey,
+  current,
+  params,
+  className,
+}: {
+  label: string;
+  sortKey: 'sales' | 'popular';
+  current: SortOption;
+  params: Record<string, string>;
+  className?: string;
+}) {
+  const active = current === sortKey;
+  const query: Record<string, string> = { ...params };
+  delete query.page;
+  if (sortKey === 'popular') delete query.sort;
+  else query.sort = sortKey;
+
+  return (
+    <th
+      scope="col"
+      aria-sort={active ? 'descending' : undefined}
+      className={className}
+    >
+      <Link
+        href={{ pathname: '/', query }}
+        className={`inline-flex items-center gap-1 whitespace-nowrap hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
+          active ? 'text-primary' : 'text-muted-foreground'
+        }`}
+      >
+        {label}
+        {active && (
+          <span aria-hidden className="text-[0.7em]">
+            ↓
+          </span>
+        )}
+      </Link>
+    </th>
+  );
 }
 
 /**
@@ -17,9 +63,13 @@ function year(iso: string | null): string | null {
 export function GamesTable({
   games,
   offset,
+  sort,
+  params,
 }: {
   games: PopularGame[];
   offset: number;
+  sort?: SortOption;
+  params?: Record<string, string>;
 }) {
   const t = useTranslations('table');
   const tCommon = useTranslations('common');
@@ -29,43 +79,64 @@ export function GamesTable({
   const compact = (n: number) =>
     format.number(n, { notation: 'compact', maximumFractionDigits: 1 });
 
+  const th =
+    'border-b border-border px-2 py-2 font-mono text-[0.64rem] font-semibold tracking-wider uppercase';
+  const sortable = sort != null && params != null;
+
   return (
     <table className="w-full border-collapse text-sm">
       <thead>
         <tr>
           <th
             scope="col"
-            className="w-9 border-b border-border px-2 py-2 text-center font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase"
+            className={`${th} w-9 text-center text-muted-foreground`}
           >
             #
           </th>
-          <th scope="col" className="w-11 border-b border-border px-2 py-2">
+          <th scope="col" className={`${th} w-11`}>
             <span className="sr-only">{tCommon('noImage')}</span>
           </th>
-          <th
-            scope="col"
-            className="border-b border-border px-2 py-2 text-left font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase"
-          >
+          <th scope="col" className={`${th} text-left text-muted-foreground`}>
             {t('game')}
           </th>
           <th
             scope="col"
-            className="hidden border-b border-border px-2 py-2 text-left font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase sm:table-cell"
+            className={`${th} hidden text-left text-muted-foreground sm:table-cell`}
           >
             {t('platforms')}
           </th>
-          <th
-            scope="col"
-            className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase"
-          >
-            {t('sales')}
-          </th>
-          <th
-            scope="col"
-            className="hidden border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase md:table-cell"
-          >
-            {t('reviews')}
-          </th>
+          {sortable ? (
+            <SortableTh
+              label={t('sales')}
+              sortKey="sales"
+              current={sort}
+              params={params}
+              className={`${th} text-right`}
+            />
+          ) : (
+            <th
+              scope="col"
+              className={`${th} text-right text-muted-foreground`}
+            >
+              {t('sales')}
+            </th>
+          )}
+          {sortable ? (
+            <SortableTh
+              label={t('reviews')}
+              sortKey="popular"
+              current={sort}
+              params={params}
+              className={`${th} hidden text-right md:table-cell`}
+            />
+          ) : (
+            <th
+              scope="col"
+              className={`${th} hidden text-right text-muted-foreground md:table-cell`}
+            >
+              {t('reviews')}
+            </th>
+          )}
         </tr>
       </thead>
       <tbody>

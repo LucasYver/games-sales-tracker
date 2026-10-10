@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
+import { DM_Sans, IBM_Plex_Mono } from 'next/font/google';
 import Link from 'next/link';
 import {
   LayoutDashboard,
@@ -19,14 +19,15 @@ import { getAdminToken } from '@/lib/admin';
 import { ThemeToggle } from './_components/ThemeToggle';
 import '../globals.css';
 
-const sans = Inter({
+const sans = DM_Sans({
   variable: '--font-sans',
   subsets: ['latin'],
   display: 'swap',
 });
-const mono = JetBrains_Mono({
+const mono = IBM_Plex_Mono({
   variable: '--font-mono',
   subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
   display: 'swap',
 });
 

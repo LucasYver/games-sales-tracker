@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import Image from 'next/image';
+import { notFound } from 'next/navigation';
 import { useFormatter, useTranslations } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import type { Metadata } from 'next';
@@ -176,6 +177,10 @@ export default async function RankingPage({
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ sort?: string; page?: string }>;
 }) {
+  // Flip to true when re-enabling the public home-grown ranking.
+  const publicRankingEnabled = false as boolean;
+  if (!publicRankingEnabled) notFound();
+
   const { sort: sortParam, page: pageParam } = await searchParams;
   const sort: RankSort =
     sortParam === 'peak' || sortParam === 'weeks' ? sortParam : 'top';

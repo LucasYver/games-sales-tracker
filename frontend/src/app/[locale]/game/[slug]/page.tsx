@@ -157,17 +157,6 @@ function GameHeader({ game }: { game: GameDetail }) {
             </span>
           ))}
         </div>
-        {game.rank && (
-          <Link
-            href="/ranking"
-            className="mt-2 inline-block font-mono text-[0.68rem] text-muted-foreground hover:text-primary"
-          >
-            {t('rankSummary', {
-              rank: game.rank.peakRank,
-              weeks: game.rank.weeksTopDecile,
-            })}
-          </Link>
-        )}
         {game.summary && (
           <p className="mt-3 max-w-[80ch] text-xs leading-relaxed text-muted-foreground">
             {game.summary}
@@ -456,21 +445,7 @@ function PriceTab({ game }: { game: GameDetail }) {
         {game.priceHistory.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t('priceNoHistory')}</p>
         ) : (
-          <>
-            {game.priceHistory.length > 1 && (
-              <RangedChart
-                points={game.priceHistory.map((p) => ({
-                  capturedAt: p.capturedAt,
-                  value: p.final,
-                }))}
-                kind="money"
-                currency={currency}
-                label={t('priceLabel')}
-                ariaLabel={t('chartAlt', { series: t('priceLabel') })}
-              />
-            )}
-
-            <div className="overflow-x-auto">
+          <div className="overflow-x-auto">
               <table className="w-full border-collapse text-sm">
                 <thead>
                   <tr>
@@ -520,8 +495,7 @@ function PriceTab({ game }: { game: GameDetail }) {
                   ))}
                 </tbody>
               </table>
-            </div>
-          </>
+          </div>
         )}
 
         {game.regionalPrices.length > 0 && (
@@ -721,8 +695,10 @@ function GamePageContent({
 
   const asOf = asOfDate(game);
 
+  // Platform tabs on top; only storefronts the game ships on.
+  const onPlatform = new Set(game.platforms);
   const platformGroups: PlatformChartGroup[] = [
-    {
+    onPlatform.has('PC') && {
       platform: 'PC',
       label: tPlatform('PC'),
       store: 'Steam',
@@ -732,15 +708,17 @@ function GamePageContent({
           key: 'reviews',
           label: t('reviewsTitle'),
           points: game.reviewHistory,
+          cumulative: true,
         },
         {
           key: 'followers',
           label: t('followersLabel'),
           points: game.followersHistory,
+          cumulative: true,
         },
       ],
     },
-    {
+    onPlatform.has('PLAYSTATION') && {
       platform: 'PLAYSTATION',
       label: tPlatform('PLAYSTATION'),
       store: 'PlayStation Store',
@@ -749,10 +727,11 @@ function GamePageContent({
           key: 'ratings',
           label: t('ratingsLabel'),
           points: game.psRatingsHistory,
+          cumulative: true,
         },
       ],
     },
-    {
+    onPlatform.has('XBOX') && {
       platform: 'XBOX',
       label: tPlatform('XBOX'),
       store: 'Xbox Store',
@@ -761,10 +740,11 @@ function GamePageContent({
           key: 'ratings',
           label: t('ratingsLabel'),
           points: game.xboxRatingsHistory,
+          cumulative: true,
         },
       ],
     },
-    {
+    onPlatform.has('SWITCH') && {
       platform: 'SWITCH',
       label: tPlatform('SWITCH'),
       store: 'Nintendo eShop',
@@ -773,18 +753,16 @@ function GamePageContent({
           key: 'ratings',
           label: t('ratingsLabel'),
           points: game.switchRatingsHistory,
+          cumulative: true,
         },
       ],
     },
-  ]
-    .map((group) => ({
-      ...group,
-      charts: group.charts.filter((chart) => chart.points.length > 1),
-    }))
-    .filter((group) => group.charts.length > 0);
+  ].filter((group): group is PlatformChartGroup => Boolean(group));
+  const hasPlatformCharts = platformGroups.some((group) =>
+    group.charts.some((chart) => chart.points.length > 1),
+  );
 
-  // Twitch audience belongs to the game, not to a storefront, so it sits
-  // outside the platform selector rather than under an arbitrary tab.
+  // Twitch is cross-platform — outside the storefront tabs.
   const twitchChart =
     game.twitchViewersHistory.length > 1 ? game.twitchViewersHistory : null;
 
@@ -835,29 +813,27 @@ function GamePageContent({
               <>
                 <PlatformBreakdown game={game} />
 
-                {platformGroups.length > 0 && (
+                {hasPlatformCharts && (
                   <section className="border-b border-border px-4 py-5">
-                    <PlatformCharts groups={platformGroups} />
+                    <Suspense>
+                      <PlatformCharts groups={platformGroups} />
+                    </Suspense>
                   </section>
                 )}
 
                 {twitchChart && (
                   <section className="border-b border-border px-4 py-5">
-                    <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-                      <h2 className="font-mono text-[0.8rem] font-bold tracking-wider uppercase">
-                        {t('crossPlatformTitle')}
-                      </h2>
-                      <span className="font-mono text-[0.68rem] text-muted-foreground">
-                        {t('chartsSource', { store: 'Twitch' })}
-                      </span>
-                    </div>
-                    <RangedChart
-                      points={twitchChart}
-                      label={t('twitchViewersSeries')}
-                      ariaLabel={t('chartAlt', {
-                        series: t('twitchViewersSeries'),
-                      })}
-                    />
+                    <Suspense>
+                      <RangedChart
+                        points={twitchChart}
+                        label={t('twitchViewersSeries')}
+                        description={t('chartsSource', { store: 'Twitch' })}
+                        syncRangeUrl
+                        ariaLabel={t('chartAlt', {
+                          series: t('twitchViewersSeries'),
+                        })}
+                      />
+                    </Suspense>
                   </section>
                 )}
               </>

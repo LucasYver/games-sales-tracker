@@ -28,7 +28,6 @@ interface Props {
 
 const PLATFORM_ALL = '__all__';
 const GENRE_ALL = '__all__';
-const STATUS_ALL = '__all__';
 const YEAR_ANY = '__any__';
 const REVIEWS_ANY = '__any__';
 
@@ -75,7 +74,7 @@ export function GamesFilter({
     (sort && sort !== 'popular') ||
       platform ||
       genre ||
-      status ||
+      (status && status !== 'released') ||
       yearMin ||
       yearMax ||
       minReviews,
@@ -136,6 +135,7 @@ export function GamesFilter({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="popular">{t('sortPopular')}</SelectItem>
+            <SelectItem value="sales">{t('sortSales')}</SelectItem>
             <SelectItem value="recent">{t('sortRecent')}</SelectItem>
             <SelectItem value="oldest">{t('sortOldest')}</SelectItem>
           </SelectContent>
@@ -187,19 +187,17 @@ export function GamesFilter({
 
       <Field id="status-select" label={t('statusLabel')}>
         <Select
-          value={status || STATUS_ALL}
+          value={status || 'released'}
           onValueChange={(v) =>
-            update([['status', v === STATUS_ALL ? '' : v]])
+            update([['status', v === 'released' ? '' : v]])
           }
         >
           <SelectTrigger id="status-select" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={STATUS_ALL}>{t('statusAll')}</SelectItem>
             <SelectItem value="released">{t('statusReleased')}</SelectItem>
             <SelectItem value="new">{t('statusNew')}</SelectItem>
-            <SelectItem value="upcoming">{t('statusUpcoming')}</SelectItem>
           </SelectContent>
         </Select>
       </Field>
@@ -309,7 +307,7 @@ export function countActiveFilters(values: {
   let n = 0;
   if (values.platform) n++;
   if (values.genre) n++;
-  if (values.status) n++;
+  if (values.status && values.status !== 'released') n++;
   if (values.yearMin) n++;
   if (values.yearMax) n++;
   if (values.minReviews) n++;

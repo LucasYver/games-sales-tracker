@@ -10,7 +10,6 @@ import {
   type SortOption,
   type StatusOption,
 } from '@/lib/api';
-import { Link } from '@/i18n/navigation';
 import { GamesTable } from '@/components/chart-room/GamesTable';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
 import { FiltersSidebar } from '@/components/FiltersSidebar';
@@ -46,50 +45,6 @@ export async function generateMetadata({
       description: t('description'),
     },
   };
-}
-
-const SORTS: SortOption[] = ['popular', 'recent', 'oldest'];
-
-function SortNav({
-  sort,
-  params,
-}: {
-  sort: SortOption;
-  params: Record<string, string>;
-}) {
-  const t = useTranslations('filter');
-  const labels: Record<SortOption, string> = {
-    popular: t('sortPopular'),
-    recent: t('sortRecent'),
-    oldest: t('sortOldest'),
-  };
-
-  return (
-    <nav
-      aria-label={t('sortLabel')}
-      className="flex gap-1 overflow-x-auto border-b border-border bg-surface-alt px-4 py-2"
-    >
-      {SORTS.map((option) => {
-        const query = { ...params, sort: option };
-        delete (query as Record<string, string | undefined>).page;
-        const active = option === sort;
-        return (
-          <Link
-            key={option}
-            href={{ pathname: '/', query }}
-            aria-current={active ? 'page' : undefined}
-            className={`border px-2 py-1.5 font-mono text-[0.7rem] tracking-wide whitespace-nowrap uppercase ${
-              active
-                ? 'border-primary/40 bg-accent text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {labels[option]}
-          </Link>
-        );
-      })}
-    </nav>
-  );
 }
 
 function EmptyState({ children }: { children: React.ReactNode }) {
@@ -157,11 +112,15 @@ function Listing({
   page,
   pageCount,
   offset,
+  sort,
+  params,
 }: {
   popular: Awaited<ReturnType<typeof getPopularGames>>;
   page: number;
   pageCount: number;
   offset: number;
+  sort: SortOption;
+  params: Record<string, string>;
 }) {
   const t = useTranslations('home');
 
@@ -177,7 +136,12 @@ function Listing({
           {t('gamesCount', { count: popular.total })}
         </span>
       </h1>
-      <GamesTable games={popular.items} offset={offset} />
+      <GamesTable
+        games={popular.items}
+        offset={offset}
+        sort={sort}
+        params={params}
+      />
       <Suspense>
         <Pagination page={page} pageCount={pageCount} />
       </Suspense>
@@ -216,15 +180,16 @@ export default async function Home({
   } = await searchParams;
   const query = q?.trim() ?? '';
   const sort: SortOption =
-    sortParam === 'recent' || sortParam === 'oldest' ? sortParam : 'popular';
+    sortParam === 'recent' ||
+    sortParam === 'oldest' ||
+    sortParam === 'sales'
+      ? sortParam
+      : 'popular';
   const platform = platformParam ?? '';
   const genre = (genreParam ?? '').trim();
-  const status: StatusOption | '' =
-    statusParam === 'released' ||
-    statusParam === 'new' ||
-    statusParam === 'upcoming'
-      ? statusParam
-      : '';
+  // Public home never lists unreleased titles. "new" stays available as a
+  // narrower released-window filter; "upcoming" and bare "all" are ignored.
+  const status: StatusOption = statusParam === 'new' ? 'new' : 'released';
   const yearMin = sanitizeYear(yearMinParam);
   const yearMax = sanitizeYear(yearMaxParam);
   const minReviewsNum = Number(minReviewsParam);
@@ -233,7 +198,7 @@ export default async function Home({
   const page = Math.max(1, Number(pageParam) || 1);
   const offset = (page - 1) * PAGE_SIZE;
 
-  const [results, popular, genres] = await Promise.all([
+  const [rawResults, popular, genres] = await Promise.all([
     query ? searchGames(query) : Promise.resolve([]),
     query
       ? Promise.resolve({ items: [], total: 0 })
@@ -243,28 +208,33 @@ export default async function Home({
           platform: platform || undefined,
           offset,
           genre: genre || undefined,
-          status: status || undefined,
+          status,
           yearMin: yearMin ?? undefined,
           yearMax: yearMax ?? undefined,
           minReviews: minReviews || undefined,
         }),
     query ? Promise.resolve<GenreOption[]>([]) : getGenres(),
   ]);
+  const now = Date.now();
+  const results = rawResults.filter((game) => {
+    if (!game.releaseDate) return false;
+    return new Date(game.releaseDate).getTime() <= now;
+  });
 
   const pageCount = Math.ceil(popular.total / PAGE_SIZE);
-  const activeParams: Record<string, string> = {};
-  if (platform) activeParams.platform = platform;
-  if (genre) activeParams.genre = genre;
-  if (status) activeParams.status = status;
-  if (yearMin != null) activeParams.yearMin = String(yearMin);
-  if (yearMax != null) activeParams.yearMax = String(yearMax);
-  if (minReviews) activeParams.minReviews = String(minReviews);
+  const listParams: Record<string, string> = {};
+  if (sort !== 'popular') listParams.sort = sort;
+  if (platform) listParams.platform = platform;
+  if (genre) listParams.genre = genre;
+  if (status === 'new') listParams.status = status;
+  if (yearMin != null) listParams.yearMin = String(yearMin);
+  if (yearMax != null) listParams.yearMax = String(yearMax);
+  if (minReviews) listParams.minReviews = String(minReviews);
 
   return (
     <main className="flex flex-col">
       {!query && <ListingJsonLd locale={locale} items={popular.items} />}
       <SiteHeader />
-      {!query && <SortNav sort={sort} params={activeParams} />}
 
       <div className="mx-auto w-full max-w-6xl px-4 py-5">
         {query ? (
@@ -277,6 +247,8 @@ export default async function Home({
                 page={page}
                 pageCount={pageCount}
                 offset={offset}
+                sort={sort}
+                params={listParams}
               />
             </div>
             <Suspense>
@@ -284,7 +256,7 @@ export default async function Home({
                 sort={sort}
                 platform={platform}
                 genre={genre}
-                status={status}
+                status={status === 'released' ? '' : status}
                 yearMin={yearMin != null ? String(yearMin) : ''}
                 yearMax={yearMax != null ? String(yearMax) : ''}
                 minReviews={minReviews ? String(minReviews) : ''}

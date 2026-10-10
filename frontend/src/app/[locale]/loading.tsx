@@ -1,7 +1,7 @@
 /**
  * Skeleton shown during navigation (filter / page change). Mirrors the
- * listing layout — header bar, sort nav, table rows — so nothing reflows when
- * the data arrives. Only the rows pulse; the shell renders instantly.
+ * listing layout — header bar, table rows — so nothing reflows when the data
+ * arrives. Only the rows pulse; the shell renders instantly.
  */
 export default function HomeLoading() {
   return (
@@ -11,14 +11,6 @@ export default function HomeLoading() {
           <div className="h-5 w-40 animate-pulse rounded-[2px] bg-muted" />
           <div className="ml-auto h-9 w-56 animate-pulse rounded-[2px] bg-muted" />
         </div>
-      </div>
-      <div className="flex gap-1 border-b border-border bg-surface-alt px-4 py-2">
-        {[0, 1, 2].map((i) => (
-          <div
-            key={i}
-            className="h-6 w-28 animate-pulse rounded-[2px] bg-muted"
-          />
-        ))}
       </div>
 
       <div className="mx-auto w-full max-w-6xl px-4 py-5">

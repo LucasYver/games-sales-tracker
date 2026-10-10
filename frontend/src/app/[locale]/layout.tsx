@@ -1,21 +1,23 @@
 import type { Metadata } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
+import { DM_Sans, IBM_Plex_Mono } from 'next/font/google';
 import { NextIntlClientProvider, hasLocale } from 'next-intl';
 import { getMessages, getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Analytics } from '@vercel/analytics/next';
 import { routing } from '@/i18n/routing';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import '../globals.css';
 
-const sans = Inter({
+const sans = DM_Sans({
   variable: '--font-sans',
   subsets: ['latin'],
   display: 'swap',
 });
-const mono = JetBrains_Mono({
+const mono = IBM_Plex_Mono({
   variable: '--font-mono',
   subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
   display: 'swap',
 });
 
@@ -74,7 +76,7 @@ export default async function LocaleLayout({
     >
       <body className="flex min-h-full flex-col">
         <NextIntlClientProvider messages={messages}>
-          {children}
+          <TooltipProvider>{children}</TooltipProvider>
         </NextIntlClientProvider>
         <Analytics />
         <SpeedInsights />
