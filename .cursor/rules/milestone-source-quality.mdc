@@ -1,0 +1,28 @@
+---
+description: Prefer few high-trust milestone sources over broad noisy media
+alwaysApply: true
+---
+
+# Milestone source quality
+
+Prefer **fewer, high-trust sources** over coverage. A milestone that is not
+well corroborated is worse than no milestone.
+
+## Bar
+
+- Soft-reject / blacklist a host when most of its contribution is unverified,
+  modeled, chart-line, or not recoupable against OFFICIAL / primary publisher /
+  Wikipedia / Alinea.
+- Do not keep a host just because reject-rate &lt; 50% if the remaining rows are
+  mostly unverified echos or bare numbers.
+
+## Blacklisted (do not revive)
+
+- `vgchartz.com` (and subdomains, e.g. `gamrconnect.vgchartz.com`) — inactive in
+  `trusted_source`; milestones soft-rejected. Never re-activate without an
+  explicit user request.
+
+## Keepers (high value)
+
+- Publisher / official IR hosts, Wikipedia, Alinea / Rhys Elliot (see
+  `alinea-milestones` rule).

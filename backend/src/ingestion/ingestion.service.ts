@@ -111,7 +111,12 @@ export const DEFAULT_CONFIDENCE_SCORE: Record<SalesSource, number> = {
 //    citing them would create a feedback loop with our own pipeline)
 //  - user-generated content / forums / social (no editorial accountability)
 //  - data-vendor walls and review/score sites (no sales figures)
+// Shared denylist for Tavily + Perplexity backlog search.
+// Perplexity Search API accepts at most 20 domains (`slice(0, 20)` in
+// perplexity.client) — put the highest-priority blocks first.
 const TAVILY_EXCLUDED_DOMAINS = [
+  // High-priority: blacklisted / low-trust sales noise that resurfaces often
+  'vgchartz.com',
   // Sales-estimation / aggregators (similar to what we're building)
   'vginsights.com',
   'gamediscoverco.com',
