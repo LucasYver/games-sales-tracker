@@ -20,25 +20,31 @@ import { IngestionService } from '../ingestion/ingestion.service';
  *                 (i.e. tracked via the regular Steam refresh).
  *   - `all`     : every game with a `STEAM` GameSource.
  *
- * Resumable via a scope-suffixed JSON checkpoint, throttled between games (both
- * endpoints are rate-limited / scraped). Neither source is SteamDB (Cloudflare/ToS).
+ * Optional `--tier CORE|EXTENDED|all` (default all). Paid + released-before-2026
+ * only when a tier filter is set (the catalog backfill target).
+ *
+ * Resumable via a scope(+tier)-suffixed JSON checkpoint, throttled between
+ * games (both endpoints are rate-limited / scraped). Neither source is SteamDB
+ * (Cloudflare/ToS).
  *
  * Usage (from backend/):
  *   npx ts-node src/scripts/backfill-leak-history.ts \
- *     [--scope leak|non-leak|all] \
+ *     [--scope leak|non-leak|all] [--tier CORE|EXTENDED|all] \
  *     [--limit <n>] [--delay <ms>] [--reviews-only] [--ccu-only] [--no-resume] \
  *     [--max-points <n>]
  *
- * `--max-points <n>` (default 20): per metric, skip games that already have
- * more than n points — i.e. only backfill titles still lacking launch history.
- * Games are processed fewest-points-first so an interrupted run covers the
- * neediest ones first.
+ * `--max-points <n>` (default 5): per metric, skip when the game already has
+ * more than n *pre-2026* points. Cron points from 2026 alone must not count —
+ * otherwise nearly every tracked title is skipped. Games are processed
+ * fewest-pre-2026-points-first so an interrupted run covers the neediest first.
  */
 
 type Scope = 'leak' | 'non-leak' | 'all';
+type Tier = 'CORE' | 'EXTENDED' | 'all';
 
 interface CliOptions {
   scope: Scope;
+  tier: Tier;
   limit: number | null;
   delayMs: number;
   doReviews: boolean;
@@ -63,8 +69,17 @@ function parseArgs(): CliOptions {
     );
   }
 
+  const rawTier = (get('--tier') ?? 'all').toUpperCase();
+  if (!['CORE', 'EXTENDED', 'ALL'].includes(rawTier)) {
+    throw new Error(
+      `Invalid --tier "${get('--tier')}". Expected one of: CORE, EXTENDED, all.`,
+    );
+  }
+  const tier: Tier = rawTier === 'ALL' ? 'all' : (rawTier as Tier);
+
   return {
     scope: rawScope,
+    tier,
     limit: get('--limit') ? Number(get('--limit')) : null,
     delayMs: get('--delay') ? Number(get('--delay')) : 1500,
     doReviews: !ccuOnly,
@@ -76,14 +91,12 @@ function parseArgs(): CliOptions {
   };
 }
 
-// The histogram + SteamCharts backfills DELETE existing rows in the covered
-// window before reinserting one point per month. A metric is skipped once its
-// existing row count exceeds `--max-points` (default below): games with real
-// history — long-tracked daily-cron titles or an earlier backfill — are left
-// untouched, so we only spend scrape budget on the ones that still lack it.
-// Two weeks of cron already yields a handful of points, so the default is set
-// well above that (a game with ≤20 points has essentially no launch history).
-const DEFAULT_MAX_POINTS = 20;
+// Histogram + SteamCharts DELETE existing rows in the covered window before
+// reinserting one point per month. Skip a metric once its *pre-2026* row
+// count exceeds `--max-points` (default below): that means a prior launch
+// backfill already landed. Daily/hourly cron points from 2026 are ignored
+// for this gate — they are not launch history.
+const DEFAULT_MAX_POINTS = 5;
 
 const SCOPE_FILTERS: Record<Scope, string> = {
   leak: `EXISTS (
@@ -97,22 +110,46 @@ const SCOPE_FILTERS: Record<Scope, string> = {
   all: 'TRUE',
 };
 
-function buildScopeQuery(scope: Scope): string {
+function buildScopeQuery(scope: Scope, tier: Tier): string {
+  const tierFilter =
+    tier === 'all'
+      ? ''
+      : `AND g."catalogTier" = '${tier}'
+            AND g."isFree" = false
+            AND g."releaseDate" IS NOT NULL
+            AND g."releaseDate" < DATE '2026-01-01'`;
+
+  // Only count pre-2026 snapshots for the skip gate / ordering. Cron-era
+  // points must not make a title look "already backfilled".
   return `SELECT
             gs."gameId" AS "gameId",
             g.name AS name,
-            COALESCE(SUM(CASE WHEN s.metric = 'STEAM_REVIEWS' THEN 1 ELSE 0 END), 0)::int AS "reviewsCount",
-            COALESCE(SUM(CASE WHEN s.metric = 'STEAM_CONCURRENT' THEN 1 ELSE 0 END), 0)::int AS "ccuCount"
+            COALESCE(SUM(CASE
+              WHEN s.metric = 'STEAM_REVIEWS'
+               AND s."capturedAt" < DATE '2026-01-01' THEN 1
+              ELSE 0 END), 0)::int AS "reviewsCount",
+            COALESCE(SUM(CASE
+              WHEN s.metric = 'STEAM_CONCURRENT'
+               AND s."capturedAt" < DATE '2026-01-01' THEN 1
+              ELSE 0 END), 0)::int AS "ccuCount"
           FROM game_source gs
           JOIN game g ON g.id = gs."gameId"
           LEFT JOIN signal_snapshot s ON s."gameId" = gs."gameId"
+            AND s.metric IN ('STEAM_REVIEWS', 'STEAM_CONCURRENT')
           WHERE gs.source = 'STEAM'
             AND g."deletedAt" IS NULL
             AND ${SCOPE_FILTERS[scope]}
+            ${tierFilter}
           GROUP BY gs."gameId", g.name
           ORDER BY
-            (COALESCE(SUM(CASE WHEN s.metric = 'STEAM_REVIEWS' THEN 1 ELSE 0 END), 0)
-             + COALESCE(SUM(CASE WHEN s.metric = 'STEAM_CONCURRENT' THEN 1 ELSE 0 END), 0)) ASC,
+            (COALESCE(SUM(CASE
+              WHEN s.metric = 'STEAM_REVIEWS'
+               AND s."capturedAt" < DATE '2026-01-01' THEN 1
+              ELSE 0 END), 0)
+             + COALESCE(SUM(CASE
+              WHEN s.metric = 'STEAM_CONCURRENT'
+               AND s."capturedAt" < DATE '2026-01-01' THEN 1
+              ELSE 0 END), 0)) ASC,
             g.name ASC`;
 }
 
@@ -135,9 +172,11 @@ async function main(): Promise<void> {
   const opts = parseArgs();
   const logger = new Logger('BackfillLeakHistory');
 
+  const checkpointSuffix =
+    opts.tier === 'all' ? opts.scope : `${opts.scope}.${opts.tier}`;
   const checkpointPath = resolve(
     __dirname,
-    `../../../scripts/.backfill-leak-history-progress.${opts.scope}.json`,
+    `../../../scripts/.backfill-leak-history-progress.${checkpointSuffix}.json`,
   );
   const done = opts.resume ? loadCheckpoint(checkpointPath) : new Set<string>();
 
@@ -154,13 +193,19 @@ async function main(): Promise<void> {
       reviewsCount: number;
       ccuCount: number;
     }>
-  >(buildScopeQuery(opts.scope));
+  >(buildScopeQuery(opts.scope, opts.tier));
+
+  const pending = games.filter((g) => !done.has(g.gameId)).length;
+  const etaMin = Math.ceil(
+    (Math.min(pending, opts.limit ?? pending) * (opts.delayMs + 2500)) / 60000,
+  );
 
   logger.log(
-    `Scope=${opts.scope}: found ${games.length} game(s) ` +
-      `(reviews=${opts.doReviews}, ccu=${opts.doCcu}, delay=${opts.delayMs}ms` +
+    `Scope=${opts.scope} tier=${opts.tier}: found ${games.length} game(s) ` +
+      `(${pending} pending, ~${etaMin} min ETA @ delay=${opts.delayMs}ms+~2.5s work) ` +
+      `(reviews=${opts.doReviews}, ccu=${opts.doCcu}` +
       `${opts.limit ? `, limit=${opts.limit}` : ''}, ` +
-      `skip metric when existing points > ${opts.maxPoints}). ` +
+      `skip metric when pre-2026 points > ${opts.maxPoints}). ` +
       `${done.size} already done.`,
   );
 
@@ -179,11 +224,22 @@ async function main(): Promise<void> {
       if (opts.limit !== null && processed >= opts.limit) break;
       if (done.has(gameId)) continue;
 
+      const reviewsNeeded =
+        opts.doReviews && reviewsCount <= opts.maxPoints;
+      const ccuNeeded = opts.doCcu && ccuCount <= opts.maxPoints;
+      if (!reviewsNeeded && !ccuNeeded) {
+        // Already has enough pre-2026 history on every requested metric.
+        if (opts.doReviews) counts.reviewsSkipped++;
+        if (opts.doCcu) counts.ccuSkipped++;
+        done.add(gameId);
+        continue;
+      }
+
       let reviewsLabel = 'skip';
       let ccuLabel = 'skip';
 
       if (opts.doReviews) {
-        if (reviewsCount > opts.maxPoints) {
+        if (!reviewsNeeded) {
           reviewsLabel = `skip(${reviewsCount})`;
           counts.reviewsSkipped++;
         } else {
@@ -200,7 +256,7 @@ async function main(): Promise<void> {
       }
 
       if (opts.doCcu) {
-        if (ccuCount > opts.maxPoints) {
+        if (!ccuNeeded) {
           ccuLabel = `skip(${ccuCount})`;
           counts.ccuSkipped++;
         } else {

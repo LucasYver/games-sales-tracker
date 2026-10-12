@@ -81,11 +81,61 @@ export interface SteamReviewHistogram {
   buckets: SteamReviewDailyCount[];
 }
 
+// Process-wide store API gate. Steam's public store (~200 req / 5 min / IP)
+// is shared across every `appreviews` / `appdetails` call; nested per-request
+// retries were burning the budget and thrashing the same app. One gap + one
+// 429 circuit-breaker keeps the batch script moving without hammering.
+let storeGateChain: Promise<void> = Promise.resolve();
+let storeNextSlotAt = 0;
+let storeCooldownUntil = 0;
+
 @Injectable()
 export class SteamClient {
   private readonly logger = new Logger(SteamClient.name);
 
+  /** Min spacing between store JSON calls (~150 req / 5 min, under the cap). */
+  private static readonly STORE_MIN_GAP_MS = 2_000;
+  /** After a 429, freeze the gate for a full Steam window. */
+  private static readonly STORE_429_COOLDOWN_MS = 5 * 60_000;
+
   constructor(private readonly config: ConfigService) {}
+
+  private async acquireStoreSlot(): Promise<void> {
+    const run = async (): Promise<void> => {
+      const now = Date.now();
+      const waitUntil = Math.max(storeNextSlotAt, storeCooldownUntil);
+      if (waitUntil > now) {
+        const waitMs = waitUntil - now;
+        if (waitMs >= 3_000) {
+          this.logger.warn(
+            `Steam store gate: waiting ${Math.round(waitMs / 1000)}s ` +
+              (waitUntil === storeCooldownUntil ? '(429 cooldown)' : '(spacing)'),
+          );
+        }
+        await new Promise((r) => setTimeout(r, waitMs));
+      }
+      storeNextSlotAt = Date.now() + SteamClient.STORE_MIN_GAP_MS;
+    };
+
+    const previous = storeGateChain;
+    let release!: () => void;
+    storeGateChain = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      await run();
+    } finally {
+      release();
+    }
+  }
+
+  private tripStoreCooldown(ms = SteamClient.STORE_429_COOLDOWN_MS): void {
+    storeCooldownUntil = Math.max(storeCooldownUntil, Date.now() + ms);
+    this.logger.warn(
+      `Steam 429 circuit open — no store requests for ${Math.round(ms / 1000)}s`,
+    );
+  }
 
   async getAppDetails(appId: number): Promise<SteamAppDetails | null> {
     try {
@@ -461,6 +511,184 @@ export class SteamClient {
   }
 
   /**
+   * Reconstruct cumulative review totals on specific UTC calendar days without
+   * walking the full history back to launch.
+   *
+   * Strategy: page `appreviews` newest-first until every review after the
+   * oldest requested day has been seen, then for each day D compute
+   * `reportedTotal - count(reviews created after end-of-D)`. Stops early once
+   * pagination crosses that floor — typically cheap when the target days are
+   * recent, expensive only when a milestone window is near launch on a
+   * high-volume title.
+   */
+  async fetchCumulativeReviewsOnDays(
+    appId: number,
+    days: string[],
+    options: { throttleMs?: number; maxPages?: number } = {},
+  ): Promise<{
+    points: Array<{
+      day: string;
+      total: number;
+      positive: number;
+      negative: number;
+    }>;
+    pagesFetched: number;
+    reportedTotal: number;
+    reachedFloor: boolean;
+  } | null> {
+    const uniqueDays = [
+      ...new Set(
+        days.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)),
+      ),
+    ].sort();
+    if (uniqueDays.length === 0) {
+      return {
+        points: [],
+        pagesFetched: 0,
+        reportedTotal: 0,
+        reachedFloor: true,
+      };
+    }
+
+    // Spacing is enforced by the process-wide store gate; no extra per-page
+    // sleep unless the caller passes one.
+    const throttleMs = options.throttleMs ?? 0;
+    const maxPages = options.maxPages ?? 5000;
+    const oldest = uniqueDays[0];
+    const oldestEndUnix = Math.floor(
+      new Date(`${oldest}T23:59:59.999Z`).getTime() / 1000,
+    );
+    const dayEnds = new Map(
+      uniqueDays.map((d) => [
+        d,
+        Math.floor(new Date(`${d}T23:59:59.999Z`).getTime() / 1000),
+      ]),
+    );
+
+    const afterTotal = new Map(uniqueDays.map((d) => [d, 0]));
+    const afterPos = new Map(uniqueDays.map((d) => [d, 0]));
+    const afterNeg = new Map(uniqueDays.map((d) => [d, 0]));
+
+    const seenCursors = new Set<string>();
+    let cursor = '*';
+    let reportedTotal: number | null = null;
+    let reportedPos: number | null = null;
+    let reportedNeg: number | null = null;
+    let pagesFetched = 0;
+    let reachedFloor = false;
+
+    while (pagesFetched < maxPages) {
+      let data: any;
+      try {
+        data = await this.getStoreJson(
+          `https://store.steampowered.com/appreviews/${appId}`,
+          {
+            json: 1,
+            filter: 'recent',
+            language: 'all',
+            purchase_type: 'all',
+            review_type: 'all',
+            num_per_page: 100,
+            cursor,
+          },
+        );
+      } catch (error) {
+        const status = axios.isAxiosError(error)
+          ? error.response?.status
+          : undefined;
+        // Surface rate-limits to the caller so the batch script can cool down
+        // and retry instead of treating the game as permanently failed.
+        if (status === 429) throw error;
+        this.logger.warn(
+          `fetchCumulativeReviewsOnDays page ${pagesFetched + 1} failed for ${appId}: ${error}`,
+        );
+        break;
+      }
+      pagesFetched += 1;
+
+      if (pagesFetched === 1) {
+        const summary = data?.query_summary;
+        reportedTotal =
+          typeof summary?.total_reviews === 'number'
+            ? summary.total_reviews
+            : null;
+        reportedPos =
+          typeof summary?.total_positive === 'number'
+            ? summary.total_positive
+            : null;
+        reportedNeg =
+          typeof summary?.total_negative === 'number'
+            ? summary.total_negative
+            : null;
+        if (reportedTotal === null || reportedTotal < 0) return null;
+      }
+
+      const reviews = Array.isArray(data?.reviews) ? data.reviews : [];
+      if (reviews.length === 0) {
+        reachedFloor = true;
+        break;
+      }
+
+      let pageMinTs = Number.POSITIVE_INFINITY;
+      for (const review of reviews as Array<{
+        timestamp_created?: unknown;
+        voted_up?: unknown;
+      }>) {
+        const ts = Number(review.timestamp_created);
+        if (!Number.isFinite(ts) || ts <= 0) continue;
+        if (ts < pageMinTs) pageMinTs = ts;
+        const votedUp = review.voted_up === true;
+        for (const d of uniqueDays) {
+          if (ts > (dayEnds.get(d) as number)) {
+            afterTotal.set(d, (afterTotal.get(d) as number) + 1);
+            if (votedUp) afterPos.set(d, (afterPos.get(d) as number) + 1);
+            else afterNeg.set(d, (afterNeg.get(d) as number) + 1);
+          }
+        }
+      }
+
+      // Newest-first: once a page reaches at/before the oldest day end, every
+      // later page is older still — we have counted all post-window reviews.
+      if (pageMinTs <= oldestEndUnix) {
+        reachedFloor = true;
+        break;
+      }
+
+      const nextCursor = typeof data?.cursor === 'string' ? data.cursor : null;
+      if (!nextCursor || seenCursors.has(nextCursor)) {
+        reachedFloor = true;
+        break;
+      }
+      seenCursors.add(nextCursor);
+      cursor = nextCursor;
+
+      if (throttleMs > 0) await new Promise((r) => setTimeout(r, throttleMs));
+    }
+
+    if (reportedTotal === null) return null;
+
+    const livePos = reportedPos ?? 0;
+    const liveNeg = reportedNeg ?? Math.max(0, reportedTotal - livePos);
+
+    const points = uniqueDays.map((day) => {
+      const total = Math.max(
+        0,
+        reportedTotal - (afterTotal.get(day) as number),
+      );
+      const positive = Math.max(0, livePos - (afterPos.get(day) as number));
+      const negative = Math.max(0, liveNeg - (afterNeg.get(day) as number));
+      return { day, total, positive, negative };
+    });
+
+    return {
+      points,
+      pagesFetched,
+      reportedTotal,
+      reachedFloor,
+    };
+  }
+
+  /**
    * Sample reviewer lifetime playtime from the public `appreviews` endpoint and
    * return the median/mean (in minutes) over the sample. Each review carries an
    * `author.playtime_forever` field (minutes played in this app, as of the
@@ -693,31 +921,45 @@ export class SteamClient {
   }
 
   /**
-   * GET a Steam store endpoint with a small retry on HTTP 429. The store
-   * `appdetails` / `appreviews` APIs are aggressively rate-limited (~200
-   * requests / 5 min per IP); on 429 we back off and retry a couple of times
-   * before letting the error propagate to the caller's try/catch.
+   * GET a Steam store endpoint through the process-wide rate gate.
+   * On 429: open a 5‑minute circuit, wait once, retry once, then throw.
+   * Avoids the old nested 15/30/60/120s loops that kept burning the same app.
    */
   private async getStoreJson(
     url: string,
     params: Record<string, unknown>,
   ): Promise<any> {
-    const maxAttempts = 3;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      await this.acquireStoreSlot();
       try {
-        const { data } = await axios.get(url, { params, timeout: 15000 });
+        const { data } = await axios.get(url, { params, timeout: 20000 });
         return data;
       } catch (error) {
         const status = axios.isAxiosError(error)
           ? error.response?.status
           : undefined;
-        if (status === 429 && attempt < maxAttempts) {
-          const backoffMs = attempt * 5000;
+        if (status === 429 && attempt < 2) {
+          const retryAfterRaw = axios.isAxiosError(error)
+            ? Number(error.response?.headers?.['retry-after'])
+            : NaN;
+          const cooldownMs =
+            Number.isFinite(retryAfterRaw) && retryAfterRaw > 0
+              ? Math.min(
+                  10 * 60_000,
+                  Math.max(
+                    SteamClient.STORE_429_COOLDOWN_MS,
+                    retryAfterRaw * 1000,
+                  ),
+                )
+              : SteamClient.STORE_429_COOLDOWN_MS;
           this.logger.warn(
-            `Steam 429 on ${url} (attempt ${attempt}/${maxAttempts}); retrying in ${backoffMs}ms`,
+            `Steam 429 on ${url} — opening ${Math.round(cooldownMs / 1000)}s circuit, then one retry`,
           );
-          await new Promise((r) => setTimeout(r, backoffMs));
+          this.tripStoreCooldown(cooldownMs);
           continue;
+        }
+        if (status === 429) {
+          this.tripStoreCooldown(SteamClient.STORE_429_COOLDOWN_MS);
         }
         throw error;
       }

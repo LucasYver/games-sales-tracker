@@ -2308,6 +2308,13 @@ export class IngestionService {
   }
 
   /**
+   * Exclusive end of the historical reviews/CCU backfill overwrite window.
+   * Snapshots on/after this UTC day (cron-era data) are left untouched —
+   * backfills only write launch→Aug 2026 and delete inside that range.
+   */
+  private static readonly HISTORY_BACKFILL_END_EXCLUSIVE = '2026-09-01';
+
+  /**
    * Reconstruct and persist a game's daily review history straight from
    * Steam's public `appreviews` API — the API-only equivalent of importing a
    * SteamDB review CSV. Paginates every individual review, aggregates new
@@ -2359,13 +2366,21 @@ export class IngestionService {
 
     // Accumulate over every day (incl. pre-release) so the first persisted day
     // carries the full cumulative total, but only emit snapshots from release
-    // onward to avoid polluting the week-1 lifecycle window.
+    // onward to avoid polluting the week-1 lifecycle window. Stop before
+    // HISTORY_BACKFILL_END_EXCLUSIVE so cron-era rows stay intact.
+    const historyEndExclusive =
+      IngestionService.HISTORY_BACKFILL_END_EXCLUSIVE;
     let cumulativePositive = 0;
     let cumulativeNegative = 0;
     let skippedPreRelease = 0;
+    let truncatedAtCap = false;
     const rows: SignalSnapshot[] = [];
     const emittedDays: string[] = [];
     for (const entry of history.daily) {
+      if (entry.day >= historyEndExclusive) {
+        truncatedAtCap = true;
+        break;
+      }
       cumulativePositive += entry.positive;
       cumulativeNegative += entry.negative;
       if (releaseDayKey && entry.day < releaseDayKey) {
@@ -2393,16 +2408,20 @@ export class IngestionService {
       );
     }
 
-    const anchoredLatest = await this.anchorReviewSeriesToLive(rows, appId);
+    // Don't pin the truncated series to today's live total — that would invent
+    // post-cap growth onto the last historical point.
+    const latestTotal = truncatedAtCap
+      ? rows[rows.length - 1].value
+      : await this.anchorReviewSeriesToLive(rows, appId);
 
     const firstDay = new Date(`${emittedDays[0]}T00:00:00.000Z`);
-    const lastDay = new Date(
-      `${emittedDays[emittedDays.length - 1]}T00:00:00.000Z`,
+    // Exclusive cap: delete through the last instant before 2026-09-01.
+    const lastDayEnd = new Date(
+      new Date(`${historyEndExclusive}T00:00:00.000Z`).getTime() - 1,
     );
-    const lastDayEnd = new Date(lastDay.getTime() + 24 * 3600 * 1000 - 1);
 
     // Upsert at day granularity: drop existing STEAM_REVIEWS rows in the
-    // covered range (incl. live-poll rows) then insert one per day.
+    // covered range then insert; leave cron rows on/after the cap alone.
     await this.signals.delete({
       gameId,
       metric: SignalMetric.STEAM_REVIEWS,
@@ -2412,7 +2431,6 @@ export class IngestionService {
 
     const latestDay = emittedDays[emittedDays.length - 1];
     const rawLatest = cumulativePositive + cumulativeNegative;
-    const latestTotal = anchoredLatest;
     const latestRating = rawLatest > 0 ? cumulativePositive / rawLatest : null;
 
     this.logger.log(
@@ -2505,12 +2523,19 @@ export class IngestionService {
         ? hist.buckets
         : this.aggregateBucketsToMonthly(hist.buckets);
 
+    const historyEndExclusive =
+      IngestionService.HISTORY_BACKFILL_END_EXCLUSIVE;
     let cumulativePositive = 0;
     let cumulativeNegative = 0;
     let skippedPreRelease = 0;
+    let truncatedAtCap = false;
     const rows: SignalSnapshot[] = [];
     const emittedDays: string[] = [];
     for (const bucket of processedBuckets) {
+      if (bucket.day >= historyEndExclusive) {
+        truncatedAtCap = true;
+        break;
+      }
       cumulativePositive += bucket.positive;
       cumulativeNegative += bucket.negative;
       if (releaseMonthStart && bucket.day < releaseMonthStart) {
@@ -2545,13 +2570,14 @@ export class IngestionService {
       };
     }
 
-    const anchoredLatest = await this.anchorReviewSeriesToLive(rows, appId);
+    const latestTotal = truncatedAtCap
+      ? rows[rows.length - 1].value
+      : await this.anchorReviewSeriesToLive(rows, appId);
 
     const firstDay = new Date(`${emittedDays[0]}T00:00:00.000Z`);
-    const lastDay = new Date(
-      `${emittedDays[emittedDays.length - 1]}T00:00:00.000Z`,
+    const lastDayEnd = new Date(
+      new Date(`${historyEndExclusive}T00:00:00.000Z`).getTime() - 1,
     );
-    const lastDayEnd = new Date(lastDay.getTime() + 24 * 3600 * 1000 - 1);
 
     await this.signals.delete({
       gameId,
@@ -2561,13 +2587,13 @@ export class IngestionService {
     await this.signals.save(rows, { chunk: 500 });
 
     const rawLatest = cumulativePositive + cumulativeNegative;
-    const latestTotal = anchoredLatest;
     const latestRating = rawLatest > 0 ? cumulativePositive / rawLatest : null;
 
     this.logger.log(
       `[reviews-histogram] "${game.name}" (${hist.rollupType}→month) — ` +
         `${rows.length} months ` +
-        `(${emittedDays[0]} → ${emittedDays[emittedDays.length - 1]}), ` +
+        `(${emittedDays[0]} → ${emittedDays[emittedDays.length - 1]}` +
+        `, cap < ${historyEndExclusive}), ` +
         `latest ${latestTotal.toLocaleString()} reviews` +
         (latestRating !== null
           ? ` (${(latestRating * 100).toFixed(1)}% positive)`
@@ -2585,6 +2611,201 @@ export class IngestionService {
       rangeEnd: emittedDays[emittedDays.length - 1],
       latestTotal,
       latestRating,
+    };
+  }
+
+  /**
+   * Densify `STEAM_REVIEWS` around dated milestones via Steam `appreviews`.
+   *
+   * For each non-engagement milestone with a `reportedAt`, target the UTC days
+   * `[reportedAt - windowDays … reportedAt + windowDays]`. Days that already
+   * have any `STEAM_REVIEWS` row (same UTC date) are left untouched — no
+   * delete, insert-only. Requires at least `minMilestones` such milestones.
+   *
+   * Uses {@link SteamClient.fetchCumulativeReviewsOnDays} (newest-first
+   * pagination until the oldest target day) so typical mid/late-life
+   * milestones stay cheap compared to a full history walk.
+   */
+  async backfillReviewsAroundMilestones(
+    gameId: string,
+    options: { windowDays?: number; minMilestones?: number } = {},
+  ): Promise<{
+    milestoneDays: number;
+    targetDays: number;
+    skippedExisting: number;
+    imported: number;
+    pagesFetched: number;
+    reachedFloor: boolean;
+  }> {
+    const windowDays = options.windowDays ?? 5;
+    const minMilestones = options.minMilestones ?? 3;
+
+    const game = await this.games.findOne({ where: { id: gameId } });
+    if (!game) {
+      throw new NotFoundException(`Game ${gameId} not found.`);
+    }
+
+    const steamSource = await this.gameSources.findOne({
+      where: { gameId, source: SourceType.STEAM },
+    });
+    const appId = steamSource ? Number(steamSource.externalId) : NaN;
+    if (!Number.isFinite(appId)) {
+      throw new BadRequestException(
+        `Game "${game.name}" is not linked to a Steam app.`,
+      );
+    }
+
+    const milestones = await this.milestones.find({
+      where: {
+        gameId,
+        rejectedAt: IsNull(),
+        isEngagement: false,
+        reportedAt: Not(IsNull()),
+      },
+    });
+    if (milestones.length < minMilestones) {
+      throw new BadRequestException(
+        `Game "${game.name}" has ${milestones.length} dated milestone(s); ` +
+          `need ≥ ${minMilestones}.`,
+      );
+    }
+
+    const todayUtc = new Date().toISOString().slice(0, 10);
+    const releaseDay = game.releaseDate
+      ? game.releaseDate.toISOString().slice(0, 10)
+      : null;
+
+    const milestoneDaySet = new Set<string>();
+    for (const m of milestones) {
+      if (!m.reportedAt) continue;
+      milestoneDaySet.add(m.reportedAt.toISOString().slice(0, 10));
+    }
+
+    const targetDaySet = new Set<string>();
+    for (const day of milestoneDaySet) {
+      const base = new Date(`${day}T00:00:00.000Z`);
+      for (let off = -windowDays; off <= windowDays; off++) {
+        const d = new Date(base.getTime() + off * 24 * 3600 * 1000);
+        const key = d.toISOString().slice(0, 10);
+        if (key > todayUtc) continue;
+        if (releaseDay && key < releaseDay) continue;
+        targetDaySet.add(key);
+      }
+    }
+    const targetDays = [...targetDaySet].sort();
+
+    if (targetDays.length === 0) {
+      return {
+        milestoneDays: milestoneDaySet.size,
+        targetDays: 0,
+        skippedExisting: 0,
+        imported: 0,
+        pagesFetched: 0,
+        reachedFloor: true,
+      };
+    }
+
+    const existing = await this.signals
+      .createQueryBuilder('s')
+      .select(`DISTINCT (s."capturedAt" AT TIME ZONE 'UTC')::date`, 'day')
+      .where('s."gameId" = :gameId', { gameId })
+      .andWhere('s.metric = :metric', { metric: SignalMetric.STEAM_REVIEWS })
+      .andWhere(
+        `(s."capturedAt" AT TIME ZONE 'UTC')::date IN (:...days)`,
+        { days: targetDays },
+      )
+      .getRawMany<{ day: string | Date }>();
+
+    const existingDays = new Set(
+      existing.map((r) =>
+        typeof r.day === 'string'
+          ? r.day.slice(0, 10)
+          : r.day.toISOString().slice(0, 10),
+      ),
+    );
+    const missingDays = targetDays.filter((d) => !existingDays.has(d));
+    const skippedExisting = targetDays.length - missingDays.length;
+
+    if (missingDays.length === 0) {
+      return {
+        milestoneDays: milestoneDaySet.size,
+        targetDays: targetDays.length,
+        skippedExisting,
+        imported: 0,
+        pagesFetched: 0,
+        reachedFloor: true,
+      };
+    }
+
+    let fetched: Awaited<
+      ReturnType<SteamClient['fetchCumulativeReviewsOnDays']>
+    >;
+    try {
+      fetched = await this.steam.fetchCumulativeReviewsOnDays(
+        appId,
+        missingDays,
+      );
+    } catch (error) {
+      // Preserve rate-limit errors so the batch script can cool down + retry
+      // without checkpointing the game as done.
+      const status =
+        error &&
+        typeof error === 'object' &&
+        'response' in error &&
+        (error as { response?: { status?: number } }).response?.status;
+      if (status === 429) {
+        throw new BadRequestException(
+          `Steam rate-limited (429) for app ${appId}; retry after cooldown.`,
+        );
+      }
+      throw error;
+    }
+    if (!fetched) {
+      throw new BadRequestException(
+        `Steam appreviews returned no usable totals for app ${appId}.`,
+      );
+    }
+    if (!fetched.reachedFloor) {
+      this.logger.warn(
+        `[reviews-milestone-window] "${game.name}" hit page cap before ` +
+          `reaching ${missingDays[0]} — imported values may undercount.`,
+      );
+    }
+
+    const rows = fetched.points
+      .filter((p) => missingDays.includes(p.day) && p.total > 0)
+      .map((p) => {
+        const denom = p.positive + p.negative;
+        return this.signals.create({
+          gameId,
+          source: SourceType.STEAM,
+          metric: SignalMetric.STEAM_REVIEWS,
+          value: p.total,
+          averageRating: denom > 0 ? p.positive / denom : null,
+          capturedAt: new Date(`${p.day}T00:00:00.000Z`),
+          synthetic: false,
+        });
+      });
+
+    if (rows.length > 0) {
+      await this.signals.save(rows, { chunk: 500 });
+    }
+
+    this.logger.log(
+      `[reviews-milestone-window] "${game.name}" — ` +
+        `milestones=${milestoneDaySet.size} targets=${targetDays.length} ` +
+        `existing=${skippedExisting} imported=${rows.length} ` +
+        `pages=${fetched.pagesFetched}` +
+        (fetched.reachedFloor ? '' : ' (page-cap)'),
+    );
+
+    return {
+      milestoneDays: milestoneDaySet.size,
+      targetDays: targetDays.length,
+      skippedExisting,
+      imported: rows.length,
+      pagesFetched: fetched.pagesFetched,
+      reachedFloor: fetched.reachedFloor,
     };
   }
 
@@ -2628,10 +2849,13 @@ export class IngestionService {
     const releaseMonthStart = game.releaseDate
       ? `${game.releaseDate.toISOString().slice(0, 7)}-01`
       : null;
+    const historyEndExclusive =
+      IngestionService.HISTORY_BACKFILL_END_EXCLUSIVE;
 
     const usable = months.filter(
       (m) =>
         m.peakPlayers > 0 &&
+        m.monthStart < historyEndExclusive &&
         (releaseMonthStart === null || m.monthStart >= releaseMonthStart),
     );
     if (usable.length === 0) {
@@ -2641,21 +2865,9 @@ export class IngestionService {
     }
 
     const firstMonth = new Date(`${usable[0].monthStart}T00:00:00.000Z`);
-    const lastMonth = new Date(
-      `${usable[usable.length - 1].monthStart}T00:00:00.000Z`,
-    );
-    // Cover the whole last month so a previous monthly row for it is replaced,
-    // but stop short of the current (skipped) month's live-poll rows.
+    // Exclusive cap at début septembre: replace through end of August only.
     const lastMonthEnd = new Date(
-      Date.UTC(
-        lastMonth.getUTCFullYear(),
-        lastMonth.getUTCMonth() + 1,
-        0,
-        23,
-        59,
-        59,
-        999,
-      ),
+      new Date(`${historyEndExclusive}T00:00:00.000Z`).getTime() - 1,
     );
 
     await this.signals.delete({
@@ -2702,7 +2914,8 @@ export class IngestionService {
 
     this.logger.log(
       `[ccu-steamcharts] "${game.name}" — ${usable.length} months ` +
-        `(${usable[0].monthStart} → ${usable[usable.length - 1].monthStart}), ` +
+        `(${usable[0].monthStart} → ${usable[usable.length - 1].monthStart}` +
+        `, cap < ${historyEndExclusive}), ` +
         `peak ${peakValue.toLocaleString()} at ${peakMonth}`,
     );
 

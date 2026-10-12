@@ -532,6 +532,8 @@ export class GamesService {
 
     if (sort === 'sales') {
       // Latest headline snapshot per game — same source as listingUnits().
+      // Alias stays lowercase: TypeORM emits ORDER BY <alias> unquoted, and
+      // Postgres folds that to lower case, so a camelCase alias never matches.
       qb.leftJoin(
         `(
           SELECT DISTINCT ON ("gameId")
@@ -546,9 +548,9 @@ export class GamesService {
       );
       qb.addSelect(
         'MAX((COALESCE(snap.low, 0) + COALESCE(snap.high, 0)) / 2.0)',
-        'salesMid',
+        'sales_mid',
       );
-      qb.orderBy('salesMid', 'DESC');
+      qb.orderBy('sales_mid', 'DESC');
     } else if (sort === 'recent') {
       qb.orderBy('g.releaseDate', 'DESC', 'NULLS LAST');
     } else if (sort === 'oldest') {
