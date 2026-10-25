@@ -6,6 +6,12 @@ import { ExternalLink, Pencil } from 'lucide-react';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type { AdminMilestone } from '@/lib/admin';
 import { DeleteButton } from './DeleteButton';
 import { EditMilestoneForm } from './EditMilestoneForm';
@@ -18,6 +24,38 @@ function formatDate(iso: string | null): string {
     month: 'short',
     day: 'numeric',
   });
+}
+
+/**
+ * Truncated note with the full quote in a tooltip, opened by a long hover or
+ * a click. Radix closes tooltips on pointer down/click, so both handlers
+ * preventDefault. The click only opens (never toggles): after a long hover
+ * the tooltip is already open and a toggle would close it.
+ */
+function NoteCell({ note }: { note: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <TooltipProvider delayDuration={500}>
+      <Tooltip open={open} onOpenChange={setOpen}>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onPointerDown={(e) => e.preventDefault()}
+            onClick={(e) => {
+              e.preventDefault();
+              setOpen(true);
+            }}
+            className="block max-w-[220px] cursor-pointer truncate text-left"
+          >
+            {note}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-md break-words whitespace-pre-wrap">
+          {note}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 function hostnameOf(url: string): string {
@@ -98,10 +136,12 @@ export function MilestoneRow({
           )}
         </TableCell>
         <TableCell
-          className="text-muted-foreground truncate text-sm"
+          className="text-muted-foreground text-sm"
           title={m.publisher ?? undefined}
         >
-          {m.publisher ?? '—'}
+          <span className="block max-w-[160px] truncate">
+            {m.publisher ?? '—'}
+          </span>
         </TableCell>
         <TableCell className="text-right tabular-nums">
           {m.units.toLocaleString()}
@@ -112,11 +152,8 @@ export function MilestoneRow({
         <TableCell className="text-muted-foreground text-sm">
           {formatDate(m.capturedAt)}
         </TableCell>
-        <TableCell
-          className="text-muted-foreground truncate text-xs"
-          title={m.note ?? undefined}
-        >
-          {m.note ?? '—'}
+        <TableCell className="text-muted-foreground text-xs">
+          {m.note ? <NoteCell note={m.note} /> : '—'}
         </TableCell>
         <TableCell className="text-right">
           <div className="flex justify-end gap-1">
