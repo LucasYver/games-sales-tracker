@@ -5,18 +5,28 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import type { Metadata } from 'next';
 import { getRankedGames, listingUnits, type RankSort } from '@/lib/api';
+import { routing } from '@/i18n/routing';
 import { Link } from '@/i18n/navigation';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
 import { Pagination } from '@/components/Pagination';
 
 const PAGE_SIZE = 50;
 const SORTS: RankSort[] = ['top', 'peak', 'weeks'];
+// Flip to true when re-enabling the public home-grown ranking.
+const publicRankingEnabled = false as boolean;
 
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
+  if (!publicRankingEnabled) {
+    return {
+      title: 'Not Found',
+      robots: { index: false, follow: false },
+    };
+  }
+
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: 'ranking' });
 
@@ -25,7 +35,11 @@ export async function generateMetadata({
     description: t('metaDescription'),
     alternates: {
       canonical: `/${locale}/ranking`,
-      languages: { en: '/en/ranking', fr: '/fr/ranking' },
+      languages: {
+        en: '/en/ranking',
+        fr: '/fr/ranking',
+        'x-default': `/${routing.defaultLocale}/ranking`,
+      },
     },
   };
 }
@@ -177,8 +191,6 @@ export default async function RankingPage({
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ sort?: string; page?: string }>;
 }) {
-  // Flip to true when re-enabling the public home-grown ranking.
-  const publicRankingEnabled = false as boolean;
   if (!publicRankingEnabled) notFound();
 
   const { sort: sortParam, page: pageParam } = await searchParams;

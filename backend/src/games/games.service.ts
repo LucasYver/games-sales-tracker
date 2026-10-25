@@ -632,6 +632,37 @@ export class GamesService {
     return rows.map((r) => ({ name: r.name, count: Number(r.count) }));
   }
 
+  /** Slug + last estimate (else release date) for the public sitemap. */
+  async listSitemap(): Promise<{
+    items: { slug: string; lastModified: string | null }[];
+  }> {
+    const rows = await this.games
+      .createQueryBuilder('g')
+      .leftJoin(
+        `(
+          SELECT "gameId", MAX("computedAt") AS "computedAt"
+          FROM estimate_snapshot
+          GROUP BY "gameId"
+        )`,
+        'snap',
+        'snap."gameId" = g.id',
+      )
+      .select('g.slug', 'slug')
+      .addSelect('COALESCE(snap."computedAt", g.releaseDate)', 'lastModified')
+      .getRawMany<{ slug: string; lastModified: Date | string | null }>();
+
+    return {
+      items: rows.map((r) => {
+        if (!r.lastModified) return { slug: r.slug, lastModified: null };
+        const at = new Date(r.lastModified);
+        return {
+          slug: r.slug,
+          lastModified: Number.isNaN(at.getTime()) ? null : at.toISOString(),
+        };
+      }),
+    };
+  }
+
   private parseGenres(value: string | null): string[] {
     if (!value) return [];
     return value

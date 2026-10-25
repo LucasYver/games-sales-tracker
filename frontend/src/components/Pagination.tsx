@@ -1,9 +1,8 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { usePathname, useRouter } from '@/i18n/navigation';
+import { Link, usePathname } from '@/i18n/navigation';
 import { useTranslations } from 'next-intl';
-import { useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -13,23 +12,20 @@ interface Props {
 }
 
 export function Pagination({ page, pageCount }: Props) {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const t = useTranslations('pagination');
 
-  const goTo = useCallback(
-    (target: number) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (target <= 1) {
-        params.delete('page');
-      } else {
-        params.set('page', String(target));
-      }
-      router.push(`${pathname}?${params.toString()}` as never);
-    },
-    [router, pathname, searchParams],
-  );
+  function hrefFor(target: number) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (target <= 1) {
+      params.delete('page');
+    } else {
+      params.set('page', String(target));
+    }
+    const query = Object.fromEntries(params.entries());
+    return { pathname, query };
+  }
 
   if (pageCount <= 1) return null;
 
@@ -43,20 +39,27 @@ export function Pagination({ page, pageCount }: Props) {
       className="flex items-center justify-center gap-1.5 pt-4"
       aria-label={t('nav')}
     >
-      <Button
-        variant="outline"
-        size="icon"
-        onClick={() => goTo(page - 1)}
-        disabled={page <= 1}
-        aria-label={t('previous')}
-      >
-        <ChevronLeft aria-hidden="true" className="size-4" />
-      </Button>
+      {page <= 1 ? (
+        <Button
+          variant="outline"
+          size="icon"
+          disabled
+          aria-label={t('previous')}
+        >
+          <ChevronLeft aria-hidden="true" className="size-4" />
+        </Button>
+      ) : (
+        <Button asChild variant="outline" size="icon">
+          <Link href={hrefFor(page - 1)} aria-label={t('previous')}>
+            <ChevronLeft aria-hidden="true" className="size-4" />
+          </Link>
+        </Button>
+      )}
 
       {pages[0] > 1 && (
         <>
-          <Button variant="outline" size="sm" onClick={() => goTo(1)}>
-            1
+          <Button asChild variant="outline" size="sm">
+            <Link href={hrefFor(1)}>1</Link>
           </Button>
           {pages[0] > 2 && (
             <span className="text-muted-foreground px-1" aria-hidden>
@@ -69,13 +72,17 @@ export function Pagination({ page, pageCount }: Props) {
       {pages.map((p) => (
         <Button
           key={p}
+          asChild
           variant={p === page ? 'default' : 'outline'}
           size="sm"
-          onClick={() => goTo(p)}
-          aria-current={p === page ? 'page' : undefined}
-          aria-label={`Page ${p}`}
         >
-          {p}
+          <Link
+            href={hrefFor(p)}
+            aria-current={p === page ? 'page' : undefined}
+            aria-label={`Page ${p}`}
+          >
+            {p}
+          </Link>
         </Button>
       ))}
 
@@ -86,21 +93,23 @@ export function Pagination({ page, pageCount }: Props) {
               …
             </span>
           )}
-          <Button variant="outline" size="sm" onClick={() => goTo(pageCount)}>
-            {pageCount}
+          <Button asChild variant="outline" size="sm">
+            <Link href={hrefFor(pageCount)}>{pageCount}</Link>
           </Button>
         </>
       )}
 
-      <Button
-        variant="outline"
-        size="icon"
-        onClick={() => goTo(page + 1)}
-        disabled={page >= pageCount}
-        aria-label={t('next')}
-      >
-        <ChevronRight aria-hidden="true" className="size-4" />
-      </Button>
+      {page >= pageCount ? (
+        <Button variant="outline" size="icon" disabled aria-label={t('next')}>
+          <ChevronRight aria-hidden="true" className="size-4" />
+        </Button>
+      ) : (
+        <Button asChild variant="outline" size="icon">
+          <Link href={hrefFor(page + 1)} aria-label={t('next')}>
+            <ChevronRight aria-hidden="true" className="size-4" />
+          </Link>
+        </Button>
+      )}
     </nav>
   );
 }

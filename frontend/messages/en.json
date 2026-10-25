@@ -32,12 +32,18 @@
   },
   "homeMeta": {
     "description": "Video game sales, figure by figure: PC, PlayStation, Xbox and Switch, ranked and updated daily.",
-    "title": "Video game sales"
+    "title": "Video game sales",
+    "titlePage": "Video game sales — Page {page}"
   },
   "gamePageMeta": {
     "description": "Sales for {name}: current figure, per-platform split and store review trends.",
+    "descriptionFree": "{name} is free-to-play, so it has no copies-sold estimate. Player and review trends are updated daily.",
+    "descriptionUnits": "Estimated {units} copies of {name} sold ({platforms}) as of {date}. Per-platform split and store review trends.",
+    "descriptionUnitsNoDate": "Estimated {units} copies of {name} sold ({platforms}). Per-platform split and store review trends.",
     "title": "{name} ({year}) — Sales",
-    "titleNoYear": "{name} — Sales"
+    "titleFree": "{name} — Free-to-play",
+    "titleNoYear": "{name} — Sales",
+    "titleUnits": "{name} sales — {units} copies"
   },
   "home": {
     "gamesCount": "{count, number} games",
@@ -114,6 +120,9 @@
     "followersSeriesAlt": "Steam followers of {name} over time.",
     "freeToPlayNote": "This game is free-to-play, so it has no sales estimate.",
     "genres": "Genres",
+    "heading": "{name} sales",
+    "headingFree": "{name}",
+    "headingUnits": "{units} copies",
     "interestTitle": "Audience signals",
     "noData": "No sales figure yet for this game.",
     "peakCcuHint": "Steam concurrent players · {date}",

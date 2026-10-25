@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { useTranslations } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import type { Metadata } from 'next';
+import { routing } from '@/i18n/routing';
 import {
   getGenres,
   getPopularGames,
@@ -17,32 +18,65 @@ import { Pagination } from '@/components/Pagination';
 
 const PAGE_SIZE = 50;
 
+type HomeSearchParams = {
+  q?: string;
+  sort?: string;
+  platform?: string;
+  genre?: string;
+  status?: string;
+  yearMin?: string;
+  yearMax?: string;
+  minReviews?: string;
+  page?: string;
+};
+
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<HomeSearchParams>;
 }): Promise<Metadata> {
   const { locale } = await params;
+  const sp = await searchParams;
   const t = await getTranslations({ locale, namespace: 'homeMeta' });
+  const page = Math.max(1, Number(sp.page) || 1);
+  const filtered = hasListingFilters(sp);
+  const paginated = !filtered && page >= 2;
+  const title = paginated ? t('titlePage', { page }) : t('title');
+  const description = t('description');
+  const canonical = paginated ? `/${locale}?page=${page}` : `/${locale}`;
+  const languages = paginated
+    ? {
+        en: `/en?page=${page}`,
+        fr: `/fr?page=${page}`,
+        'x-default': `/${routing.defaultLocale}?page=${page}`,
+      }
+    : {
+        en: '/en',
+        fr: '/fr',
+        'x-default': `/${routing.defaultLocale}`,
+      };
 
   return {
-    title: t('title'),
-    description: t('description'),
+    title,
+    description,
+    robots: { index: !filtered, follow: true },
     alternates: {
-      canonical: `/${locale}`,
-      languages: { en: '/en', fr: '/fr' },
+      canonical,
+      languages,
     },
     openGraph: {
-      title: t('title'),
-      description: t('description'),
+      title,
+      description,
       type: 'website',
       locale,
-      url: `/${locale}`,
+      url: canonical,
     },
     twitter: {
       card: 'summary_large_image',
-      title: t('title'),
-      description: t('description'),
+      title,
+      description,
     },
   };
 }
@@ -154,17 +188,7 @@ export default async function Home({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{
-    q?: string;
-    sort?: string;
-    platform?: string;
-    genre?: string;
-    status?: string;
-    yearMin?: string;
-    yearMax?: string;
-    minReviews?: string;
-    page?: string;
-  }>;
+  searchParams: Promise<HomeSearchParams>;
 }) {
   const { locale } = await params;
   const {
@@ -268,6 +292,21 @@ export default async function Home({
       </div>
     </main>
   );
+}
+
+function hasListingFilters(sp: HomeSearchParams): boolean {
+  if (sp.q?.trim()) return true;
+  if (sp.sort === 'recent' || sp.sort === 'oldest' || sp.sort === 'sales') {
+    return true;
+  }
+  if (sp.platform) return true;
+  if ((sp.genre ?? '').trim()) return true;
+  // Home already forces released; only a non-default status is a filter.
+  if (sp.status && sp.status !== 'released') return true;
+  if (sanitizeYear(sp.yearMin) != null) return true;
+  if (sanitizeYear(sp.yearMax) != null) return true;
+  const minReviewsNum = Number(sp.minReviews);
+  return Number.isFinite(minReviewsNum) && minReviewsNum > 0;
 }
 
 function sanitizeYear(value: string | undefined): number | null {

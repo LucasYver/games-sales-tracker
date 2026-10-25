@@ -32,12 +32,18 @@
   },
   "homeMeta": {
     "description": "Les ventes des jeux vidéo, chiffre par chiffre : PC, PlayStation, Xbox et Switch, classées et mises à jour chaque jour.",
-    "title": "Ventes de jeux vidéo"
+    "title": "Ventes de jeux vidéo",
+    "titlePage": "Ventes de jeux vidéo — Page {page}"
   },
   "gamePageMeta": {
     "description": "Ventes de {name} : chiffre actuel, ventilation par plateforme et évolution des avis boutique.",
+    "descriptionFree": "{name} est free-to-play : pas d'estimation de copies vendues. Signaux joueurs et avis mis à jour chaque jour.",
+    "descriptionUnits": "Environ {units} exemplaires de {name} vendus ({platforms}) au {date}. Ventilation par plateforme et évolution des avis boutique.",
+    "descriptionUnitsNoDate": "Environ {units} exemplaires de {name} vendus ({platforms}). Ventilation par plateforme et évolution des avis boutique.",
     "title": "{name} ({year}) — Ventes",
-    "titleNoYear": "{name} — Ventes"
+    "titleFree": "{name} — Free-to-play",
+    "titleNoYear": "{name} — Ventes",
+    "titleUnits": "Ventes de {name} — {units} exemplaires"
   },
   "home": {
     "gamesCount": "{count, number} jeux",
@@ -114,6 +120,9 @@
     "followersSeriesAlt": "Évolution du nombre de followers Steam de {name}.",
     "freeToPlayNote": "Ce jeu est gratuit, il n’a donc pas d’estimation de ventes.",
     "genres": "Genres",
+    "heading": "Ventes de {name}",
+    "headingFree": "{name}",
+    "headingUnits": "{units} exemplaires",
     "interestTitle": "Signaux d’audience",
     "noData": "Aucun chiffre de vente pour ce jeu.",
     "peakCcuHint": "joueurs simultanés Steam · {date}",

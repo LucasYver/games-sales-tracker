@@ -1,5 +1,5 @@
 import { useTranslations, useFormatter } from 'next-intl';
-import { getTranslations } from 'next-intl/server';
+import { getFormatter, getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import Image from 'next/image';
@@ -9,6 +9,7 @@ import {
   type GameDetail,
   type Platform,
 } from '@/lib/api';
+import { routing } from '@/i18n/routing';
 import { Link } from '@/i18n/navigation';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
 import { RangedChart } from '@/components/chart-room/RangedChart';
@@ -23,15 +24,24 @@ import {
 } from '@/components/chart-room/PriceCountrySelect';
 import { Suspense } from 'react';
 
+function compactUnits(units: number, format: { number: (value: number, opts: Intl.NumberFormatOptions) => string }) {
+  return format.number(units, {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  });
+}
+
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ slug: string; locale: string }>;
 }): Promise<Metadata> {
   const { slug, locale } = await params;
-  const [game, t] = await Promise.all([
+  const [game, t, tPlatform, format] = await Promise.all([
     getGame(slug),
     getTranslations({ locale, namespace: 'gamePageMeta' }),
+    getTranslations({ locale, namespace: 'platform' }),
+    getFormatter({ locale }),
   ]);
 
   if (!game) return { title: 'Game not found' };
@@ -39,10 +49,44 @@ export async function generateMetadata({
   const year = game.releaseDate
     ? new Date(game.releaseDate).getFullYear()
     : null;
-  const title = year
-    ? t('title', { name: game.name, year })
-    : t('titleNoYear', { name: game.name });
-  const description = t('description', { name: game.name });
+  const units = game.isFree ? null : headlineUnits(game);
+  const unitsLabel = units ? compactUnits(units, format) : null;
+  const platforms =
+    game.platforms.map((p) => tPlatform(p)).join(', ') || '—';
+  const asOf = asOfDate(game);
+  const asOfLabel = asOf
+    ? format.dateTime(new Date(asOf), {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    : null;
+
+  let title: string;
+  let description: string;
+  if (game.isFree) {
+    title = t('titleFree', { name: game.name });
+    description = t('descriptionFree', { name: game.name });
+  } else if (unitsLabel) {
+    title = t('titleUnits', { name: game.name, units: unitsLabel });
+    description = asOfLabel
+      ? t('descriptionUnits', {
+          name: game.name,
+          units: unitsLabel,
+          platforms,
+          date: asOfLabel,
+        })
+      : t('descriptionUnitsNoDate', {
+          name: game.name,
+          units: unitsLabel,
+          platforms,
+        });
+  } else {
+    title = year
+      ? t('title', { name: game.name, year })
+      : t('titleNoYear', { name: game.name });
+    description = t('description', { name: game.name });
+  }
   const url = `/${locale}/game/${game.slug}`;
 
   return {
@@ -53,6 +97,7 @@ export async function generateMetadata({
       languages: {
         en: `/en/game/${game.slug}`,
         fr: `/fr/game/${game.slug}`,
+        'x-default': `/${routing.defaultLocale}/game/${game.slug}`,
       },
     },
     openGraph: {
@@ -112,6 +157,8 @@ function GameHeader({ game }: { game: GameDetail }) {
   const t = useTranslations('gamePage');
   const tPlatform = useTranslations('platform');
   const format = useFormatter();
+  const units = game.isFree ? null : headlineUnits(game);
+  const unitsLabel = units ? compactUnits(units, format) : null;
 
   return (
     <header className="flex items-start gap-4 border-b border-border px-4 py-4">
@@ -129,7 +176,14 @@ function GameHeader({ game }: { game: GameDetail }) {
       )}
       <div className="min-w-0 flex-1">
         <h1 className="text-2xl leading-tight font-bold tracking-tight">
-          {game.name}
+          {game.isFree
+            ? t('headingFree', { name: game.name })
+            : t('heading', { name: game.name })}
+          {unitsLabel && (
+            <span className="mt-1 block font-mono text-base font-semibold text-muted-foreground">
+              {t('headingUnits', { units: unitsLabel })}
+            </span>
+          )}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {[

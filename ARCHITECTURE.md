@@ -157,7 +157,7 @@ the reported milestone when one exists. Source URLs and verbatim quotes are
 not shown on the public page.
 
 Default API base: `NEXT_PUBLIC_API_URL` or `http://localhost:3001/api`
-(`frontend/src/lib/api.ts`). Fonts are Inter and JetBrains Mono.
+(`frontend/src/lib/api.ts`). The sitemap (`app/sitemap.ts`) reads `GET /games/sitemap`. Fonts are Inter and JetBrains Mono.
 
 ## Environment
 

@@ -77,6 +77,11 @@ export class GamesController {
     return this.games.listGenres();
   }
 
+  @Get('sitemap')
+  sitemap() {
+    return this.games.listSitemap();
+  }
+
   @Get(':slug')
   getBySlug(
     @Param('slug') slug: string,

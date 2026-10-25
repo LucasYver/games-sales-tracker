@@ -6,6 +6,7 @@ import { notFound } from 'next/navigation';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Analytics } from '@vercel/analytics/next';
 import { routing } from '@/i18n/routing';
+import { SITE_URL } from '@/lib/site-url';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import '../globals.css';
 
@@ -20,9 +21,6 @@ const mono = IBM_Plex_Mono({
   weight: ['400', '500', '600', '700'],
   display: 'swap',
 });
-
-const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
 
 export async function generateMetadata({
   params,

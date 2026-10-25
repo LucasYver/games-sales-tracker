@@ -7,7 +7,7 @@ npm install
 npm run dev
 ```
 
-http://localhost:3000. Sans `.env`, l’API appelée est `http://localhost:3001/api`. Surcharge : `NEXT_PUBLIC_API_URL`. URL publique du site : `NEXT_PUBLIC_SITE_URL`.
+http://localhost:3000. Sans `.env`, l’API appelée est `http://localhost:3001/api`. Surcharge : `NEXT_PUBLIC_API_URL`. Origine publique (canonicals, sitemap, robots) : `NEXT_PUBLIC_SITE_URL` — en production, `https://www.gamesalestracker.tech` (fallback Vercel dans `src/lib/site-url.ts` si la var manque).
 
 ## Routes
 
