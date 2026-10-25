@@ -1158,8 +1158,8 @@ function MilestonesTab({ s }: { s: AdminGamePageSummary }) {
                 <TableHead>Reported by</TableHead>
                 <TableHead>Attribution</TableHead>
                 <TableHead className="text-right">Units</TableHead>
-                <TableHead className="text-right">Confidence</TableHead>
                 <TableHead>Reported</TableHead>
+                <TableHead>Created</TableHead>
                 <TableHead>Note</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   AchievementSnapshot,
+  AdminUser,
   EstimateSnapshot,
   Game,
   GameIngestionState,
@@ -15,7 +16,11 @@ import {
   TrustedSource,
 } from '../entities';
 import { AdminController } from './admin.controller';
+import { AdminAuthController } from './admin-auth.controller';
 import { AdminService } from './admin.service';
+import { AdminAuthService } from './admin-auth.service';
+import { AdminAuthGuard } from './admin-auth.guard';
+import { AdminMailService } from './admin-mail.service';
 import { IngestionModule } from '../ingestion/ingestion.module';
 import { GamesModule } from '../games/games.module';
 import { PublishersModule } from '../publishers/publishers.module';
@@ -38,6 +43,7 @@ import { ReferenceProfilesModule } from '../reference-profiles/reference-profile
       ProcessedArticle,
       AchievementSnapshot,
       EstimateSnapshot,
+      AdminUser,
     ]),
     IngestionModule,
     GamesModule,
@@ -46,7 +52,13 @@ import { ReferenceProfilesModule } from '../reference-profiles/reference-profile
     EstimationModule,
     ReferenceProfilesModule,
   ],
-  controllers: [AdminController],
-  providers: [AdminService],
+  controllers: [AdminController, AdminAuthController],
+  providers: [
+    AdminService,
+    AdminAuthService,
+    AdminAuthGuard,
+    AdminMailService,
+  ],
+  exports: [AdminAuthService],
 })
 export class AdminModule {}

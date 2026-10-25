@@ -37,7 +37,7 @@ NestJS modules under `backend/src/`. Entry points worth knowing:
 | ---- | ---- |
 | Public API | `games/games.controller.ts` |
 | Ingestion API | `ingestion/ingestion.controller.ts` |
-| Admin API | `admin/admin.controller.ts` (`X-Admin-Token`) |
+| Admin API | `admin/admin.controller.ts` (`X-Admin-Session`) |
 | Vercel crons | `scheduler/cron.controller.ts` + `scheduler/refresh.service.ts` |
 | Estimation | `estimation/estimation.service.ts` |
 | Matcher | `reference-profiles/` |
@@ -68,6 +68,7 @@ on `DATABASE_URL_DIRECT`, then `DATABASE_URL`.
 | `TrustedSource` | `trusted_source` | Outlet registry for article extraction. `feedUrl` is reference data; RSS is not polled. |
 | `ProcessedArticle` | `processed_article` | URL dedup for extraction. |
 | `ReferenceProfile` | `reference_profile` | Observed vector for one matcher anchor. |
+| `AdminUser` | `admin_user` | Allowlisted back-office account (email + scrypt hash). No public signup. |
 
 `SalesRecord` was renamed to `Milestone`. `GenreProfile` and the per-game
 calibration columns are gone.
@@ -97,7 +98,9 @@ Other clients in `ingestion/`:
 - PlayStation and Xbox ratings and prices.
 - Twitch viewers.
 - games-popularity.com followers (`GAMES_POPULARITY_API_KEY`).
-- Wikipedia and backlog search (Perplexity by default, Tavily optional).
+- Wikipedia and backlog search (Perplexity first; Tavily on credit
+  cooldown / missing key / error). Credit exhaustion trips a 24h
+  `provider_cooldown` so harvest does not re-probe a dead balance.
 - Exophase achievements.
 - LLM extraction (`llm/llm-extractor.service.ts`): grounded tool call on
   fetched text. `OPENAI_MODEL` in `backend/.env.example` is `gpt-4o-mini`.
@@ -119,11 +122,16 @@ weekly estimate rebuild and rank, slower playtime and achievement passes.
 
 ### Admin
 
-`/admin` is English-only, behind `ADMIN_TOKEN` (fail-closed when unset).
-Pages: dashboard, games, milestones, trusted sources, publishers, genres,
-reference profiles, ranks. The controller is the endpoint list; the UI
-covers refresh, CSV import, histogram / SteamCharts backfill, follower
-backfill, estimate rebuild, and matcher inspection.
+`/admin` is English-only. Login is email/password against the `admin_user`
+allowlist; sessions are HMAC-signed with `ADMIN_SESSION_SECRET` and stored in
+an HttpOnly cookie (`X-Admin-Session`). Fail-closed when the secret is unset.
+Bootstrap the first user with `ADMIN_BOOTSTRAP_EMAIL` /
+`ADMIN_BOOTSTRAP_PASSWORD` or `npm run admin:create-user`. Account creation
+sends a Chart Room–styled welcome email via Resend when `RESEND_API_KEY` is
+set. Pages: dashboard, games, milestones, trusted sources, publishers, genres,
+reference profiles, ranks. The controller is the endpoint list; the UI covers
+refresh, CSV import, histogram / SteamCharts backfill, follower backfill,
+estimate rebuild, and matcher inspection.
 
 ## Frontend
 

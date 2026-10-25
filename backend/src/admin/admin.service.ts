@@ -30,7 +30,6 @@ import {
   cycleWindow,
   type IngestionCadence,
 } from '../ingestion/ingestion-cadence';
-import { isPeriodicQuote } from '../ingestion/sales-figure.utils';
 import { DEFAULT_CONFIDENCE_SCORE } from '../ingestion/ingestion.service';
 import { slugify } from '../common/slug';
 import { GamesService } from '../games/games.service';
@@ -719,20 +718,20 @@ export class AdminService {
 
     // SQL mirror of getRefreshIntervalDays()/isDueForRefresh()
     // (scheduler/refresh-interval.ts) so the admin listing can filter on the
-    // cron's refresh cadence without materialising the whole catalog. Keep the
-    // age tiers in sync with that file.
+    // milestone-harvest cadence without materialising the whole catalog. Keep
+    // the age tiers in sync with that file.
     const ageDaysExpr = 'EXTRACT(EPOCH FROM (now() - g."releaseDate")) / 86400';
     const refreshIntervalExpr =
       `CASE ` +
-      `WHEN ${ageDaysExpr} <= 180 THEN 1 ` +
+      `WHEN ${ageDaysExpr} <= 180 THEN 3 ` +
       `WHEN ${ageDaysExpr} <= 365 THEN 7 ` +
       `WHEN ${ageDaysExpr} <= 1095 THEN 30 ` +
       `WHEN ${ageDaysExpr} <= 1825 THEN 90 ` +
       `ELSE 180 END`;
     const needsRefreshExpr =
-      `g."releaseDate" IS NOT NULL AND (` +
-      `g."lastRefreshedAt" IS NULL OR ` +
-      `EXTRACT(EPOCH FROM (now() - g."lastRefreshedAt")) / 86400 >= (${refreshIntervalExpr}))`;
+      `g."releaseDate" IS NOT NULL AND g."releaseDate" <= now() AND (` +
+      `g."lastMilestoneHarvestedAt" IS NULL OR ` +
+      `EXTRACT(EPOCH FROM (now() - g."lastMilestoneHarvestedAt")) / 86400 >= (${refreshIntervalExpr}))`;
 
     const applyFilters = (
       builder: ReturnType<typeof this.games.createQueryBuilder>,
@@ -1333,13 +1332,20 @@ export class AdminService {
   async listMilestones(opts: {
     gameId?: string;
     source?: SalesSource;
-    undated?: boolean;
-    suspect?: boolean;
+    sort?: 'reportedAt' | 'capturedAt';
+    direction?: 'asc' | 'desc';
     offset?: number;
     limit?: number;
   }): Promise<PaginatedAdmin<Milestone & { gameName: string }>> {
     const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
     const offset = Math.max(opts.offset ?? 0, 0);
+
+    const SORT_EXPR: Record<'reportedAt' | 'capturedAt', string> = {
+      reportedAt: 'm.reportedAt',
+      capturedAt: 'm.capturedAt',
+    };
+    const sortExpr = SORT_EXPR[opts.sort ?? 'capturedAt'];
+    const direction = opts.direction === 'asc' ? 'ASC' : 'DESC';
 
     const qb = Milestone.applyDefault(
       this.milestones.createQueryBuilder('m'),
@@ -1347,11 +1353,11 @@ export class AdminService {
     )
       .innerJoin('m.game', 'g')
       .addSelect('g.name', 'gameName')
-      .orderBy('m.capturedAt', 'DESC');
+      // NULLS LAST keeps undated milestones at the bottom for reportedAt.
+      .orderBy(sortExpr, direction, 'NULLS LAST');
 
     if (opts.gameId) qb.andWhere('m.gameId = :gid', { gid: opts.gameId });
     if (opts.source) qb.andWhere('m.source = :src', { src: opts.source });
-    if (opts.undated) qb.andWhere('m.reportedAt IS NULL');
 
     const [entities, raws, total] = await Promise.all([
       qb.clone().offset(offset).limit(limit).getMany(),
@@ -1359,14 +1365,10 @@ export class AdminService {
       qb.clone().getCount(),
     ]);
 
-    let items = entities.map((m, i) => ({
+    const items = entities.map((m, i) => ({
       ...m,
       gameName: raws[i]?.gameName ?? '',
     }));
-
-    if (opts.suspect) {
-      items = items.filter((m) => m.note && isPeriodicQuote(m.note));
-    }
 
     return { items, total };
   }

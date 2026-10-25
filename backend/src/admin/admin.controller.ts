@@ -12,7 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
-import { AdminTokenGuard } from './admin-token.guard';
+import { AdminAuthGuard } from './admin-auth.guard';
 import { CatalogTier, SalesSource } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
 import { PublishersService } from '../publishers/publishers.service';
@@ -27,8 +27,9 @@ import { UpdateGameDto } from './dto/update-game.dto';
 import { UpdateMilestoneDto } from './dto/update-milestone.dto';
 import { CreateMilestoneDto } from './dto/create-milestone.dto';
 import { UpdateTrustedSourceDto } from './dto/update-trusted-source.dto';
+
 @Controller('admin')
-@UseGuards(AdminTokenGuard)
+@UseGuards(AdminAuthGuard)
 export class AdminController {
   constructor(
     private readonly admin: AdminService,
@@ -201,16 +202,17 @@ export class AdminController {
   listMilestones(
     @Query('gameId') gameId?: string,
     @Query('source') source?: string,
-    @Query('undated') undated?: string,
-    @Query('suspect') suspect?: string,
+    @Query('sort') sort?: string,
+    @Query('direction') direction?: string,
     @Query('offset') offset?: string,
     @Query('limit') limit?: string,
   ) {
     return this.admin.listMilestones({
       gameId,
       source: source as SalesSource | undefined,
-      undated: undated === 'true',
-      suspect: suspect === 'true',
+      sort:
+        sort === 'reportedAt' || sort === 'capturedAt' ? sort : undefined,
+      direction: direction === 'asc' ? 'asc' : undefined,
       offset: offset ? Number(offset) : undefined,
       limit: limit ? Number(limit) : undefined,
     });

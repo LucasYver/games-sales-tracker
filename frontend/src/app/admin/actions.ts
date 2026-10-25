@@ -14,14 +14,16 @@ import { API_URL } from '@/lib/api';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
 export async function signIn(formData: FormData): Promise<void> {
-  const token = String(formData.get('token') ?? '').trim();
-  if (!token) redirect('/admin/login?error=missing');
+  const email = String(formData.get('email') ?? '').trim();
+  const password = String(formData.get('password') ?? '');
+  if (!email || !password) redirect('/admin/login?error=missing');
 
-  // Validate against the backend by hitting a cheap admin endpoint.
   let res: Response;
   try {
-    res = await fetch(`${API_URL}/admin/stats`, {
-      headers: { 'X-Admin-Token': token },
+    res = await fetch(`${API_URL}/admin/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
       cache: 'no-store',
     });
   } catch {
@@ -31,8 +33,11 @@ export async function signIn(formData: FormData): Promise<void> {
   if (res.status === 401) redirect('/admin/login?error=invalid');
   if (!res.ok) redirect(`/admin/login?error=backend&code=${res.status}`);
 
+  const body = (await res.json()) as { token: string };
+  if (!body.token) redirect('/admin/login?error=backend');
+
   const store = await cookies();
-  store.set(ADMIN_COOKIE, token, {
+  store.set(ADMIN_COOKIE, body.token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',

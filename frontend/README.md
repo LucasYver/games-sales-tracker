@@ -16,7 +16,7 @@ http://localhost:3000. Sans `.env`, l’API appelée est `http://localhost:3001/
 | `/[locale]` | Catalogue (`fr`, `en`, `next-intl`) |
 | `/[locale]/ranking` | Classement |
 | `/[locale]/game/[slug]` | Fiche : estimation, historiques, prix |
-| `/admin` | Back-office, hors i18n, cookie `ADMIN_TOKEN` |
+| `/admin` | Back-office, hors i18n, cookie session email/mdp |
 
 Les textes visibles passent par `messages/`. Ne pas écrire de français en dur dans les composants.
 

@@ -15,7 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { signOut } from './actions';
-import { getAdminToken } from '@/lib/admin';
+import { getAdminSession } from '@/lib/admin';
 import { ThemeToggle } from './_components/ThemeToggle';
 import '../globals.css';
 
@@ -83,7 +83,7 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const token = await getAdminToken();
+  const session = await getAdminSession();
 
   return (
     <html
@@ -98,7 +98,7 @@ export default async function AdminLayout({
             __html: `try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme:dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}`,
           }}
         />
-        {token ? (
+        {session ? (
           <>
             <aside className="bg-card border-border hidden w-60 shrink-0 flex-col border-r p-4 md:flex">
               <Link

@@ -4,7 +4,6 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, In, IsNull, MoreThanOrEqual, Not, Repository } from 'typeorm';
 import {
@@ -269,7 +268,6 @@ export class IngestionService {
     private readonly twitch: TwitchClient,
     private readonly sources: SourcesService,
     private readonly publishers: PublishersService,
-    private readonly config: ConfigService,
     private readonly ingestionState: IngestionStateService,
   ) {}
 
@@ -3683,13 +3681,13 @@ export class IngestionService {
   }
 
   /**
-   * Backlog discovery via web search (Tavily and/or Perplexity, controlled by
-   * the `BACKLOG_SEARCH_ENGINE` env var): find sales articles (typically older
-   * coverage that predates our RSS polling), then run the same grounded LLM
-   * extraction on each result's page text. The host is matched against the
-   * trusted-source registry to pick the sales tier/confidence; unknown hosts
-   * fall back to a low-confidence MEDIA figure. Already-processed URLs are
-   * skipped. Best-effort: each step logs and continues.
+   * Backlog discovery via web search (Perplexity first, Tavily on credit
+   * exhaustion / cooldown / missing key / transient error): find sales
+   * articles, then run the same grounded LLM extraction on each result's page
+   * text. The host is matched against the trusted-source registry to pick the
+   * sales tier/confidence; unknown hosts fall back to a low-confidence MEDIA
+   * figure. Already-processed URLs are skipped. Best-effort: each step logs
+   * and continues.
    */
   async discoverBacklog(
     gameId: string,
@@ -3707,35 +3705,31 @@ export class IngestionService {
     let ingested = 0;
     let records = 0;
 
-    const engine = this.resolveBacklogEngine();
-    if (engine === null) {
+    if (!this.perplexity.enabled && !this.tavily.enabled) {
       this.logger.log(
-        `[backlog] "${name}" — no backlog search engine configured (set TAVILY_API_KEY and/or PERPLEXITY_API_KEY)`,
+        `[backlog] "${name}" — no backlog search engine configured (set PERPLEXITY_API_KEY and/or TAVILY_API_KEY)`,
       );
       return { checked, ingested, records };
     }
 
     try {
-      // Multiple query phrasings catch different headline patterns:
-      //   - "X copies sold / units shipped" → traditional sales coverage
-      //   - "X million players reached" → engagement milestones (often the only
-      //     public number for subscription-led launches like Ubisoft+/Game Pass)
-      //   - "sales milestone / announcement" → PR-style coverage with vague titles
-      //   - per-platform phrasings → the single-platform figures we now capture
-      //     (PC/PS/Xbox/Switch) to learn the PC-vs-console split
+      // Exactly 5 phrasings: Perplexity bills one request per batch of up to
+      // 5 queries, so a 6th query doubles the cost of every game. Tavily bills
+      // per query. Switch is out of estimation scope, hence no Switch query.
+      //   - lifetime copies sold → worldwide sales coverage and milestones
+      //   - players reached → engagement milestones (often the only public
+      //     number for subscription-led launches like Ubisoft+/Game Pass)
+      //   - per-platform phrasings → single-platform figures used to learn the
+      //     PC-vs-console split
       const queries = [
-        `${name} total copies sold lifetime`,
+        `${name} total copies sold to date milestone`,
         `${name} million players reached milestone`,
-        `${name} units shipped sold to date`,
-        `${name} sales figures announcement`,
-        `${name} total copies sold reached milestone`,
         `${name} PlayStation PS5 copies sold`,
         `${name} Xbox copies sold`,
-        `${name} Nintendo Switch copies sold`,
         `${name} Steam PC copies sold`,
       ];
 
-      const results = await this.runBacklogSearch(engine, name, queries);
+      const results = await this.runBacklogSearch(name, queries);
       if (results.length === 0) {
         return { checked, ingested, records };
       }
@@ -3798,36 +3792,12 @@ export class IngestionService {
   }
 
   /**
-   * Resolve which backlog search engine(s) to use based on the
-   * `BACKLOG_SEARCH_ENGINE` env var and whichever API keys are configured.
-   * Returns `null` when no engine is usable.
-   */
-  private resolveBacklogEngine(): 'tavily' | 'perplexity' | 'both' | null {
-    const raw = (
-      this.config.get<string>('BACKLOG_SEARCH_ENGINE') ?? 'tavily'
-    ).toLowerCase();
-    const requested: 'tavily' | 'perplexity' | 'both' =
-      raw === 'perplexity' || raw === 'both' ? raw : 'tavily';
-
-    const tavily = this.tavily.enabled;
-    const perplexity = this.perplexity.enabled;
-
-    if (requested === 'both') {
-      if (tavily && perplexity) return 'both';
-      if (tavily) return 'tavily';
-      if (perplexity) return 'perplexity';
-      return null;
-    }
-    if (requested === 'perplexity') return perplexity ? 'perplexity' : null;
-    return tavily ? 'tavily' : null;
-  }
-
-  /**
-   * Run the multi-query backlog search against the chosen engine(s) and return
-   * a deduplicated list of results (URL-keyed) capped to a safe LLM budget.
+   * Perplexity first (when keyed and not in credit cooldown). On credit
+   * exhaustion, cooldown, missing key, or transient API error → Tavily.
+   * A successful Perplexity response (even empty) does NOT also call Tavily,
+   * so we do not double-bill on every game.
    */
   private async runBacklogSearch(
-    engine: 'tavily' | 'perplexity' | 'both',
     name: string,
     queries: string[],
   ): Promise<TavilyResult[]> {
@@ -3838,59 +3808,67 @@ export class IngestionService {
         if (!prev || prev.score < r.score) merged.set(r.url, r);
       }
     };
+    const capped = () =>
+      [...merged.values()].sort((a, b) => b.score - a.score).slice(0, 24);
 
-    const tavilyJob = async (): Promise<number> => {
-      // Tavily takes a single query per call, so we fan out one HTTP request
-      // per variant and merge.
-      const perQuery = await Promise.all(
-        queries.map((q) =>
-          this.tavily.search(q, {
-            maxResults: 12,
-            excludeDomains: TAVILY_EXCLUDED_DOMAINS,
-          }),
-        ),
-      );
-      let count = 0;
-      for (const list of perQuery) {
-        addAll(list);
-        count += list.length;
-      }
-      return count;
-    };
-
-    const perplexityJob = async (): Promise<number> => {
-      // Perplexity's Search API batches up to 5 queries per billed request;
-      // the client chunks our query set accordingly (e.g. 9 queries → 2
-      // requests) so none are silently dropped.
-      const list = await this.perplexity.search(queries, {
+    if (this.perplexity.enabled) {
+      // Perplexity Search API batches up to 5 queries per billed request;
+      // the client chunks larger query sets into several billed requests.
+      const outcome = await this.perplexity.search(queries, {
         maxResults: 12,
         excludeDomains: TAVILY_EXCLUDED_DOMAINS,
       });
-      addAll(list);
-      return list.length;
-    };
 
-    if (engine === 'tavily') {
-      const total = await tavilyJob();
-      this.logger.log(
-        `[backlog] "${name}" — Tavily returned ${total} raw / ${merged.size} unique result(s) across ${queries.length} queries`,
-      );
-    } else if (engine === 'perplexity') {
-      const total = await perplexityJob();
-      this.logger.log(
-        `[backlog] "${name}" — Perplexity returned ${total} raw / ${merged.size} unique result(s) across ${queries.length} queries`,
-      );
-    } else {
-      const [tavilyCount, perplexityCount] = await Promise.all([
-        tavilyJob(),
-        perplexityJob(),
-      ]);
-      this.logger.log(
-        `[backlog] "${name}" — Tavily=${tavilyCount} + Perplexity=${perplexityCount} raw → ${merged.size} unique URL(s) after cross-engine dedupe`,
-      );
+      if (outcome.status === 'ok') {
+        addAll(outcome.results);
+        this.logger.log(
+          `[backlog] "${name}" — Perplexity returned ${outcome.results.length} raw / ${merged.size} unique result(s) across ${queries.length} queries`,
+        );
+        return capped();
+      }
+
+      const until = outcome.cooldownUntil?.toISOString() ?? 'n/a';
+      if (outcome.status === 'skipped_cooldown') {
+        this.logger.log(
+          `[backlog] "${name}" — Perplexity in credit cooldown until ${until}; falling back to Tavily`,
+        );
+      } else if (outcome.status === 'credit_exhausted') {
+        this.logger.warn(
+          `[backlog] "${name}" — Perplexity credit exhausted; cooldown until ${until}; falling back to Tavily`,
+        );
+      } else if (outcome.status === 'error') {
+        this.logger.warn(
+          `[backlog] "${name}" — Perplexity error; falling back to Tavily`,
+        );
+      }
     }
 
-    return [...merged.values()].sort((a, b) => b.score - a.score).slice(0, 24);
+    if (!this.tavily.enabled) {
+      this.logger.log(
+        `[backlog] "${name}" — Tavily not configured; backlog search skipped`,
+      );
+      return [];
+    }
+
+    // Tavily takes a single query per call, so we fan out one HTTP request
+    // per variant and merge.
+    const perQuery = await Promise.all(
+      queries.map((q) =>
+        this.tavily.search(q, {
+          maxResults: 12,
+          excludeDomains: TAVILY_EXCLUDED_DOMAINS,
+        }),
+      ),
+    );
+    let total = 0;
+    for (const list of perQuery) {
+      addAll(list);
+      total += list.length;
+    }
+    this.logger.log(
+      `[backlog] "${name}" — Tavily returned ${total} raw / ${merged.size} unique result(s) across ${queries.length} queries`,
+    );
+    return capped();
   }
 
   /**
@@ -3965,9 +3943,12 @@ export class IngestionService {
   async refreshGame(
     gameId: string,
   ): Promise<{ found: boolean; articlesIngested: number }> {
-    const signals = await this.refreshGameSignals(gameId);
-    if (!signals.found) return { found: false, articlesIngested: 0 };
-    return this.harvestGameMilestones(gameId);
+    // Harvest first: the estimate rebuild at the end of refreshGameSignals
+    // then picks up the freshly harvested milestones.
+    const harvest = await this.harvestGameMilestones(gameId);
+    if (!harvest.found) return harvest;
+    await this.refreshGameSignals(gameId);
+    return harvest;
   }
 
   async refreshGameSignals(gameId: string): Promise<{ found: boolean }> {
@@ -4404,10 +4385,9 @@ export class IngestionService {
     try {
       await this.scrapeWikipedia(game.id, game.name);
       const backlog = await this.discoverBacklog(game.id, game.name);
-      const rebuild = await this.gamesService.rebuildEstimateHistory(game.id);
       this.logger.log(
         `[harvest] "${game.name}" — done in ${Date.now() - startedAt}ms, ` +
-          `${backlog.ingested} article(s), ${rebuild.points} estimate point(s)`,
+          `${backlog.ingested} article(s)`,
       );
       return { found: true, articlesIngested: backlog.ingested };
     } finally {

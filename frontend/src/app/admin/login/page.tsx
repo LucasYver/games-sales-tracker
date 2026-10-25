@@ -13,9 +13,9 @@ export default async function AdminLogin({
 
   const errorMessage =
     error === 'invalid'
-      ? 'Invalid token.'
+      ? 'Invalid email or password.'
       : error === 'missing'
-        ? 'Token is required.'
+        ? 'Email and password are required.'
         : error === 'unreachable'
           ? 'Backend unreachable.'
           : error === 'backend'
@@ -31,7 +31,7 @@ export default async function AdminLogin({
         <CardContent>
           {reason === 'expired' && (
             <p className="mb-4 text-sm text-amber-600">
-              Session expired or token invalid. Please sign in again.
+              Session expired. Please sign in again.
             </p>
           )}
           {errorMessage && (
@@ -39,19 +39,25 @@ export default async function AdminLogin({
           )}
           <form action={signIn} className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="token">Admin token</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
-                id="token"
-                name="token"
-                type="password"
+                id="email"
+                name="email"
+                type="email"
                 required
                 autoFocus
+                autoComplete="username"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                required
                 autoComplete="current-password"
               />
-              <p className="text-muted-foreground text-xs">
-                The token configured server-side in{' '}
-                <code className="font-mono">ADMIN_TOKEN</code>.
-              </p>
             </div>
             <Button type="submit" className="w-full">
               Sign in

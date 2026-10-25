@@ -48,10 +48,11 @@ export function MilestoneRow({
     <>
       <TableRow>
         {gameName && (
-          <TableCell>
+          <TableCell className="overflow-hidden">
             <Link
               href={`/admin/games/${m.gameId}`}
-              className="hover:text-primary hover:underline"
+              title={gameName}
+              className="hover:text-primary block truncate hover:underline"
             >
               {gameName}
             </Link>
@@ -80,16 +81,16 @@ export function MilestoneRow({
             )}
           </div>
         </TableCell>
-        <TableCell>
+        <TableCell className="overflow-hidden">
           {m.sourceUrl ? (
             <a
               href={m.sourceUrl}
               target="_blank"
               rel="noopener noreferrer"
               title={m.sourceUrl}
-              className="text-primary inline-flex max-w-[200px] items-center gap-1 truncate text-xs hover:underline"
+              className="text-primary flex max-w-full items-center gap-1 truncate text-xs hover:underline"
             >
-              {hostnameOf(m.sourceUrl)}
+              <span className="truncate">{hostnameOf(m.sourceUrl)}</span>
               <ExternalLink aria-hidden="true" className="size-3 shrink-0" />
             </a>
           ) : (
@@ -97,7 +98,7 @@ export function MilestoneRow({
           )}
         </TableCell>
         <TableCell
-          className="text-muted-foreground max-w-[160px] truncate text-sm"
+          className="text-muted-foreground truncate text-sm"
           title={m.publisher ?? undefined}
         >
           {m.publisher ?? '—'}
@@ -105,14 +106,14 @@ export function MilestoneRow({
         <TableCell className="text-right tabular-nums">
           {m.units.toLocaleString()}
         </TableCell>
-        <TableCell className="text-muted-foreground text-right text-sm tabular-nums">
-          {m.confidenceScore == null ? '—' : Math.round(m.confidenceScore)}
-        </TableCell>
         <TableCell className="text-muted-foreground text-sm">
           {formatDate(m.reportedAt)}
         </TableCell>
+        <TableCell className="text-muted-foreground text-sm">
+          {formatDate(m.capturedAt)}
+        </TableCell>
         <TableCell
-          className="text-muted-foreground max-w-xs truncate text-xs"
+          className="text-muted-foreground truncate text-xs"
           title={m.note ?? undefined}
         >
           {m.note ?? '—'}

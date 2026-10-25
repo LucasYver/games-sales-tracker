@@ -139,9 +139,12 @@ restauration du dump.
 | `DATABASE_URL_DIRECT` | prod seulement | Connexion directe pour les migrations (Neon sans `-pooler`) |
 | `IGDB_CLIENT_ID` / `IGDB_CLIENT_SECRET` | non | Import catalogue IGDB ([Twitch dev console](https://dev.twitch.tv/console/apps)) |
 | `OPENAI_API_KEY` | non | Extraction de chiffres depuis texte (Wikipedia, presse) |
-| `TAVILY_API_KEY` / `PERPLEXITY_API_KEY` | non | Découverte d’articles backlog |
+| `PERPLEXITY_API_KEY` / `TAVILY_API_KEY` | non | Backlog articles (Perplexity → Tavily fallback) |
 | `GAMES_POPULARITY_API_KEY` | non | Backfill followers Steam + top-seller rank |
-| `ADMIN_TOKEN` | non | Accès back-office `/admin` (vide = désactivé) |
+| `ADMIN_SESSION_SECRET` | non | HMAC des sessions admin (vide = back-office désactivé) |
+| `ADMIN_BOOTSTRAP_EMAIL` / `ADMIN_BOOTSTRAP_PASSWORD` | non | Premier compte allowlist au boot |
+| `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | non | Mail de bienvenue à la création d’un admin |
+| `PUBLIC_APP_URL` | non | Lien `/admin/login` dans le mail (ex. `https://example.com`) |
 
 Sans clés API, l’app fonctionne avec les données déjà présentes dans le dump ;
 seuls l’ingestion live et certains crons sont ignorés.

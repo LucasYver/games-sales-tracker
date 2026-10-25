@@ -3,41 +3,41 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { API_URL } from './api';
 
-export const ADMIN_COOKIE = 'admin_token';
+export const ADMIN_COOKIE = 'admin_session';
 
 /**
- * Read the admin token from the session cookie. Returns null when unset so
- * callers can redirect to the login page rather than crash.
+ * Read the signed admin session from the HttpOnly cookie. Returns null when
+ * unset so callers can redirect to the login page rather than crash.
  */
-export async function getAdminToken(): Promise<string | null> {
+export async function getAdminSession(): Promise<string | null> {
   const store = await cookies();
   return store.get(ADMIN_COOKIE)?.value ?? null;
 }
 
 /**
- * Require an admin token. Redirects to the login page when missing. Used at
+ * Require an admin session. Redirects to the login page when missing. Used at
  * the top of every protected admin server component.
  */
-export async function requireAdminToken(): Promise<string> {
-  const token = await getAdminToken();
+export async function requireAdminSession(): Promise<string> {
+  const token = await getAdminSession();
   if (!token) redirect('/admin/login');
   return token;
 }
 
 /**
  * Authenticated fetch against the admin backend endpoints. Always passes the
- * token from the session cookie; redirects to login on 401.
+ * session from the cookie; redirects to login on 401.
  */
 export async function adminFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const token = await requireAdminToken();
+  const token = await requireAdminSession();
   const res = await fetch(`${API_URL}/admin${path}`, {
     ...init,
     headers: {
       ...(init?.headers ?? {}),
-      'X-Admin-Token': token,
+      'X-Admin-Session': token,
       'Content-Type': 'application/json',
     },
     cache: 'no-store',

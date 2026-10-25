@@ -157,12 +157,12 @@ export class Game {
   @DeleteDateColumn({ type: 'timestamptz', nullable: true })
   deletedAt: Date | null;
 
-  // Timestamp of the last successful Steam ingestion refresh. Used by the
-  // periodic refresh cron to skip games that were updated recently. The
-  // refresh cadence depends on the game's age (see refresh-interval.ts).
+  // Timestamp of the last Steam reviews poll or full per-game signals refresh.
   @Column({ type: 'timestamptz', nullable: true })
   lastRefreshedAt: Date | null;
 
+  // Timestamp of the last milestone harvest. The harvest cron's cadence
+  // depends on the game's age (see refresh-interval.ts).
   @Column({ type: 'timestamptz', nullable: true })
   lastMilestoneHarvestedAt: Date | null;
 

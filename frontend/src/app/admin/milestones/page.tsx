@@ -22,27 +22,85 @@ export const dynamic = 'force-dynamic';
 const PAGE_SIZE = 50;
 const SOURCES = ['OFFICIAL', 'WIKIPEDIA', 'ANNOUNCEMENT', 'MEDIA'];
 
+/**
+ * Column header that drives server-side sorting via query params. Clicking
+ * an inactive column sorts it descending; clicking the active column toggles
+ * the direction. Resets to page 1 by omitting the `page` param.
+ */
+function SortableHead({
+  column,
+  label,
+  sort,
+  direction,
+  filters,
+}: {
+  column: string;
+  label: string;
+  sort?: string;
+  direction?: string;
+  filters: Record<string, string>;
+}) {
+  const isActive = sort === column;
+  const currentDir = isActive ? (direction === 'asc' ? 'asc' : 'desc') : null;
+  const nextDir = currentDir === 'desc' ? 'asc' : 'desc';
+  const indicator = !isActive ? '↕' : currentDir === 'asc' ? '↑' : '↓';
+  const href = `?${new URLSearchParams({
+    ...filters,
+    sort: column,
+    direction: nextDir,
+  })}`;
+
+  return (
+    <TableHead>
+      <Link
+        href={href}
+        className={`hover:text-foreground inline-flex items-center gap-1 ${
+          isActive ? 'text-foreground' : ''
+        }`}
+      >
+        {label}
+        <span className={`text-xs ${isActive ? '' : 'opacity-40'}`}>
+          {indicator}
+        </span>
+      </Link>
+    </TableHead>
+  );
+}
+
 export default async function AdminMilestonesPage({
   searchParams,
 }: {
   searchParams: Promise<{
     source?: string;
-    undated?: string;
-    suspect?: string;
+    sort?: string;
+    direction?: string;
     page?: string;
   }>;
 }) {
-  const { source, undated, suspect, page: pageParam } = await searchParams;
+  const { source, sort, direction, page: pageParam } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
   const offset = (page - 1) * PAGE_SIZE;
 
+  // Default matches the API: capturedAt DESC (most recently created first).
+  const activeSort =
+    sort === 'reportedAt' || sort === 'capturedAt' ? sort : 'capturedAt';
+  const activeDirection = direction === 'asc' ? 'asc' : 'desc';
+
+  // Active filters/sort shared by the fetch query and the pagination links.
+  // Only persist sort params when they diverge from the default so Reset /
+  // bare URLs stay clean.
+  const filters: Record<string, string> = {};
+  if (source) filters.source = source;
+  if (activeSort !== 'capturedAt' || activeDirection !== 'desc') {
+    filters.sort = activeSort;
+    filters.direction = activeDirection;
+  }
+
   const params = new URLSearchParams({
+    ...filters,
     limit: String(PAGE_SIZE),
     offset: String(offset),
   });
-  if (source) params.set('source', source);
-  if (undated === 'true') params.set('undated', 'true');
-  if (suspect === 'true') params.set('suspect', 'true');
 
   const { items, total } = await adminFetch<
     PaginatedAdmin<AdminMilestoneWithGame>
@@ -62,6 +120,12 @@ export default async function AdminMilestonesPage({
       <Card>
         <CardContent className="pt-6">
           <form className="flex flex-wrap items-end gap-4">
+            {filters.sort && (
+              <input type="hidden" name="sort" value={filters.sort} />
+            )}
+            {filters.direction && (
+              <input type="hidden" name="direction" value={filters.direction} />
+            )}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="source">Source</Label>
               <select
@@ -78,26 +142,6 @@ export default async function AdminMilestonesPage({
                 ))}
               </select>
             </div>
-            <div className="flex items-end gap-3">
-              <label className="text-foreground flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  name="undated"
-                  value="true"
-                  defaultChecked={undated === 'true'}
-                />
-                Undated only
-              </label>
-              <label className="text-foreground flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  name="suspect"
-                  value="true"
-                  defaultChecked={suspect === 'true'}
-                />
-                Suspect quote only
-              </label>
-            </div>
             <Button type="submit">Apply</Button>
             <Button asChild variant="ghost">
               <Link href="/admin/milestones">Reset</Link>
@@ -107,18 +151,30 @@ export default async function AdminMilestonesPage({
       </Card>
 
       <Card>
-        <Table>
+        <Table className="table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead>Game</TableHead>
-              <TableHead>Source tier</TableHead>
-              <TableHead>Reported by</TableHead>
-              <TableHead>Attribution</TableHead>
-              <TableHead className="text-right">Units</TableHead>
-              <TableHead className="text-right">Confidence</TableHead>
-              <TableHead>Reported</TableHead>
+              <TableHead className="w-[18%]">Game</TableHead>
+              <TableHead className="w-[12%]">Source tier</TableHead>
+              <TableHead className="w-[12%]">Reported by</TableHead>
+              <TableHead className="w-[12%]">Attribution</TableHead>
+              <TableHead className="w-[10%] text-right">Units</TableHead>
+              <SortableHead
+                column="reportedAt"
+                label="Reported"
+                sort={activeSort}
+                direction={activeDirection}
+                filters={filters}
+              />
+              <SortableHead
+                column="capturedAt"
+                label="Created"
+                sort={activeSort}
+                direction={activeDirection}
+                filters={filters}
+              />
               <TableHead>Note</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="w-[88px] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -145,9 +201,7 @@ export default async function AdminMilestonesPage({
             <Button asChild variant="outline" size="sm">
               <Link
                 href={`?${new URLSearchParams({
-                  ...(source ? { source } : {}),
-                  ...(undated ? { undated } : {}),
-                  ...(suspect ? { suspect } : {}),
+                  ...filters,
                   page: String(page - 1),
                 })}`}
               >
@@ -162,9 +216,7 @@ export default async function AdminMilestonesPage({
             <Button asChild variant="outline" size="sm">
               <Link
                 href={`?${new URLSearchParams({
-                  ...(source ? { source } : {}),
-                  ...(undated ? { undated } : {}),
-                  ...(suspect ? { suspect } : {}),
+                  ...filters,
                   page: String(page + 1),
                 })}`}
               >
