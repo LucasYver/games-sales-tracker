@@ -5,6 +5,8 @@ import { Game, GameRank } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
 import { IngestionStateService } from '../ingestion/ingestion-state.service';
 import { RankService } from '../reference-profiles/rank.service';
+import { BlogService } from '../blog/blog.service';
+import { AdminMailService } from '../admin/admin-mail.service';
 import { isEligibleForAutomaticHarvest } from './harvest-eligibility';
 import { isDueForRefresh } from './refresh-interval';
 
@@ -20,6 +22,8 @@ export class RefreshService {
     private readonly ingestion: IngestionService,
     private readonly ingestionState: IngestionStateService,
     private readonly rank: RankService,
+    private readonly blog: BlogService,
+    private readonly mail: AdminMailService,
   ) {}
 
   // Wall-clock cap per invocation, with headroom under the 800s Vercel
@@ -282,6 +286,33 @@ export class RefreshService {
    * admitted by IGDB rating or live Steam reviews). Runs at 2 AM, ahead of the
    * 3 AM per-app refresh.
    */
+  /**
+   * Sunday: write at most one draft if none is waiting, otherwise remind
+   * admins about leftover drafts. Never publishes.
+   */
+  async generateWeeklyBlogDraft() {
+    try {
+      const result = await this.blog.runWeeklyDraftJob();
+      if (result.action === 'generated' && result.postId) {
+        const post = await this.blog.getAdmin(result.postId);
+        await this.mail.sendBlogDraftReady(post);
+        await this.blog.markReviewEmailSent(post.id);
+        this.logger.log(`Blog draft generated for ${result.gameName}.`);
+      } else if (result.action === 'digest') {
+        await this.mail.sendBlogDraftDigest(result.drafts);
+        this.logger.log(
+          `Blog draft skipped — ${result.drafts.length} draft(s) already waiting.`,
+        );
+      } else {
+        this.logger.log(
+          `Blog draft skipped${result.reason ? `: ${result.reason}` : '.'}`,
+        );
+      }
+    } catch (error) {
+      this.logger.warn(`Weekly blog draft failed: ${error}`);
+    }
+  }
+
   async discoverNewGames() {
     try {
       const result = await this.ingestion.discoverIgdbGames();

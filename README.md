@@ -143,7 +143,7 @@ restauration du dump.
 | `GAMES_POPULARITY_API_KEY` | non | Backfill followers Steam + top-seller rank |
 | `ADMIN_SESSION_SECRET` | non | HMAC des sessions admin (vide = back-office désactivé) |
 | `ADMIN_BOOTSTRAP_EMAIL` / `ADMIN_BOOTSTRAP_PASSWORD` | non | Premier compte allowlist au boot |
-| `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | non | Mail de bienvenue à la création d’un admin |
+| `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | non | Mail de bienvenue admin + relecture des brouillons blog |
 | `PUBLIC_APP_URL` | non | Lien `/admin/login` dans le mail (ex. `https://example.com`) |
 
 Sans clés API, l’app fonctionne avec les données déjà présentes dans le dump ;

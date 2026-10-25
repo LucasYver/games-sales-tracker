@@ -38,6 +38,7 @@ NestJS modules under `backend/src/`. Entry points worth knowing:
 | Public API | `games/games.controller.ts` |
 | Ingestion API | `ingestion/ingestion.controller.ts` |
 | Admin API | `admin/admin.controller.ts` (`X-Admin-Session`) |
+| Public blog | `blog/blog.controller.ts` (published posts only) |
 | Vercel crons | `scheduler/cron.controller.ts` + `scheduler/refresh.service.ts` |
 | Estimation | `estimation/estimation.service.ts` |
 | Matcher | `reference-profiles/` |
@@ -70,6 +71,8 @@ on `DATABASE_URL_DIRECT`, then `DATABASE_URL`.
 | `ReferenceProfile` | `reference_profile` | Observed vector for one matcher anchor. |
 | `AdminUser` | `admin_user` | Allowlisted back-office account (email + scrypt hash). No public signup. |
 | `ProviderCooldown` | `provider_cooldown` | Cross-invocation skip window for an external provider (Perplexity out of credit). |
+| `BlogPost` | `blog_post` | AI-assisted official-sales article. `DRAFT` until an admin publishes. One row per game. |
+| `BlogPostTranslation` | `blog_post_translation` | Native FR/EN body, slug, SEO fields, editor issues. |
 
 `SalesRecord` was renamed to `Milestone`. `GenreProfile` and the per-game
 calibration columns are gone.
@@ -126,6 +129,8 @@ copy the cron expressions into this file.
 Rough groups: hourly CCU and Twitch, several-times-daily reviews / store
 ratings / milestone harvest / prices / followers, nightly IGDB discovery,
 weekly estimate rebuild and rank, slower playtime and achievement passes.
+Sunday `blog-draft` writes at most one unpublished article (or mails a
+digest if a draft is already waiting). It never publishes.
 
 ### Admin
 
@@ -136,7 +141,8 @@ Bootstrap the first user with `ADMIN_BOOTSTRAP_EMAIL` /
 `ADMIN_BOOTSTRAP_PASSWORD` or `npm run admin:create-user`. Account creation
 sends a Chart Room–styled welcome email via Resend when `RESEND_API_KEY` is
 set. Pages: dashboard, games, milestones, trusted sources, publishers, genres,
-reference profiles, ranks. The controller is the endpoint list; the UI covers
+reference profiles, ranks, blog. Draft-ready and leftover-draft digest
+mails reuse Resend. The controller is the endpoint list; the UI covers
 refresh, CSV import, histogram / SteamCharts backfill, follower backfill,
 estimate rebuild, and matcher inspection.
 
@@ -150,6 +156,8 @@ the locale prefix.
 | `/[locale]` | Search and filterable catalog |
 | `/[locale]/ranking` | Review-velocity ranking |
 | `/[locale]/game/[slug]` | Headline estimate, history, signals, regional prices |
+| `/[locale]/blog` | Published official-sales articles (human-reviewed) |
+| `/[locale]/blog/[slug]` | One article, FR/EN, no model estimates |
 | `/admin/*` | Back-office |
 
 The public game page shows `headline` (the model range). `totalSales` is
@@ -157,7 +165,7 @@ the reported milestone when one exists. Source URLs and verbatim quotes are
 not shown on the public page.
 
 Default API base: `NEXT_PUBLIC_API_URL` or `http://localhost:3001/api`
-(`frontend/src/lib/api.ts`). The sitemap (`app/sitemap.ts`) reads `GET /games/sitemap`. Fonts are Inter and JetBrains Mono.
+(`frontend/src/lib/api.ts`). The sitemap (`app/sitemap.ts`) reads `GET /games/sitemap` and `GET /blog/sitemap`. Fonts are Inter and JetBrains Mono.
 
 ## Environment
 

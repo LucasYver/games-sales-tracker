@@ -18,3 +18,5 @@ export * from './game-platform-release-date.entity';
 export * from './game-ingestion-state.entity';
 export * from './admin-user.entity';
 export * from './provider-cooldown.entity';
+export * from './blog-post.entity';
+export * from './blog-post-translation.entity';

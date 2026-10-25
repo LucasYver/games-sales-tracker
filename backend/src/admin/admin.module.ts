@@ -27,6 +27,7 @@ import { PublishersModule } from '../publishers/publishers.module';
 import { GenresModule } from '../genres/genres.module';
 import { EstimationModule } from '../estimation/estimation.module';
 import { ReferenceProfilesModule } from '../reference-profiles/reference-profiles.module';
+import { BlogModule } from '../blog/blog.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { ReferenceProfilesModule } from '../reference-profiles/reference-profile
     GenresModule,
     EstimationModule,
     ReferenceProfilesModule,
+    BlogModule,
   ],
   controllers: [AdminController, AdminAuthController],
   providers: [
@@ -59,6 +61,6 @@ import { ReferenceProfilesModule } from '../reference-profiles/reference-profile
     AdminAuthGuard,
     AdminMailService,
   ],
-  exports: [AdminAuthService],
+  exports: [AdminAuthService, AdminMailService],
 })
 export class AdminModule {}

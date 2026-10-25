@@ -20,6 +20,7 @@
     "MEDIUM": "Medium confidence"
   },
   "nav": {
+    "blog": "Blog",
     "langSwitch": "Français",
     "ranking": "Ranking"
   },
@@ -124,6 +125,8 @@
     "headingFree": "{name}",
     "headingUnits": "{units} copies",
     "interestTitle": "Audience signals",
+    "officialRecap": "How many copies has {name} sold?",
+    "officialRecapLead": "Official sales recap",
     "noData": "No sales figure yet for this game.",
     "peakCcuHint": "Steam concurrent players · {date}",
     "peakCcuLabel": "Steam all-time peak",
@@ -208,5 +211,19 @@
     "topDecile": "Wks top 10%",
     "topDecileShort": "{count} wks top 10%",
     "weeks": "Wks charted"
+  },
+  "blog": {
+    "breadcrumbBlog": "Blog",
+    "breadcrumbHome": "Home",
+    "ctaGame": "See live sales data for {name}",
+    "empty": "No articles yet. Official sales recaps will land here soon.",
+    "faqTitle": "Questions",
+    "indexDescription": "Official video-game sales figures: publisher statements, Wikipedia, and analyst notes, game by game.",
+    "indexIntro": "Publisher statements, Wikipedia, and the analyst notes we keep on file — the official sales story for each game, dated and attributed.",
+    "indexTitle": "Official sales, on the record",
+    "metaIndexTitle": "Official game sales — Blog",
+    "publishedOn": "Published {date}",
+    "tldrTitle": "In short",
+    "updatedOn": "Updated {date}"
   }
 }

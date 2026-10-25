@@ -624,6 +624,77 @@ export interface PlatformBreakdownResult {
   aggregateHigh: number;
 }
 
+export type BlogPostStatus = 'DRAFT' | 'PUBLISHED' | 'REJECTED';
+
+export interface AdminBlogSummary {
+  id: string;
+  status: BlogPostStatus;
+  gameId: string | null;
+  gameName: string | null;
+  gameSlug: string | null;
+  coverUrl: string | null;
+  generatedAt: string | null;
+  publishedAt: string | null;
+  rejectReason: string | null;
+  model: string | null;
+  issueCount: number;
+  unverifiedCount: number;
+  titles: Record<string, string>;
+  slugs: Record<string, string>;
+}
+
+export interface AdminBlogTranslation {
+  locale: 'en' | 'fr';
+  slug: string;
+  title: string;
+  metaDescription: string;
+  excerpt: string;
+  tldr: string[];
+  bodyMarkdown: string;
+  faq: { question: string; answer: string }[];
+  claims: { sentence: string; factIds: string[] }[];
+  reviewIssues: {
+    severity: 'warning' | 'error';
+    excerpt: string;
+    problem: string;
+    suggestion: string;
+  }[];
+  unverifiedNumbers: string[];
+}
+
+export interface AdminBlogDetail extends AdminBlogSummary {
+  factPack: {
+    game?: { name: string; slug: string };
+    facts?: {
+      id: string;
+      kind: string;
+      value: number;
+      unit: string;
+      platform: string;
+      source: string;
+      sourceName: string;
+      date: string | null;
+      isEngagement: boolean;
+      isAlinea: boolean;
+      sourceUrl?: string | null;
+    }[];
+  };
+  reviewedBy: string | null;
+  reviewEmailSentAt: string | null;
+  translations: AdminBlogTranslation[];
+}
+
+export interface AdminBlogCandidate {
+  gameId: string;
+  name: string;
+  slug: string;
+  coverUrl: string | null;
+  score: number;
+  reasons: string[];
+  salesFactCount: number;
+  steamReviews: number | null;
+}
+
 export interface AdminEstimateBreakdown {
   computedAt: string;
   platforms: PlatformBreakdownResult[];

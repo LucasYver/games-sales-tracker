@@ -31,6 +31,7 @@
         { "path": "/api/cron/ps-prices", "schedule": "0 6,14,22 * * *" },
         { "path": "/api/cron/game-discovery", "schedule": "0 2 * * *" },
         { "path": "/api/cron/steam-followers", "schedule": "0 4,16 * * *" },
-        { "path": "/api/cron/game-rank", "schedule": "0 5 * * 1" }
+        { "path": "/api/cron/game-rank", "schedule": "0 5 * * 1" },
+        { "path": "/api/cron/blog-draft", "schedule": "0 7 * * 0" }
     ]
 }

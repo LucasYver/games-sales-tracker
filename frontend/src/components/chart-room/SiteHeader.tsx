@@ -5,8 +5,13 @@ import { SearchBar } from '@/components/SearchBar';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 /** Persistent bar: wordmark, search, language. Same on every public page. */
-export function SiteHeader() {
+export function SiteHeader({
+  localePaths,
+}: {
+  localePaths?: Partial<Record<string, string>>;
+}) {
   const t = useTranslations('siteMeta');
+  const tNav = useTranslations('nav');
 
   return (
     <header className="border-b border-border bg-card">
@@ -17,12 +22,18 @@ export function SiteHeader() {
         >
           {t('siteName')}
         </Link>
+        <Link
+          href="/blog"
+          className="font-mono text-sm text-muted-foreground hover:text-foreground"
+        >
+          {tNav('blog')}
+        </Link>
         <div className="order-3 w-full sm:order-none sm:ml-auto sm:w-auto sm:max-w-xs sm:flex-1">
           <Suspense fallback={<div className="h-9" />}>
             <SearchBar />
           </Suspense>
         </div>
-        <LanguageSwitcher />
+        <LanguageSwitcher localePaths={localePaths} />
       </div>
     </header>
   );

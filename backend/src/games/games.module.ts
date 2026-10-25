@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   AchievementSnapshot,
+  BlogPost,
   EstimateSnapshot,
   Game,
   GameRank,
@@ -25,6 +26,7 @@ import { GamesService } from './games.service';
       Milestone,
       PriceSnapshot,
       GameRank,
+      BlogPost,
     ]),
     EstimationModule,
   ],

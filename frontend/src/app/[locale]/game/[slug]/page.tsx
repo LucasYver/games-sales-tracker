@@ -326,6 +326,26 @@ function SalesHeadline({ game }: { game: GameDetail }) {
   );
 }
 
+function OfficialSalesRecap({ game }: { game: GameDetail }) {
+  const t = useTranslations('gamePage');
+  const locale = useLocale();
+  const slug = game.blog?.slugByLocale?.[locale as 'en' | 'fr'];
+  if (!slug) return null;
+  return (
+    <aside className="border-b border-border px-4 py-3">
+      <p className="font-mono text-[0.68rem] tracking-wide text-text-faint uppercase">
+        {t('officialRecapLead')}
+      </p>
+      <Link
+        href={`/blog/${slug}`}
+        className="mt-1 inline-block text-sm text-primary hover:underline"
+      >
+        {t('officialRecap', { name: game.name })}
+      </Link>
+    </aside>
+  );
+}
+
 /**
  * Current price, and the discount louder than the price itself when one is
  * running — that is the thing a visitor scanning the page wants to catch.
@@ -850,6 +870,7 @@ function GamePageContent({
 
         <GameHeader game={game} />
         <SalesHeadline game={game} />
+        <OfficialSalesRecap game={game} />
         <TabNav
           slug={game.slug}
           active={activeTab}

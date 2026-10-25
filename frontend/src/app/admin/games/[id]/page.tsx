@@ -29,6 +29,7 @@ import { GameTabNav } from '../../_components/GameTabNav';
 import { DeleteButton } from '../../_components/DeleteButton';
 import { RefreshGameButton } from '../../_components/RefreshGameButton';
 import { RebuildEstimatesButton } from '../../_components/RebuildEstimatesButton';
+import { GenerateBlogDraftButton } from '../../_components/GenerateBlogDraftButton';
 import { ImportCcuCsvButton } from '../../_components/ImportCcuCsvButton';
 import { ImportReviewsCsvButton } from '../../_components/ImportReviewsCsvButton';
 import { EditGameForm } from '../../_components/EditGameForm';
@@ -176,6 +177,7 @@ export default async function AdminGameDetailPage({
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
             <RefreshGameButton gameId={s.id} />
             {!s.isFree && <RebuildEstimatesButton gameId={s.id} />}
+            {!s.isFree && <GenerateBlogDraftButton gameId={s.id} />}
             <ImportCcuCsvButton gameId={s.id} />
             <ImportReviewsCsvButton gameId={s.id} />
             <DeleteButton

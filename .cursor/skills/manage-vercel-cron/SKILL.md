@@ -60,10 +60,12 @@ Adding a value to `INGESTION_PIPELINES` in
   `isEligibleForAutomaticHarvest` (`CORE`, or `EXTENDED` with
   `recentVelocityPercentile <= 0.1`) plus `isDueForRefresh`.
 
-Whole-catalog jobs that do not loop games (`game-rank`, and discovery's
-own IGDB pass) are not rows in `INGESTION_CRONS`. Do not add them there
-unless the dashboard query in `AdminService.stats` can count their cycle
-the same way as the others.
+Whole-catalog jobs that do not loop games (`game-rank`, discovery's
+own IGDB pass, `blog-draft`) are not rows in `INGESTION_CRONS`. Do not
+add them there unless the dashboard query in `AdminService.stats` can
+count their cycle the same way as the others. `blog-draft` writes at most
+one unpublished article per week and never publishes. How the game is
+picked: `manage-blog` skill (`BlogCandidateService.pickBest`).
 
 Milestone harvest is per-game but age-based, not cycle-based, so it is not
 in `INGESTION_CRONS` either. Its dashboard row comes from

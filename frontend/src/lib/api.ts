@@ -167,6 +167,7 @@ export interface GameDetail {
   regionalPrices: RegionalPrice[];
   rank: RankInfo | null;
   storeRatings: StoreRatings;
+  blog: { slugByLocale: { en?: string; fr?: string } } | null;
 }
 
 /**
@@ -336,5 +337,81 @@ export async function getGame(
       game.priceStore === 'xbox' || game.priceStore === 'playstation'
         ? game.priceStore
         : 'steam',
+    blog: game.blog ?? null,
   };
+}
+
+const BLOG_TTL = 3600;
+
+export interface PublicBlogListItem {
+  slug: string;
+  title: string;
+  excerpt: string;
+  publishedAt: string | null;
+  game: { name: string; slug: string; coverUrl: string | null } | null;
+}
+
+export interface PublicBlogIndex {
+  items: PublicBlogListItem[];
+  total: number;
+}
+
+export interface PublicBlogPost {
+  slug: string;
+  locale: 'en' | 'fr';
+  title: string;
+  metaDescription: string;
+  excerpt: string;
+  tldr: string[];
+  bodyMarkdown: string;
+  faq: { question: string; answer: string }[];
+  publishedAt: string | null;
+  updatedAt: string;
+  game: { name: string; slug: string; coverUrl: string | null } | null;
+  alternate: { locale: 'en' | 'fr'; slug: string } | null;
+}
+
+export async function getBlogIndex(
+  locale: string,
+  limit = 20,
+  offset = 0,
+): Promise<PublicBlogIndex> {
+  const res = await fetch(
+    `${API_URL}/blog?locale=${encodeURIComponent(locale)}&limit=${limit}&offset=${offset}`,
+    { next: { revalidate: BLOG_TTL } },
+  );
+  if (!res.ok) return { items: [], total: 0 };
+  return res.json();
+}
+
+export async function getBlogPost(
+  locale: string,
+  slug: string,
+): Promise<PublicBlogPost | null> {
+  const res = await fetch(
+    `${API_URL}/blog/${encodeURIComponent(locale)}/${encodeURIComponent(slug)}`,
+    { next: { revalidate: BLOG_TTL } },
+  );
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export interface BlogSitemapItem {
+  locale: string;
+  slug: string;
+  publishedAt: string | null;
+  alternateSlug?: string;
+}
+
+export async function getBlogSitemap(): Promise<BlogSitemapItem[]> {
+  try {
+    const res = await fetch(`${API_URL}/blog/sitemap`, {
+      next: { revalidate: BLOG_TTL },
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { items?: BlogSitemapItem[] };
+    return data.items ?? [];
+  } catch {
+    return [];
+  }
 }

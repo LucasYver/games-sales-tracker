@@ -6,7 +6,11 @@ import { useTransition } from 'react';
 import { Languages } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-export function LanguageSwitcher() {
+export function LanguageSwitcher({
+  localePaths,
+}: {
+  localePaths?: Partial<Record<string, string>>;
+}) {
   const locale = useLocale();
   const t = useTranslations('nav');
   const router = useRouter();
@@ -16,7 +20,7 @@ export function LanguageSwitcher() {
   const toggle = () => {
     const next = locale === 'en' ? 'fr' : 'en';
     startTransition(() => {
-      router.replace(pathname, { locale: next });
+      router.replace(localePaths?.[next] ?? pathname, { locale: next });
     });
   };
 

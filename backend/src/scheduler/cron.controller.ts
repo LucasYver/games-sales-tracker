@@ -90,4 +90,10 @@ export class CronController {
   gameRank() {
     return this.refresh.recomputeHomegrownRank();
   }
+
+  @Get('blog-draft')
+  @HttpCode(200)
+  blogDraft() {
+    return this.refresh.generateWeeklyBlogDraft();
+  }
 }

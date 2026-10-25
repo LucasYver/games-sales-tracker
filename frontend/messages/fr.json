@@ -20,6 +20,7 @@
     "MEDIUM": "Confiance moyenne"
   },
   "nav": {
+    "blog": "Blog",
     "langSwitch": "English",
     "ranking": "Classement"
   },
@@ -124,6 +125,8 @@
     "headingFree": "{name}",
     "headingUnits": "{units} exemplaires",
     "interestTitle": "Signaux d’audience",
+    "officialRecap": "Combien d'exemplaires {name} a-t-il vendus ?",
+    "officialRecapLead": "Ce que l'on sait officiellement",
     "noData": "Aucun chiffre de vente pour ce jeu.",
     "peakCcuHint": "joueurs simultanés Steam · {date}",
     "peakCcuLabel": "Record Steam",
@@ -208,5 +211,19 @@
     "topDecile": "Sem. top 10 %",
     "topDecileShort": "{count} sem. top 10 %",
     "weeks": "Sem. classé"
+  },
+  "blog": {
+    "breadcrumbBlog": "Blog",
+    "breadcrumbHome": "Accueil",
+    "ctaGame": "Voir les données live de {name}",
+    "empty": "Pas encore d'article. Les dossiers sur les ventes officielles arriveront ici.",
+    "faqTitle": "Questions",
+    "indexDescription": "Chiffres de ventes officiels : déclarations d'éditeurs, Wikipedia et notes d'analystes, jeu par jeu.",
+    "indexIntro": "Déclarations d'éditeurs, Wikipedia et notes d'analystes — l'histoire officielle des ventes de chaque jeu, datée et attribuée.",
+    "indexTitle": "Les ventes officielles, telles qu'annoncées",
+    "metaIndexTitle": "Ventes officielles — Blog",
+    "publishedOn": "Publié le {date}",
+    "tldrTitle": "En bref",
+    "updatedOn": "Mis à jour le {date}"
   }
 }

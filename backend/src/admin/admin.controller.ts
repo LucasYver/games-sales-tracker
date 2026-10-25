@@ -4,13 +4,16 @@ import {
   Delete,
   Get,
   HttpCode,
+  NotFoundException,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { AdminService } from './admin.service';
 import { AdminAuthGuard } from './admin-auth.guard';
 import { CatalogTier, SalesSource } from '../entities';
@@ -27,6 +30,11 @@ import { UpdateGameDto } from './dto/update-game.dto';
 import { UpdateMilestoneDto } from './dto/update-milestone.dto';
 import { CreateMilestoneDto } from './dto/create-milestone.dto';
 import { UpdateTrustedSourceDto } from './dto/update-trusted-source.dto';
+import { UpdateBlogTranslationDto } from './dto/update-blog-translation.dto';
+import { RejectBlogDto } from './dto/reject-blog.dto';
+import { BlogService } from '../blog/blog.service';
+import { AdminMailService } from './admin-mail.service';
+import type { BlogPostStatus } from '../entities';
 
 @Controller('admin')
 @UseGuards(AdminAuthGuard)
@@ -39,6 +47,8 @@ export class AdminController {
     private readonly estimation: EstimationService,
     private readonly referenceProfiles: ReferenceProfilesAdminService,
     private readonly rank: RankService,
+    private readonly blog: BlogService,
+    private readonly mail: AdminMailService,
   ) {}
 
   @Get('stats')
@@ -79,8 +89,7 @@ export class AdminController {
             ? false
             : undefined,
       catalogTier:
-        catalogTier === CatalogTier.CORE ||
-        catalogTier === CatalogTier.EXTENDED
+        catalogTier === CatalogTier.CORE || catalogTier === CatalogTier.EXTENDED
           ? catalogTier
           : undefined,
       sort:
@@ -210,8 +219,7 @@ export class AdminController {
     return this.admin.listMilestones({
       gameId,
       source: source as SalesSource | undefined,
-      sort:
-        sort === 'reportedAt' || sort === 'capturedAt' ? sort : undefined,
+      sort: sort === 'reportedAt' || sort === 'capturedAt' ? sort : undefined,
       direction: direction === 'asc' ? 'asc' : undefined,
       offset: offset ? Number(offset) : undefined,
       limit: limit ? Number(limit) : undefined,
@@ -346,4 +354,78 @@ export class AdminController {
   backfillSteamPs() {
     return this.ingestion.startBackfillMissing();
   }
+
+  @Get('blog/candidates')
+  blogCandidates(@Query('limit') limit?: string) {
+    return this.blog.listCandidates(Number(limit) || undefined);
+  }
+
+  @Get('blog')
+  listBlog(
+    @Query('status') status?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const valid: BlogPostStatus[] = ['DRAFT', 'PUBLISHED', 'REJECTED'];
+    const resolved = valid.includes(status as BlogPostStatus)
+      ? (status as BlogPostStatus)
+      : 'DRAFT';
+    return this.blog.list(
+      resolved,
+      Number(limit) || undefined,
+      Number(offset) || undefined,
+    );
+  }
+
+  @Get('blog/:id')
+  getBlog(@Param('id', ParseUUIDPipe) id: string) {
+    return this.blog.getAdmin(id);
+  }
+
+  @Post('games/:id/blog-draft')
+  @HttpCode(200)
+  async generateBlogDraft(@Param('id', ParseUUIDPipe) id: string) {
+    const post = await this.blog.generateForGame(id);
+    await this.mail.sendBlogDraftReady(post);
+    await this.blog.markReviewEmailSent(post.id);
+    return post;
+  }
+
+  @Patch('blog/:id/translations/:locale')
+  updateBlogTranslation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('locale') locale: string,
+    @Body() body: UpdateBlogTranslationDto,
+  ) {
+    if (locale !== 'en' && locale !== 'fr') {
+      throw new NotFoundException(`Unknown locale ${locale}`);
+    }
+    return this.blog.updateTranslation(id, locale, body);
+  }
+
+  @Post('blog/:id/publish')
+  @HttpCode(200)
+  publishBlog(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
+    return this.blog.publish(id, adminEmail(req));
+  }
+
+  @Post('blog/:id/reject')
+  @HttpCode(200)
+  rejectBlog(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: RejectBlogDto,
+    @Req() req: Request,
+  ) {
+    return this.blog.reject(id, body.reason, adminEmail(req));
+  }
+
+  @Post('blog/:id/unpublish')
+  @HttpCode(200)
+  unpublishBlog(@Param('id', ParseUUIDPipe) id: string) {
+    return this.blog.unpublish(id);
+  }
+}
+
+function adminEmail(req: Request): string | undefined {
+  return (req as Request & { adminUser?: { email: string } }).adminUser?.email;
 }

@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, LessThanOrEqual, Or, Repository } from 'typeorm';
 import {
   AchievementSnapshot,
+  BlogPost,
   ConfidenceLevel,
   EstimateSnapshot,
   Game,
@@ -237,6 +238,8 @@ export class GamesService {
     private readonly prices: Repository<PriceSnapshot>,
     @InjectRepository(GameRank)
     private readonly ranks: Repository<GameRank>,
+    @InjectRepository(BlogPost)
+    private readonly blogPosts: Repository<BlogPost>,
     private readonly estimation: EstimationService,
     private readonly estimationMethods: EstimationMethodService,
   ) {}
@@ -805,6 +808,18 @@ export class GamesService {
 
     const storeRatings = await this.buildStoreRatings(game.id);
 
+    const publishedBlog = await this.blogPosts.findOne({
+      where: { gameId: game.id, status: 'PUBLISHED' },
+      relations: { translations: true },
+    });
+    const blog = publishedBlog
+      ? {
+          slugByLocale: Object.fromEntries(
+            publishedBlog.translations.map((t) => [t.locale, t.slug]),
+          ) as { en?: string; fr?: string },
+        }
+      : null;
+
     const estimateSnapshotRows = game.isFree
       ? []
       : await this.estimateSnapshots.find({
@@ -867,6 +882,7 @@ export class GamesService {
       regionalPrices,
       rank,
       storeRatings,
+      blog,
     };
   }
 
@@ -894,7 +910,8 @@ export class GamesService {
     );
     const stores: PublicPriceStore[] = [];
     if (rows.some((r) => r.source === SourceType.STEAM)) stores.push('steam');
-    if (rows.some((r) => r.source === SourceType.XBOX_STORE)) stores.push('xbox');
+    if (rows.some((r) => r.source === SourceType.XBOX_STORE))
+      stores.push('xbox');
     if (rows.some((r) => r.source === SourceType.PS_STORE))
       stores.push('playstation');
     return stores;

@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import {
   ADMIN_COOKIE,
   adminFetch,
+  type AdminBlogDetail,
   type AdminGenreIgdbSyncResult,
   type SalesSource,
 } from '@/lib/admin';
@@ -333,6 +334,74 @@ export interface SteamPsBackfillResult {
     followers: number;
     ratings: number;
   };
+}
+
+export async function generateBlogDraft(
+  gameId: string,
+): Promise<AdminBlogDetail> {
+  const result = await adminFetch<AdminBlogDetail>(
+    `/games/${gameId}/blog-draft`,
+    { method: 'POST' },
+  );
+  revalidatePath('/admin/blog');
+  revalidatePath(`/admin/blog/${result.id}`);
+  revalidatePath(`/admin/games/${gameId}`);
+  return result;
+}
+
+export async function publishBlogPost(id: string): Promise<AdminBlogDetail> {
+  const result = await adminFetch<AdminBlogDetail>(`/blog/${id}/publish`, {
+    method: 'POST',
+  });
+  revalidatePath('/admin/blog');
+  revalidatePath(`/admin/blog/${id}`);
+  revalidatePath('/en/blog', 'layout');
+  revalidatePath('/fr/blog', 'layout');
+  return result;
+}
+
+export async function rejectBlogPost(
+  id: string,
+  reason?: string,
+): Promise<AdminBlogDetail> {
+  const result = await adminFetch<AdminBlogDetail>(`/blog/${id}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+  revalidatePath('/admin/blog');
+  revalidatePath(`/admin/blog/${id}`);
+  return result;
+}
+
+export async function unpublishBlogPost(id: string): Promise<AdminBlogDetail> {
+  const result = await adminFetch<AdminBlogDetail>(`/blog/${id}/unpublish`, {
+    method: 'POST',
+  });
+  revalidatePath('/admin/blog');
+  revalidatePath(`/admin/blog/${id}`);
+  revalidatePath('/en/blog', 'layout');
+  revalidatePath('/fr/blog', 'layout');
+  return result;
+}
+
+export async function updateBlogTranslation(
+  id: string,
+  locale: 'en' | 'fr',
+  body: {
+    title?: string;
+    metaDescription?: string;
+    excerpt?: string;
+    tldr?: string[];
+    bodyMarkdown?: string;
+    faq?: { question: string; answer: string }[];
+  },
+): Promise<AdminBlogDetail> {
+  const result = await adminFetch<AdminBlogDetail>(
+    `/blog/${id}/translations/${locale}`,
+    { method: 'PATCH', body: JSON.stringify(body) },
+  );
+  revalidatePath(`/admin/blog/${id}`);
+  return result;
 }
 
 export async function runSteamPsBackfill(): Promise<SteamPsBackfillResult> {

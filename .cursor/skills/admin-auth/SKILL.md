@@ -85,14 +85,16 @@ After create: best-effort welcome email (does not roll back the user if mail fai
 `GET /admin/auth/users` lists allowlisted accounts (auth required).
 `GET /admin/auth/me` returns `{ email }` for the current session.
 
-## Welcome email (Resend)
+## Admin emails (Resend)
 
 `AdminMailService` POSTs to `https://api.resend.com/emails` when
 `RESEND_API_KEY` is set; otherwise logs a warn and skips.
 
 - From: `RESEND_FROM_EMAIL` (prod: verified domain, e.g.
   `Game Sales Tracker <noreply@gamesalestracker.tech>`)
-- Link: `${PUBLIC_APP_URL}/admin/login`
+- Welcome: `${PUBLIC_APP_URL}/admin/login` after account create
+- Blog draft ready / leftover-draft digest: `${PUBLIC_APP_URL}/admin/blog/:id`
+  to every `admin_user` with `disabledAt` null
 - HTML: Chart Room palette (dark `#0e1420`, gold `#d9a441`, mono wordmark)
 - Never include the password in the mail
 
@@ -105,7 +107,7 @@ After changing Vercel env vars, redeploy.
 | --- | -------- | ---- |
 | `ADMIN_SESSION_SECRET` | Yes for auth | HMAC key for sessions; empty → admin API disabled |
 | `ADMIN_BOOTSTRAP_EMAIL` / `ADMIN_BOOTSTRAP_PASSWORD` | No | First user on boot; remove password after use |
-| `RESEND_API_KEY` | No | Welcome mail; skip if unset |
+| `RESEND_API_KEY` | No | Welcome + blog review mails; skip if unset |
 | `RESEND_FROM_EMAIL` | No | Sender (domain must be verified in Resend for arbitrary recipients) |
 | `PUBLIC_APP_URL` | No | Base URL for the login link in mail |
 

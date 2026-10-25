@@ -10,6 +10,7 @@ import {
   Tags,
   Boxes,
   Trophy,
+  Newspaper,
   LogOut,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -74,6 +75,12 @@ const NAV_ITEMS = [
     href: '/admin/ranks',
     label: 'Ranks',
     icon: Trophy,
+    exact: false,
+  },
+  {
+    href: '/admin/blog',
+    label: 'Blog',
+    icon: Newspaper,
     exact: false,
   },
 ];
