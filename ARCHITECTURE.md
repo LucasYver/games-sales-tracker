@@ -69,6 +69,7 @@ on `DATABASE_URL_DIRECT`, then `DATABASE_URL`.
 | `ProcessedArticle` | `processed_article` | URL dedup for extraction. |
 | `ReferenceProfile` | `reference_profile` | Observed vector for one matcher anchor. |
 | `AdminUser` | `admin_user` | Allowlisted back-office account (email + scrypt hash). No public signup. |
+| `ProviderCooldown` | `provider_cooldown` | Cross-invocation skip window for an external provider (Perplexity out of credit). |
 
 `SalesRecord` was renamed to `Milestone`. `GenreProfile` and the per-game
 calibration columns are gone.
@@ -107,7 +108,13 @@ Other clients in `ingestion/`:
   If that variable is unset, the code falls back to `gpt-5.6-luna`.
 
 Trusted-source matching still gates article milestones. RSS polling was
-removed; discovery of articles is search plus on-site templates.
+removed; articles are discovered by web search only. `searchUrlTemplate`
+on `trusted_source` is stored and editable but no code queries it.
+
+Milestone harvest (`IngestionService.harvestGameMilestones`) runs Wikipedia
+then backlog search. It does not rebuild estimates; the `estimate-rebuild`
+cron does. Per-game cadence is age-based (`scheduler/refresh-interval.ts`),
+keyed on `game.lastMilestoneHarvestedAt`.
 
 ### Scheduler
 

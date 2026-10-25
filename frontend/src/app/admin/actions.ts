@@ -229,9 +229,18 @@ export async function updateMilestone(
   revalidatePath('/admin/trusted-sources', 'layout');
 }
 
-export async function deleteMilestone(id: string): Promise<void> {
-  await adminFetch(`/milestones/${id}`, { method: 'DELETE' });
+export async function deleteMilestone(
+  id: string,
+  gameId: string,
+): Promise<void> {
+  const result = await adminFetch<{ deleted: boolean }>(`/milestones/${id}`, {
+    method: 'DELETE',
+  });
+  if (!result.deleted) {
+    throw new Error('Milestone was not deleted (already removed?)');
+  }
   revalidatePath('/admin/milestones');
+  revalidatePath(`/admin/games/${gameId}`);
   revalidatePath('/admin/trusted-sources', 'layout');
 }
 

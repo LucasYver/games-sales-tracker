@@ -93,6 +93,77 @@ function StatCard({
   );
 }
 
+// Milestone harvest has no fixed cycle: each game is due when its age-based
+// interval elapses, so "Remaining" is the number of games due right now.
+function MilestoneHarvestRow({
+  harvest,
+}: {
+  harvest: AdminStats['milestoneHarvest'];
+}) {
+  const status =
+    harvest.failedLast24h > 0
+      ? 'Issues'
+      : harvest.dueNow === 0
+        ? 'Complete'
+        : 'In progress';
+
+  return (
+    <TableRow>
+      <TableCell>
+        <p className="font-medium">Milestone harvest</p>
+        <code className="text-muted-foreground text-xs">
+          {harvest.cronPath}
+        </code>
+      </TableCell>
+      <TableCell>
+        <p className="whitespace-nowrap text-sm">Age-based (3d → 180d)</p>
+        <code className="text-muted-foreground whitespace-nowrap text-xs">
+          {harvest.schedule}
+        </code>
+      </TableCell>
+      <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
+        Rolling, last 24h
+      </TableCell>
+      <TableCell className="tabular-nums">
+        <p className="whitespace-nowrap">
+          {harvest.checkedLast24h.toLocaleString()} checked /{' '}
+          {harvest.eligible.toLocaleString()} eligible
+        </p>
+        <p className="text-muted-foreground whitespace-nowrap text-xs">
+          ~{harvest.expectedPerDay.toLocaleString()}/day expected
+        </p>
+      </TableCell>
+      <TableCell className="text-right tabular-nums">
+        <p>{harvest.dueNow.toLocaleString()}</p>
+        <p className="text-muted-foreground text-xs">due now</p>
+      </TableCell>
+      <TableCell className="text-right tabular-nums">
+        <span
+          className={harvest.failedLast24h > 0 ? 'text-destructive' : undefined}
+        >
+          {harvest.failedLast24h.toLocaleString()}
+        </span>
+      </TableCell>
+      <TableCell>
+        <Badge
+          variant={
+            status === 'Complete'
+              ? 'default'
+              : status === 'Issues'
+                ? 'destructive'
+                : 'secondary'
+          }
+        >
+          {status}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-muted-foreground whitespace-nowrap text-right text-xs">
+        {formatTimestamp(harvest.lastSuccessAt)}
+      </TableCell>
+    </TableRow>
+  );
+}
+
 export default async function AdminDashboard() {
   const stats = await adminFetch<AdminStats>('/stats');
 
@@ -295,6 +366,7 @@ export default async function AdminDashboard() {
                       </TableRow>
                     );
                   })}
+                  <MilestoneHarvestRow harvest={stats.milestoneHarvest} />
                 </TableBody>
               </Table>
             </div>

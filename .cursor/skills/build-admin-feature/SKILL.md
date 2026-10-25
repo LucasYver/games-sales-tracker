@@ -28,17 +28,11 @@ description: >-
 
 ## Auth
 
-Allowlist only — no public registration. Accounts live in `admin_user`
-(email + scrypt hash). First user: `ADMIN_BOOTSTRAP_*` env or
-`npm run admin:create-user`. More users: `POST /admin/auth/users` (already
-authenticated) or the same script. Creating a user sends a Chart Room–styled
-welcome email via Resend when `RESEND_API_KEY` is set (`PUBLIC_APP_URL` for
-the `/admin/login` link).
+Allowlist + email/password + `X-Admin-Session`. Full model, env vars, Resend
+welcome mail, and session TTL: see the `admin-auth` skill.
 
 `AdminController` is `@UseGuards(AdminAuthGuard)`. Do not add a second
-guard. UI sends `X-Admin-Session` (signed cookie). Fail-closed when
-`ADMIN_SESSION_SECRET` is unset. `POST /admin/auth/login` is public
-(separate `AdminAuthController`).
+guard. `POST /admin/auth/login` is public (`AdminAuthController`).
 
 ## Backend
 

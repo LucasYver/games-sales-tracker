@@ -44,8 +44,8 @@ export class TrustedSource {
   url: string | null;
 
   // On-site search URL with a "{q}" placeholder (e.g.
-  // "https://www.pcgamer.com/search/?searchTerm={q}"). Used by article
-  // discovery to scrape the outlet's own search results. Null = not searchable.
+  // "https://www.pcgamer.com/search/?searchTerm={q}"). Reference data only:
+  // no ingestion code queries it today. Null = not searchable.
   @Column({ type: 'varchar', nullable: true })
   searchUrlTemplate: string | null;
 

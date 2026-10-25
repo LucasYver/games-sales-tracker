@@ -32,6 +32,8 @@ import {
 } from '../ingestion/ingestion-cadence';
 import { DEFAULT_CONFIDENCE_SCORE } from '../ingestion/ingestion.service';
 import { slugify } from '../common/slug';
+import { EXTENDED_HARVEST_PERCENTILE } from '../scheduler/harvest-eligibility';
+import { harvestDueSql } from '../scheduler/refresh-interval';
 import { GamesService } from '../games/games.service';
 import { ReferenceProfileService } from '../reference-profiles/reference-profile.service';
 
@@ -207,6 +209,20 @@ export interface AdminStats {
     lastAttemptAt: Date | null;
     lastSuccessAt: Date | null;
   }>;
+  milestoneHarvest: {
+    cronPath: string;
+    schedule: string;
+    /** Released, dated, tier-eligible games (CORE or top EXTENDED). */
+    eligible: number;
+    /** Eligible games whose age-based interval has elapsed. */
+    dueNow: number;
+    /** Steady-state harvests per day implied by the age-based intervals. */
+    expectedPerDay: number;
+    checkedLast24h: number;
+    failedLast24h: number;
+    lastAttemptAt: Date | null;
+    lastSuccessAt: Date | null;
+  };
 }
 
 export interface AdminGameSummary {
@@ -663,6 +679,8 @@ export class AdminService {
       }),
     );
 
+    const milestoneHarvest = await this.milestoneHarvestProgress();
+
     return {
       games: {
         total: gamesTotal,
@@ -686,6 +704,63 @@ export class AdminService {
       },
       estimates: { total: estimatesTotal },
       ingestionPipelines,
+      milestoneHarvest,
+    };
+  }
+
+  /**
+   * Milestone harvest has no fixed cycle: each game is due when its
+   * age-based interval elapses (`scheduler/refresh-interval.ts`), and only
+   * CORE or top-velocity EXTENDED games qualify (`harvest-eligibility.ts`).
+   */
+  private async milestoneHarvestProgress(): Promise<
+    AdminStats['milestoneHarvest']
+  > {
+    const { intervalDays, isDue } = harvestDueSql('g');
+    const [row] = await this.games.query<
+      Array<{
+        eligible: string;
+        dueNow: string;
+        expectedPerDay: string | null;
+        checkedLast24h: string;
+        failedLast24h: string;
+        lastAttemptAt: Date | null;
+        lastSuccessAt: Date | null;
+      }>
+    >(
+      `SELECT
+         COUNT(*) FILTER (WHERE ${intervalDays} IS NOT NULL) AS "eligible",
+         COUNT(*) FILTER (WHERE ${isDue}) AS "dueNow",
+         SUM(1.0 / ${intervalDays}) AS "expectedPerDay",
+         COUNT(*) FILTER (
+           WHERE g."lastMilestoneHarvestedAt" >= now() - interval '24 hours'
+         ) AS "checkedLast24h",
+         COUNT(*) FILTER (
+           WHERE s."lastAttemptAt" >= now() - interval '24 hours'
+             AND s."failureCount" > 0
+         ) AS "failedLast24h",
+         MAX(s."lastAttemptAt") AS "lastAttemptAt",
+         MAX(s."lastSuccessAt") AS "lastSuccessAt"
+       FROM game g
+       LEFT JOIN game_rank r ON r."gameId" = g.id
+       LEFT JOIN game_ingestion_state s
+         ON s."gameId" = g.id AND s.pipeline = 'MILESTONE_HARVEST'
+       WHERE g."isFree" = false
+         AND g."deletedAt" IS NULL
+         AND (g."catalogTier" = $1 OR r."recentVelocityPercentile" <= $2)`,
+      [CatalogTier.CORE, EXTENDED_HARVEST_PERCENTILE],
+    );
+
+    return {
+      cronPath: '/api/cron/milestone-harvest',
+      schedule: '30 0,6,12,18 * * *',
+      eligible: Number(row?.eligible ?? 0),
+      dueNow: Number(row?.dueNow ?? 0),
+      expectedPerDay: Math.round(Number(row?.expectedPerDay ?? 0)),
+      checkedLast24h: Number(row?.checkedLast24h ?? 0),
+      failedLast24h: Number(row?.failedLast24h ?? 0),
+      lastAttemptAt: row?.lastAttemptAt ?? null,
+      lastSuccessAt: row?.lastSuccessAt ?? null,
     };
   }
 
@@ -716,22 +791,7 @@ export class AdminService {
     const hasEstimateExpr =
       'EXISTS (SELECT 1 FROM sales_estimate e WHERE e."gameId" = g.id)';
 
-    // SQL mirror of getRefreshIntervalDays()/isDueForRefresh()
-    // (scheduler/refresh-interval.ts) so the admin listing can filter on the
-    // milestone-harvest cadence without materialising the whole catalog. Keep
-    // the age tiers in sync with that file.
-    const ageDaysExpr = 'EXTRACT(EPOCH FROM (now() - g."releaseDate")) / 86400';
-    const refreshIntervalExpr =
-      `CASE ` +
-      `WHEN ${ageDaysExpr} <= 180 THEN 3 ` +
-      `WHEN ${ageDaysExpr} <= 365 THEN 7 ` +
-      `WHEN ${ageDaysExpr} <= 1095 THEN 30 ` +
-      `WHEN ${ageDaysExpr} <= 1825 THEN 90 ` +
-      `ELSE 180 END`;
-    const needsRefreshExpr =
-      `g."releaseDate" IS NOT NULL AND g."releaseDate" <= now() AND (` +
-      `g."lastMilestoneHarvestedAt" IS NULL OR ` +
-      `EXTRACT(EPOCH FROM (now() - g."lastMilestoneHarvestedAt")) / 86400 >= (${refreshIntervalExpr}))`;
+    const needsRefreshExpr = harvestDueSql('g').isDue;
 
     const applyFilters = (
       builder: ReturnType<typeof this.games.createQueryBuilder>,
@@ -1013,8 +1073,11 @@ export class AdminService {
           platformReleaseDates: true,
         },
       }),
+      // Soft-deleted (rejectedAt set) milestones must never appear in admin
+      // listings — TypeORM's DeleteDateColumn filter covers this; the
+      // explicit notRejected() keeps the intent obvious at the call site.
       this.milestones.find({
-        where: { gameId: id },
+        where: { gameId: id, ...Milestone.notRejected() },
         order: { reportedAt: 'DESC' },
       }),
       this.gameRanks.findOne({ where: { gameId: id } }),
@@ -1450,7 +1513,10 @@ export class AdminService {
       id,
       ...Milestone.notRejected(),
     });
-    return { deleted: (result.affected ?? 0) > 0 };
+    if ((result.affected ?? 0) === 0) {
+      throw new NotFoundException(`Milestone ${id} not found`);
+    }
+    return { deleted: true };
   }
 
   /**

@@ -30,3 +30,5 @@ When documentation and code disagree, treat the code as the current behavior, re
 ## Workflows
 
 Use the relevant project skill for database access, estimate-divergence diagnosis, catalog discovery, and Vercel cron management. Read the source-of-truth document named by that skill before making changes.
+
+After any code or config change, before reporting done, follow the `sync-skills-and-rules` skill: grep `.cursor/skills` and `.cursor/rules` for what changed and fix stale statements. Ask before changing a rule that encodes user policy.

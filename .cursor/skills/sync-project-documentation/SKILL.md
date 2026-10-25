@@ -27,9 +27,13 @@ did not re-read the file's claims, delete the stamp instead of bumping it.
 | Discovery thresholds | `ingestion/discovery.constants.ts` | markdown |
 | DB connection, migrations | `.cursor/skills/database-connection` and `.cursor/rules/typeorm-migrations.mdc` | |
 | How to change a cron / debug one / change discovery / add admin UI | the matching skill under `.cursor/skills/` | |
+| Admin login, sessions, allowlist, Resend welcome mail | `.cursor/skills/admin-auth` | `ARCHITECTURE.md` beyond a one-liner; `build-admin-feature` beyond a pointer |
 
 `backend/README.md` and `frontend/README.md` stay short pointers. They do
 not restate the model.
+
+Checking `.cursor/skills` and `.cursor/rules` for stale statements follows
+the `sync-skills-and-rules` skill.
 
 ## When the code change is…
 

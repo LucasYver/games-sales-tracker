@@ -97,6 +97,17 @@ export interface AdminStats {
     lastAttemptAt: string | null;
     lastSuccessAt: string | null;
   }>;
+  milestoneHarvest: {
+    cronPath: string;
+    schedule: string;
+    eligible: number;
+    dueNow: number;
+    expectedPerDay: number;
+    checkedLast24h: number;
+    failedLast24h: number;
+    lastAttemptAt: string | null;
+    lastSuccessAt: string | null;
+  };
 }
 
 export interface AdminGameSummary {

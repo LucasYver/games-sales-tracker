@@ -23,6 +23,7 @@ in `vercel.json`. Per-game progress is `game_ingestion_state`.
 | `lastAttemptAt` in this cycle, `lastSuccessAt` older, `lastError` set | The call threw | Read `lastError`. Fix that. |
 | No `game_ingestion_state` row | Game not in the target set, or this job does not track per game | Check filters below before assuming the cron is dead. |
 | Attempted this cycle, no success, no error | `track()` stamps the attempt first; the process was killed mid-call | Same as a budget kill. It will not retry until the next cadence window. |
+| Harvest logs `Perplexity in credit cooldown` / `falling back to Tavily` | A credit or billing error wrote a 24h row in `provider_cooldown` | Expected while out of credit. After a recharge, delete the `perplexity` row to retry now. Tavily costs far more per game; check its plan. |
 
 `isDue` uses `lastAttemptAt`, not `lastSuccessAt`. A failed game waits
 until the next hour/day/week/month. Deleting its state row forces a retry.
@@ -58,6 +59,8 @@ newly inserted stub.
 - `STORE_RATINGS`, `PS_PRICE`, `XBOX_PRICE` need a console platform.
 - `MILESTONE_HARVEST` also requires `isEligibleForAutomaticHarvest` and
   `isDueForRefresh`. An extended game with a weak rank is skipped on purpose.
+  Due selection reads `game.lastMilestoneHarvestedAt`, not the state row.
+  Pre-release and undated games are never harvested.
 - Store ratings throw when a PlayStation game has no concept URL. That
   string in `lastError` is the diagnosis.
 

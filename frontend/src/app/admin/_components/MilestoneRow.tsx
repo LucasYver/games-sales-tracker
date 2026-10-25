@@ -130,7 +130,7 @@ export function MilestoneRow({
               <Pencil aria-hidden="true" className="size-4" />
             </Button>
             <DeleteButton
-              action={deleteMilestone.bind(null, m.id)}
+              action={() => deleteMilestone(m.id, m.gameId)}
               confirmMessage={`Delete this ${m.source} milestone${gameName ? ` for ${gameName}` : ''}?`}
               iconOnly
               label="Delete milestone"

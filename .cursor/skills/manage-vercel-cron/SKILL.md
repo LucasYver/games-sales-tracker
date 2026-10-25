@@ -65,6 +65,13 @@ own IGDB pass) are not rows in `INGESTION_CRONS`. Do not add them there
 unless the dashboard query in `AdminService.stats` can count their cycle
 the same way as the others.
 
+Milestone harvest is per-game but age-based, not cycle-based, so it is not
+in `INGESTION_CRONS` either. Its dashboard row comes from
+`AdminService.milestoneHarvestProgress` (eligible, due now, expected per
+day). Its `cronPath` / `schedule` there must also match `vercel.json`.
+Change harvest tiers in `scheduler/refresh-interval.ts` only:
+`getRefreshIntervalDays` and its SQL mirror `harvestDueSql` live together.
+
 ## Dashboard copy
 
 When the job is per-game and should appear on `/admin`, add one object to
