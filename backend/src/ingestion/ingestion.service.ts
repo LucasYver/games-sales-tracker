@@ -114,8 +114,23 @@ export const DEFAULT_CONFIDENCE_SCORE: Record<SalesSource, number> = {
 // Perplexity Search API accepts at most 20 domains (`slice(0, 20)` in
 // perplexity.client) — put the highest-priority blocks first.
 const TAVILY_EXCLUDED_DOMAINS = [
-  // High-priority: blacklisted / low-trust sales noise that resurfaces often
+  // High-priority first: Perplexity Search accepts at most 20 exclude domains
+  // (`slice(0, 20)` in perplexity.client). Keep blacklisted / modeled hosts here.
   'vgchartz.com',
+  'nintendolife.com',
+  'indielist.games',
+  'gamesberry.app',
+  'sensortower.com',
+  'steamdata.ai',
+  'playrev.io',
+  'gamedata.wtf',
+  'devuego.lat',
+  'devuego.es',
+  '9000.to',
+  'gamesensor.info',
+  'edgechat.ai',
+  'findings.oreate.ai',
+  'podcasttranscript.ai',
   // Sales-estimation / aggregators (similar to what we're building)
   'vginsights.com',
   'gamediscoverco.com',
@@ -129,7 +144,8 @@ const TAVILY_EXCLUDED_DOMAINS = [
   'rec0ded88.com',
   'raijin.gg',
   // Estimate providers whose figures are explicitly modeled ("we estimate",
-  // "estimated X to Y", "up to X") yet get mislabeled as sourced milestones
+  // "estimated X to Y", "up to X", "derived from N Steam reviews") yet get
+  // mislabeled as sourced milestones
   'gamerevenuedata.com',
   'steamrev.com',
   'steampulse.org',

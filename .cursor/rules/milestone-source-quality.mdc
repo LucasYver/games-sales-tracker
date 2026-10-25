@@ -21,6 +21,15 @@ well corroborated is worse than no milestone.
 - `vgchartz.com` (and subdomains, e.g. `gamrconnect.vgchartz.com`) — inactive in
   `trusted_source`; milestones soft-rejected. Never re-activate without an
   explicit user request.
+- `nintendolife.com` — was wrongly auto-tiered OFFICIAL; mostly Japanese physical
+  chart lines + media echos of figures already held elsewhere. Inactive;
+  milestones soft-rejected. Never re-activate without an explicit user request.
+- Modeled / review-derived estimate hosts (same treatment): `indielist.games`,
+  `gamesberry.app`, `sensortower.com` (incl. `app.sensortower.com`),
+  `steamdata.ai`, `playrev.io`, `gamedata.wtf`, `devuego.lat`, `devuego.es`,
+  `9000.to`, `gamesensor.info` — plus AI republish farms `edgechat.ai`,
+  `findings.oreate.ai`, `podcasttranscript.ai`. Also listed in
+  `TAVILY_EXCLUDED_DOMAINS` so discovery does not resurface them.
 
 ## Keepers (high value)
 
