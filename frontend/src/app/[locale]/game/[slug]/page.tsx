@@ -1,4 +1,4 @@
-import { useTranslations, useFormatter } from 'next-intl';
+import { useTranslations, useFormatter, useLocale } from 'next-intl';
 import { getFormatter, getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
@@ -24,11 +24,11 @@ import {
 } from '@/components/chart-room/PriceCountrySelect';
 import { Suspense } from 'react';
 
-function compactUnits(units: number, format: { number: (value: number, opts: Intl.NumberFormatOptions) => string }) {
-  return format.number(units, {
+function compactUnits(units: number, locale: string) {
+  return new Intl.NumberFormat(locale, {
     notation: 'compact',
     maximumFractionDigits: 1,
-  });
+  }).format(units);
 }
 
 export async function generateMetadata({
@@ -50,7 +50,7 @@ export async function generateMetadata({
     ? new Date(game.releaseDate).getFullYear()
     : null;
   const units = game.isFree ? null : headlineUnits(game);
-  const unitsLabel = units ? compactUnits(units, format) : null;
+  const unitsLabel = units ? compactUnits(units, locale) : null;
   const platforms =
     game.platforms.map((p) => tPlatform(p)).join(', ') || '—';
   const asOf = asOfDate(game);
@@ -157,8 +157,9 @@ function GameHeader({ game }: { game: GameDetail }) {
   const t = useTranslations('gamePage');
   const tPlatform = useTranslations('platform');
   const format = useFormatter();
+  const locale = useLocale();
   const units = game.isFree ? null : headlineUnits(game);
-  const unitsLabel = units ? compactUnits(units, format) : null;
+  const unitsLabel = units ? compactUnits(units, locale) : null;
 
   return (
     <header className="flex items-start gap-4 border-b border-border px-4 py-4">
