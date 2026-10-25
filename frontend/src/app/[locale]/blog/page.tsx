@@ -10,6 +10,8 @@ import { Pagination } from '@/components/Pagination';
 
 const PAGE_SIZE = 20;
 
+export const dynamic = 'force-dynamic';
+
 export async function generateMetadata({
   params,
   searchParams,

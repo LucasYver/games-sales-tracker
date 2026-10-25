@@ -6,8 +6,11 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Link } from '@/i18n/navigation';
 import { getBlogPost } from '@/lib/api';
+import { displayCover } from '@/lib/cover';
 import { SITE_URL } from '@/lib/site-url';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
+
+export const dynamic = 'force-dynamic';
 
 export async function generateMetadata({
   params,
@@ -170,26 +173,15 @@ export default async function BlogArticlePage({
           <span className="text-muted-foreground">{post.title}</span>
         </nav>
 
-        <header className="border-b border-border pb-6">
-          {post.game?.coverUrl && (
-            <div className="relative mb-4 aspect-[16/7] overflow-hidden rounded-[3px] bg-muted">
-              <Image
-                src={post.game.coverUrl}
-                alt={post.game.name}
-                fill
-                priority
-                sizes="768px"
-                className="object-cover"
-              />
-            </div>
-          )}
-          <h1 className="text-3xl font-bold tracking-tight">{post.title}</h1>
-          <p className="mt-3 text-sm text-muted-foreground">
-            {published ? t('publishedOn', { date: published }) : null}
-            {published ? ' · ' : null}
-            {t('updatedOn', { date: updated })}
-          </p>
-        </header>
+        <ArticleHeader
+          title={post.title}
+          coverUrl={post.game?.coverUrl ?? null}
+          coverAlt={post.game?.name ?? post.title}
+          publishedLabel={
+            published ? t('publishedOn', { date: published }) : null
+          }
+          updatedLabel={t('updatedOn', { date: updated })}
+        />
 
         <aside className="my-6 border border-border bg-card px-4 py-3">
           <p className="font-mono text-[0.68rem] tracking-wide text-text-faint uppercase">
@@ -264,5 +256,71 @@ export default async function BlogArticlePage({
         )}
       </article>
     </main>
+  );
+}
+
+function ArticleHeader({
+  title,
+  coverUrl,
+  coverAlt,
+  publishedLabel,
+  updatedLabel,
+}: {
+  title: string;
+  coverUrl: string | null;
+  coverAlt: string;
+  publishedLabel: string | null;
+  updatedLabel: string;
+}) {
+  const cover = coverUrl ? displayCover(coverUrl) : null;
+  const titleBlock = (
+    <div className="min-w-0 flex-1">
+      <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
+      <p className="mt-3 text-sm text-muted-foreground">
+        {publishedLabel}
+        {publishedLabel ? ' · ' : null}
+        {updatedLabel}
+      </p>
+    </div>
+  );
+
+  if (!cover) {
+    return <header className="border-b border-border pb-6">{titleBlock}</header>;
+  }
+
+  if (cover.kind === 'landscape') {
+    return (
+      <header className="border-b border-border pb-6">
+        <div className="relative mb-5 aspect-[616/353] overflow-hidden rounded-[3px] bg-muted">
+          <Image
+            src={cover.src}
+            alt={coverAlt}
+            fill
+            priority
+            sizes="768px"
+            className="object-cover"
+          />
+        </div>
+        {titleBlock}
+      </header>
+    );
+  }
+
+  return (
+    <header className="border-b border-border pb-6">
+      <div className="flex items-start gap-4 sm:gap-5">
+        <div className="relative aspect-[3/4] w-28 shrink-0 overflow-hidden rounded-[3px] bg-muted sm:w-36">
+          <Image
+            src={cover.src}
+            alt={coverAlt}
+            fill
+            priority
+            sizes="144px"
+            className="object-cover"
+          />
+        </div>
+        {titleBlock}
+      </div>
+    </header>
   );
 }

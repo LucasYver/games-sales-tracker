@@ -2,7 +2,7 @@
 
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, updateTag } from 'next/cache';
 import {
   ADMIN_COOKIE,
   adminFetch,
@@ -349,14 +349,30 @@ export async function generateBlogDraft(
   return result;
 }
 
+function revalidatePublicBlog(post: AdminBlogDetail) {
+  updateTag('blog');
+  revalidatePath('/blog', 'layout');
+  revalidatePath('/en/blog', 'layout');
+  revalidatePath('/fr/blog', 'layout');
+  for (const [locale, slug] of Object.entries(post.slugs ?? {})) {
+    if (!slug) continue;
+    revalidatePath(`/${locale}/blog/${slug}`);
+    revalidatePath(`/blog/${slug}`);
+  }
+  if (post.gameSlug) {
+    revalidatePath(`/en/game/${post.gameSlug}`);
+    revalidatePath(`/fr/game/${post.gameSlug}`);
+    revalidatePath(`/game/${post.gameSlug}`);
+  }
+}
+
 export async function publishBlogPost(id: string): Promise<AdminBlogDetail> {
   const result = await adminFetch<AdminBlogDetail>(`/blog/${id}/publish`, {
     method: 'POST',
   });
   revalidatePath('/admin/blog');
   revalidatePath(`/admin/blog/${id}`);
-  revalidatePath('/en/blog', 'layout');
-  revalidatePath('/fr/blog', 'layout');
+  revalidatePublicBlog(result);
   return result;
 }
 
@@ -379,8 +395,7 @@ export async function unpublishBlogPost(id: string): Promise<AdminBlogDetail> {
   });
   revalidatePath('/admin/blog');
   revalidatePath(`/admin/blog/${id}`);
-  revalidatePath('/en/blog', 'layout');
-  revalidatePath('/fr/blog', 'layout');
+  revalidatePublicBlog(result);
   return result;
 }
 

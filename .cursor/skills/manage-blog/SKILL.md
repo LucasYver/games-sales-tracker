@@ -34,6 +34,11 @@ quotes on a public page. Never mention AI on `/blog`. Never auto-publish.
    is not left with a fact list and empty EN/FR editors.
 5. Resend review mail. Nothing is public until an admin clicks Publish.
 
+Public `/[locale]/blog` is `force-dynamic` and fetches with `cache: 'no-store'`.
+Do not put a long `revalidate` TTL on the index: an empty first visit
+otherwise sticks after Publish. `publishBlogPost` / `unpublishBlogPost`
+must `updateTag('blog')` and revalidate the locale blog + game pages.
+
 `/admin/blog/:id` is the review screen, not a writing plan: fact pack at
 the top, then editable EN/FR title / meta / excerpt / TL;DR / body.
 Regenerate replaces the draft for that game (blocked only if PUBLISHED).

@@ -378,7 +378,7 @@ export async function getBlogIndex(
 ): Promise<PublicBlogIndex> {
   const res = await fetch(
     `${API_URL}/blog?locale=${encodeURIComponent(locale)}&limit=${limit}&offset=${offset}`,
-    { next: { revalidate: BLOG_TTL } },
+    { cache: 'no-store' },
   );
   if (!res.ok) return { items: [], total: 0 };
   return res.json();
@@ -390,7 +390,7 @@ export async function getBlogPost(
 ): Promise<PublicBlogPost | null> {
   const res = await fetch(
     `${API_URL}/blog/${encodeURIComponent(locale)}/${encodeURIComponent(slug)}`,
-    { next: { revalidate: BLOG_TTL } },
+    { cache: 'no-store' },
   );
   if (!res.ok) return null;
   return res.json();
@@ -406,7 +406,7 @@ export interface BlogSitemapItem {
 export async function getBlogSitemap(): Promise<BlogSitemapItem[]> {
   try {
     const res = await fetch(`${API_URL}/blog/sitemap`, {
-      next: { revalidate: BLOG_TTL },
+      next: { tags: ['blog'], revalidate: BLOG_TTL },
     });
     if (!res.ok) return [];
     const data = (await res.json()) as { items?: BlogSitemapItem[] };
