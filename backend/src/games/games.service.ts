@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, LessThanOrEqual, Or, Repository } from 'typeorm';
+import { In, IsNull, LessThanOrEqual, Not, Or, Repository } from 'typeorm';
 import {
   AchievementSnapshot,
   BlogPost,
@@ -809,7 +809,12 @@ export class GamesService {
     const storeRatings = await this.buildStoreRatings(game.id);
 
     const publishedBlog = await this.blogPosts.findOne({
-      where: { gameId: game.id, status: 'PUBLISHED' },
+      // Live includes a published article whose refresh is in review.
+      where: {
+        gameId: game.id,
+        publishedAt: Not(IsNull()),
+        status: Not('REJECTED'),
+      },
       relations: { translations: true },
     });
     const blog = publishedBlog

@@ -366,9 +366,13 @@ function revalidatePublicBlog(post: AdminBlogDetail) {
   }
 }
 
-export async function publishBlogPost(id: string): Promise<AdminBlogDetail> {
+export async function publishBlogPost(
+  id: string,
+  force = false,
+): Promise<AdminBlogDetail> {
   const result = await adminFetch<AdminBlogDetail>(`/blog/${id}/publish`, {
     method: 'POST',
+    body: JSON.stringify({ force }),
   });
   revalidatePath('/admin/blog');
   revalidatePath(`/admin/blog/${id}`);
@@ -386,6 +390,8 @@ export async function rejectBlogPost(
   });
   revalidatePath('/admin/blog');
   revalidatePath(`/admin/blog/${id}`);
+  // Rejecting a refresh puts the previous live version back.
+  if (result.isLive) revalidatePublicBlog(result);
   return result;
 }
 
@@ -416,6 +422,7 @@ export async function updateBlogTranslation(
     { method: 'PATCH', body: JSON.stringify(body) },
   );
   revalidatePath(`/admin/blog/${id}`);
+  if (result.status === 'PUBLISHED') revalidatePublicBlog(result);
   return result;
 }
 

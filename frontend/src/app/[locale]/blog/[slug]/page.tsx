@@ -46,7 +46,7 @@ export async function generateMetadata({
       locale,
       url: `${SITE_URL}${path}`,
       publishedTime: post.publishedAt ?? undefined,
-      modifiedTime: post.updatedAt,
+      modifiedTime: post.updatedAt ?? post.publishedAt ?? undefined,
       images: post.game?.coverUrl
         ? [{ url: post.game.coverUrl, alt: post.game.name }]
         : [],
@@ -73,18 +73,27 @@ export default async function BlogArticlePage({
   ]);
   if (!post) notFound();
 
-  const published = post.publishedAt
-    ? format.dateTime(new Date(post.publishedAt), {
+  const longDate = (iso: string) =>
+    format.dateTime(new Date(iso), {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  const published = post.publishedAt ? longDate(post.publishedAt) : null;
+  // Only worth a line when the text changed after it went live.
+  const updated =
+    post.updatedAt &&
+    post.publishedAt &&
+    longDate(post.updatedAt) !== longDate(post.publishedAt)
+      ? longDate(post.updatedAt)
+      : null;
+  const asOf = post.figuresAsOf
+    ? format.dateTime(new Date(post.figuresAsOf), {
         year: 'numeric',
         month: 'long',
-        day: 'numeric',
+        timeZone: 'UTC',
       })
     : null;
-  const updated = format.dateTime(new Date(post.updatedAt), {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -94,9 +103,16 @@ export default async function BlogArticlePage({
         headline: post.title,
         description: post.metaDescription,
         datePublished: post.publishedAt,
-        dateModified: post.updatedAt,
+        dateModified: post.updatedAt ?? post.publishedAt,
         inLanguage: locale,
         image: post.game?.coverUrl ?? undefined,
+        about: post.game
+          ? {
+              '@type': 'VideoGame',
+              name: post.game.name,
+              url: `${SITE_URL}/${locale}/game/${post.game.slug}`,
+            }
+          : undefined,
         author: {
           '@type': 'Organization',
           name: 'Game Sales Tracker',
@@ -147,7 +163,10 @@ export default async function BlogArticlePage({
     <main className="flex min-h-screen flex-col">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{
+          // `<` escaped so article text can never close the script tag.
+          __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c'),
+        }}
       />
       <SiteHeader
         localePaths={{
@@ -180,7 +199,8 @@ export default async function BlogArticlePage({
           publishedLabel={
             published ? t('publishedOn', { date: published }) : null
           }
-          updatedLabel={t('updatedOn', { date: updated })}
+          updatedLabel={updated ? t('updatedOn', { date: updated }) : null}
+          asOfLabel={asOf ? t('figuresAsOf', { date: asOf }) : null}
         />
 
         <aside className="my-6 border border-border bg-card px-4 py-3">
@@ -221,6 +241,23 @@ export default async function BlogArticlePage({
               ),
               ol: ({ children }) => (
                 <ol className="mb-4 list-decimal space-y-1 pl-5">{children}</ol>
+              ),
+              table: ({ children }) => (
+                <div className="mb-6 overflow-x-auto">
+                  <table className="w-full border-collapse text-left text-sm">
+                    {children}
+                  </table>
+                </div>
+              ),
+              th: ({ children }) => (
+                <th className="border-b border-border px-2 py-1.5 font-mono text-[0.68rem] tracking-wide text-text-faint uppercase">
+                  {children}
+                </th>
+              ),
+              td: ({ children }) => (
+                <td className="border-b border-border px-2 py-1.5 align-top">
+                  {children}
+                </td>
               ),
             }}
           >
@@ -265,22 +302,27 @@ function ArticleHeader({
   coverAlt,
   publishedLabel,
   updatedLabel,
+  asOfLabel,
 }: {
   title: string;
   coverUrl: string | null;
   coverAlt: string;
   publishedLabel: string | null;
-  updatedLabel: string;
+  updatedLabel: string | null;
+  asOfLabel: string | null;
 }) {
   const cover = coverUrl ? displayCover(coverUrl) : null;
   const titleBlock = (
     <div className="min-w-0 flex-1">
       <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
       <p className="mt-3 text-sm text-muted-foreground">
-        {publishedLabel}
-        {publishedLabel ? ' · ' : null}
-        {updatedLabel}
+        {[publishedLabel, updatedLabel].filter(Boolean).join(' · ')}
       </p>
+      {asOfLabel && (
+        <p className="mt-1 font-mono text-[0.72rem] text-text-faint">
+          {asOfLabel}
+        </p>
+      )}
     </div>
   );
 

@@ -42,6 +42,7 @@ export default async function AdminBlogReviewPage({
               {post.gameName ?? 'Blog draft'}
             </h1>
             <Badge>{post.status}</Badge>
+            {post.isLive && <Badge variant="outline">live</Badge>}
           </div>
           <p className="text-muted-foreground mt-1 font-mono text-xs">
             {post.model ?? 'unknown model'}
@@ -55,9 +56,45 @@ export default async function AdminBlogReviewPage({
               label="Regenerate"
             />
           )}
-          <BlogReviewActions id={post.id} status={post.status} />
+          <BlogReviewActions
+            id={post.id}
+            status={post.status}
+            isLive={post.isLive}
+            isRefresh={post.isRefresh}
+            unverifiedCount={post.unverifiedCount}
+            errorCount={post.errorCount}
+          />
         </div>
       </div>
+
+      {post.isRefresh && (
+        <p className="rounded border px-3 py-2 text-sm">
+          New version of a live article. The public keeps reading the current
+          version until you publish this one. Discarding keeps the current
+          version.
+        </p>
+      )}
+
+      {post.freshness?.stale && (
+        <div className="border-destructive/40 bg-destructive/5 rounded border px-3 py-2 text-sm">
+          <p className="font-semibold">
+            The live article no longer matches the sourced figures
+          </p>
+          {post.freshness.added.length > 0 && (
+            <p className="mt-1">New: {post.freshness.added.join(' · ')}</p>
+          )}
+          {post.freshness.removed.length > 0 && (
+            <p className="mt-1">
+              No longer on file (rejected or edited):{' '}
+              {post.freshness.removed.join(' · ')}
+            </p>
+          )}
+          <p className="text-muted-foreground mt-1">
+            Regenerate to write an update. The live version stays online until
+            you publish it.
+          </p>
+        </div>
+      )}
 
       {post.rejectReason && (
         <p className="text-destructive text-sm">Rejected: {post.rejectReason}</p>
@@ -88,6 +125,11 @@ export default async function AdminBlogReviewPage({
                 {f.isEngagement ? ' · engagement' : ''}
                 {f.isAlinea ? ' · Alinea' : ''}
               </span>
+              {f.label && (
+                <span className="text-muted-foreground basis-full text-xs">
+                  {f.label}
+                </span>
+              )}
               {f.sourceUrl && (
                 <a
                   href={f.sourceUrl}

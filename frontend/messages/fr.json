@@ -218,6 +218,7 @@
     "ctaGame": "Voir les données live de {name}",
     "empty": "Pas encore d'article. Les dossiers sur les ventes officielles arriveront ici.",
     "faqTitle": "Questions",
+    "figuresAsOf": "Dernier chiffre connu : {date}",
     "indexDescription": "Chiffres de ventes officiels : déclarations d'éditeurs, Wikipedia et notes d'analystes, jeu par jeu.",
     "indexIntro": "Déclarations d'éditeurs, Wikipedia et notes d'analystes — l'histoire officielle des ventes de chaque jeu, datée et attribuée.",
     "indexTitle": "Les ventes officielles, telles qu'annoncées",

@@ -82,12 +82,14 @@ export class AdminMailService {
     titles: Record<string, string>;
     issueCount: number;
     unverifiedCount: number;
+    isRefresh?: boolean;
     translations?: { locale: string; tldr: string[] }[];
     factPack?: Record<string, unknown>;
   }): Promise<void> {
     const tldr = post.translations?.find((t) => t.locale === 'en')?.tldr ?? [];
     const latestFigure = latestFigureLabel(post.factPack);
-    const subject = `Draft ready — ${post.gameName ?? 'Untitled'} · ${latestFigure ?? 'review needed'}`;
+    const kind = post.isRefresh ? 'Update ready' : 'Draft ready';
+    const subject = `${kind} — ${post.gameName ?? 'Untitled'} · ${latestFigure ?? 'review needed'}`;
     const reviewUrl = `${publicAppUrl()}/admin/blog/${post.id}`;
     const html = buildDraftReadyHtml({
       gameName: post.gameName ?? 'Untitled',
@@ -97,9 +99,14 @@ export class AdminMailService {
       issueCount: post.issueCount,
       unverifiedCount: post.unverifiedCount,
       reviewUrl,
+      heading: post.isRefresh
+        ? 'Article update to review'
+        : 'New blog draft to review',
     });
     const text = [
-      `New blog draft to review: ${post.gameName ?? 'Untitled'}`,
+      post.isRefresh
+        ? `Updated figures for ${post.gameName ?? 'Untitled'}: a new version of the live article is ready. The current version stays online until you publish.`
+        : `New blog draft to review: ${post.gameName ?? 'Untitled'}`,
       '',
       `EN: ${post.titles.en ?? ''}`,
       `FR: ${post.titles.fr ?? ''}`,
@@ -306,6 +313,7 @@ function buildDraftReadyHtml(opts: {
   issueCount: number;
   unverifiedCount: number;
   reviewUrl: string;
+  heading: string;
 }): string {
   const bullets = opts.tldr
     .map(
@@ -328,7 +336,7 @@ function buildDraftReadyHtml(opts: {
           <tr>
             <td style="padding:24px 28px 8px;border-bottom:1px solid #26303f;">
               <p style="margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:15px;font-weight:700;color:#cfd8e3;">Game Sales Tracker</p>
-              <p style="margin:6px 0 0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#7c8a9a;">New blog draft to review</p>
+              <p style="margin:6px 0 0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#7c8a9a;">${escapeHtml(opts.heading)}</p>
             </td>
           </tr>
           <tr>

@@ -366,7 +366,10 @@ export interface PublicBlogPost {
   bodyMarkdown: string;
   faq: { question: string; answer: string }[];
   publishedAt: string | null;
-  updatedAt: string;
+  /** Last change to the public text. */
+  updatedAt: string | null;
+  /** Date of the newest sourced figure the article uses. */
+  figuresAsOf: string | null;
   game: { name: string; slug: string; coverUrl: string | null } | null;
   alternate: { locale: 'en' | 'fr'; slug: string } | null;
 }
@@ -400,6 +403,7 @@ export interface BlogSitemapItem {
   locale: string;
   slug: string;
   publishedAt: string | null;
+  updatedAt: string | null;
   alternateSlug?: string;
 }
 

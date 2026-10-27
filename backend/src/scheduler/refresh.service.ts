@@ -282,22 +282,21 @@ export class RefreshService {
   }
 
   /**
-   * Nightly catalog discovery via IGDB (popularity-ranked + fresh releases,
-   * admitted by IGDB rating or live Steam reviews). Runs at 2 AM, ahead of the
-   * 3 AM per-app refresh.
-   */
-  /**
-   * Sunday: write at most one draft if none is waiting, otherwise remind
-   * admins about leftover drafts. Never publishes.
+   * Sunday: write at most one draft if none is waiting — a refresh of a live
+   * article whose figures changed first, else a new article — otherwise
+   * remind admins about leftover drafts. Never publishes.
    */
   async generateWeeklyBlogDraft() {
     try {
       const result = await this.blog.runWeeklyDraftJob();
-      if (result.action === 'generated' && result.postId) {
+      if (
+        (result.action === 'generated' || result.action === 'refreshed') &&
+        result.postId
+      ) {
         const post = await this.blog.getAdmin(result.postId);
         await this.mail.sendBlogDraftReady(post);
         await this.blog.markReviewEmailSent(post.id);
-        this.logger.log(`Blog draft generated for ${result.gameName}.`);
+        this.logger.log(`Blog draft ${result.action} for ${result.gameName}.`);
       } else if (result.action === 'digest') {
         await this.mail.sendBlogDraftDigest(result.drafts);
         this.logger.log(
@@ -313,6 +312,11 @@ export class RefreshService {
     }
   }
 
+  /**
+   * Nightly catalog discovery via IGDB (popularity-ranked + fresh releases,
+   * admitted by IGDB rating or live Steam reviews). Runs at 2 AM, ahead of the
+   * 3 AM per-app refresh.
+   */
   async discoverNewGames() {
     try {
       const result = await this.ingestion.discoverIgdbGames();

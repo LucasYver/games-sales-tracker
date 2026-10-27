@@ -1,60 +1,80 @@
-import type { BlogFact, BlogWriterArticle } from './blog.types';
+import type { BlogFact, BlogFactPack, BlogWriterArticle } from './blog.types';
 
-const NUMBER_RE =
-  /(?<![A-Za-z])(?:\d{1,3}(?:[ \u00a0.,]\d{3})+|\d+(?:[.,]\d+)?)(?:\s*(?:million|millions|billion|billions|m|k| mil))?/gi;
+// Thousands separators: plain, no-break, narrow no-break (French typography)
+// and thin spaces, plus dot / comma.
+const SPACES = '\\u0020\\u00a0\\u202f\\u2009';
+// Longest first; `(?!\p{L})` keeps "12 mars" / "15 March" / "2 months" from
+// reading as millions.
+const SUFFIX = '(?:milliards?|billions?|millions?|bn|mil|m|k)(?!\\p{L})';
+const NUMBER_RE = new RegExp(
+  `(?<![\\p{L}\\d])(?:\\d{1,3}(?:[${SPACES}.,]\\d{3})+(?!\\d)|\\d+(?:[.,]\\d+)?)(?:[${SPACES}]*${SUFFIX})?`,
+  'giu',
+);
+const SUFFIX_RE = new RegExp(`^(.*?)(?:[${SPACES}]*(${SUFFIX}))?$`, 'iu');
 
-function parseHumanNumber(raw: string): number | null {
-  const cleaned = raw
-    .trim()
-    .toLowerCase()
-    .replace(/\u00a0/g, ' ');
-  const suffixMatch = cleaned.match(
-    /^(.*?)(?:\s*(million|millions|billion|billions|m|k|mil))?$/,
-  );
-  if (!suffixMatch) return null;
-  let core = suffixMatch[1].trim();
-  const suffix = suffixMatch[2];
+const MULTIPLIER: Record<string, number> = {
+  milliard: 1e9,
+  milliards: 1e9,
+  billion: 1e9,
+  billions: 1e9,
+  bn: 1e9,
+  million: 1e6,
+  millions: 1e6,
+  mil: 1e6,
+  m: 1e6,
+  k: 1e3,
+};
 
-  const lastComma = core.lastIndexOf(',');
-  const lastDot = core.lastIndexOf('.');
-  if (lastComma >= 0 && lastDot >= 0) {
-    core =
-      lastComma > lastDot
-        ? core.replace(/\./g, '').replace(',', '.')
-        : core.replace(/,/g, '');
-  } else if (lastComma >= 0) {
-    const after = core.slice(lastComma + 1);
-    core =
-      after.length === 3 && !suffix
-        ? core.replace(/,/g, '')
-        : core.replace(',', '.');
-  } else {
+export function parseHumanNumber(raw: string): number | null {
+  const match = raw.trim().toLowerCase().match(SUFFIX_RE);
+  if (!match) return null;
+  const suffix = match[2];
+  let core = match[1].replace(new RegExp(`[${SPACES}]`, 'g'), ' ').trim();
+
+  if (core.includes(' ')) {
     core = core.replace(/ /g, '');
   }
-  core = core.replace(/ /g, '');
+  const commas = core.split(',').length - 1;
+  const dots = core.split('.').length - 1;
+  if (commas > 0 && dots > 0) {
+    // Whichever comes last is the decimal mark.
+    core =
+      core.lastIndexOf(',') > core.lastIndexOf('.')
+        ? core.replace(/\./g, '').replace(',', '.')
+        : core.replace(/,/g, '');
+  } else if (commas + dots > 1) {
+    core = core.replace(/[.,]/g, '');
+  } else if (commas + dots === 1) {
+    const after = core.split(/[.,]/)[1];
+    // "1,200" / "1.200" with no suffix is a thousands group; "5,2 millions"
+    // or "5.2" is a decimal.
+    core =
+      after.length === 3 && !suffix
+        ? core.replace(/[.,]/, '')
+        : core.replace(',', '.');
+  }
+
   const n = Number(core);
   if (!Number.isFinite(n)) return null;
-
-  if (suffix === 'billion' || suffix === 'billions') return n * 1_000_000_000;
-  if (
-    suffix === 'million' ||
-    suffix === 'millions' ||
-    suffix === 'm' ||
-    suffix === 'mil'
-  ) {
-    return n * 1_000_000;
-  }
-  if (suffix === 'k') return n * 1_000;
-  return n;
+  return suffix ? n * MULTIPLIER[suffix] : n;
 }
 
-function allowedValues(facts: BlogFact[]): number[] {
+function allowedValues(facts: BlogFact[], extraText: string[]): number[] {
   const values = new Set<number>();
   for (const fact of facts) {
     values.add(fact.value);
     if (fact.date) {
       const year = Number(fact.date.slice(0, 4));
       if (year >= 1970 && year <= 2100) values.add(year);
+      const day = Number(fact.date.slice(8, 10));
+      if (day >= 1 && day <= 31) values.add(day);
+    }
+  }
+  // Numbers that belong to a name ("Cyberpunk 2077", "FIFA 23").
+  for (const text of extraText) {
+    for (const raw of extractFrom(text)) {
+      const parsed = parseHumanNumber(raw);
+      if (parsed != null) values.add(parsed);
     }
   }
   return [...values];
@@ -68,28 +88,42 @@ function closeEnough(found: number, allowed: number): boolean {
   return Math.abs(found - allowed) <= 1;
 }
 
-function extractFrom(text: string): string[] {
+export function extractFrom(text: string): string[] {
   return [...text.matchAll(NUMBER_RE)].map((m) => m[0].trim());
 }
 
-/** Numbers in the draft that do not match a fact value or a fact year. */
-export function findUnverifiedNumbers(
-  article: BlogWriterArticle,
-  facts: BlogFact[],
-): string[] {
-  const allowed = allowedValues(facts);
-  const blobs = [
+export type CheckableArticle = Pick<
+  BlogWriterArticle,
+  'title' | 'metaDescription' | 'excerpt' | 'tldr' | 'bodyMarkdown' | 'faq'
+>;
+
+export function articleTexts(article: CheckableArticle): string[] {
+  return [
     article.title,
     article.metaDescription,
     article.excerpt,
-    ...article.tldr,
+    ...(article.tldr ?? []),
     article.bodyMarkdown,
-    ...article.faq.flatMap((item) => [item.question, item.answer]),
-  ];
+    ...(article.faq ?? []).flatMap((item) => [item.question, item.answer]),
+  ].filter((text): text is string => typeof text === 'string');
+}
+
+/**
+ * Numbers in the draft that do not match a fact value, a fact date, or a
+ * number inside one of `names` (game title, publisher...).
+ */
+export function findUnverifiedNumbers(
+  article: CheckableArticle,
+  facts: BlogFact[],
+  names: string[] = [],
+): string[] {
+  const allowed = allowedValues(facts, names);
   const unverified: string[] = [];
   const seen = new Set<string>();
-  for (const blob of blobs) {
-    for (const raw of extractFrom(blob)) {
+  for (const blob of articleTexts(article)) {
+    // Link targets are URLs, not claims.
+    const text = blob.replace(/\]\([^)]*\)/g, ']');
+    for (const raw of extractFrom(text)) {
       const parsed = parseHumanNumber(raw);
       if (parsed == null) continue;
       if (parsed > 0 && parsed < 15) continue;
@@ -101,4 +135,9 @@ export function findUnverifiedNumbers(
     }
   }
   return unverified;
+}
+
+/** Names whose digits are not claims ("Cyberpunk 2077", "2K"). */
+export function packNames(pack: Pick<BlogFactPack, 'game'>): string[] {
+  return [pack.game.name, pack.game.publisher ?? '', pack.game.developer ?? ''];
 }

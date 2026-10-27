@@ -43,7 +43,9 @@ export default async function AdminBlogPage({
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Blog</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          AI drafts stay private until you publish. One article per game.
+          AI drafts stay private until you publish. One article per game;
+          a live article whose figures change gets an update draft (Sunday
+          cron or Regenerate) while the current version stays online.
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -86,7 +88,7 @@ async function PostsTable({ status }: { status: BlogPostStatus }) {
         <TableRow>
           <TableHead>Game</TableHead>
           <TableHead>EN title</TableHead>
-          <TableHead>Issues</TableHead>
+          <TableHead>Errors / issues / unverified</TableHead>
           <TableHead>Generated</TableHead>
         </TableRow>
       </TableHeader>
@@ -97,13 +99,23 @@ async function PostsTable({ status }: { status: BlogPostStatus }) {
               <Link href={`/admin/blog/${row.id}`} className="hover:underline">
                 {row.gameName ?? '—'}
               </Link>
+              {row.isRefresh && (
+                <Badge variant="outline" className="ml-2">
+                  update
+                </Badge>
+              )}
+              {row.freshness?.stale && (
+                <Badge variant="destructive" className="ml-2">
+                  outdated figures
+                </Badge>
+              )}
             </TableCell>
             <TableCell className="max-w-md truncate">
               {row.titles.en ?? '—'}
             </TableCell>
             <TableCell>
               <Badge variant="outline">
-                {row.issueCount} / {row.unverifiedCount}
+                {row.errorCount} / {row.issueCount} / {row.unverifiedCount}
               </Badge>
             </TableCell>
             <TableCell className="font-mono text-xs">

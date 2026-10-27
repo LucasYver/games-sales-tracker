@@ -66,35 +66,26 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     });
   }
 
-  const seen = new Set<string>();
+  // One entry per language version, each listing all versions (hreflang).
   for (const post of posts) {
-    const key = `${post.locale}:${post.slug}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const lastMod = post.publishedAt ? new Date(post.publishedAt) : now;
     const altLocale = post.locale === 'en' ? 'fr' : 'en';
-    const altSlug = post.alternateSlug;
-    if (altSlug) seen.add(`${altLocale}:${altSlug}`);
+    const own = `${SITE_URL}/${post.locale}/blog/${post.slug}`;
+    const alt = post.alternateSlug
+      ? `${SITE_URL}/${altLocale}/blog/${post.alternateSlug}`
+      : null;
+    const defaultUrl =
+      post.locale === routing.defaultLocale || !alt ? own : alt;
+    const lastMod = new Date(post.updatedAt ?? post.publishedAt ?? '');
     entries.push({
-      url: `${SITE_URL}/${post.locale}/blog/${post.slug}`,
+      url: own,
       lastModified: Number.isNaN(lastMod.getTime()) ? now : lastMod,
       changeFrequency: 'monthly',
       priority: 0.8,
       alternates: {
         languages: {
-          [post.locale]: `${SITE_URL}/${post.locale}/blog/${post.slug}`,
-          ...(altSlug
-            ? { [altLocale]: `${SITE_URL}/${altLocale}/blog/${altSlug}` }
-            : {}),
-          'x-default': `${SITE_URL}/${
-            post.locale === routing.defaultLocale || !altSlug
-              ? post.locale
-              : routing.defaultLocale
-          }/blog/${
-            post.locale === routing.defaultLocale || !altSlug
-              ? post.slug
-              : altSlug
-          }`,
+          [post.locale]: own,
+          ...(alt ? { [altLocale]: alt } : {}),
+          'x-default': defaultUrl,
         },
       },
     });

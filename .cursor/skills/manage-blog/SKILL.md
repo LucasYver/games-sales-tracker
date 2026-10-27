@@ -10,45 +10,94 @@ description: >-
 # Manage the official-sales blog
 
 Owner files: `backend/src/blog/blog-candidate.service.ts` (eligibility +
-score), `blog-fact-pack.service.ts` (writer facts), `blog.service.ts`
-(lifecycle), `blog-writer.service.ts` + `blog-prompts.ts` (OpenAI).
+score), `blog-fact-pack.service.ts` (writer facts + freshness diff),
+`blog.service.ts` (lifecycle), `blog-writer.service.ts` + `blog-prompts.ts`
+(OpenAI), `blog-number-check.ts` (deterministic number check).
 
 v1 articles use sourced milestones and public signals only. Never put
 model estimates (`estimatedToday` / Boxleiter) or `sourceUrl` / verbatim
 quotes on a public page. Never mention AI on `/blog`. Never auto-publish.
 
+## Truth rules (the point of the blog)
+
+A wrong figure is worse than a missing one. These live in code, not only
+in the prompt — keep them there:
+
+- Every fact carries a code-written `label` (scope worldwide vs one
+  platform, official vs press vs Wikipedia, Alinea = third-party ESTIMATE,
+  engagement = NOT copies, signals = popularity NOT sales). The writer and
+  editor read it. Change labels in `milestoneLabel` / `SIGNALS`.
+- `answerHint` picks the lead fact in code: newest non-Alinea GLOBAL sales
+  figure, else newest non-Alinea, else the estimate (flagged as such).
+- Prompt forbids arithmetic (sums, differences, %, growth, rounding into a
+  new claim) and outside knowledge. `date` = when the figure was reported.
+- `findUnverifiedNumbers` flags any number that is not a fact value, a
+  fact year/day, or part of the game/publisher/developer name. Month
+  names never count as a "m(illion)" suffix; FR narrow no-break spaces and
+  "milliard" are parsed.
+
 ## Generation
 
-`BlogService.generateForGame` (admin Generate / Sunday cron):
+`BlogService.generateForGame` (admin Generate/Regenerate, Sunday cron):
 
 1. Freeze a fact pack (`BlogFactPackService.buildForGame`) — sourced
-   milestones + public signals. No model estimates. `sourceUrl` stays
-   admin-only and is stripped before the writer.
+   milestones + public signals, labelled. `sourceUrl` stays admin-only and
+   is stripped before the writer.
 2. `BlogWriterService.writeLocale` runs EN and FR in parallel. Writer
-   model `BLOG_WRITER_MODEL` (default `gpt-6.1-sol`) returns the full
-   article JSON. Editor `BLOG_EDITOR_MODEL` (default `gpt-6-luna`) lists
-   issues only — it does not rewrite.
-3. Deterministic `findUnverifiedNumbers` on the draft.
+   `BLOG_WRITER_MODEL` (default `gpt-6.1-sol`) returns the article JSON;
+   editor `BLOG_EDITOR_MODEL` (default `gpt-6-luna`) lists issues only.
+3. `findUnverifiedNumbers`. If it flags anything or the editor reports an
+   `error`, the writer gets ONE revision pass with the problems, then the
+   editor and the number check run again on the revised draft.
 4. Persist `blog_post` + both translations in **one transaction** as
-   `DRAFT`. If the translation insert fails, roll back so the review page
-   is not left with a fact list and empty EN/FR editors.
-5. Resend review mail. Nothing is public until an admin clicks Publish.
+   `DRAFT`.
+5. Resend review mail (“Update ready” for a refresh). Nothing changes on
+   the public site until an admin publishes.
+
+## Lifecycle
+
+- **Live** = `publishedAt IS NOT NULL` and status ≠ `REJECTED`. Public
+  routes, sitemap and the game-page link use that, not `status`.
+- **Refresh**: regenerating a `PUBLISHED` article copies the public text
+  and fact pack into `liveSnapshot` and moves the post to `DRAFT`. The
+  public keeps reading the snapshot. Publish → new text goes live,
+  `publishedAt` kept, `contentUpdatedAt` bumped. Reject (“Discard update”)
+  → snapshot restored, status back to `PUBLISHED`, and
+  `staleAckFingerprint` remembers the figures so the same change is not
+  proposed again.
+- **Freshness** (`BlogService.freshness`): compares the live fact pack's
+  sales/engagement facts with today's eligible milestones. Any new,
+  edited or rejected milestone → `stale`, unless the fingerprint was
+  acknowledged. Admin shows “outdated figures”.
+- **Edits** (`updateTranslation`) re-run `findUnverifiedNumbers` and drop
+  editor issues whose quoted excerpt is gone. Editing a live article bumps
+  `contentUpdatedAt`.
+- **Publish guard**: `publish` refuses a `REJECTED` post and refuses while
+  unverified numbers or editor `error`s remain, unless `force: true` (the
+  admin confirms a warning listing the counts).
+- `dateModified` / sitemap `lastmod` = `contentUpdatedAt ?? publishedAt`,
+  never `updatedAt` (bumped by bookkeeping like the review mail).
+- Public article shows “Latest figure on record: <month year>” from the
+  newest sales/engagement fact of the live pack.
 
 Public `/[locale]/blog` is `force-dynamic` and fetches with `cache: 'no-store'`.
 Do not put a long `revalidate` TTL on the index: an empty first visit
-otherwise sticks after Publish. `publishBlogPost` / `unpublishBlogPost`
-must `updateTag('blog')` and revalidate the locale blog + game pages.
+otherwise sticks after Publish. `publishBlogPost` / `unpublishBlogPost` /
+discarding a refresh / editing a live article must `updateTag('blog')`
+and revalidate the locale blog + game pages. The sitemap lists one entry
+per language version, each with its hreflang alternates.
 
-`/admin/blog/:id` is the review screen, not a writing plan: fact pack at
-the top, then editable EN/FR title / meta / excerpt / TL;DR / body.
-Regenerate replaces the draft for that game (blocked only if PUBLISHED).
+`/admin/blog/:id` is the review screen, not a writing plan: fact pack
+(with labels) at the top, then editable EN/FR title / meta / excerpt /
+TL;DR / body.
 
 ## Who uses the score
 
 - Admin tab `/admin/blog?status=CANDIDATES` → `list(40)`.
-- Sunday cron `GET /api/cron/blog-draft` → `pickBest()` then
-  `generateForGame`. Skip a new draft if any `DRAFT` exists (send digest)
-  or if `OPENAI_API_KEY` is unset.
+- Sunday cron `GET /api/cron/blog-draft` → if any `DRAFT` exists, send
+  the digest; if `OPENAI_API_KEY` is unset, skip. Otherwise refresh the
+  oldest stale live article (`firstStaleLivePost`) if there is one, else
+  `pickBest()` then `generateForGame`.
 
 One article per game: any `blog_post` row (draft, published, or rejected)
 removes the game from the pool.
@@ -94,6 +143,8 @@ clause: edit `blog-candidate.service.ts` and this table together.
 
 - Soft-reject Alinea / Rhys Elliot as low-trust estimates (see
   `alinea-milestones` rule).
-- Revive a game that already has a `blog_post` without an explicit ask.
+- Revive a game that already has a `blog_post` without an explicit ask
+  (refreshing its own live article is not reviving).
+- Take a live article offline to refresh it: use the snapshot flow.
 - Lead the article with model sales estimates.
 - Copy these weights into `ARCHITECTURE.md` or other skills.

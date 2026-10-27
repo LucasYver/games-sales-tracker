@@ -62,6 +62,7 @@ import { DropTrustedSourceWeight1788790000000 } from './1788790000000-DropTruste
 import { AddAdminUser1788800000000 } from './1788800000000-AddAdminUser';
 import { AddProviderCooldown1788810000000 } from './1788810000000-AddProviderCooldown';
 import { AddBlogPost1788820000000 } from './1788820000000-AddBlogPost';
+import { AddBlogPostRefresh1788830000000 } from './1788830000000-AddBlogPostRefresh';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -135,4 +136,5 @@ export const migrations: MixedList<Function | string> = [
   AddAdminUser1788800000000,
   AddProviderCooldown1788810000000,
   AddBlogPost1788820000000,
+  AddBlogPostRefresh1788830000000,
 ];

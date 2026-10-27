@@ -626,19 +626,33 @@ export interface PlatformBreakdownResult {
 
 export type BlogPostStatus = 'DRAFT' | 'PUBLISHED' | 'REJECTED';
 
+export interface AdminBlogFreshness {
+  /** The live article no longer matches the sourced figures on file. */
+  stale: boolean;
+  added: string[];
+  removed: string[];
+}
+
 export interface AdminBlogSummary {
   id: string;
   status: BlogPostStatus;
+  /** On the public blog (a DRAFT can be live while its refresh is reviewed). */
+  isLive: boolean;
+  /** A new version of a live article, waiting for review. */
+  isRefresh: boolean;
   gameId: string | null;
   gameName: string | null;
   gameSlug: string | null;
   coverUrl: string | null;
   generatedAt: string | null;
   publishedAt: string | null;
+  contentUpdatedAt: string | null;
   rejectReason: string | null;
   model: string | null;
   issueCount: number;
+  errorCount: number;
   unverifiedCount: number;
+  freshness: AdminBlogFreshness | null;
   titles: Record<string, string>;
   slugs: Record<string, string>;
 }
@@ -676,6 +690,7 @@ export interface AdminBlogDetail extends AdminBlogSummary {
       date: string | null;
       isEngagement: boolean;
       isAlinea: boolean;
+      label?: string;
       sourceUrl?: string | null;
     }[];
   };

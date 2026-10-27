@@ -13,6 +13,12 @@ export interface BlogFact {
   date: string | null;
   isEngagement: boolean;
   isAlinea: boolean;
+  /**
+   * Plain-English description of exactly what the number measures, written
+   * by code (not the model) so the writer cannot mislabel it. Missing on
+   * packs frozen before labels existed.
+   */
+  label?: string;
   /** Admin-only. Never sent to the writer or the public API. */
   sourceUrl?: string | null;
 }
@@ -30,6 +36,34 @@ export interface BlogFactPack {
   };
   facts: BlogFact[];
   gameUrlByLocale: Record<BlogLocale, string>;
+}
+
+/** Live public content kept while a refreshed draft is under review. */
+export interface BlogLiveSnapshot {
+  factPack: BlogFactPack;
+  model: string | null;
+  generatedAt: string | null;
+  translations: Record<
+    string,
+    {
+      title: string;
+      metaDescription: string;
+      excerpt: string;
+      tldr: string[];
+      bodyMarkdown: string;
+      faq: { question: string; answer: string }[];
+      claims: { sentence: string; factIds: string[] }[];
+      reviewIssues: BlogReviewIssue[];
+      unverifiedNumbers: string[];
+    }
+  >;
+}
+
+export interface BlogFreshness {
+  /** The published article no longer matches the sourced figures on file. */
+  stale: boolean;
+  added: string[];
+  removed: string[];
 }
 
 export interface BlogWriterArticle {

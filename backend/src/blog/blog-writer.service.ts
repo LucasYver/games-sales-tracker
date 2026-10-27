@@ -6,12 +6,13 @@ import {
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import type { BlogLocale } from '../entities';
-import { findUnverifiedNumbers } from './blog-number-check';
+import { findUnverifiedNumbers, packNames } from './blog-number-check';
 import {
   EDITOR_SCHEMA,
   WRITER_SCHEMA,
   editorSystemPrompt,
   editorUserPrompt,
+  reviseUserPrompt,
   writerSystemPrompt,
   writerUserPrompt,
 } from './blog-prompts';
@@ -60,59 +61,107 @@ export class BlogWriterService {
       );
     }
 
-    const written = await this.callJson<BlogWriterArticle>({
-      model: this.writerModel,
-      effort: this.writerEffort,
-      system: writerSystemPrompt(locale),
-      user: writerUserPrompt(locale, pack),
-      schemaName: 'blog_article',
-      schema: WRITER_SCHEMA,
-    });
+    const today = new Date().toISOString().slice(0, 10);
+    const names = packNames(pack);
+    const system = writerSystemPrompt(locale);
 
+    let article = this.normalize(
+      await this.callJson<BlogWriterArticle>({
+        model: this.writerModel,
+        effort: this.writerEffort,
+        system,
+        user: writerUserPrompt(locale, pack, today),
+        schemaName: 'blog_article',
+        schema: WRITER_SCHEMA,
+      }),
+      locale,
+      pack,
+    );
+    let issues = await this.review(locale, pack, today, article);
+    let unverifiedNumbers = findUnverifiedNumbers(article, pack.facts, names);
+
+    // One correction pass when a check fails, so the reviewer starts from a
+    // draft that already matches the facts.
+    if (
+      unverifiedNumbers.length > 0 ||
+      issues.some((issue) => issue.severity === 'error')
+    ) {
+      try {
+        const revised = this.normalize(
+          await this.callJson<BlogWriterArticle>({
+            model: this.writerModel,
+            effort: this.writerEffort,
+            system,
+            user: reviseUserPrompt(locale, pack, today, publicDraft(article), {
+              unverifiedNumbers,
+              issues,
+            }),
+            schemaName: 'blog_article',
+            schema: WRITER_SCHEMA,
+          }),
+          locale,
+          pack,
+        );
+        article = revised;
+        issues = await this.review(locale, pack, today, article);
+        unverifiedNumbers = findUnverifiedNumbers(article, pack.facts, names);
+      } catch (error) {
+        this.logger.warn(`Blog revision pass failed (${locale}): ${error}`);
+      }
+    }
+
+    return { article, issues, unverifiedNumbers, model: this.writerModel };
+  }
+
+  private normalize(
+    written: BlogWriterArticle,
+    locale: BlogLocale,
+    pack: BlogFactPack,
+  ): BlogWriterArticle {
     const gameUrl = pack.gameUrlByLocale[locale];
-    const article: BlogWriterArticle = {
+    // The game link belongs in the body; anywhere else the placeholder would
+    // print as-is, so it is dropped.
+    const strip = (text: string | undefined) =>
+      (text ?? '').replaceAll('{GAME_URL}', '').trim();
+    return {
       ...written,
       slug: stableBlogSlug(pack.game.slug, locale),
-      title: (written.title ?? '').slice(0, 200),
-      metaDescription: (written.metaDescription ?? '').slice(0, 320),
-      excerpt: written.excerpt ?? '',
-      tldr: (written.tldr ?? []).slice(0, 3),
+      title: strip(written.title).slice(0, 200),
+      metaDescription: strip(written.metaDescription).slice(0, 320),
+      excerpt: strip(written.excerpt),
+      tldr: (written.tldr ?? []).slice(0, 3).map(strip),
       bodyMarkdown: (written.bodyMarkdown ?? '').replaceAll(
         '{GAME_URL}',
         gameUrl,
       ),
-      faq: (written.faq ?? []).slice(0, 4),
+      faq: (written.faq ?? []).slice(0, 4).map((item) => ({
+        question: strip(item.question),
+        answer: strip(item.answer),
+      })),
       claims: written.claims ?? [],
     };
+  }
 
-    let issues: BlogReviewIssue[] = [];
+  private async review(
+    locale: BlogLocale,
+    pack: BlogFactPack,
+    today: string,
+    article: BlogWriterArticle,
+  ): Promise<BlogReviewIssue[]> {
     try {
       const edited = await this.callJson<{ issues: BlogReviewIssue[] }>({
         model: this.editorModel,
         effort: 'low',
         system: editorSystemPrompt(),
-        user: editorUserPrompt(locale, pack, {
-          title: article.title,
-          metaDescription: article.metaDescription,
-          excerpt: article.excerpt,
-          tldr: article.tldr,
-          bodyMarkdown: article.bodyMarkdown,
-          faq: article.faq,
-        }),
+        user: editorUserPrompt(locale, pack, today, publicDraft(article)),
         schemaName: 'blog_editor',
         schema: EDITOR_SCHEMA,
       });
-      issues = edited.issues ?? [];
+      return edited.issues ?? [];
     } catch (error) {
       this.logger.warn(`Blog editor pass failed (${locale}): ${error}`);
+      return [];
     }
-
-    return {
-      article,
-      issues,
-      unverifiedNumbers: findUnverifiedNumbers(article, pack.facts),
-      model: this.writerModel,
-    };
   }
 
   private async callJson<T>(params: {
@@ -152,4 +201,15 @@ export class BlogWriterService {
     }
     return JSON.parse(text) as T;
   }
+}
+
+function publicDraft(article: BlogWriterArticle) {
+  return {
+    title: article.title,
+    metaDescription: article.metaDescription,
+    excerpt: article.excerpt,
+    tldr: article.tldr,
+    bodyMarkdown: article.bodyMarkdown,
+    faq: article.faq,
+  };
 }

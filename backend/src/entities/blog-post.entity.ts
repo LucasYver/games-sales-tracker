@@ -46,8 +46,26 @@ export class BlogPost {
   @Column({ type: 'timestamptz', nullable: true })
   generatedAt: Date | null;
 
+  // Set while the article is on the public blog. A post can be live and in
+  // DRAFT at the same time: a refreshed draft is under review and the public
+  // keeps reading `liveSnapshot` until it is published or rejected.
   @Column({ type: 'timestamptz', nullable: true })
   publishedAt: Date | null;
+
+  // Last time the public text changed (publish, refresh, edit while live).
+  // Drives `dateModified` and the sitemap — not bumped by admin bookkeeping.
+  @Column({ type: 'timestamptz', nullable: true })
+  contentUpdatedAt: Date | null;
+
+  // Public content and fact pack of the live version while a refresh is in
+  // review (see BlogLiveSnapshot). Null otherwise.
+  @Column({ type: 'jsonb', nullable: true })
+  liveSnapshot: Record<string, unknown> | null;
+
+  // Fingerprint of the sourced figures an admin already chose not to act on
+  // (refresh rejected), so the same change is not proposed every week.
+  @Column({ type: 'text', nullable: true })
+  staleAckFingerprint: string | null;
 
   @Column({ type: 'timestamptz', nullable: true })
   reviewEmailSentAt: Date | null;

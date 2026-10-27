@@ -32,6 +32,7 @@ import { CreateMilestoneDto } from './dto/create-milestone.dto';
 import { UpdateTrustedSourceDto } from './dto/update-trusted-source.dto';
 import { UpdateBlogTranslationDto } from './dto/update-blog-translation.dto';
 import { RejectBlogDto } from './dto/reject-blog.dto';
+import { PublishBlogDto } from './dto/publish-blog.dto';
 import { BlogService } from '../blog/blog.service';
 import { AdminMailService } from './admin-mail.service';
 import type { BlogPostStatus } from '../entities';
@@ -405,8 +406,12 @@ export class AdminController {
 
   @Post('blog/:id/publish')
   @HttpCode(200)
-  publishBlog(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
-    return this.blog.publish(id, adminEmail(req));
+  publishBlog(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: PublishBlogDto,
+    @Req() req: Request,
+  ) {
+    return this.blog.publish(id, adminEmail(req), body?.force === true);
   }
 
   @Post('blog/:id/reject')

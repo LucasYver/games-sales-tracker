@@ -218,6 +218,7 @@
     "ctaGame": "See live sales data for {name}",
     "empty": "No articles yet. Official sales recaps will land here soon.",
     "faqTitle": "Questions",
+    "figuresAsOf": "Latest figure on record: {date}",
     "indexDescription": "Official video-game sales figures: publisher statements, Wikipedia, and analyst notes, game by game.",
     "indexIntro": "Publisher statements, Wikipedia, and the analyst notes we keep on file — the official sales story for each game, dated and attributed.",
     "indexTitle": "Official sales, on the record",
