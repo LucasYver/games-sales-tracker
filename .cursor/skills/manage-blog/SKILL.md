@@ -38,16 +38,29 @@ in the prompt — keep them there:
 
 ## No repetition (the other point)
 
-- `consolidateFacts` (in `milestoneFacts`): one fact per figure. Same
-  number from several sources → keep OFFICIAL > ANNOUNCEMENT > WIKIPEDIA >
-  MEDIA, then earliest report. A lower figure reported after a higher one
-  (same kind/platform, not Alinea) is an old number repeated → dropped.
-  `compareFacts` consolidates the frozen side too, so older packs are not
-  flagged stale for it.
+- Credits (`attribution` in `blog-fact-pack.service.ts`): `milestone.publisher`
+  is free-text "who the figure is credited to" from extraction. A credit
+  matching the game's publisher/developer keeps that name (press facts:
+  `sourceRank` 1); generic credits ("reportedly", "new sales analysis",
+  "the press") become `press reports` (rank 3). Official = 0, Wikipedia = 2.
+- `consolidateFacts` (in `milestoneFacts`), in order: engagement equal to
+  a sales figure is dropped (misfiled); press within 1% of an Alinea
+  estimate (±14 d) is that estimate relayed → dropped; press within 3% of
+  a more trusted figure (±14 d) is a rounded relay → dropped; Alinea keeps
+  only the newest estimate per kind/platform; same number from several
+  sources → most trusted, then earliest; a lower total reported after a
+  higher one (non-estimate) → dropped. `compareFacts` consolidates the
+  frozen side too. Real case (RE Requiem): 54 milestones → 10 facts.
+- `answerHint` lead: newest worldwide figure from the publisher (rank ≤ 1),
+  else Wikipedia, else press, else the estimate. A later higher press
+  figure or estimate is mentioned once after it.
 - Each fact gets a `section` (`intro`, `timeline`, `platforms`, `players`,
   `popularity`) in `factsForModel`; the prompt puts each fact in its
   section once. The TL;DR box sits above the body and the body never
   repeats it. No FAQ (it only repeated the body); old articles keep theirs.
+- The prompt forbids narrating its own rules ("kept without reconciling",
+  "cannot be added up"...), caps caveats at one per section, and bans
+  quoted or generic source names; the editor flags all three as errors.
 - `findRepeatedFigures` counts each fact's figure in `bodyMarkdown` (TL;DR
   excluded). Extra mentions become an `error` issue
   (`REPEATED_FIGURE_PROBLEM`), which triggers the revision pass and blocks

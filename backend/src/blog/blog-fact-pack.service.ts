@@ -28,11 +28,95 @@ const PLATFORM_NAME: Record<string, string> = {
 
 type FactFields = Omit<BlogFact, 'id'>;
 
+type GameNames = { publisher?: string | null; developer?: string | null };
+
+/** Generic credits from article extraction ("reportedly", "the press"...). */
+const GENERIC_CREDIT =
+  /^(the |a |an |une? |la |le |les )?(press|presse|media|médias|report|reports|reportedly|sources?|analysts?|sales analysis|new sales analysis|nouvelle analyse des ventes|analyse des ventes|insiders?|data|données)\b/i;
+const OWN_CREDIT =
+  /^(the |l'|le |la )?(publisher|developer|studio|éditeur|développeur|studio)$/i;
+
+function normalizeName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\(.*?\)/g, ' ')
+    .replace(/\b(co|ltd|inc|corp|corporation|llc|sa|gmbh|kk|k\.k)\b\.?/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function sameCompany(a: string, b: string): boolean {
+  const x = normalizeName(a);
+  const y = normalizeName(b);
+  return !!x && !!y && (x === y || x.includes(y) || y.includes(x));
+}
+
+/**
+ * Who a milestone is credited to, in words fit for an article, and how far
+ * it can be trusted. Press credits are free text from extraction: generic
+ * ones ("reportedly", "new sales analysis") become "press reports"; a
+ * credit to the game's publisher or developer keeps that company's name.
+ */
+function attribution(
+  row: Milestone,
+  game: GameNames,
+): { sourceName: string; sourceRank: number; creditedToMaker: boolean } {
+  const credit = row.publisher?.trim() ?? '';
+  const maker = [game.publisher, game.developer].find(
+    (name): name is string => !!name?.trim() && sameCompany(credit, name),
+  );
+  const ownCredit = OWN_CREDIT.test(credit) ? game.publisher?.trim() : null;
+  const makerName = maker?.trim() ?? ownCredit ?? null;
+
+  if (isAlineaMilestone(row)) {
+    return {
+      sourceName: 'Alinea Analytics',
+      sourceRank: 3,
+      creditedToMaker: false,
+    };
+  }
+  switch (row.source) {
+    case SalesSource.OFFICIAL:
+    case SalesSource.ANNOUNCEMENT:
+      return {
+        sourceName:
+          makerName ??
+          (credit && !GENERIC_CREDIT.test(credit) ? credit : null) ??
+          game.publisher?.trim() ??
+          sourceDisplayName(row),
+        sourceRank: 0,
+        creditedToMaker: true,
+      };
+    case SalesSource.WIKIPEDIA:
+      return { sourceName: 'Wikipedia', sourceRank: 2, creditedToMaker: false };
+    default:
+      if (makerName) {
+        return { sourceName: makerName, sourceRank: 1, creditedToMaker: true };
+      }
+      if (
+        !credit ||
+        GENERIC_CREDIT.test(credit) ||
+        credit === credit.toLowerCase()
+      ) {
+        return {
+          sourceName: 'press reports',
+          sourceRank: 3,
+          creditedToMaker: false,
+        };
+      }
+      return { sourceName: credit, sourceRank: 3, creditedToMaker: false };
+  }
+}
+
 /**
  * What a milestone number measures, spelled out so the writer cannot blur
  * it. Internal note for the writer: it is told never to copy the wording.
  */
-function milestoneLabel(row: Milestone): string {
+function milestoneLabel(
+  row: Milestone,
+  sourceName: string,
+  creditedToMaker: boolean,
+): string {
   const scope =
     row.platform === Platform.GLOBAL
       ? 'all platforms, worldwide'
@@ -46,32 +130,28 @@ function milestoneLabel(row: Milestone): string {
   switch (row.source) {
     case SalesSource.OFFICIAL:
     case SalesSource.ANNOUNCEMENT:
-      return `${what}; official`;
+      return `${what}; official statement`;
     case SalesSource.WIKIPEDIA:
       return `${what}; cited on Wikipedia`;
     default:
-      return `${what}; press report, not a publisher statement`;
+      return creditedToMaker
+        ? `${what}; figure from ${sourceName}, known through press coverage`
+        : `${what}; press report`;
   }
 }
 
 /**
- * Blog-eligible milestones as facts (no ids). Leaks and model estimates
- * stay out. `gamePublisher` replaces a nameless "the publisher".
+ * Blog-eligible milestones as facts (no ids), consolidated. Leaks and model
+ * estimates stay out. `game` names the publisher/developer for credits.
  */
 export function milestoneFacts(
   rows: Milestone[],
-  gamePublisher?: string | null,
+  game: GameNames = {},
 ): FactFields[] {
   const facts: FactFields[] = [];
   for (const row of rows) {
     if (!isBlogEligibleMilestone(row)) continue;
-    const official =
-      row.source === SalesSource.OFFICIAL ||
-      row.source === SalesSource.ANNOUNCEMENT;
-    const sourceName =
-      official && !row.publisher?.trim() && gamePublisher?.trim()
-        ? gamePublisher.trim()
-        : sourceDisplayName(row);
+    const { sourceName, sourceRank, creditedToMaker } = attribution(row, game);
     facts.push({
       kind: row.isEngagement ? 'engagement' : 'sales',
       value: row.units,
@@ -79,10 +159,11 @@ export function milestoneFacts(
       platform: row.platform,
       source: row.source,
       sourceName,
+      sourceRank,
       date: row.reportedAt ? row.reportedAt.toISOString().slice(0, 10) : null,
       isEngagement: row.isEngagement,
       isAlinea: isAlineaMilestone(row),
-      label: milestoneLabel(row),
+      label: milestoneLabel(row, sourceName, creditedToMaker),
       sourceUrl: row.sourceUrl,
     });
   }
@@ -91,42 +172,108 @@ export function milestoneFacts(
 
 const SOURCE_RANK: Record<string, number> = {
   OFFICIAL: 0,
-  ANNOUNCEMENT: 1,
+  ANNOUNCEMENT: 0,
   WIKIPEDIA: 2,
   MEDIA: 3,
 };
 
-function sameFigure(a: number, b: number): boolean {
-  return Math.abs(a - b) <= Math.max(a, b) * 0.005;
+export function factRank(f: Pick<FactFields, 'source' | 'sourceRank'>): number {
+  return f.sourceRank ?? SOURCE_RANK[f.source] ?? 9;
+}
+
+const MS_DAY = 86_400_000;
+
+function daysApart(a: string | null, b: string | null): number {
+  if (!a || !b) return Infinity;
+  return Math.abs(Date.parse(a) - Date.parse(b)) / MS_DAY;
+}
+
+function within(a: number, b: number, ratio: number): boolean {
+  return Math.abs(a - b) <= Math.max(a, b) * ratio;
 }
 
 /**
- * One fact per figure, so an article never lists the same milestone twice.
+ * One fact per figure, so an article never lists the same milestone twice
+ * and never mistakes a relayed number for a new one. In order:
  *
- * - The same number reported by several sources (publisher, Wikipedia,
- *   press) is one milestone: keep the most authoritative source, then the
- *   earliest report.
- * - A cumulative total cannot go down: a lower figure reported after a
- *   higher one is an old number repeated by the press, not a milestone.
- *   Analyst estimates are exempt — a lower one is a revision.
+ * 1. Players reached equal to a sales figure (same platform) is the same
+ *    number misfiled as engagement: dropped.
+ * 2. Press figures within 1% of an analyst estimate (same kind/platform,
+ *    ±14 days) are that estimate relayed: dropped.
+ * 3. Press figures within 3% of a more trusted figure (±14 days) are a
+ *    rounded relay ("7 million" for an official 6.9): dropped.
+ * 4. Analyst estimates: only the newest per kind/platform (a newer one is
+ *    a revision of the older).
+ * 5. The same number from several sources is one milestone: keep the most
+ *    trusted source, then the earliest report.
+ * 6. A total cannot go down: a lower figure reported after a higher one
+ *    (not an estimate) is an old number repeated: dropped.
  *
  * Release year and signals pass through. Input order is kept.
  */
 export function consolidateFacts<T extends FactFields>(facts: T[]): T[] {
   const isRecord = (f: T) => f.kind === 'sales' || f.kind === 'engagement';
   const group = (f: T) => `${f.kind}|${f.platform}|${f.isAlinea}`;
-  const rank = (f: T) => SOURCE_RANK[f.source] ?? 9;
+  const scope = (f: T) => `${f.kind}|${f.platform}`;
+  const isPress = (f: T) => !f.isAlinea && f.source === 'MEDIA';
 
-  const preferred = facts
-    .filter(isRecord)
-    .sort(
-      (a, b) =>
-        rank(a) - rank(b) || (a.date ?? '9999').localeCompare(b.date ?? '9999'),
-    );
+  let pool = facts.filter(isRecord);
+
+  pool = pool.filter(
+    (f) =>
+      f.kind !== 'engagement' ||
+      !pool.some(
+        (s) =>
+          s.kind === 'sales' &&
+          s.platform === f.platform &&
+          within(s.value, f.value, 0.01),
+      ),
+  );
+  pool = pool.filter(
+    (f) =>
+      !isPress(f) ||
+      !pool.some(
+        (e) =>
+          e.isAlinea &&
+          scope(e) === scope(f) &&
+          within(e.value, f.value, 0.01) &&
+          daysApart(e.date, f.date) <= 14,
+      ),
+  );
+  pool = pool.filter(
+    (f) =>
+      !isPress(f) ||
+      !pool.some(
+        (o) =>
+          !o.isAlinea &&
+          o !== f &&
+          scope(o) === scope(f) &&
+          factRank(o) < factRank(f) &&
+          o.value !== f.value &&
+          within(o.value, f.value, 0.03) &&
+          daysApart(o.date, f.date) <= 14,
+      ),
+  );
+  pool = pool.filter(
+    (f) =>
+      !f.isAlinea ||
+      !pool.some(
+        (o) =>
+          o.isAlinea &&
+          scope(o) === scope(f) &&
+          (o.date ?? '') > (f.date ?? ''),
+      ),
+  );
+
+  const preferred = [...pool].sort(
+    (a, b) =>
+      factRank(a) - factRank(b) ||
+      (a.date ?? '9999').localeCompare(b.date ?? '9999'),
+  );
   const unique: T[] = [];
   for (const fact of preferred) {
     const duplicate = unique.some(
-      (k) => group(k) === group(fact) && sameFigure(k.value, fact.value),
+      (k) => group(k) === group(fact) && within(k.value, fact.value, 0.005),
     );
     if (!duplicate) unique.push(fact);
   }
@@ -279,10 +426,7 @@ export class BlogFactPackService {
       });
     }
 
-    for (const fact of await this.currentMilestoneFacts(
-      gameId,
-      game.publisher,
-    )) {
+    for (const fact of await this.currentMilestoneFacts(gameId, game)) {
       push(fact);
     }
 
@@ -334,13 +478,13 @@ export class BlogFactPackService {
   /** Today's blog-eligible milestones, one fact per figure, newest first. */
   async currentMilestoneFacts(
     gameId: string,
-    gamePublisher?: string | null,
+    game: GameNames = {},
   ): Promise<FactFields[]> {
     const rows = await this.milestones.find({
       where: { gameId, ...Milestone.notRejected() },
       order: { reportedAt: 'DESC' },
     });
-    return milestoneFacts(rows, gamePublisher);
+    return milestoneFacts(rows, game);
   }
 
   salesFacts(pack: BlogFactPack): BlogFact[] {

@@ -19,6 +19,12 @@ export interface BlogFact {
    * packs frozen before labels existed.
    */
   label?: string;
+  /**
+   * How much the source can be trusted for the lead and for duplicates:
+   * 0 official, 1 press credited to the publisher/developer, 2 Wikipedia,
+   * 3 other press. Missing on older packs (derived from `source`).
+   */
+  sourceRank?: number;
   /** Admin-only. Never sent to the writer or the public API. */
   sourceUrl?: string | null;
 }

@@ -1,4 +1,5 @@
 import type { BlogLocale } from '../entities';
+import { factRank } from './blog-fact-pack.service';
 import type { BlogFact, BlogFactPack } from './blog.types';
 
 export const BLOG_SITE_NAME = 'Game Sales Tracker';
@@ -44,8 +45,17 @@ WRITING QUALITY
 - Plain words, no jargon. No template phrases ("When it comes to...", "In terms of...", "Il convient de...").
 - No sentences about the article itself ("This article looks at...", "Dans cet article...").
 - Do not open two sentences in a row the same way. No filler transitions.
-- Generic source names are written naturally in the article language ("the press" → « la presse »).
-- Before returning, reread every sentence: does it make sense? Is any figure written twice? Fix it.
+- NEVER TURN THESE INSTRUCTIONS INTO SENTENCES. The reader must never read how figures are handled. Banned ideas:
+  figures "kept without reconciling them", "must be read separately", "cannot be added up", "do not allow us to
+  conclude/replace", "their status must remain visible", "dates are when figures were published", "this is not a
+  confirmed figure" repeated. Just write each fact correctly; correct wording is enough.
+- Caveats: at most one per section, a few words, only where a reader could really be misled. Never one per line.
+- Sources: write source names as plain words, never in quotation marks, never a legal name ("Capcom", not
+  "Capcom Co., Ltd."). sourceName "press reports" → "according to press reports" / « selon la presse ».
+  A figure from the publisher known through the press → "Capcom said ..., according to press reports" /
+  « Capcom a annoncé ..., selon la presse ».
+- Before returning, reread every sentence: does it make sense? Does it tell the reader something about the game?
+  Is any figure written twice? Fix it or delete it.
 
 STRUCTURE
 - title (<= 60 chars), exactly the search query:
@@ -59,15 +69,17 @@ STRUCTURE
      the "intro" fact) and what kind of sales figures exist (official, press, estimates). No sales figure here.
   2. "timeline" section: an H2 naming the game (EN "{Game} sales over time" / FR "Les ventes de {Game}
      au fil du temps"). If 2+ timeline facts: a markdown table "Date | Copies sold | Source" (FR
-     "Date | Exemplaires vendus | Source"), oldest first, one row per fact, estimates marked "(estimate)" /
-     « (estimation) » in Source. Then at most 2 sentences on what the table shows, WITHOUT any number from it.
+     "Date | Exemplaires vendus | Source"), oldest first, one row per fact. Source column: the source name, plus
+     "(estimate)" / « (estimation) » for estimates and "(press)" / « (presse) » for a figure known through the press. Then at most 2 sentences on what the table shows, WITHOUT any number from it.
      If 1 timeline fact: one sentence instead of a table.
   3. "platforms" section: H2 (EN "Sales by platform" / FR "Ventes par plateforme"), one bullet per fact.
   4. "players" section: H2 (EN "How many people have played it?" / FR "Combien de joueurs ?"), one or two sentences.
-  5. "popularity" section: H2 (EN "What do player numbers on Steam and console stores show?" or similar), one short
-     paragraph, each signal once, clearly not sales.
-  6. Closing paragraph, no heading, 1-2 sentences: what is not known, only if it matters (e.g. no figure for over a
-     year), then one sentence linking to live data as a markdown link whose href is exactly {GAME_URL}.
+  5. "popularity" section: H2 (EN "How popular is it on Steam and console stores?" / FR "Quelle popularité sur Steam
+     et les consoles ?"). One opening sentence saying these numbers show popularity, not sales; then each signal once,
+     as a plain fact, with no further disclaimer.
+  6. Closing paragraph, no heading, 1-2 sentences: one gap that matters to the reader, only if there is one (e.g. no
+     official figure for over a year, no official platform split), then one sentence linking to live data as a
+     markdown link whose href is exactly {GAME_URL}.
 - Length follows the facts: about 200-350 words with 2-4 facts, never more than 700. Never pad.
 - Body markdown: H2, paragraphs, bullet lists and one table at most. No H1, no H3, no raw HTML, no images.
 
@@ -150,12 +162,18 @@ function newest(facts: BlogFact[]): BlogFact | undefined {
 export function answerHint(pack: BlogFactPack, today: string): string {
   const sales = pack.facts.filter((f) => f.kind === 'sales');
   const sourced = sales.filter((f) => !f.isAlinea);
+  const global = sourced.filter((f) => f.platform === 'GLOBAL');
+  // The publisher's own number (stated, or credited to it in the press)
+  // leads; Wikipedia, then other press, only when there is none.
   const answer =
-    newest(sourced.filter((f) => f.platform === 'GLOBAL')) ??
+    newest(global.filter((f) => factRank(f) <= 1)) ??
+    newest(global.filter((f) => factRank(f) <= 2)) ??
+    newest(global) ??
     newest(sourced) ??
     newest(sales);
-  if (!answer)
+  if (!answer) {
     return 'ANSWER=none — there is no sales fact; do not state a sales figure.';
+  }
 
   const lines = [`ANSWER=${answer.id} (${answer.label ?? answer.kind})`];
   if (answer.isAlinea) {
@@ -167,17 +185,20 @@ export function answerHint(pack: BlogFactPack, today: string): string {
       'No worldwide figure exists: say the answer covers one platform only.',
     );
   }
+  const later = (f: BlogFact) =>
+    (f.date ?? '') > (answer.date ?? '') && f.value > answer.value;
+  const newerPress = newest(global.filter((f) => f !== answer && later(f)));
+  if (newerPress) {
+    lines.push(
+      `A later, less authoritative figure exists (${newerPress.id}); mention it once after the answer, attributed to its source.`,
+    );
+  }
   const newerEstimate = newest(
-    sales.filter(
-      (f) =>
-        f.isAlinea &&
-        f.platform === 'GLOBAL' &&
-        (f.date ?? '') > (answer.date ?? ''),
-    ),
+    sales.filter((f) => f.isAlinea && f.platform === 'GLOBAL' && later(f)),
   );
   if (newerEstimate && !answer.isAlinea) {
     lines.push(
-      `A more recent analyst estimate exists (${newerEstimate.id}); mention it after the answer, clearly as an estimate.`,
+      `A later analyst estimate exists (${newerEstimate.id}); mention it once, clearly as an estimate.`,
     );
   }
   if (answer.date) {
@@ -241,6 +262,10 @@ Each fact has a "label" saying exactly what it measures. Flag as severity=error:
 - the same figure written more than once in bodyMarkdown, or a TL;DR sentence repeated in the body
 - a sentence that is ungrammatical, confusing, contradictory, or does not make sense on its own
 - wording copied from a fact label (e.g. "total copies sold so far, all platforms, worldwide")
+- a sentence that describes how figures are handled instead of informing ("kept without reconciling",
+  "must be read separately", "cannot be added up", "dates are publication dates", "status must remain visible")
+- the same caveat repeated (e.g. "not sales" on every line)
+- a source name in quotation marks, or a generic credit used as a name ("reportedly", "new sales analysis")
 - any mention of AI, models or the site's own estimates
 
 Flag as severity=warning:

@@ -98,7 +98,10 @@ export class BlogService {
   async freshness(post: BlogPost): Promise<BlogFreshness | null> {
     if (!isLive(post) || !post.gameId) return null;
     const pack = post.factPack as unknown as BlogFactPack;
-    const current = await this.factPacks.currentMilestoneFacts(post.gameId);
+    const current = await this.factPacks.currentMilestoneFacts(
+      post.gameId,
+      post.game ?? {},
+    );
     const diff = compareFacts(pack.facts ?? [], current);
     const changed = diff.added.length + diff.removed.length > 0;
     const acknowledged =
@@ -469,7 +472,7 @@ export class BlogService {
     reviewedBy?: string,
   ) {
     const current = post.gameId
-      ? await this.factPacks.currentMilestoneFacts(post.gameId)
+      ? await this.factPacks.currentMilestoneFacts(post.gameId, post.game ?? {})
       : [];
     await this.posts.manager.transaction(async (em) => {
       const translations = em.getRepository(BlogPostTranslation);
