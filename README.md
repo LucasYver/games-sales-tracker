@@ -202,7 +202,6 @@ curl -X POST http://localhost:3001/api/ingestion/steam \
 # Backend (depuis backend/)
 npm run start:dev          # dev avec hot-reload
 npm run migration:show     # migrations appliquées / en attente
-npm run test               # tests unitaires
 
 # Frontend (depuis frontend/)
 npm run dev                # dev Next.js
