@@ -5,12 +5,9 @@ import type { BlogCandidateScore } from './blog.types';
 
 const MS_DAY = 86_400_000;
 
+// Same test as `isAlineaMilestone` (blog-alinea.ts): keep the two in step.
 const ALINEA_SQL = `(
-  COALESCE(m.publisher, '') ILIKE '%alinea%'
-  OR COALESCE(m.note, '') ILIKE '%alinea%'
-  OR COALESCE(m.note, '') ILIKE '%rhys elliot%'
-  OR COALESCE(m."sourceUrl", '') ILIKE '%alineaanalytics%'
-  OR COALESCE(m."sourceUrl", '') ILIKE '%rhys%elliot%'
+  CONCAT_WS(' ', m.publisher, m.note, m."sourceUrl") ~* '(alinea|rhys\\s+elliott?)'
 )`;
 
 interface CandidateRow {

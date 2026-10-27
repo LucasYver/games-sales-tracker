@@ -37,22 +37,6 @@ export function isBlogEligibleMilestone(row: {
   return true;
 }
 
-export function isHighTrustSalesMilestone(row: {
-  source: SalesSource;
-  isEstimate: boolean;
-  isEngagement: boolean;
-  publisher?: string | null;
-  note?: string | null;
-  sourceUrl?: string | null;
-}): boolean {
-  if (row.isEngagement) return false;
-  if (!isBlogEligibleMilestone(row)) return false;
-  if (isAlineaMilestone(row)) return true;
-  return (
-    row.source === SalesSource.OFFICIAL || row.source === SalesSource.WIKIPEDIA
-  );
-}
-
 export function sourceDisplayName(row: {
   source: SalesSource;
   publisher?: string | null;
