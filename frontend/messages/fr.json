@@ -41,10 +41,10 @@
     "descriptionFree": "{name} est free-to-play : pas d'estimation de copies vendues. Signaux joueurs et avis mis à jour chaque jour.",
     "descriptionUnits": "Environ {units} exemplaires de {name} vendus ({platforms}) au {date}. Ventilation par plateforme et évolution des avis boutique.",
     "descriptionUnitsNoDate": "Environ {units} exemplaires de {name} vendus ({platforms}). Ventilation par plateforme et évolution des avis boutique.",
-    "title": "{name} ({year}) — Ventes",
+    "title": "{name} ({year})",
     "titleFree": "{name} — Free-to-play",
-    "titleNoYear": "{name} — Ventes",
-    "titleUnits": "Ventes de {name} — {units} exemplaires"
+    "titleNoYear": "{name}",
+    "titleUnits": "{name} — {units} exemplaires"
   },
   "home": {
     "gamesCount": "{count, number} jeux",
@@ -121,7 +121,7 @@
     "followersSeriesAlt": "Évolution du nombre de followers Steam de {name}.",
     "freeToPlayNote": "Ce jeu est gratuit, il n’a donc pas d’estimation de ventes.",
     "genres": "Genres",
-    "heading": "Ventes de {name}",
+    "heading": "{name}",
     "headingFree": "{name}",
     "headingUnits": "{units} exemplaires",
     "interestTitle": "Signaux d’audience",
