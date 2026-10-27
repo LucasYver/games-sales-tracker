@@ -27,9 +27,10 @@ well corroborated is worse than no milestone.
 - Modeled / review-derived estimate hosts (same treatment): `indielist.games`,
   `gamesberry.app`, `sensortower.com` (incl. `app.sensortower.com`),
   `steamdata.ai`, `playrev.io`, `gamedata.wtf`, `devuego.lat`, `devuego.es`,
-  `9000.to`, `gamesensor.info` — plus AI republish farms `edgechat.ai`,
-  `findings.oreate.ai`, `podcasttranscript.ai`. Also listed in
-  `TAVILY_EXCLUDED_DOMAINS` so discovery does not resurface them.
+  `9000.to`, `gamesensor.info`, `raijin.gg`, `steam-discovery.vercel.app` —
+  plus AI republish farms `edgechat.ai`, `findings.oreate.ai`,
+  `podcasttranscript.ai`. Also listed in `TAVILY_EXCLUDED_DOMAINS` so discovery
+  does not resurface them.
 
 ## Keepers (high value)
 

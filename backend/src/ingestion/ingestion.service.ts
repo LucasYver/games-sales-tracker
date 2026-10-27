@@ -118,6 +118,8 @@ const TAVILY_EXCLUDED_DOMAINS = [
   // (`slice(0, 20)` in perplexity.client). Keep blacklisted / modeled hosts here.
   'vgchartz.com',
   'nintendolife.com',
+  'raijin.gg',
+  'steam-discovery.vercel.app',
   'indielist.games',
   'gamesberry.app',
   'sensortower.com',
@@ -142,7 +144,6 @@ const TAVILY_EXCLUDED_DOMAINS = [
   'statista.com',
   'similarweb.com',
   'rec0ded88.com',
-  'raijin.gg',
   // Estimate providers whose figures are explicitly modeled ("we estimate",
   // "estimated X to Y", "up to X", "derived from N Steam reviews") yet get
   // mislabeled as sourced milestones
