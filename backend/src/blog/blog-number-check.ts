@@ -1,4 +1,9 @@
-import type { BlogFact, BlogFactPack, BlogWriterArticle } from './blog.types';
+import type {
+  BlogFact,
+  BlogFactPack,
+  BlogReviewIssue,
+  BlogWriterArticle,
+} from './blog.types';
 
 // Thousands separators: plain, no-break, narrow no-break (French typography)
 // and thin spaces, plus dot / comma.
@@ -135,6 +140,63 @@ export function findUnverifiedNumbers(
     }
   }
   return unverified;
+}
+
+export const REPEATED_FIGURE_PROBLEM = 'Figure repeated in the article body';
+
+/**
+ * Sourced figures (sales, players, popularity signals) written more than
+ * once in the body. Each one belongs in exactly one place; repeating it is
+ * padding and reads badly. The TL;DR box is separate and not counted.
+ */
+export function findRepeatedFigures(
+  bodyMarkdown: string,
+  facts: BlogFact[],
+): { figure: string; count: number }[] {
+  const figures = facts.filter(
+    (f) => f.kind === 'sales' || f.kind === 'engagement' || f.kind === 'signal',
+  );
+  const expected = new Map<number, number>();
+  for (const f of figures) {
+    expected.set(f.value, (expected.get(f.value) ?? 0) + 1);
+  }
+  const seen = new Map<number, { figure: string; count: number }>();
+  const text = bodyMarkdown.replace(/\]\([^)]*\)/g, ']');
+  for (const raw of extractFrom(text)) {
+    const parsed = parseHumanNumber(raw);
+    if (parsed == null || parsed < 1_000) continue;
+    let best: number | null = null;
+    for (const f of figures) {
+      if (!closeEnough(parsed, f.value)) continue;
+      if (
+        best == null ||
+        Math.abs(parsed - f.value) < Math.abs(parsed - best)
+      ) {
+        best = f.value;
+      }
+    }
+    if (best == null) continue;
+    const entry = seen.get(best) ?? { figure: raw, count: 0 };
+    entry.count += 1;
+    seen.set(best, entry);
+  }
+  return [...seen.entries()]
+    .filter(([value, entry]) => entry.count > (expected.get(value) ?? 1))
+    .map(([, entry]) => entry);
+}
+
+/** Editor-style issues for repeated figures, so the review screen lists them. */
+export function repeatedFigureIssues(
+  bodyMarkdown: string,
+  facts: BlogFact[],
+): BlogReviewIssue[] {
+  return findRepeatedFigures(bodyMarkdown, facts).map(({ figure, count }) => ({
+    severity: 'error',
+    excerpt: figure,
+    problem: `${REPEATED_FIGURE_PROBLEM} (${count} times)`,
+    suggestion:
+      'Keep this figure once, in the section it belongs to (or the table), and delete the other mentions.',
+  }));
 }
 
 /** Names whose digits are not claims ("Cyberpunk 2077", "2K"). */

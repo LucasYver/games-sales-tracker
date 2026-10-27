@@ -125,14 +125,19 @@ export default async function BlogArticlePage({
         },
         mainEntityOfPage: `${SITE_URL}/${locale}/blog/${post.slug}`,
       },
-      {
-        '@type': 'FAQPage',
-        mainEntity: post.faq.map((item) => ({
-          '@type': 'Question',
-          name: item.question,
-          acceptedAnswer: { '@type': 'Answer', text: item.answer },
-        })),
-      },
+      // Older articles only: new ones have no FAQ.
+      ...(post.faq.length > 0
+        ? [
+            {
+              '@type': 'FAQPage',
+              mainEntity: post.faq.map((item) => ({
+                '@type': 'Question',
+                name: item.question,
+                acceptedAnswer: { '@type': 'Answer', text: item.answer },
+              })),
+            },
+          ]
+        : []),
       {
         '@type': 'BreadcrumbList',
         itemListElement: [

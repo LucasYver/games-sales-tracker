@@ -20,7 +20,12 @@ import {
   factsFingerprint,
   figuresAsOf,
 } from './blog-fact-pack.service';
-import { findUnverifiedNumbers, packNames } from './blog-number-check';
+import {
+  findUnverifiedNumbers,
+  packNames,
+  REPEATED_FIGURE_PROBLEM,
+  repeatedFigureIssues,
+} from './blog-number-check';
 import { BlogWriterService } from './blog-writer.service';
 import { stableBlogSlug } from './blog.types';
 import type {
@@ -293,14 +298,20 @@ export class BlogService {
     if (input.faq != null) row.faq = input.faq;
 
     // Re-check the edited text: a number typed by hand gets the same scrutiny
-    // as the writer's, and editor notes about text that is gone are dropped.
+    // as the writer's, repeated figures are recounted, and editor notes about
+    // text that is gone are dropped.
     const pack = post.factPack as unknown as BlogFactPack;
     row.unverifiedNumbers = findUnverifiedNumbers(
       row,
       pack.facts ?? [],
       pack.game ? packNames(pack) : [],
     );
-    row.reviewIssues = issuesStillInText(row.reviewIssues ?? [], row);
+    row.reviewIssues = [
+      ...repeatedFigureIssues(row.bodyMarkdown, pack.facts ?? []),
+      ...issuesStillInText(row.reviewIssues ?? [], row).filter(
+        (issue) => !issue.problem.startsWith(REPEATED_FIGURE_PROBLEM),
+      ),
+    ];
     await this.translations.save(row);
 
     if (post.status === 'PUBLISHED') {

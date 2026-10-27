@@ -36,6 +36,25 @@ in the prompt — keep them there:
   names never count as a "m(illion)" suffix; FR narrow no-break spaces and
   "milliard" are parsed.
 
+## No repetition (the other point)
+
+- `consolidateFacts` (in `milestoneFacts`): one fact per figure. Same
+  number from several sources → keep OFFICIAL > ANNOUNCEMENT > WIKIPEDIA >
+  MEDIA, then earliest report. A lower figure reported after a higher one
+  (same kind/platform, not Alinea) is an old number repeated → dropped.
+  `compareFacts` consolidates the frozen side too, so older packs are not
+  flagged stale for it.
+- Each fact gets a `section` (`intro`, `timeline`, `platforms`, `players`,
+  `popularity`) in `factsForModel`; the prompt puts each fact in its
+  section once. The TL;DR box sits above the body and the body never
+  repeats it. No FAQ (it only repeated the body); old articles keep theirs.
+- `findRepeatedFigures` counts each fact's figure in `bodyMarkdown` (TL;DR
+  excluded). Extra mentions become an `error` issue
+  (`REPEATED_FIGURE_PROBLEM`), which triggers the revision pass and blocks
+  publish until fixed; recounted on every edit.
+- Length follows the facts (~200-350 words for 2-4 facts, max 700). The
+  prompt has a short format example (invented game) — keep it invented.
+
 ## Generation
 
 `BlogService.generateForGame` (admin Generate/Regenerate, Sunday cron):
@@ -46,9 +65,10 @@ in the prompt — keep them there:
 2. `BlogWriterService.writeLocale` runs EN and FR in parallel. Writer
    `BLOG_WRITER_MODEL` (default `gpt-6.1-sol`) returns the article JSON;
    editor `BLOG_EDITOR_MODEL` (default `gpt-6-luna`) lists issues only.
-3. `findUnverifiedNumbers`. If it flags anything or the editor reports an
-   `error`, the writer gets ONE revision pass with the problems, then the
-   editor and the number check run again on the revised draft.
+3. `findUnverifiedNumbers` + `repeatedFigureIssues`. If either flags
+   anything or the editor reports an `error` (including a sentence that
+   makes no sense), the writer gets ONE revision pass with the problems,
+   then all checks run again on the revised draft.
 4. Persist `blog_post` + both translations in **one transaction** as
    `DRAFT`.
 5. Resend review mail (“Update ready” for a refresh). Nothing changes on
@@ -89,7 +109,7 @@ per language version, each with its hreflang alternates.
 
 `/admin/blog/:id` is the review screen, not a writing plan: fact pack
 (with labels) at the top, then editable EN/FR title / meta / excerpt /
-TL;DR / body.
+TL;DR / body (FAQ stays editable for older articles).
 
 ## Who uses the score
 

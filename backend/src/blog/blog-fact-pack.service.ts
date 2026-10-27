@@ -28,36 +28,50 @@ const PLATFORM_NAME: Record<string, string> = {
 
 type FactFields = Omit<BlogFact, 'id'>;
 
-/** What a milestone number measures, spelled out so the writer cannot blur it. */
-function milestoneLabel(row: Milestone, sourceName: string): string {
+/**
+ * What a milestone number measures, spelled out so the writer cannot blur
+ * it. Internal note for the writer: it is told never to copy the wording.
+ */
+function milestoneLabel(row: Milestone): string {
   const scope =
     row.platform === Platform.GLOBAL
-      ? 'worldwide, all platforms'
-      : `on ${PLATFORM_NAME[row.platform] ?? row.platform} only — NOT a worldwide total`;
+      ? 'all platforms, worldwide'
+      : `${PLATFORM_NAME[row.platform] ?? row.platform} only, not the worldwide total`;
   const what = row.isEngagement
-    ? `players/users reached (${scope}); may include subscription or free access such as Game Pass — NOT copies sold`
-    : `cumulative copies sold (${scope})`;
+    ? `players reached, ${scope}; may include Game Pass or free access; not copies sold`
+    : `total copies sold so far, ${scope}`;
   if (isAlineaMilestone(row)) {
-    return `${what}; third-party ESTIMATE by Alinea Analytics, not an official figure`;
+    return `${what}; analyst ESTIMATE, not an official figure`;
   }
   switch (row.source) {
     case SalesSource.OFFICIAL:
-      return `${what}; official figure stated by ${sourceName}`;
     case SalesSource.ANNOUNCEMENT:
-      return `${what}; announced by ${sourceName}`;
+      return `${what}; official`;
     case SalesSource.WIKIPEDIA:
-      return `${what}; figure cited on Wikipedia`;
+      return `${what}; cited on Wikipedia`;
     default:
-      return `${what}; reported by ${sourceName} (press/analyst), not a publisher statement`;
+      return `${what}; press report, not a publisher statement`;
   }
 }
 
-/** Blog-eligible milestones as facts (no ids). Leaks and model estimates stay out. */
-export function milestoneFacts(rows: Milestone[]): FactFields[] {
+/**
+ * Blog-eligible milestones as facts (no ids). Leaks and model estimates
+ * stay out. `gamePublisher` replaces a nameless "the publisher".
+ */
+export function milestoneFacts(
+  rows: Milestone[],
+  gamePublisher?: string | null,
+): FactFields[] {
   const facts: FactFields[] = [];
   for (const row of rows) {
     if (!isBlogEligibleMilestone(row)) continue;
-    const sourceName = sourceDisplayName(row);
+    const official =
+      row.source === SalesSource.OFFICIAL ||
+      row.source === SalesSource.ANNOUNCEMENT;
+    const sourceName =
+      official && !row.publisher?.trim() && gamePublisher?.trim()
+        ? gamePublisher.trim()
+        : sourceDisplayName(row);
     facts.push({
       kind: row.isEngagement ? 'engagement' : 'sales',
       value: row.units,
@@ -68,11 +82,70 @@ export function milestoneFacts(rows: Milestone[]): FactFields[] {
       date: row.reportedAt ? row.reportedAt.toISOString().slice(0, 10) : null,
       isEngagement: row.isEngagement,
       isAlinea: isAlineaMilestone(row),
-      label: milestoneLabel(row, sourceName),
+      label: milestoneLabel(row),
       sourceUrl: row.sourceUrl,
     });
   }
-  return facts;
+  return consolidateFacts(facts);
+}
+
+const SOURCE_RANK: Record<string, number> = {
+  OFFICIAL: 0,
+  ANNOUNCEMENT: 1,
+  WIKIPEDIA: 2,
+  MEDIA: 3,
+};
+
+function sameFigure(a: number, b: number): boolean {
+  return Math.abs(a - b) <= Math.max(a, b) * 0.005;
+}
+
+/**
+ * One fact per figure, so an article never lists the same milestone twice.
+ *
+ * - The same number reported by several sources (publisher, Wikipedia,
+ *   press) is one milestone: keep the most authoritative source, then the
+ *   earliest report.
+ * - A cumulative total cannot go down: a lower figure reported after a
+ *   higher one is an old number repeated by the press, not a milestone.
+ *   Analyst estimates are exempt — a lower one is a revision.
+ *
+ * Release year and signals pass through. Input order is kept.
+ */
+export function consolidateFacts<T extends FactFields>(facts: T[]): T[] {
+  const isRecord = (f: T) => f.kind === 'sales' || f.kind === 'engagement';
+  const group = (f: T) => `${f.kind}|${f.platform}|${f.isAlinea}`;
+  const rank = (f: T) => SOURCE_RANK[f.source] ?? 9;
+
+  const preferred = facts
+    .filter(isRecord)
+    .sort(
+      (a, b) =>
+        rank(a) - rank(b) || (a.date ?? '9999').localeCompare(b.date ?? '9999'),
+    );
+  const unique: T[] = [];
+  for (const fact of preferred) {
+    const duplicate = unique.some(
+      (k) => group(k) === group(fact) && sameFigure(k.value, fact.value),
+    );
+    if (!duplicate) unique.push(fact);
+  }
+
+  const kept = new Set(
+    unique.filter(
+      (fact) =>
+        fact.isAlinea ||
+        !unique.some(
+          (other) =>
+            group(other) === group(fact) &&
+            other.value > fact.value &&
+            !!other.date &&
+            !!fact.date &&
+            other.date < fact.date,
+        ),
+    ),
+  );
+  return facts.filter((f) => !isRecord(f) || kept.has(f));
 }
 
 /** Facts an article states as sourced figures (not release year or live signals). */
@@ -99,7 +172,10 @@ export function compareFacts(
   frozen: FactFields[],
   current: FactFields[],
 ): Omit<BlogFreshness, 'stale'> {
-  const before = new Map(recordFacts(frozen).map((f) => [factKey(f), f]));
+  // Older packs were frozen before consolidation: compare like with like.
+  const before = new Map(
+    recordFacts(consolidateFacts(frozen)).map((f) => [factKey(f), f]),
+  );
   const now = new Map(recordFacts(current).map((f) => [factKey(f), f]));
   const byDateDesc = (a: FactFields, b: FactFields) =>
     (b.date ?? '').localeCompare(a.date ?? '');
@@ -203,7 +279,12 @@ export class BlogFactPackService {
       });
     }
 
-    for (const fact of await this.currentMilestoneFacts(gameId)) push(fact);
+    for (const fact of await this.currentMilestoneFacts(
+      gameId,
+      game.publisher,
+    )) {
+      push(fact);
+    }
 
     for (const signal of SIGNALS) {
       const snap = await this.signals.findOne({
@@ -250,13 +331,16 @@ export class BlogFactPackService {
     };
   }
 
-  /** Today's blog-eligible milestones, newest first. */
-  async currentMilestoneFacts(gameId: string): Promise<FactFields[]> {
+  /** Today's blog-eligible milestones, one fact per figure, newest first. */
+  async currentMilestoneFacts(
+    gameId: string,
+    gamePublisher?: string | null,
+  ): Promise<FactFields[]> {
     const rows = await this.milestones.find({
       where: { gameId, ...Milestone.notRejected() },
       order: { reportedAt: 'DESC' },
     });
-    return milestoneFacts(rows);
+    return milestoneFacts(rows, gamePublisher);
   }
 
   salesFacts(pack: BlogFactPack): BlogFact[] {

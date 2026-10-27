@@ -6,7 +6,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import type { BlogLocale } from '../entities';
-import { findUnverifiedNumbers, packNames } from './blog-number-check';
+import {
+  findUnverifiedNumbers,
+  packNames,
+  repeatedFigureIssues,
+} from './blog-number-check';
 import {
   EDITOR_SCHEMA,
   WRITER_SCHEMA,
@@ -80,8 +84,8 @@ export class BlogWriterService {
     let issues = await this.review(locale, pack, today, article);
     let unverifiedNumbers = findUnverifiedNumbers(article, pack.facts, names);
 
-    // One correction pass when a check fails, so the reviewer starts from a
-    // draft that already matches the facts.
+    // One correction pass when a check fails (invented number, repeated
+    // figure, editor error), so the reviewer starts from a clean draft.
     if (
       unverifiedNumbers.length > 0 ||
       issues.some((issue) => issue.severity === 'error')
@@ -134,10 +138,8 @@ export class BlogWriterService {
         '{GAME_URL}',
         gameUrl,
       ),
-      faq: (written.faq ?? []).slice(0, 4).map((item) => ({
-        question: strip(item.question),
-        answer: strip(item.answer),
-      })),
+      // FAQ dropped: it only repeated the body's figures.
+      faq: [],
       claims: written.claims ?? [],
     };
   }
@@ -148,6 +150,8 @@ export class BlogWriterService {
     today: string,
     article: BlogWriterArticle,
   ): Promise<BlogReviewIssue[]> {
+    // Repetition is counted in code: the editor model misses it too often.
+    const repeated = repeatedFigureIssues(article.bodyMarkdown, pack.facts);
     try {
       const edited = await this.callJson<{ issues: BlogReviewIssue[] }>({
         model: this.editorModel,
@@ -157,10 +161,10 @@ export class BlogWriterService {
         schemaName: 'blog_editor',
         schema: EDITOR_SCHEMA,
       });
-      return edited.issues ?? [];
+      return [...repeated, ...(edited.issues ?? [])];
     } catch (error) {
       this.logger.warn(`Blog editor pass failed (${locale}): ${error}`);
-      return [];
+      return repeated;
     }
   }
 
@@ -210,6 +214,5 @@ function publicDraft(article: BlogWriterArticle) {
     excerpt: article.excerpt,
     tldr: article.tldr,
     bodyMarkdown: article.bodyMarkdown,
-    faq: article.faq,
   };
 }
