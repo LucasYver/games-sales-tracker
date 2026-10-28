@@ -340,6 +340,48 @@ export function compareFacts(
   };
 }
 
+export type PublicSourceKind =
+  | 'official'
+  | 'publisher-press'
+  | 'wikipedia'
+  | 'press'
+  | 'estimate';
+
+/**
+ * Figures the public page renders itself (sales table + popularity cards)
+ * for articles with the sales-table marker. Only display fields: no URLs,
+ * no quotes. `sourceName` is null for anonymous press reports.
+ */
+export function publicFigures(pack: BlogFactPack | null | undefined) {
+  const facts = pack?.facts ?? [];
+  const kindOf = (f: BlogFact): PublicSourceKind => {
+    if (f.isAlinea) return 'estimate';
+    if (f.source === 'OFFICIAL' || f.source === 'ANNOUNCEMENT') {
+      return 'official';
+    }
+    if (f.source === 'WIKIPEDIA') return 'wikipedia';
+    return factRank(f) <= 1 ? 'publisher-press' : 'press';
+  };
+  return {
+    sales: facts
+      .filter((f) => f.kind === 'sales')
+      .sort(
+        (a, b) =>
+          (a.date ?? '').localeCompare(b.date ?? '') || a.value - b.value,
+      )
+      .map((f) => ({
+        date: f.date,
+        value: f.value,
+        platform: f.platform,
+        sourceKind: kindOf(f),
+        sourceName: f.sourceName === 'press reports' ? null : f.sourceName,
+      })),
+    signals: facts
+      .filter((f) => f.kind === 'signal')
+      .map((f) => ({ metric: f.source, value: f.value, date: f.date })),
+  };
+}
+
 /** Date of the newest sourced figure in a pack: what the article is "as of". */
 export function figuresAsOf(
   pack: BlogFactPack | null | undefined,

@@ -218,6 +218,45 @@
     "ctaGame": "Voir les données live de {name}",
     "empty": "Pas encore d'article. Les dossiers sur les ventes officielles arriveront ici.",
     "faqTitle": "Questions",
+    "figures": {
+      "colCopies": "Exemplaires vendus",
+      "colDate": "Date",
+      "colPlatform": "Plateforme",
+      "colSource": "Source",
+      "estimate": "estimation",
+      "platformCaption": "Par plateforme",
+      "platforms": {
+        "MOBILE": "Mobile",
+        "OTHER": "Autre",
+        "PC": "PC",
+        "PLAYSTATION": "PlayStation",
+        "SWITCH": "Nintendo Switch",
+        "XBOX": "Xbox"
+      },
+      "popularityNote": "Ces chiffres mesurent la popularité du jeu, pas ses ventes.",
+      "popularityTitle": "Popularité en chiffres",
+      "press": "presse",
+      "pressReports": "Presse",
+      "signals": {
+        "PS_RATINGS": {
+          "label": "évaluations PlayStation Store",
+          "sub": "{date}"
+        },
+        "STEAM_PEAK_CCU": {
+          "label": "joueurs en même temps",
+          "sub": "record Steam · {date}"
+        },
+        "STEAM_REVIEWS": {
+          "label": "avis Steam",
+          "sub": "{date}"
+        },
+        "XBOX_RATINGS": {
+          "label": "évaluations Xbox Store",
+          "sub": "{date}"
+        }
+      },
+      "worldwideCaption": "Monde, toutes plateformes"
+    },
     "figuresAsOf": "Dernier chiffre connu : {date}",
     "indexDescription": "Chiffres de ventes officiels : déclarations d'éditeurs, Wikipedia et notes d'analystes, jeu par jeu.",
     "indexIntro": "Déclarations d'éditeurs, Wikipedia et notes d'analystes — l'histoire officielle des ventes de chaque jeu, datée et attribuée.",

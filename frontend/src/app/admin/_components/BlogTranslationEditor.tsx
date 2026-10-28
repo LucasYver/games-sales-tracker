@@ -88,6 +88,13 @@ export function BlogTranslationEditor({
           rows={18}
           className="font-mono text-xs"
         />
+        {body.includes('[[sales-table]]') && (
+          <p className="text-muted-foreground mt-1 text-xs">
+            Keep the <code>[[sales-table]]</code> line: the site renders the
+            sales table there, and the popularity cards under the TL;DR, from
+            the facts. Do not type those numbers in the text.
+          </p>
+        )}
       </div>
       <Button type="button" size="sm" onClick={onSave} disabled={pending}>
         {pending ? 'Saving…' : `Save ${translation.locale.toUpperCase()}`}

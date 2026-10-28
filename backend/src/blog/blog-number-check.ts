@@ -4,6 +4,7 @@ import type {
   BlogReviewIssue,
   BlogWriterArticle,
 } from './blog.types';
+import { hasSalesTableMarker } from './blog.types';
 
 // Thousands separators: plain, no-break, narrow no-break (French typography)
 // and thin spaces, plus dot / comma.
@@ -143,22 +144,27 @@ export function findUnverifiedNumbers(
 }
 
 export const REPEATED_FIGURE_PROBLEM = 'Figure repeated in the article body';
+export const SHOWN_BY_PAGE_PROBLEM =
+  'Figure already shown in the sales table or popularity cards';
 
 /**
- * Sourced figures (sales, players, popularity signals) written more than
- * once in the body. Each one belongs in exactly one place; repeating it is
- * padding and reads badly. The TL;DR box is separate and not counted.
+ * Sourced figures written in the body more often than allowed. Legacy
+ * bodies: each figure once. Bodies with the sales-table marker: sales and
+ * popularity figures are rendered by the page, so the text writes them
+ * zero times; players-reached figures once. The TL;DR is not counted.
  */
 export function findRepeatedFigures(
   bodyMarkdown: string,
   facts: BlogFact[],
-): { figure: string; count: number }[] {
+): { figure: string; count: number; allowed: number }[] {
   const figures = facts.filter(
     (f) => f.kind === 'sales' || f.kind === 'engagement' || f.kind === 'signal',
   );
+  const pageRendered = hasSalesTableMarker(bodyMarkdown);
   const expected = new Map<number, number>();
   for (const f of figures) {
-    expected.set(f.value, (expected.get(f.value) ?? 0) + 1);
+    const allowed = pageRendered && f.kind !== 'engagement' ? 0 : 1;
+    expected.set(f.value, (expected.get(f.value) ?? 0) + allowed);
   }
   const seen = new Map<number, { figure: string; count: number }>();
   const text = bodyMarkdown.replace(/\]\([^)]*\)/g, ']');
@@ -181,8 +187,8 @@ export function findRepeatedFigures(
     seen.set(best, entry);
   }
   return [...seen.entries()]
-    .filter(([value, entry]) => entry.count > (expected.get(value) ?? 1))
-    .map(([, entry]) => entry);
+    .map(([value, entry]) => ({ ...entry, allowed: expected.get(value) ?? 1 }))
+    .filter((entry) => entry.count > entry.allowed);
 }
 
 /** Editor-style issues for repeated figures, so the review screen lists them. */
@@ -190,13 +196,32 @@ export function repeatedFigureIssues(
   bodyMarkdown: string,
   facts: BlogFact[],
 ): BlogReviewIssue[] {
-  return findRepeatedFigures(bodyMarkdown, facts).map(({ figure, count }) => ({
-    severity: 'error',
-    excerpt: figure,
-    problem: `${REPEATED_FIGURE_PROBLEM} (${count} times)`,
-    suggestion:
-      'Keep this figure once, in the section it belongs to (or the table), and delete the other mentions.',
-  }));
+  return findRepeatedFigures(bodyMarkdown, facts).map(
+    ({ figure, count, allowed }) =>
+      allowed === 0
+        ? {
+            severity: 'error',
+            excerpt: figure,
+            problem: SHOWN_BY_PAGE_PROBLEM,
+            suggestion:
+              'Delete this number from the text: the page already shows it. Keep the sentence only if it still says something without it.',
+          }
+        : {
+            severity: 'error',
+            excerpt: figure,
+            problem: `${REPEATED_FIGURE_PROBLEM} (${count} times)`,
+            suggestion:
+              'Keep this figure once, in the section it belongs to, and delete the other mentions.',
+          },
+  );
+}
+
+/** Issues the code recounts on every edit (not the editor model's). */
+export function isComputedIssue(issue: BlogReviewIssue): boolean {
+  return (
+    issue.problem.startsWith(REPEATED_FIGURE_PROBLEM) ||
+    issue.problem.startsWith(SHOWN_BY_PAGE_PROBLEM)
+  );
 }
 
 /** Names whose digits are not claims ("Cyberpunk 2077", "2K"). */

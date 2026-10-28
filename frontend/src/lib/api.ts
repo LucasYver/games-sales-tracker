@@ -356,6 +356,28 @@ export interface PublicBlogIndex {
   total: number;
 }
 
+/** Line in `bodyMarkdown` where the page renders the sales table. */
+export const SALES_TABLE_MARKER = '[[sales-table]]';
+
+export type BlogSourceKind =
+  | 'official'
+  | 'publisher-press'
+  | 'wikipedia'
+  | 'press'
+  | 'estimate';
+
+export interface BlogFigures {
+  sales: {
+    date: string | null;
+    value: number;
+    platform: string;
+    sourceKind: BlogSourceKind;
+    /** Null for anonymous press reports. */
+    sourceName: string | null;
+  }[];
+  signals: { metric: string; value: number; date: string | null }[];
+}
+
 export interface PublicBlogPost {
   slug: string;
   locale: 'en' | 'fr';
@@ -370,6 +392,8 @@ export interface PublicBlogPost {
   updatedAt: string | null;
   /** Date of the newest sourced figure the article uses. */
   figuresAsOf: string | null;
+  /** Rendered by the page (sales table + popularity cards); null on older articles. */
+  figures: BlogFigures | null;
   game: { name: string; slug: string; coverUrl: string | null } | null;
   alternate: { locale: 'en' | 'fr'; slug: string } | null;
 }

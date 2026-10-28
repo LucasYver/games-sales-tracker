@@ -19,15 +19,16 @@ import {
   compareFacts,
   factsFingerprint,
   figuresAsOf,
+  publicFigures,
 } from './blog-fact-pack.service';
 import {
   findUnverifiedNumbers,
   packNames,
-  REPEATED_FIGURE_PROBLEM,
+  isComputedIssue,
   repeatedFigureIssues,
 } from './blog-number-check';
 import { BlogWriterService } from './blog-writer.service';
-import { stableBlogSlug } from './blog.types';
+import { hasSalesTableMarker, stableBlogSlug } from './blog.types';
 import type {
   BlogFactPack,
   BlogFreshness,
@@ -169,6 +170,10 @@ export class BlogService {
       publishedAt: post.publishedAt,
       updatedAt: post.contentUpdatedAt ?? post.publishedAt,
       figuresAsOf: figuresAsOf(livePack(post)),
+      // Table + cards rendered by the page; null on articles written before.
+      figures: hasSalesTableMarker(content.bodyMarkdown)
+        ? publicFigures(livePack(post))
+        : null,
       game: post.game
         ? {
             name: post.game.name,
@@ -312,7 +317,7 @@ export class BlogService {
     row.reviewIssues = [
       ...repeatedFigureIssues(row.bodyMarkdown, pack.facts ?? []),
       ...issuesStillInText(row.reviewIssues ?? [], row).filter(
-        (issue) => !issue.problem.startsWith(REPEATED_FIGURE_PROBLEM),
+        (issue) => !isComputedIssue(issue),
       ),
     ];
     await this.translations.save(row);

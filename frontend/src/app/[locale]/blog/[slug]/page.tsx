@@ -5,10 +5,11 @@ import Image from 'next/image';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Link } from '@/i18n/navigation';
-import { getBlogPost } from '@/lib/api';
+import { SALES_TABLE_MARKER, getBlogPost } from '@/lib/api';
 import { displayCover } from '@/lib/cover';
 import { SITE_URL } from '@/lib/site-url';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
+import { PopularityCards, SalesTable } from '@/components/blog/BlogFigures';
 
 export const dynamic = 'force-dynamic';
 
@@ -219,15 +220,23 @@ export default async function BlogArticlePage({
           </ul>
         </aside>
 
+        {post.figures && <PopularityCards signals={post.figures.signals} />}
+
         <div className="blog-prose text-sm leading-relaxed">
           <Markdown
             remarkPlugins={[remarkGfm]}
             components={{
               a: ({ href, children }) =>
                 href?.startsWith('/') ? (
-                  <Link href={href}>{children}</Link>
+                  <Link href={href} className="text-primary hover:underline">
+                    {children}
+                  </Link>
                 ) : (
-                  <a href={href} rel="noopener noreferrer">
+                  <a
+                    href={href}
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
                     {children}
                   </a>
                 ),
@@ -240,7 +249,15 @@ export default async function BlogArticlePage({
               h3: ({ children }) => (
                 <h3 className="mt-6 mb-2 text-lg font-semibold">{children}</h3>
               ),
-              p: ({ children }) => <p className="mb-4">{children}</p>,
+              // The marker line becomes the sales table built from the facts.
+              p: ({ children }) =>
+                children === SALES_TABLE_MARKER ? (
+                  post.figures ? (
+                    <SalesTable sales={post.figures.sales} />
+                  ) : null
+                ) : (
+                  <p className="mb-4">{children}</p>
+                ),
               ul: ({ children }) => (
                 <ul className="mb-4 list-disc space-y-1 pl-5">{children}</ul>
               ),

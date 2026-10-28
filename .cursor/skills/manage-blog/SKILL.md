@@ -54,9 +54,9 @@ in the prompt — keep them there:
 - `answerHint` lead: newest worldwide figure from the publisher (rank ≤ 1),
   else Wikipedia, else press, else the estimate. A later higher press
   figure or estimate is mentioned once after it.
-- Each fact gets a `section` (`intro`, `timeline`, `platforms`, `players`,
-  `popularity`) in `factsForModel`; the prompt puts each fact in its
-  section once. The TL;DR box sits above the body and the body never
+- Each fact gets a `section` (`intro`, `table`, `cards`, `players`) in
+  `factsForModel`; table/cards numbers are rendered by the page, players
+  figures written once. The TL;DR box sits above the body and the body never
   repeats it. No FAQ (it only repeated the body); old articles keep theirs.
 - The prompt forbids narrating its own rules ("kept without reconciling",
   "cannot be added up"...), caps caveats at one per section, and bans
@@ -67,6 +67,28 @@ in the prompt — keep them there:
   publish until fixed; recounted on every edit.
 - Length follows the facts (~200-350 words for 2-4 facts, max 700). The
   prompt has a short format example (invented game) — keep it invented.
+
+## Numbers on the page come from code
+
+Articles written since the sales-table layout carry the line
+`[[sales-table]]` (`SALES_TABLE_MARKER`) in `bodyMarkdown`. Its presence is
+the layout switch:
+
+- `getPublic` returns `figures` (`publicFigures`: sales rows + signals from
+  the live pack, display fields only, no URLs). `null` for older articles,
+  which render exactly as before.
+- `frontend/src/components/blog/BlogFigures.tsx`: `PopularityCards` (Steam
+  peak, Steam reviews, PS / Xbox ratings) under the TL;DR, and
+  `SalesTable` (worldwide rows, then by platform; estimates muted) where
+  the marker paragraph is. Copies use compact long format with 4
+  significant digits — never round a figure into a new one.
+- The writer never types those numbers: `sectionOf` gives sales `table`
+  and signals `cards`; `withSalesTable` strips any markdown table and puts
+  the marker on its own line (after the first H2 if missing).
+  `findRepeatedFigures` allows 0 sales/signal mentions in a marker body
+  (`SHOWN_BY_PAGE_PROBLEM`), 1 per players figure. TL;DR uses sales/players
+  facts only.
+- Admin editor reminds to keep the marker line.
 
 ## Generation
 

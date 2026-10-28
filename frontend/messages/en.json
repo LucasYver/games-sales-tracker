@@ -218,6 +218,45 @@
     "ctaGame": "See live sales data for {name}",
     "empty": "No articles yet. Official sales recaps will land here soon.",
     "faqTitle": "Questions",
+    "figures": {
+      "colCopies": "Copies sold",
+      "colDate": "Date",
+      "colPlatform": "Platform",
+      "colSource": "Source",
+      "estimate": "estimate",
+      "platformCaption": "By platform",
+      "platforms": {
+        "MOBILE": "Mobile",
+        "OTHER": "Other",
+        "PC": "PC",
+        "PLAYSTATION": "PlayStation",
+        "SWITCH": "Nintendo Switch",
+        "XBOX": "Xbox"
+      },
+      "popularityNote": "These numbers show how popular the game is, not how many copies it sold.",
+      "popularityTitle": "Popularity in numbers",
+      "press": "press",
+      "pressReports": "Press reports",
+      "signals": {
+        "PS_RATINGS": {
+          "label": "PlayStation Store ratings",
+          "sub": "{date}"
+        },
+        "STEAM_PEAK_CCU": {
+          "label": "people playing at once",
+          "sub": "Steam record · {date}"
+        },
+        "STEAM_REVIEWS": {
+          "label": "Steam reviews",
+          "sub": "{date}"
+        },
+        "XBOX_RATINGS": {
+          "label": "Xbox Store ratings",
+          "sub": "{date}"
+        }
+      },
+      "worldwideCaption": "Worldwide, all platforms"
+    },
     "figuresAsOf": "Latest figure on record: {date}",
     "indexDescription": "Official video-game sales figures: publisher statements, Wikipedia, and analyst notes, game by game.",
     "indexIntro": "Publisher statements, Wikipedia, and the analyst notes we keep on file — the official sales story for each game, dated and attributed.",

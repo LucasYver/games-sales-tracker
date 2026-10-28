@@ -116,3 +116,14 @@ export function publicAppUrl(): string {
     'https://www.gamesalestracker.tech'
   ).replace(/\/$/, '');
 }
+
+/**
+ * Line the writer puts in `bodyMarkdown` where the page renders the sales
+ * table from the fact pack. Its presence also marks the layout where sales
+ * and popularity figures come from code (table + cards), not from the text.
+ */
+export const SALES_TABLE_MARKER = '[[sales-table]]';
+
+export function hasSalesTableMarker(bodyMarkdown: string): boolean {
+  return bodyMarkdown.includes(SALES_TABLE_MARKER);
+}

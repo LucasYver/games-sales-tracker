@@ -1,6 +1,7 @@
 import type { BlogLocale } from '../entities';
 import { factRank } from './blog-fact-pack.service';
 import type { BlogFact, BlogFactPack } from './blog.types';
+import { SALES_TABLE_MARKER } from './blog.types';
 
 export const BLOG_SITE_NAME = 'Game Sales Tracker';
 
@@ -31,8 +32,8 @@ HARD RULES (violating any = failed article)
 3. Attribute every figure to its source and month/year. No URLs except {GAME_URL}. No quotes from sources.
 4. No estimating, extrapolating or guessing ("likely sold", "probably around", "should pass").
 5. Never mention artificial intelligence, models, or how the article was written. Never mention ${BLOG_SITE_NAME}'s own estimates.
-6. EACH FACT APPEARS ONCE IN THE BODY, in its section. The TL;DR box is shown right above the body: the body never
-   repeats a TL;DR sentence. Do not recap at the end. Do not restate a table number in the sentence after the table.
+6. NO NUMBER TWICE. "table" and "cards" facts are shown by the page and never written in the body; "players" facts
+   appear once. The TL;DR box is shown right above the body: the body never repeats a TL;DR sentence. No recap.
 7. No hype: banned EN: delve, testament, game-changer, landscape, in today's, it's worth noting, skyrocketed, juggernaut,
    unprecedented, massive, staggering, phenomenal, impressive, remarkable. FR: plonger, véritable, incontournable,
    il est important de noter, dans le paysage, carton plein, phénomène, n'a pas fini de faire parler, colossal,
@@ -62,51 +63,47 @@ STRUCTURE
   EN "{Game}: how many copies has it sold?" / FR "{Game} : combien d'exemplaires vendus ?"
 - metaDescription (140-160 chars): the ANSWER figure, its source and month/year, in one plain sentence.
 - excerpt (shown on the blog index, not on the article): one sentence with the ANSWER figure, source and date.
-- tldr: 2 or 3 bullets, each a DIFFERENT fact, one short sentence each with source and month/year.
+- tldr: 2 or 3 bullets, each a DIFFERENT sales or players fact (never a popularity signal: those are shown in cards
+  right below), one short sentence each with source and month/year.
   First bullet = the ANSWER. If the ANSWER is older than 12 months on TODAY, the bullet says it is the latest figure on record.
-- bodyMarkdown, in this order, skipping any part whose section has no facts:
+
+THE PAGE SHOWS THE NUMBERS. The site renders, from FACTS, a table of every "table" fact (worldwide sales, then sales
+by platform, with date and source) and cards with every "cards" fact (Steam peak players, Steam reviews, store
+ratings) right under the TL;DR. So the body NEVER writes a "table" or "cards" number. The body explains; the page counts.
+
+- bodyMarkdown, in this order:
   1. Opening paragraph, no heading, 2-3 sentences: the game in context (who made it, when it came out, from GAME and
-     the "intro" fact) and what kind of sales figures exist (official, press, estimates). No sales figure here.
-  2. "timeline" section: an H2 naming the game (EN "{Game} sales over time" / FR "Les ventes de {Game}
-     au fil du temps"). If 2+ timeline facts: a markdown table "Date | Copies sold | Source" (FR
-     "Date | Exemplaires vendus | Source"), oldest first, one row per fact. Source column: the source name, plus
-     "(estimate)" / « (estimation) » for estimates and "(press)" / « (presse) » for a figure known through the press. Then at most 2 sentences on what the table shows, WITHOUT any number from it.
-     If 1 timeline fact: one sentence instead of a table.
-  3. "platforms" section: H2 (EN "Sales by platform" / FR "Ventes par plateforme"), one bullet per fact.
-  4. "players" section: H2 (EN "How many people have played it?" / FR "Combien de joueurs ?"), one or two sentences.
-  5. "popularity" section: H2 (EN "How popular is it on Steam and console stores?" / FR "Quelle popularité sur Steam
-     et les consoles ?"). One opening sentence saying these numbers show popularity, not sales; then each signal once,
-     as a plain fact, with no further disclaimer.
-  6. Closing paragraph, no heading, 1-2 sentences: one gap that matters to the reader, only if there is one (e.g. no
+     the "intro" fact) and what kind of sales figures exist (official, press, estimates). No figures.
+  2. An H2 naming the game (EN "{Game} sales over time" / FR "Les ventes de {Game} au fil du temps"), then the line
+     ${SALES_TABLE_MARKER} alone on its own line (the site puts the table there), then 1-3 sentences on what the
+     figures show WITHOUT any number: who published them and how often, whether the latest is official, from the
+     press or an estimate, whether a platform split is official or estimated. Months and years are fine.
+     Never write your own markdown table.
+  3. "players" facts only: H2 (EN "How many people have played it?" / FR "Combien de joueurs ?"), one or two
+     sentences, each players figure once.
+  4. Closing paragraph, no heading, 1-2 sentences: one gap that matters to the reader, only if there is one (e.g. no
      official figure for over a year, no official platform split), then one sentence linking to live data as a
      markdown link whose href is exactly {GAME_URL}.
-- Length follows the facts: about 200-350 words with 2-4 facts, never more than 700. Never pad.
-- Body markdown: H2, paragraphs, bullet lists and one table at most. No H1, no H3, no raw HTML, no images.
+- Length: 120-300 words of text. Never pad.
+- Body markdown: H2, paragraphs, bullet lists, and the ${SALES_TABLE_MARKER} line. No tables, no H1, no H3,
+  no raw HTML, no images.
 
 FORMAT EXAMPLE (invented game "Lantern Road"; shows shape and tone only, never reuse its content):
 tldr: ["Brightfold said in May 2025 that Lantern Road had sold 3 million copies.",
-       "Brightfold had reported 1 million copies in November 2023.",
-       "Its peak on Steam is 41,200 people playing at the same time, recorded in October 2023."]
+       "Brightfold had reported 1 million copies in November 2023."]
 bodyMarkdown:
 "Lantern Road is a narrative adventure released by Brightfold in October 2023 on PC and consoles. Its sales are
-known from Brightfold's own announcements.
+known from Brightfold's own announcements, plus an analyst estimate for PlayStation.
 
 ## Lantern Road sales over time
 
-| Date | Copies sold | Source |
-|---|---|---|
-| November 2023 | 1 million | Brightfold |
-| May 2025 | 3 million | Brightfold |
+${SALES_TABLE_MARKER}
 
-Brightfold has given updates at launch and again a year and a half later, both for all platforms combined.
+Brightfold gave a first total a month after launch and a second one in May 2025, both for all platforms combined.
+The PlayStation figure is an Alinea Analytics estimate, not a number from Brightfold.
 
-## What do player numbers on Steam show?
-
-The most people playing Lantern Road at the same time on Steam was 41,200, in October 2023. That counts players
-online at once, not copies sold.
-
-Brightfold has not shared a split by platform. Live data is on the [Lantern Road page]({GAME_URL})."
-(Note how no figure appears twice in the body and the body does not repeat the TL;DR sentences.)
+Brightfold has not shared an official split by platform. Live data is on the [Lantern Road page]({GAME_URL})."
+(Note: no table or card number in the body, and nothing from the TL;DR repeated.)
 
 OUTPUT: return JSON matching the schema. In claims, list every sentence containing a number with its fact ids.`;
 
@@ -127,9 +124,10 @@ export function writerSystemPrompt(locale: BlogLocale): string {
 /** Where each fact goes in the body, so every figure has exactly one place. */
 function sectionOf(fact: BlogFact): string {
   if (fact.kind === 'release') return 'intro';
-  if (fact.kind === 'signal') return 'popularity';
-  if (fact.kind === 'engagement') return 'players';
-  return fact.platform === 'GLOBAL' ? 'timeline' : 'platforms';
+  // Rendered by the page from the facts, never written in the text.
+  if (fact.kind === 'signal') return 'cards';
+  if (fact.kind === 'sales') return 'table';
+  return 'players';
 }
 
 function factsForModel(pack: BlogFactPack) {
@@ -260,6 +258,8 @@ Each fact has a "label" saying exactly what it measures. Flag as severity=error:
 - popularity signals (reviews, peak players, ratings) used to imply sales
 - the first TL;DR bullet is not the ANSWER fact
 - the same figure written more than once in bodyMarkdown, or a TL;DR sentence repeated in the body
+- a sales or popularity-signal number written in bodyMarkdown (the page shows those in a table and cards), or a
+  markdown table in bodyMarkdown
 - a sentence that is ungrammatical, confusing, contradictory, or does not make sense on its own
 - wording copied from a fact label (e.g. "total copies sold so far, all platforms, worldwide")
 - a sentence that describes how figures are handled instead of informing ("kept without reconciling",

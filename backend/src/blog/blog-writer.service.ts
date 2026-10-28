@@ -25,7 +25,7 @@ import type {
   BlogReviewIssue,
   BlogWriterArticle,
 } from './blog.types';
-import { stableBlogSlug } from './blog.types';
+import { SALES_TABLE_MARKER, stableBlogSlug } from './blog.types';
 
 @Injectable()
 export class BlogWriterService {
@@ -134,9 +134,8 @@ export class BlogWriterService {
       metaDescription: strip(written.metaDescription).slice(0, 320),
       excerpt: strip(written.excerpt),
       tldr: (written.tldr ?? []).slice(0, 3).map(strip),
-      bodyMarkdown: (written.bodyMarkdown ?? '').replaceAll(
-        '{GAME_URL}',
-        gameUrl,
+      bodyMarkdown: withSalesTable(
+        (written.bodyMarkdown ?? '').replaceAll('{GAME_URL}', gameUrl),
       ),
       // FAQ dropped: it only repeated the body's figures.
       faq: [],
@@ -215,4 +214,31 @@ function publicDraft(article: BlogWriterArticle) {
     tldr: article.tldr,
     bodyMarkdown: article.bodyMarkdown,
   };
+}
+
+/**
+ * The sales table is rendered by the page at the marker line. Drop any
+ * table the writer typed anyway (its numbers would duplicate the page's),
+ * and put the marker on its own line — after the first H2 if it is missing.
+ */
+export function withSalesTable(body: string): string {
+  const lines = body
+    .split('\n')
+    .filter((line) => !/^\s*\|.*\|\s*$/.test(line))
+    .map((line) =>
+      line.includes(SALES_TABLE_MARKER) ? SALES_TABLE_MARKER : line,
+    );
+  const first = lines.indexOf(SALES_TABLE_MARKER);
+  const cleaned = lines.filter(
+    (line, i) => line !== SALES_TABLE_MARKER || i === first,
+  );
+  if (first < 0) {
+    const h2 = cleaned.findIndex((line) => line.startsWith('## '));
+    const at = h2 >= 0 ? h2 + 1 : Math.min(cleaned.length, 1);
+    cleaned.splice(at, 0, '', SALES_TABLE_MARKER, '');
+  }
+  return cleaned
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
