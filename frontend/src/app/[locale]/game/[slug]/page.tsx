@@ -10,6 +10,7 @@ import {
   type Platform,
 } from '@/lib/api';
 import { routing } from '@/i18n/routing';
+import { SITE_URL } from '@/lib/site-url';
 import { Link } from '@/i18n/navigation';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
 import { RangedChart } from '@/components/chart-room/RangedChart';
@@ -765,6 +766,7 @@ function GamePageContent({
   const t = useTranslations('gamePage');
   const tPlatform = useTranslations('platform');
   const format = useFormatter();
+  const locale = useLocale();
 
   const activeTab: TabKey = game.isFree ? 'overview' : tab;
 
@@ -845,10 +847,17 @@ function GamePageContent({
     '@context': 'https://schema.org',
     '@type': 'VideoGame',
     name: game.name,
+    url: `${SITE_URL}/${locale}/game/${game.slug}`,
     image: game.coverUrl ?? undefined,
     description: game.summary ?? undefined,
     datePublished: game.releaseDate ?? undefined,
-    gamePlatform: game.platforms,
+    gamePlatform: game.platforms.map((p) => tPlatform(p)),
+    author: game.developer
+      ? { '@type': 'Organization', name: game.developer }
+      : undefined,
+    publisher: game.publisher
+      ? { '@type': 'Organization', name: game.publisher }
+      : undefined,
   };
 
   return (

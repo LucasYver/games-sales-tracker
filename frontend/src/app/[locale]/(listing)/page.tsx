@@ -3,6 +3,7 @@ import { useTranslations } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import type { Metadata } from 'next';
 import { routing } from '@/i18n/routing';
+import { SITE_URL } from '@/lib/site-url';
 import {
   getGenres,
   getPopularGames,
@@ -129,7 +130,7 @@ function ListingJsonLd({
     itemListElement: items.map((game, idx) => ({
       '@type': 'ListItem',
       position: idx + 1,
-      url: `/${locale}/game/${game.slug}`,
+      url: `${SITE_URL}/${locale}/game/${game.slug}`,
       name: game.name,
     })),
   };

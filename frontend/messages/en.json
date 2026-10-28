@@ -41,10 +41,10 @@
     "descriptionFree": "{name} is free-to-play, so it has no copies-sold estimate. Player and review trends are updated daily.",
     "descriptionUnits": "Estimated {units} copies of {name} sold ({platforms}) as of {date}. Per-platform split and store review trends.",
     "descriptionUnitsNoDate": "Estimated {units} copies of {name} sold ({platforms}). Per-platform split and store review trends.",
-    "title": "{name} ({year})",
+    "title": "{name} ({year}) — Sales",
     "titleFree": "{name} — Free-to-play",
-    "titleNoYear": "{name}",
-    "titleUnits": "{name} — {units} copies"
+    "titleNoYear": "{name} — Sales",
+    "titleUnits": "{name} sales — {units} copies"
   },
   "home": {
     "gamesCount": "{count, number} games",
@@ -121,7 +121,7 @@
     "followersSeriesAlt": "Steam followers of {name} over time.",
     "freeToPlayNote": "This game is free-to-play, so it has no sales estimate.",
     "genres": "Genres",
-    "heading": "{name}",
+    "heading": "{name} sales",
     "headingFree": "{name}",
     "headingUnits": "{units} copies",
     "interestTitle": "Audience signals",
