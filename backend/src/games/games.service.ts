@@ -635,7 +635,12 @@ export class GamesService {
     return rows.map((r) => ({ name: r.name, count: Number(r.count) }));
   }
 
-  /** Slug + last estimate (else release date) for the public sitemap. */
+  /**
+   * Slug + last estimate (else release date) for the public sitemap. An
+   * upcoming game falls back to its last row update: a future release date
+   * is not a modification time, and search engines distrust the whole
+   * sitemap's lastmod when some entries are in the future.
+   */
   async listSitemap(): Promise<{
     items: { slug: string; lastModified: string | null }[];
   }> {
@@ -651,7 +656,14 @@ export class GamesService {
         'snap."gameId" = g.id',
       )
       .select('g.slug', 'slug')
-      .addSelect('COALESCE(snap."computedAt", g.releaseDate)', 'lastModified')
+      .addSelect(
+        'COALESCE(snap."computedAt", LEAST(g.releaseDate, g.updatedAt))',
+        'lastModified',
+      )
+      // Stable order: the frontend splits this list into fixed-size
+      // sitemap files, so a game must not hop between them.
+      .orderBy('g.createdAt', 'ASC')
+      .addOrderBy('g.id', 'ASC')
       .getRawMany<{ slug: string; lastModified: Date | string | null }>();
 
     return {

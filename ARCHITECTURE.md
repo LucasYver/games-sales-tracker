@@ -166,7 +166,7 @@ the reported milestone when one exists. Source URLs and verbatim quotes are
 not shown on the public page.
 
 Default API base: `NEXT_PUBLIC_API_URL` or `http://localhost:3001/api`
-(`frontend/src/lib/api.ts`). The sitemap (`app/sitemap.ts`) reads `GET /games/sitemap` and `GET /blog/sitemap`. Fonts are Inter and JetBrains Mono.
+(`frontend/src/lib/api.ts`). The sitemap is split (`app/sitemap/[file]/route.ts`, served at `/sitemap/{id}.xml`: 0 = home, blog and posts, then 2,000 games per file) behind an index at `/sitemap.xml` (`app/sitemap.xml/route.ts`); it reads `GET /games/sitemap` and `GET /blog/sitemap`. Fonts are Inter and JetBrains Mono.
 
 ## Environment
 

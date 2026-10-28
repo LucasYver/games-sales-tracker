@@ -2,6 +2,10 @@
  * Skeleton shown during navigation (filter / page change). Mirrors the
  * listing layout — header bar, table rows — so nothing reflows when the data
  * arrives. Only the rows pulse; the shell renders instantly.
+ *
+ * Scoped to the (listing) group on purpose: a loading boundary above the
+ * game and blog pages starts streaming before their notFound(), so unknown
+ * slugs answered HTTP 200 (soft 404) instead of 404.
  */
 export default function HomeLoading() {
   return (
