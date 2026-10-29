@@ -40,7 +40,7 @@ from features import N_TAGS, game_tags, tag_col
 from frozen import MODELS, FrozenEnsemble, FrozenForestKnn
 from snapshot import load_snapshot
 
-CHOSEN = bench.V11_MODEL
+CHOSEN = bench.ML_MODEL
 CHALLENGER = "Forêt + voisins"
 BACKEND_MODEL = Path(__file__).resolve().parents[1] / "backend/src/estimation/ml/ensemble-model.json"
 

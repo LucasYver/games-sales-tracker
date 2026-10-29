@@ -40,7 +40,7 @@ from snapshot import load_snapshot
 
 BOOTSTRAP = 300
 WITH = "Avec voisins (actuel)"
-V11 = bench.V11_MODEL
+V11 = bench.ML_MODEL
 
 
 def ensemble(name: str, description: str, trees: list[str], linear: list[str]) -> ModelSpec:

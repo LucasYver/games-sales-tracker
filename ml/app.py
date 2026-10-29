@@ -18,7 +18,7 @@ from plotly.subplots import make_subplots
 import streamlit as st
 
 from backtest import compute_backtest, to_us
-from bench import (PROD_MODEL, V11_MODEL, ABLATION_MODEL, error_by_age, load_final, load_saved_bench, paired_gain, run_bench, save_bench,
+from bench import (PROD_MODEL, ML_MODEL, ABLATION_MODEL, error_by_age, load_final, load_saved_bench, paired_gain, run_bench, save_bench,
                    set_similarity)
 from features import FeatureBuilder
 from frozen import NEVER_DOWN_MIN_DAYS, NEVER_DOWN_MIN_REVIEWS, US_PER_DAY, never_down_dates
@@ -26,6 +26,7 @@ from playground import LEARNED_MODELS, train as train_playable
 from baseline import Estimator
 from metrics import add_error_columns, segment_table, summarize
 from snapshot import load_snapshot
+from suspects import PRIORITY, review_list
 
 st.set_page_config(page_title="Labo estimation des ventes", page_icon=":material/query_stats:", layout="wide")
 
@@ -719,7 +720,7 @@ def timeline(game_id: str, platform: str, with_holdout: bool, end: str) -> pd.Da
 # (le bleu reste au modèle actuel, l'orange aux chiffres publiés).
 LEARNED_COLORS = {
     PROD_MODEL: ("#2e3a4d", "#c9d1de"),
-    V11_MODEL: ("#8d5524", "#c08457"),
+    ML_MODEL: ("#8d5524", "#c08457"),
     "Moyenne forêt + linéaire": ("#6250d6", "#9085e9"),
     "Forêt + voisins": ("#008300", "#008300"),
     "Forêt aléatoire": ("#1baf7a", "#199e70"),
@@ -743,7 +744,7 @@ def feature_builder():
     return FeatureBuilder(snap, est, [c for c in load_bench().table.columns if c.startswith("tag_")])
 
 
-PROD_BASE = V11_MODEL  # le modèle suivi par la règle en prod
+PROD_BASE = ML_MODEL  # le modèle suivi par la règle en prod
 
 
 def prod_curve(game_id: str, X: pd.DataFrame, honest: bool) -> pd.DataFrame:
@@ -835,7 +836,7 @@ with tab_game:
     if bench_ready:
         names = st.multiselect(
             "Modèles appris à comparer au site", [PROD_MODEL] + LEARNED_MODELS, default=[PROD_MODEL, PROD_BASE],
-            help="Par défaut, le modèle en ligne et le modèle qu'il suit. « En prod » = la v1.1 (voisins + "
+            help="Par défaut, le modèle en ligne et le modèle qu'il suit. « En prod » = la v1.2 (voisins + "
                  f"série + studio), rien avant {NEVER_DOWN_MIN_DAYS} jours après la sortie PC, puis jamais en baisse (le "
                  f"plus haut chiffre déjà donné aux dates où le jeu avait au moins {NEVER_DOWN_MIN_REVIEWS:,} "
                  "reviews Steam). Le site ne l'affiche que pour les jeux qu'il estime déjà à 300 000 ventes et plus.")
@@ -1072,7 +1073,7 @@ with tab_game:
 # passe après la moyenne : il s'appuie encore plus sur la similarité du site (à re-challenger) et sur une
 # table d'erreurs des jeux connus à maintenir.
 COMPLEXITY = {"Linéaire (sans les voisins)": 1, "Linéaire (toutes les infos)": 1, "Linéaire + interactions": 2,
-              "Gradient boosting": 3, "Forêt aléatoire": 4, "Moyenne forêt + linéaire": 5, V11_MODEL: 5.2,
+              "Gradient boosting": 3, "Forêt aléatoire": 4, "Moyenne forêt + linéaire": 5, ML_MODEL: 5.2,
               PROD_MODEL: 5.5,
               "Forêt + voisins": 6}
 NOT_CANDIDATES = {"Modèle actuel", "Actuel recalibré"}
@@ -1370,6 +1371,48 @@ with tab_models:
 
 # ─── 5. Qualité des données ──────────────────────────────────────────────────
 
+@st.cache_data(show_spinner="Recherche des chiffres à vérifier…")
+def review_table(snapshot: str) -> pd.DataFrame:
+    return review_list(snap, load_bench())
+
+
+def render_review(b) -> None:
+    st.subheader("Chiffres à vérifier dans la base")
+    review = review_table(snap.path.name)
+    if review.empty:
+        st.success("Aucun chiffre à vérifier.")
+        return
+    st.markdown(
+        f"**{len(review)} chiffres actifs** méritent un œil. Rien n'est modifié en base : c'est une liste de travail, "
+        "à corriger ou rejeter depuis la page admin du jeu. Les estimations sont faites par des modèles qui n'avaient "
+        "pas vu le jeu, à la date du chiffre.\n\n"
+        "- **Priorité 1** : écart extrême (plus de ×20 avec tous les modèles), chiffre monde plus petit que les joueurs "
+        "PC de la fuite Steam 2018 alors qu'il est publié après, chiffre daté dans le futur, ou jeu marqué gratuit "
+        "(le chiffre compte sans doute des joueurs).\n"
+        "- **Priorité 2** : partiel probable (plus de 4 fois sous tous les modèles, qui sont d'accord entre eux), bien "
+        "au-dessus de tous les modèles (plus de 4 fois l'estimation la plus haute : total de série, date fausse… ou "
+        "vrai succès console), lancement suspect (3 jours ou moins après la sortie, plus de 3 fois au-dessus).\n"
+        "- **Priorité 3** : incohérent dans le temps (moins de la moitié d'un chiffre plus ancien du même jeu), daté "
+        "plus de 30 jours avant la sortie du jeu.")
+    counts = review.raisons.str.split(" ; ").explode().value_counts()
+    c1, c2 = st.columns([1, 2])
+    priorities = c1.multiselect("Priorité", sorted(review.priorité.unique()), default=sorted(review.priorité.unique()))
+    reason = c2.selectbox("Raison", ["toutes"] + [f"{r} ({n})" for r, n in counts.items()])
+    shown = review[review.priorité.isin(priorities)]
+    if reason != "toutes":
+        shown = shown[shown.raisons.str.contains(reason.rsplit(" (", 1)[0], regex=False)]
+    st.dataframe(shown.drop(columns=["milestoneId"]), hide_index=True, width="stretch", height=420, column_config={
+        "chiffre": st.column_config.NumberColumn(format="localized"),
+        "estimation ML": st.column_config.NumberColumn(format="localized", help="Modèle en prod, à la date du chiffre."),
+        "estimation site": st.column_config.NumberColumn(format="localized", help="Ancienne formule du site."),
+        "chiffre ÷ ML": st.column_config.NumberColumn(format="×%.2f"),
+        "lien source": st.column_config.LinkColumn(display_text="source"),
+        "page admin": st.column_config.LinkColumn(display_text="admin"),
+    })
+    st.download_button("Télécharger la liste (CSV)", review.to_csv(index=False).encode(), "milestones_a_verifier.csv",
+                       "text/csv")
+
+
 with tab_data:
     st.markdown("Le test ne vaut que ce que valent les chiffres publiés. Cet onglet montre d'où ils viennent et ce "
                 "qu'il a fallu écarter.")
@@ -1448,6 +1491,9 @@ with tab_data:
                                                       help="Linéaire + interactions n'ayant jamais vu ce jeu."),
             "source": st.column_config.LinkColumn(display_text="source"),
         })
+
+    if bench_b is not None:
+        render_review(bench_b)
 
     st.subheader("Jeux avec le plus de doublons")
     st.caption("Surtout des jeux attendus ou récents, dont la même annonce a été reprise par de nombreux médias.")

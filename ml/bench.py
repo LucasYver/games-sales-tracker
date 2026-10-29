@@ -179,7 +179,9 @@ def feature_families() -> dict[str, list[str]]:
 # Règle en prod (backend `MlEstimateService`, référence `frozen.predict_never_down`),
 # appliquée au modèle v1.1.
 PROD_MODEL = "En prod : jamais en baisse dès J+3"
-V11_MODEL = "v1.1 : voisins + série + studio"
+# Le modèle en prod : mêmes informations depuis la v1.1, réentraîné à chaque gel
+# (v1.2 = gel du 29/10 17 h, models/2026-10-29T17).
+ML_MODEL = "v1.2 : voisins + série + studio"
 
 
 def model_specs(tag_cols: list[str]) -> list[ModelSpec]:
@@ -211,17 +213,17 @@ def model_specs(tag_cols: list[str]) -> list[ModelSpec]:
         ModelSpec("Forêt + voisins", "La forêt, puis une correction : on regarde de combien elle se trompe sur les "
                                      "15 jeux les plus similaires (similarité du site) dont on connaît les ventes, et "
                                      f"on corrige de {KNN_ALPHA:.0%} de cette erreur.", "forest_knn", TREE_FEATURES),
-        ensemble := ModelSpec("Moyenne forêt + linéaire", "La moyenne des estimations de la forêt et du linéaire + interactions. "
+        ensemble := ModelSpec("Moyenne forêt + linéaire", "La v1 : la moyenne des estimations de la forêt et du linéaire + interactions. "
                                               "Deux façons de raisonner très différentes : leurs erreurs se compensent "
                                               "en partie.", "ensemble",
                   members=[forest, ModelSpec("Linéaire + interactions", "", "ridge", signals + INTERACTION_FEATURES)]),
-        v11 := ModelSpec(V11_MODEL, "La moyenne forêt + linéaire, plus le palmarès de la série et du studio : le "
+        v11 := ModelSpec(ML_MODEL, "La moyenne forêt + linéaire, plus le palmarès de la série et du studio : le "
                                     "meilleur chiffre monde déjà publié par un jeu précédent de la même série et du "
                                     "même studio.", "ensemble", members=[
-                             ModelSpec(f"{V11_MODEL} (forêt)", "", "forest", TREE_FEATURES + TRACK_RECORD_FEATURES),
-                             ModelSpec(f"{V11_MODEL} (linéaire)", "", "ridge",
+                             ModelSpec(f"{ML_MODEL} (forêt)", "", "forest", TREE_FEATURES + TRACK_RECORD_FEATURES),
+                             ModelSpec(f"{ML_MODEL} (linéaire)", "", "ridge",
                                        signals + TRACK_RECORD_FEATURES + INTERACTION_FEATURES)]),
-        ModelSpec(PROD_MODEL, "Le modèle en ligne : la v1.1, rien avant 3 jours après la sortie PC (le site garde son "
+        ModelSpec(PROD_MODEL, "Le modèle en ligne : la v1.2, rien avant 3 jours après la sortie PC (le site garde son "
                               "chiffre), puis jamais en baisse : le plus haut chiffre déjà donné aux dates où le jeu "
                               f"avait au moins {NEVER_DOWN_MIN_REVIEWS:,} reviews Steam.",
                   "running_max", members=[v11], min_days=NEVER_DOWN_MIN_DAYS, min_reviews=NEVER_DOWN_MIN_REVIEWS),
@@ -551,7 +553,7 @@ LOCKED_GAMES_SPENT = True
 
 # Modèles passés aux contrôles de la courbe et du catalogue (les plus longs).
 CHECKED_MODELS = ["Modèle actuel", "Linéaire + interactions", "Gradient boosting", "Forêt aléatoire",
-                  "Moyenne forêt + linéaire", V11_MODEL, PROD_MODEL]
+                  "Moyenne forêt + linéaire", ML_MODEL, PROD_MODEL]
 
 
 def run_bench(snap, est: Estimator, res, bootstrap: int = 300) -> BenchResult:
@@ -725,6 +727,9 @@ def main() -> None:
     (REPORTS / "bench.md").write_text(text)
     b.cv_preds.to_parquet(REPORTS / "bench_oof.parquet", index=False)
     save_bench(b)
+    import suspects  # import local : suspects importe ce module
+    review = suspects.write_report(snap, b)
+    print(f"→ {REPORTS / 'milestones_a_verifier.csv'} ({len(review)} chiffres à vérifier)")
     print(f"\n→ {REPORTS / 'bench.md'}\n→ {REPORTS / 'bench_oof.parquet'}\n→ {SAVED} (lu par l'UI)")
 
 
