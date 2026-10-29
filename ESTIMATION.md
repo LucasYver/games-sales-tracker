@@ -229,6 +229,10 @@ even if the code emits the tag.
   then had ≥ `ML_MIN_STEAM_REVIEWS` Steam reviews (`neverDownDates`; Python
   reference `predict_never_down` in `ml/frozen.py`). A switch between the
   platform sum and the ML estimate can still move the figure either way.
+- The admin estimate tab explains it (`MlEstimateService.explain`): why it
+  is shown or not, the inputs, the exact split of the estimate by family of
+  inputs (forest: value moves along each tree's path; ridge: coefficient ×
+  standardised input) and the « never down » steps.
 - `estimatedToday` = the ML range when the batch has an `ml-ensemble` row,
   else the platform sum. It carries `units`, the figure to display: the ML
   estimate itself (never the midpoint of its range, which would overstate

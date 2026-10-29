@@ -23,6 +23,7 @@ import {
   ML_METHOD_CODE,
   mlEstimateApplies,
   MlEstimateService,
+  type MlExplanation,
 } from './ml/ml-estimate.service';
 import {
   FIRST_WEEK_BUCKET_LARGE_YEAR1_RATIO,
@@ -146,6 +147,8 @@ export interface EstimateBreakdownResult {
    * when it is the figure the site displays (`mlEstimateApplies`).
    */
   ml: { low: number; high: number; units: number; shown: boolean } | null;
+  /** How the ML estimate was computed (inputs, split by family, steps). */
+  mlExplanation: MlExplanation | null;
   declared: {
     units: number;
     source: string;
@@ -1176,7 +1179,8 @@ export class EstimationService {
             ),
           }
         : null;
-    const ml = total ? await this.mlEstimate.estimate(gameId) : null;
+    const mlExplanation = total ? await this.mlEstimate.explain(gameId) : null;
+    const ml = mlExplanation?.estimate ?? null;
 
     return {
       computedAt,
@@ -1190,10 +1194,11 @@ export class EstimationService {
               units: Math.round(ml.units),
               shown: mlEstimateApplies(
                 (total.low + total.high) / 2,
-                ml.steamReviews,
+                mlExplanation?.steamReviews ?? null,
               ),
             }
           : null,
+      mlExplanation,
       declared: bestDeclared
         ? {
             units: bestDeclared.units,

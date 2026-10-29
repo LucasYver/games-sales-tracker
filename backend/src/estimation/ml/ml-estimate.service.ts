@@ -6,7 +6,14 @@ import { platformReleaseDate } from '../../games/platform-release-date';
 import { SalesProfileResolverService } from '../../reference-profiles/sales-profile-resolver.service';
 import { ensembleModel, MlPrediction } from './ml-ensemble';
 import {
+  decompose,
+  describeInputs,
+  MlDecomposition,
+  MlInput,
+} from './ml-explain';
+import {
   buildMlFeatures,
+  ML_MIN_DAYS_AFTER_RELEASE,
   MlSignals,
   mlSignalWindows,
   mlTooEarly,
@@ -36,6 +43,32 @@ export function mlEstimateApplies(
     siteUnits >= ML_MIN_SITE_UNITS &&
     (steamReviews ?? 0) >= ML_MIN_STEAM_REVIEWS
   );
+}
+
+export interface MlExplanation {
+  modelVersion: string;
+  asOf: string;
+  pcReleaseDate: string | null;
+  rule: {
+    minDaysAfterRelease: number;
+    minSteamReviews: number;
+    minSiteUnits: number;
+  };
+  halfWidthFactor: number;
+  /** Null before J+3 or without a release date. */
+  estimate: MlPrediction | null;
+  steamReviews?: number | null;
+  /** Date whose estimate is displayed (the « never down » maximum). */
+  usedDate: string | null;
+  inputs: MlInput[];
+  decomposition: MlDecomposition | null;
+  steps: Array<{
+    date: string;
+    units: number;
+    steamReviews: number | null;
+    counted: boolean;
+    used: boolean;
+  }>;
 }
 
 export interface MlEstimate extends MlPrediction {
@@ -123,6 +156,78 @@ export class MlEstimateService {
 
   /** Estimate at `asOf` (default: now); null for unknown or free games. */
   async estimate(gameId: string, asOf?: Date): Promise<MlEstimate | null> {
+    const run = await this.evaluate(gameId, asOf);
+    if (!run || run.points.length === 0) return null;
+    const model = ensembleModel();
+    return {
+      ...model.fromLog(run.points[run.used].log),
+      steamReviews: run.points[0].signals.reviews?.value ?? null,
+    };
+  }
+
+  /**
+   * Admin explanation of the same computation as `estimate`: inputs at the
+   * date whose estimate is displayed, the exact split by family of inputs,
+   * and every « never down » step. Null for unknown or free games.
+   */
+  async explain(gameId: string, asOf?: Date): Promise<MlExplanation | null> {
+    const run = await this.evaluate(gameId, asOf);
+    if (!run) return null;
+    const model = ensembleModel();
+    const base = {
+      modelVersion: model.version,
+      asOf: run.at.toISOString(),
+      pcReleaseDate: run.pcReleaseDate?.toISOString() ?? null,
+      rule: {
+        minDaysAfterRelease: ML_MIN_DAYS_AFTER_RELEASE,
+        minSteamReviews: ML_MIN_STEAM_REVIEWS,
+        minSiteUnits: ML_MIN_SITE_UNITS,
+      },
+      halfWidthFactor: model.halfWidthFactor,
+    };
+    if (run.points.length === 0) {
+      return {
+        ...base,
+        estimate: null,
+        inputs: [],
+        decomposition: null,
+        steps: [],
+        usedDate: null,
+      };
+    }
+    const used = run.points[run.used];
+    const ageDays = run.pcReleaseDate
+      ? Math.floor(
+          (used.date.getTime() - run.pcReleaseDate.getTime()) / 86_400_000,
+        )
+      : null;
+    return {
+      ...base,
+      estimate: model.fromLog(used.log),
+      steamReviews: run.points[0].signals.reviews?.value ?? null,
+      usedDate: used.date.toISOString(),
+      inputs: describeInputs(used.signals, run.neighbours, ageDays),
+      decomposition: decompose(model.explain(used.features)),
+      steps: run.points
+        .map((p, i) => ({
+          date: p.date.toISOString(),
+          units: Math.exp(p.log),
+          steamReviews: p.signals.reviews?.value ?? null,
+          counted: p.counted,
+          used: i === run.used,
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date)),
+    };
+  }
+
+  /**
+   * The model on the « never down » grid. Cumulative sales never go down:
+   * the displayed estimate is the highest one on the J+3 … grid up to the
+   * date, counting only past dates where the game already had enough Steam
+   * reviews to be in the model's zone (the date itself always counts).
+   * `points[0]` is the date itself; no point before J+3.
+   */
+  private async evaluate(gameId: string, asOf?: Date) {
     const game = await this.games.findOne({
       where: { id: gameId },
       relations: { platformReleaseDates: true },
@@ -131,7 +236,9 @@ export class MlEstimateService {
 
     const at = asOf ?? new Date();
     const pcReleaseDate = platformReleaseDate(game, Platform.PC);
-    if (mlTooEarly(pcReleaseDate, at) || !pcReleaseDate) return null;
+    if (mlTooEarly(pcReleaseDate, at) || !pcReleaseDate) {
+      return { at, pcReleaseDate, neighbours: null, points: [], used: 0 };
+    }
 
     const model = ensembleModel();
     const profile = await this.salesProfile.resolveForGame(game, {
@@ -143,7 +250,7 @@ export class MlEstimateService {
       firstWeekToYearOneMultiplier: profile.firstWeekToYearOneMultiplier,
       pcShare: profile.pcShare,
     };
-    const logAt = async (date: Date) => {
+    const pointAt = async (date: Date, isNow: boolean) => {
       const signals = await this.loadSignals(game, date, pcReleaseDate);
       const features = buildMlFeatures(
         {
@@ -162,24 +269,28 @@ export class MlEstimateService {
         },
         model.tagColumns,
       );
+      const reviews = signals.reviews?.value ?? 0;
       return {
-        reviews: signals.reviews?.value ?? 0,
+        date,
+        signals,
+        features,
         log: model.predictLog(features),
+        counted: isNow || reviews >= ML_MIN_STEAM_REVIEWS,
       };
     };
 
-    // Cumulative sales never go down: the estimate is the highest one the
-    // model gave on the J+3 … grid, counting only past dates where the game
-    // already had enough Steam reviews to be in the model's zone.
-    const [now, ...past] = await Promise.all(
-      [at, ...neverDownDates(pcReleaseDate, at)].map(logAt),
+    const points = await Promise.all([
+      pointAt(at, true),
+      // A grid date equal to the date itself is the same point.
+      ...neverDownDates(pcReleaseDate, at)
+        .filter((d) => d.getTime() < at.getTime())
+        .map((d) => pointAt(d, false)),
+    ]);
+    const used = points.reduce(
+      (best, p, i) => (p.counted && p.log > points[best].log ? i : best),
+      0,
     );
-    const log = past.reduce(
-      (best, p) =>
-        p.reviews >= ML_MIN_STEAM_REVIEWS ? Math.max(best, p.log) : best,
-      now.log,
-    );
-    return { ...model.fromLog(log), steamReviews: now.reviews || null };
+    return { at, pcReleaseDate, neighbours, points, used };
   }
 
   private async loadSignals(

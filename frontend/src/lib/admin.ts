@@ -713,12 +713,49 @@ export interface AdminBlogCandidate {
   steamReviews: number | null;
 }
 
+export interface AdminMlExplanation {
+  modelVersion: string;
+  asOf: string;
+  pcReleaseDate: string | null;
+  rule: {
+    minDaysAfterRelease: number;
+    minSteamReviews: number;
+    minSiteUnits: number;
+  };
+  halfWidthFactor: number;
+  /** Null before J+3 or without a PC release date. */
+  estimate: { units: number; low: number; high: number } | null;
+  steamReviews?: number | null;
+  /** Date whose estimate is displayed (the « never down » maximum). */
+  usedDate: string | null;
+  inputs: { label: string; value: number | string | null }[];
+  decomposition: {
+    start: { forest: number; ridge: number; average: number };
+    families: {
+      family: string;
+      forest: number;
+      ridge: number;
+      average: number;
+    }[];
+    result: { forest: number; ridge: number; average: number };
+  } | null;
+  steps: {
+    date: string;
+    units: number;
+    steamReviews: number | null;
+    counted: boolean;
+    used: boolean;
+  }[];
+}
+
 export interface AdminEstimateBreakdown {
   computedAt: string;
   platforms: PlatformBreakdownResult[];
   total: { low: number; high: number } | null;
   /** Worldwide ML estimate; `shown` when the public site displays it. */
   ml: { low: number; high: number; units: number; shown: boolean } | null;
+  /** How the ML estimate was computed. */
+  mlExplanation: AdminMlExplanation | null;
   declared: {
     units: number;
     source: string;

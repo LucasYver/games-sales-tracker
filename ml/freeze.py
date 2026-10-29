@@ -51,7 +51,9 @@ def _f32(v: float) -> str:
 
 
 def export_tree(estimator) -> str:
-    """Un arbre en JSON compact : f = feature (-1 = feuille), x = seuil ou valeur, r = enfant droit.
+    """Un arbre en JSON compact : f = feature (-1 = feuille), x = seuil ou valeur, r = enfant droit,
+    v = valeur moyenne de chaque nœud (sert seulement à expliquer une estimation : la contribution
+    d'une question est l'écart de valeur entre le nœud et l'enfant choisi).
 
     Les seuils sont arrondis au float32 inférieur : scikit-learn compare des
     features float32, et pour un float32 `v`, `v <= seuil` équivaut alors à
@@ -59,7 +61,7 @@ def export_tree(estimator) -> str:
     perdent ~1e-7 en relatif, sans effet sur le chiffre affiché.
     """
     t = estimator.tree_
-    feature, right, x = [], [], []
+    feature, right, x, value = [], [], [], []
     for i in range(t.node_count):
         leaf = t.children_left[i] == -1
         if not leaf:
@@ -71,8 +73,9 @@ def export_tree(estimator) -> str:
         feature.append(-1 if leaf else int(t.feature[i]))
         right.append(-1 if leaf else int(t.children_right[i]))
         x.append(_f32(t.value[i][0][0]) if leaf else _f32(thr))
-    return '{"f":%s,"x":[%s],"r":%s}' % (json.dumps(feature, separators=(",", ":")), ",".join(x),
-                                         json.dumps(right, separators=(",", ":")))
+        value.append(_f32(t.value[i][0][0]))
+    return '{"f":%s,"x":[%s],"r":%s,"v":[%s]}' % (json.dumps(feature, separators=(",", ":")), ",".join(x),
+                                                json.dumps(right, separators=(",", ":")), ",".join(value))
 
 
 def top_tags(snap, table: pd.DataFrame, tag_cols: list[str]) -> list[dict]:
@@ -87,11 +90,16 @@ def top_tags(snap, table: pd.DataFrame, tag_cols: list[str]) -> list[dict]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--install", action="store_true", help="copier ensemble.json dans le backend")
+    parser.add_argument("--add-node-values", action="store_true",
+                        help="réécrire les arbres d'un gel existant avec la valeur de chaque nœud (explications), "
+                             "après avoir vérifié qu'ils sont identiques")
     args = parser.parse_args()
 
     snap = load_snapshot()
     out = MODELS / snap.path.name
-    if (out / "ensemble.json").exists():
+    if args.add_node_values:
+        add_node_values(snap, out)
+    elif (out / "ensemble.json").exists():
         print(f"Modèles déjà figés dans {out} : on n'y touche plus.")
     else:
         freeze(snap, out)
@@ -99,6 +107,26 @@ def main() -> None:
         BACKEND_MODEL.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(out / "ensemble.json", BACKEND_MODEL)
         print(f"→ copié dans {BACKEND_MODEL}")
+
+
+def add_node_values(snap, out: Path) -> None:
+    """Ajoute `v` aux arbres d'un gel existant. Les prédictions ne changent pas :
+    on réentraîne à l'identique et on vérifie que f, x et r sont les mêmes."""
+    b = bench.load_saved_bench(snap.path.name)
+    assert b is not None, "lancer d'abord bench.py sur ce snapshot"
+    forest_spec = {s.name: s for s in b.specs}[CHOSEN].members[0]
+    table = b.table[~b.table.suspect].reset_index(drop=True)
+    _, forest = bench._fit_core(forest_spec, table, None)
+    doc = json.loads((out / "ensemble.json").read_text())
+    trees = [json.loads(export_tree(e)) for e in forest.estimators_]
+    for old, new in zip(doc["forest"]["trees"], trees, strict=True):
+        assert old["f"] == new["f"] and old["r"] == new["r"] and np.array_equal(
+            np.array(old["x"], dtype=np.float32), np.array(new["x"], dtype=np.float32)), "arbres différents"
+    doc["forest"]["trees"] = "__TREES__"
+    text = json.dumps(doc, indent=1, ensure_ascii=False).replace(
+        '"__TREES__"', "[\n" + ",\n".join(export_tree(e) for e in forest.estimators_) + "\n]")
+    (out / "ensemble.json").write_text(text + "\n")
+    print(f"Valeurs des nœuds ajoutées à {out / 'ensemble.json'} (arbres vérifiés identiques)")
 
 
 def freeze(snap, out: Path) -> None:

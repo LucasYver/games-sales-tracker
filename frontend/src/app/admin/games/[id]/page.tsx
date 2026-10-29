@@ -40,6 +40,7 @@ import { ReviewHistoryChart } from '../../_components/ReviewHistoryChart';
 import { FollowersHistoryChart } from '../../_components/FollowersHistoryChart';
 import { TwitchViewersHistoryChart } from '../../_components/TwitchViewersHistoryChart';
 import { EstimateBreakdownView } from '../../_components/EstimateBreakdownPanel';
+import { MlExplanationPanel } from '../../_components/MlExplanationPanel';
 import { deleteGame, setReferenceExclusion } from '../../actions';
 
 export const dynamic = 'force-dynamic';
@@ -618,6 +619,14 @@ async function EstimatesTab({
             header.
           </CardContent>
         </Card>
+      )}
+
+      {b?.mlExplanation && (
+        <MlExplanationPanel
+          explanation={b.mlExplanation}
+          shown={b.ml?.shown ?? false}
+          siteUnits={algo ? midpoint(algo.low, algo.high) : null}
+        />
       )}
     </div>
   );

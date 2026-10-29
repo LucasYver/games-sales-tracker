@@ -18,6 +18,8 @@ interface ForestTreeJson {
   x: number[];
   /** Right child per node; the left child of node i is always i + 1. */
   r: number[];
+  /** Mean value of every node (explanations only). */
+  v?: number[];
 }
 
 export interface EnsembleModelJson {
@@ -39,6 +41,15 @@ interface CompiledTree {
   feature: Int32Array;
   x: Float32Array;
   right: Int32Array;
+  value: Float32Array | null;
+}
+
+/** log(units) = start + Σ contributions, per member of the ensemble. */
+export interface MlContributions {
+  forestStart: number;
+  ridgeStart: number;
+  forest: Record<string, number>;
+  ridge: Record<string, number>;
 }
 
 export interface MlPrediction {
@@ -61,6 +72,7 @@ export class EnsembleModel {
       feature: Int32Array.from(t.f),
       x: Float32Array.from(t.x),
       right: Int32Array.from(t.r),
+      value: t.v ? Float32Array.from(t.v) : null,
     }));
   }
 
@@ -89,6 +101,44 @@ export class EnsembleModel {
       sum += ((valueOf(features, name) - r.mean[j]) / r.scale[j]) * r.coef[j];
     });
     return sum;
+  }
+
+  /**
+   * Exact split of each member's log(units) by feature. Ridge: coefficient ×
+   * standardised value. Forest: along each tree's path, every split moves the
+   * value from the node to the chosen child; the move is credited to the
+   * split's feature, then averaged over the trees.
+   */
+  explain(features: Record<string, number>): MlContributions {
+    const names = this.json.forest.features;
+    const row = Float32Array.from(names.map((n) => valueOf(features, n)));
+    const forest: Record<string, number> = {};
+    let forestStart = 0;
+    for (const tree of this.trees) {
+      if (!tree.value) throw new Error('Model has no node values to explain');
+      let i = 0;
+      forestStart += tree.value[0];
+      while (tree.feature[i] >= 0) {
+        const f = tree.feature[i];
+        const child = row[f] <= tree.x[i] ? i + 1 : tree.right[i];
+        forest[names[f]] =
+          (forest[names[f]] ?? 0) + tree.value[child] - tree.value[i];
+        i = child;
+      }
+    }
+    for (const n of Object.keys(forest)) forest[n] /= this.trees.length;
+    const r = this.json.ridge;
+    const ridge: Record<string, number> = {};
+    r.features.forEach((name, j) => {
+      ridge[name] =
+        ((valueOf(features, name) - r.mean[j]) / r.scale[j]) * r.coef[j];
+    });
+    return {
+      forestStart: forestStart / this.trees.length,
+      ridgeStart: r.intercept,
+      forest,
+      ridge,
+    };
   }
 
   /** log(units): the mean of the forest and the ridge, in log space. */
