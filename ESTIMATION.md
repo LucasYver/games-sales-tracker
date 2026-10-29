@@ -210,9 +210,11 @@ even if the code emits the tag.
 - **Worldwide ML estimate** (`MlEstimateService`, method `ml-ensemble`,
   platform GLOBAL): the model chosen in `ml/` (random forest + ridge, mean
   in log space), frozen by `ml/freeze.py` into
-  `estimation/ml/ensemble-model.json`. Its inputs mirror
-  `ml/features.py` (signals at the date, game fields, the matcher profile
-  with the game itself held out, as in training). Range =
+  `estimation/ml/ensemble-model.json` (v1.1). Its inputs mirror
+  `ml/features.py`: signals at the date, game fields, the matcher profile
+  with the game itself held out (as in training), and the series / developer
+  track record — the best real worldwide figure published by the date for
+  an earlier game of the same `franchiseSlug` / developer. Range =
   `estimate ÷ k → estimate × k` with `k = halfWidthFactor` from the JSON.
   `persistEstimates` stores it, in the same batch, only where
   `mlEstimateApplies`: platform-sum midpoint ≥ `ML_MIN_SITE_UNITS` (300k)

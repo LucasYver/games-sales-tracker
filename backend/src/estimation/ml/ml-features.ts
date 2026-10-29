@@ -37,6 +37,12 @@ export interface MlSignals {
   /** Highest STEAM_CONCURRENT in the launch window (see `mlSignalWindows`). */
   launchPeakCcu: number | null;
   followers: number | null;
+  /**
+   * Best real worldwide figure published by the date for an earlier game of
+   * the same series / developer (released before this one).
+   */
+  seriesBest: number | null;
+  developerBest: number | null;
 }
 
 /** What the matcher learned from the game's neighbours, the game itself held out. */
@@ -227,6 +233,11 @@ export function buildMlFeatures(
     // Steam followers
     log_followers: log1p(s.followers),
     has_followers: flag(s.followers !== null),
+    // what the series and the developer already sold
+    log_series_best: log1p(s.seriesBest),
+    has_series_best: flag(s.seriesBest !== null),
+    log_developer_best: log1p(s.developerBest),
+    has_developer_best: flag(s.developerBest !== null),
     // delayed PC release
     log_pc_delay_days: Math.log1p(pcDelay),
     pc_later: flag(pcDelay > PC_LATER_DAYS),

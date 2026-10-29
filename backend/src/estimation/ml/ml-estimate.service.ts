@@ -57,8 +57,20 @@ const peakCcu = (where: string): string => `(
    WHERE "gameId" = $1 AND metric = '${SignalMetric.STEAM_CONCURRENT}'
      AND ${where})`;
 
+// Best real worldwide figure published by $2 for another, earlier-released
+// game of the same group ($10 = this game's release; unknown → any game).
+const trackRecord = (sameGroup: string): string => `(
+  SELECT MAX(m.units) FROM milestone m
+    JOIN game o ON o.id = m."gameId"
+   WHERE ${sameGroup} AND o.id <> $1 AND o."deletedAt" IS NULL
+     AND ($10::timestamptz IS NULL OR o."releaseDate" < $10::timestamptz)
+     AND m.platform = '${Platform.GLOBAL}' AND m."rejectedAt" IS NULL
+     AND m."isEngagement" = false AND m."isEstimate" = false
+     AND m.units > 0 AND m."reportedAt" <= $2)`;
+
 // $1 game, $2 date, $3/$4 reviews 30/90 days after the PC release,
-// $5 date − 90 days, $6/$7 launch window.
+// $5 date − 90 days, $6/$7 launch window, $8 series, $9 developer
+// (trimmed, lower-cased), $10 release date.
 const SIGNALS_SQL = `
   SELECT r.value AS "reviews",
          r."capturedAt" AS "reviewsAt",
@@ -70,7 +82,9 @@ const SIGNALS_SQL = `
          ${latest(SignalMetric.STEAM_CONCURRENT, '$2')} AS "ccuNow",
          ${peakCcu('"capturedAt" <= $2')} AS "peakCcu",
          ${peakCcu('"capturedAt" BETWEEN $6 AND $7')} AS "launchPeakCcu",
-         ${latest(SignalMetric.STEAM_FOLLOWERS, '$2')} AS "followers"
+         ${latest(SignalMetric.STEAM_FOLLOWERS, '$2')} AS "followers",
+         ${trackRecord('o."franchiseSlug" = $8')} AS "seriesBest",
+         ${trackRecord('lower(btrim(o.developer)) = $9')} AS "developerBest"
     FROM (SELECT 1) AS one
     LEFT JOIN LATERAL (
       SELECT value, "capturedAt" FROM signal_snapshot
@@ -130,7 +144,7 @@ export class MlEstimateService {
       pcShare: profile.pcShare,
     };
     const logAt = async (date: Date) => {
-      const signals = await this.loadSignals(gameId, date, pcReleaseDate);
+      const signals = await this.loadSignals(game, date, pcReleaseDate);
       const features = buildMlFeatures(
         {
           asOf: date,
@@ -169,19 +183,23 @@ export class MlEstimateService {
   }
 
   private async loadSignals(
-    gameId: string,
+    game: Pick<Game, 'id' | 'franchiseSlug' | 'developer' | 'releaseDate'>,
     at: Date,
     pcReleaseDate: Date | null,
   ): Promise<MlSignals> {
     const w = mlSignalWindows(at, pcReleaseDate);
+    const developer = game.developer?.trim().toLowerCase() || null;
     const [row] = await this.signals.manager.query<SignalsRow[]>(SIGNALS_SQL, [
-      gameId,
+      game.id,
       at,
       w.reviews30dAt,
       w.reviews90dAt,
       w.reviews90dAgoAt,
       w.launchStart,
       w.launchEnd,
+      game.franchiseSlug || null,
+      developer,
+      game.releaseDate,
     ]);
     const { reviews, reviewsAt, ...rest } = row;
     return {
