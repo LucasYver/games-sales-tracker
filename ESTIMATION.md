@@ -219,6 +219,13 @@ even if the code emits the tag.
   **and** ≥ `ML_MIN_STEAM_REVIEWS` (1,000) Steam reviews at the date. The
   model only saw games that publish their sales; outside that zone it
   overshoots by ×10 or more (`ml/README.md`).
+- The ML estimate starts `ML_MIN_DAYS_AFTER_RELEASE` (3) days after the PC
+  release; before, the platform sum stays. It never goes down: it is the
+  highest model estimate over the grid J+3, 7, 14, 30, 60, 90, 180, 270, 365,
+  then every 180 days, up to the date, counting a past date only if the game
+  then had ≥ `ML_MIN_STEAM_REVIEWS` Steam reviews (`neverDownDates`; Python
+  reference `predict_never_down` in `ml/frozen.py`). A switch between the
+  platform sum and the ML estimate can still move the figure either way.
 - `estimatedToday` = the ML range when the batch has an `ml-ensemble` row,
   else the platform sum. It carries `units`, the figure to display: the ML
   estimate itself (never the midpoint of its range, which would overstate

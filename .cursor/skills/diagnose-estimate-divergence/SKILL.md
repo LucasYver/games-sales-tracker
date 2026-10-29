@@ -26,7 +26,8 @@ Exception: where `mlEstimateApplies` (platform-sum midpoint ≥ 300k and
 ≥ 1,000 Steam reviews), the headline is the GLOBAL `ml-ensemble` row, and
 `estimatedTodayUnits` is the ML estimate (`ESTIMATION.md` §6). The breakdown
 endpoint returns both: `total` (platform sum) and `ml` (`shown` says which
-one the site displays). A divergence of the ML figure is fixed in `ml/`
+one the site displays). The ML figure is absent before J+3 and never goes
+down: it can be an earlier, higher estimate of the same game. A divergence of the ML figure is fixed in `ml/`
 (new snapshot, bench, `freeze.py`, `freeze.py --install`), never by a
 constant; the platform recompute below still explains the split and the
 gate.

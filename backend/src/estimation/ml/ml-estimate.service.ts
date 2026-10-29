@@ -5,7 +5,13 @@ import { Game, Platform, SignalMetric, SignalSnapshot } from '../../entities';
 import { platformReleaseDate } from '../../games/platform-release-date';
 import { SalesProfileResolverService } from '../../reference-profiles/sales-profile-resolver.service';
 import { ensembleModel, MlPrediction } from './ml-ensemble';
-import { buildMlFeatures, MlSignals, mlSignalWindows } from './ml-features';
+import {
+  buildMlFeatures,
+  MlSignals,
+  mlSignalWindows,
+  mlTooEarly,
+  neverDownDates,
+} from './ml-features';
 
 /** `estimation_method.code` of the worldwide ML estimate rows. */
 export const ML_METHOD_CODE = 'ml-ensemble';
@@ -82,7 +88,9 @@ interface SignalsRow extends Omit<MlSignals, 'reviews'> {
  * Worldwide sales estimate from the model chosen in `ml/` (see
  * `ml-ensemble.ts`). It is the figure the site displays where
  * `mlEstimateApplies`; the per-platform methods still give the platform
- * split, and remain the figure everywhere else.
+ * split, and remain the figure everywhere else, including the first
+ * `ML_MIN_DAYS_AFTER_RELEASE` days. It never goes down over time (see
+ * `estimate`); ml/frozen.py `predict_never_down` is the reference.
  *
  * The matcher runs with the game itself held out, exactly as during training:
  * the model learned from neighbours that never include the game's own
@@ -109,38 +117,55 @@ export class MlEstimateService {
 
     const at = asOf ?? new Date();
     const pcReleaseDate = platformReleaseDate(game, Platform.PC);
-    const model = ensembleModel();
-    const [signals, profile] = await Promise.all([
-      this.loadSignals(gameId, at, pcReleaseDate),
-      this.salesProfile.resolveForGame(game, { holdoutGameId: game.id }),
-    ]);
+    if (mlTooEarly(pcReleaseDate, at) || !pcReleaseDate) return null;
 
-    const features = buildMlFeatures(
-      {
-        asOf: at,
-        releaseDate: game.releaseDate,
-        pcReleaseDate,
-        platforms: game.platforms ?? [],
-        categories: game.categories,
-        steamTags: game.steamTags,
-        dlcCount: game.dlc ? game.dlc.length : null,
-        franchiseSlug: game.franchiseSlug,
-        liveService: game.liveService,
-        isAnnualIteration: game.isAnnualIteration,
-        signals,
-        neighbours: profile && {
-          pcBoxleiterLow: profile.pcDefaultBoxleiterLow,
-          pcBoxleiterHigh: profile.pcDefaultBoxleiterHigh,
-          firstWeekToYearOneMultiplier: profile.firstWeekToYearOneMultiplier,
-          pcShare: profile.pcShare,
-        },
-      },
-      model.tagColumns,
-    );
-    return {
-      ...model.predict(features),
-      steamReviews: signals.reviews?.value ?? null,
+    const model = ensembleModel();
+    const profile = await this.salesProfile.resolveForGame(game, {
+      holdoutGameId: game.id,
+    });
+    const neighbours = profile && {
+      pcBoxleiterLow: profile.pcDefaultBoxleiterLow,
+      pcBoxleiterHigh: profile.pcDefaultBoxleiterHigh,
+      firstWeekToYearOneMultiplier: profile.firstWeekToYearOneMultiplier,
+      pcShare: profile.pcShare,
     };
+    const logAt = async (date: Date) => {
+      const signals = await this.loadSignals(gameId, date, pcReleaseDate);
+      const features = buildMlFeatures(
+        {
+          asOf: date,
+          releaseDate: game.releaseDate,
+          pcReleaseDate,
+          platforms: game.platforms ?? [],
+          categories: game.categories,
+          steamTags: game.steamTags,
+          dlcCount: game.dlc ? game.dlc.length : null,
+          franchiseSlug: game.franchiseSlug,
+          liveService: game.liveService,
+          isAnnualIteration: game.isAnnualIteration,
+          signals,
+          neighbours,
+        },
+        model.tagColumns,
+      );
+      return {
+        reviews: signals.reviews?.value ?? 0,
+        log: model.predictLog(features),
+      };
+    };
+
+    // Cumulative sales never go down: the estimate is the highest one the
+    // model gave on the J+3 … grid, counting only past dates where the game
+    // already had enough Steam reviews to be in the model's zone.
+    const [now, ...past] = await Promise.all(
+      [at, ...neverDownDates(pcReleaseDate, at)].map(logAt),
+    );
+    const log = past.reduce(
+      (best, p) =>
+        p.reviews >= ML_MIN_STEAM_REVIEWS ? Math.max(best, p.log) : best,
+      now.log,
+    );
+    return { ...model.fromLog(log), steamReviews: now.reviews || null };
   }
 
   private async loadSignals(

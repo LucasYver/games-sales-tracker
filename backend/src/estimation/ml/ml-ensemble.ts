@@ -91,15 +91,23 @@ export class EnsembleModel {
     return sum;
   }
 
-  predict(features: Record<string, number>): MlPrediction {
-    const log =
-      (this.predictForest(features) + this.predictRidge(features)) / 2;
+  /** log(units): the mean of the forest and the ridge, in log space. */
+  predictLog(features: Record<string, number>): number {
+    return (this.predictForest(features) + this.predictRidge(features)) / 2;
+  }
+
+  /** The estimate and its range for a log(units) prediction. */
+  fromLog(log: number): MlPrediction {
     const units = Math.exp(log);
     return {
       units,
       low: units / this.halfWidthFactor,
       high: units * this.halfWidthFactor,
     };
+  }
+
+  predict(features: Record<string, number>): MlPrediction {
+    return this.fromLog(this.predictLog(features));
   }
 }
 
