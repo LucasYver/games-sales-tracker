@@ -44,7 +44,7 @@ interface IngestionCronConfig {
   cadence: string;
   cycle: IngestionCadence;
   hourOffsetMinutes?: number;
-  target: 'paid' | 'steam' | 'console' | 'changed-signals';
+  target: 'paid' | 'steam' | 'console' | 'changed-signals' | 'with-sales';
 }
 
 const INGESTION_CRONS: IngestionCronConfig[] = [
@@ -79,6 +79,14 @@ const INGESTION_CRONS: IngestionCronConfig[] = [
     cadence: 'Monthly',
     cycle: 'month',
     target: 'steam',
+  },
+  {
+    pipeline: 'REFERENCE_PROFILE',
+    cronPath: '/api/cron/reference-profiles',
+    schedule: '30 3 * * *',
+    cadence: 'Weekly',
+    cycle: 'week',
+    target: 'with-sales',
   },
   {
     pipeline: 'ESTIMATE_REBUILD',
@@ -661,7 +669,9 @@ export class AdminService {
               ? consoleGamesTotal
               : cron.target === 'changed-signals'
                 ? Number(changedSignalsTarget?.count ?? 0)
-                : paidGamesTotal;
+                : cron.target === 'with-sales'
+                  ? Number(gamesWithSales?.c ?? 0)
+                  : paidGamesTotal;
 
         return {
           pipeline: cron.pipeline,

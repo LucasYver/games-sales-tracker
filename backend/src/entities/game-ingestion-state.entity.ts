@@ -22,6 +22,7 @@ export const INGESTION_PIPELINES = [
   'TWITCH_VIEWERS',
   'STEAM_POPULARITY',
   'MILESTONE_HARVEST',
+  'REFERENCE_PROFILE',
 ] as const;
 
 export type IngestionPipeline = (typeof INGESTION_PIPELINES)[number];

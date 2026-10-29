@@ -5,6 +5,8 @@ import { Game, GameRank } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
 import { IngestionStateService } from '../ingestion/ingestion-state.service';
 import { RankService } from '../reference-profiles/rank.service';
+import { ReferenceProfileService } from '../reference-profiles/reference-profile.service';
+import { cycleWindow } from '../ingestion/ingestion-cadence';
 import { BlogService } from '../blog/blog.service';
 import { AdminMailService } from '../admin/admin-mail.service';
 import { isEligibleForAutomaticHarvest } from './harvest-eligibility';
@@ -22,6 +24,7 @@ export class RefreshService {
     private readonly ingestion: IngestionService,
     private readonly ingestionState: IngestionStateService,
     private readonly rank: RankService,
+    private readonly referenceProfiles: ReferenceProfileService,
     private readonly blog: BlogService,
     private readonly mail: AdminMailService,
   ) {}
@@ -269,6 +272,71 @@ export class RefreshService {
    * tracked universe → `game_rank`. Read-heavy full recompute; scheduled after
    * the followers/rank capture so it sees fresh review data.
    */
+  /**
+   * Matcher anchors (`reference_profile`). Rebuilds every game that has (or
+   * could have) an anchor when its figures changed since its last attempt
+   * (a figure added or rejected), and every one of them once a UTC week, so
+   * the matcher never misses a new reference game nor keeps one whose
+   * figures were all rejected. Stalest first, within the run budget.
+   */
+  async rebuildReferenceProfiles() {
+    try {
+      const startedAt = Date.now();
+      const rows = await this.games.query<Array<{ gameId: string }>>(
+        `SELECT g.id AS "gameId"
+           FROM game g
+           LEFT JOIN game_ingestion_state st
+             ON st."gameId" = g.id AND st.pipeline = 'REFERENCE_PROFILE'
+          WHERE g."deletedAt" IS NULL
+            AND (
+              EXISTS (SELECT 1 FROM reference_profile rp WHERE rp."gameId" = g.id)
+              OR (g."isFree" = false AND (
+                EXISTS (SELECT 1 FROM milestone m
+                         WHERE m."gameId" = g.id AND m."rejectedAt" IS NULL
+                           AND m."isEngagement" = false AND m."reportedAt" IS NOT NULL)
+                OR EXISTS (SELECT 1 FROM signal_snapshot s
+                            WHERE s."gameId" = g.id AND s.metric = 'STEAM_PLAYERS_LEAK')))
+            )
+            AND (
+              st."lastAttemptAt" IS NULL
+              OR st."lastAttemptAt" < $1
+              OR EXISTS (SELECT 1 FROM milestone m
+                          WHERE m."gameId" = g.id
+                            AND (m."capturedAt" > st."lastAttemptAt"
+                                 OR m."rejectedAt" > st."lastAttemptAt"))
+            )
+          ORDER BY st."lastAttemptAt" ASC NULLS FIRST`,
+        [cycleWindow('week').startedAt],
+      );
+      let kept = 0;
+      let dropped = 0;
+      let failed = 0;
+      let attempted = 0;
+      for (const { gameId } of rows) {
+        if (Date.now() - startedAt >= RefreshService.RUN_BUDGET_MS) break;
+        attempted += 1;
+        try {
+          const profile = await this.ingestionState.track(
+            gameId,
+            'REFERENCE_PROFILE',
+            () => this.referenceProfiles.rebuildOne(gameId),
+          );
+          if (profile) kept += 1;
+          else dropped += 1;
+        } catch (error) {
+          failed += 1;
+          this.logger.warn(`[anchors] rebuild failed for ${gameId}: ${error}`);
+        }
+      }
+      this.logger.log(
+        `Reference profiles done: ${kept} kept, ${dropped} dropped, ` +
+          `${failed} failed, ${rows.length - attempted} left.`,
+      );
+    } catch (error) {
+      this.logger.warn(`Reference profiles rebuild failed: ${error}`);
+    }
+  }
+
   async recomputeHomegrownRank() {
     try {
       const result = await this.rank.recomputeAll();

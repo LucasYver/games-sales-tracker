@@ -19,6 +19,7 @@ const PIPELINE_LABELS: Record<string, string> = {
   STEAM_REVIEWER_PLAYTIME: 'Steam reviewer playtime',
   STORE_RATINGS: 'PS / Xbox store ratings',
   ACHIEVEMENTS: 'Achievements',
+  REFERENCE_PROFILE: 'Matcher anchors',
   ESTIMATE_REBUILD: 'Estimate rebuild',
   STEAM_CCU: 'Steam CCU',
   STEAM_PRICE: 'Steam prices',

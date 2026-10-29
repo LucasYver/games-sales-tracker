@@ -80,9 +80,13 @@ and is the holdout ground truth. It is not a live estimate input.
 It drops a launch peak below 15 % of the all-time peak and caps the ratio
 at 60.
 
-`rebuildAll` only visits current candidates. A game that leaves that set
-keeps its old `reference_profile` row; `rebuildOne` deletes a row only for
-a game it actually visits.
+Kept fresh by the daily `/api/cron/reference-profiles` job
+(`RefreshService.rebuildReferenceProfiles`, pipeline `REFERENCE_PROFILE`):
+it runs `rebuildOne` on every game that has an anchor or could have one,
+when a figure was added or rejected since its last attempt, and on all of
+them once a UTC week. A game whose figures were all rejected loses its
+anchor. `rebuildAll` (the script below) only visits current candidates and
+does not prune.
 
 ## How to run
 
@@ -122,7 +126,6 @@ mix the two tables.
 - Down-weight outlier anchors with leave-one-out, beyond the current
   `reviewsToUnits` median filter.
 - Platform-share proxies are not validated by the PC-only leak.
-- `rebuildAll` does not prune anchors that are no longer candidates.
 - More post-2018 milestones reduce the leak's survivor bias. The leak is
   about 585 paid games, pre-2018, mostly above 500k players.
 

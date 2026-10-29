@@ -85,6 +85,12 @@ export class CronController {
     return this.refresh.captureTwitchViewers();
   }
 
+  @Get('reference-profiles')
+  @HttpCode(200)
+  referenceProfiles() {
+    return this.refresh.rebuildReferenceProfiles();
+  }
+
   @Get('game-rank')
   @HttpCode(200)
   gameRank() {

@@ -187,7 +187,7 @@ to the model. Compare `headline` / `estimatedToday`.
 - [ ] Platform shares realistic? (wrong shares cascade through both splits)
 - [ ] m1 / tails too high or too low for the lifecycle?
 - [ ] Disagreement inflation between Boxleiter and first-week?
-- [ ] Stale reference_profile row the current gates never rebuilt?
+- [ ] Stale reference_profile row? The daily `reference-profiles` cron rebuilds anchors whose figures changed; check `game_ingestion_state` (pipeline `REFERENCE_PROFILE`).
 ```
 
 Invert a suspicious PC multiplier only as a diagnostic, not as a stored fix:
