@@ -262,6 +262,7 @@ export interface AdminGamePageSummary {
     computedAt: string;
     estimatedTodayLow: number;
     estimatedTodayHigh: number;
+    estimatedTodayUnits: number | null;
     reconciliation: unknown;
   } | null;
   milestones: AdminMilestone[];
@@ -312,6 +313,8 @@ export interface AdminEstimateSnapshot {
   computedAt: string;
   estimatedTodayLow: number;
   estimatedTodayHigh: number;
+  /** The figure the site displayed (null on rows older than the column). */
+  estimatedTodayUnits: number | null;
   reconciliation: AdminReconciliationEntry[];
 }
 
@@ -714,6 +717,8 @@ export interface AdminEstimateBreakdown {
   computedAt: string;
   platforms: PlatformBreakdownResult[];
   total: { low: number; high: number } | null;
+  /** Worldwide ML estimate; `shown` when the public site displays it. */
+  ml: { low: number; high: number; units: number; shown: boolean } | null;
   declared: {
     units: number;
     source: string;

@@ -1,7 +1,5 @@
 # Estimation method — source of truth
 
-> Verified against commit `5f0cae0` (2026-10-03).
->
 > **Contract.** This file describes how sales are estimated. If a formula
 > here changes, the code must change, and the reverse. Numeric constants
 > live in `backend/src/games/sales-modeling.constants.ts`. Method weights
@@ -21,7 +19,8 @@ signals ──► matcher profile (or global constants)
               └─ console splits (share ratios) + store-rating Boxleiter
                                 │
                                 ▼
-                    per-platform aggregate ──► estimatedToday
+                    per-platform aggregate ──► platform sum ──┐
+signals + matcher (game held out) ──► ML worldwide estimate ──────┴─► estimatedToday
 declared GLOBAL milestone ──► cross-check only (totalSales / reconciliation)
 ```
 
@@ -190,8 +189,10 @@ One input → the aggregate copies it. Disagreeing midpoints widen the band
 on purpose. The `aggregated` row is what the headline reads. Inputs and
 splits are kept beside it.
 
-`GamesService.latestEstimatesByPlatform` prefers the latest `aggregated`
-row per platform, then any other latest row if no aggregate exists.
+`GamesService.latestEstimates` prefers the latest `aggregated` row per
+platform, then any other latest row if no aggregate exists. It returns the
+GLOBAL `ml-ensemble` row apart (§6), and only when it belongs to the same
+batch as the platform rows.
 
 Adding a method means a migration that inserts `estimation_method` **and**
 a producer in `EstimationService`. A row with `isEnabled = false` is ignored
@@ -199,16 +200,37 @@ even if the code emits the tag.
 
 ## 6. Headline vs declared figure
 
-> `GamesService.aggregateSales` / `reconcile` / `buildTotal`.
+> `GamesService.aggregateSales` / `reconcile` / `buildTotal`; ML estimate in
+> `backend/src/estimation/ml/`.
 
 `milestonesAsOf` loads **GLOBAL**, non-engagement milestones only.
 
-- `estimatedToday` = sum of per-platform aggregate ranges. This is
-  `headline` on the public game payload and the value stored on
-  `estimate_snapshot`. Listing cards use the same snapshot.
-- `reconciliation` adds one GLOBAL entry comparing that sum to the
-  **largest** declared units (`isMoreAuthoritative`). Agreement does not
-  change the sum.
+- **Platform sum** = sum of per-platform aggregate ranges. Its displayed
+  figure is the midpoint.
+- **Worldwide ML estimate** (`MlEstimateService`, method `ml-ensemble`,
+  platform GLOBAL): the model chosen in `ml/` (random forest + ridge, mean
+  in log space), frozen by `ml/freeze.py` into
+  `estimation/ml/ensemble-model.json`. Its inputs mirror
+  `ml/features.py` (signals at the date, game fields, the matcher profile
+  with the game itself held out, as in training). Range =
+  `estimate ÷ k → estimate × k` with `k = halfWidthFactor` from the JSON.
+  `persistEstimates` stores it, in the same batch, only where
+  `mlEstimateApplies`: platform-sum midpoint ≥ `ML_MIN_SITE_UNITS` (300k)
+  **and** ≥ `ML_MIN_STEAM_REVIEWS` (1,000) Steam reviews at the date. The
+  model only saw games that publish their sales; outside that zone it
+  overshoots by ×10 or more (`ml/README.md`).
+- `estimatedToday` = the ML range when the batch has an `ml-ensemble` row,
+  else the platform sum. It carries `units`, the figure to display: the ML
+  estimate itself (never the midpoint of its range, which would overstate
+  it by ~40 %) or the platform-sum midpoint. It is `headline` on the public
+  game payload; `estimate_snapshot` stores the range and
+  `estimatedTodayUnits`, which listing cards and the sales ranking use.
+- With the ML headline, every platform line of the breakdown is scaled by
+  the same factor so that the platform midpoints add up to `units`.
+- `reconciliation` adds one GLOBAL entry comparing `estimatedToday` to the
+  **largest** declared units (`isMoreAuthoritative`); `estimateMethod` is
+  `ml-ensemble` or `platform-sum`, `ratio = units / declared`. Agreement
+  does not change the estimate.
 - `totalSales` is different: when any GLOBAL milestone exists it is the
   **latest-dated** figure (`isLater`), with confidence derived from
   `confidenceScore` and then nudged by agreement. It is the reported
@@ -241,9 +263,9 @@ possible later method. There is no `BACKLOG.md`.
 | ------ | --------- | ------------- |
 | `SignalSnapshot` | `capturedAt` | Raw public counts. `synthetic = true` rows are display-only and never feed an estimate. |
 | `AchievementSnapshot` | `capturedAt` | Unlock sample. Not an estimate input today. |
-| `SalesEstimate` | `computedAt` | Per-method ranges plus one `aggregated` row per platform. Append-only. |
+| `SalesEstimate` | `computedAt` | Per-method ranges, one `aggregated` row per platform, and one GLOBAL `ml-ensemble` row where §6 applies. Append-only. |
 | `EstimationMethod` | registry | Code, family, `defaultWeight`, `isEnabled`. |
-| `EstimateSnapshot` | `computedAt` | Frozen `estimatedToday` range and reconciliation JSON. |
+| `EstimateSnapshot` | `computedAt` | Frozen `estimatedToday` range, its displayed figure (`estimatedTodayUnits`) and reconciliation JSON. |
 | `Milestone` | `reportedAt` | Dated declared figure. Engagement rows are excluded from the headline. Undated rows are rejected at ingest. |
 | `ReferenceProfile` | `observedAt` | Matcher anchor. Not an estimate row. |
 

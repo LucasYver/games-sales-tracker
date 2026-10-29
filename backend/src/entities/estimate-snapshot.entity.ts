@@ -52,6 +52,13 @@ export class EstimateSnapshot {
   @Column('int')
   estimatedTodayHigh: number;
 
+  // The single figure displayed for this range: its midpoint for the
+  // platform sum, the model's own estimate for the ML range (estimate ÷/× a
+  // factor, whose midpoint would overstate it). Null only on rows written
+  // before the column existed and never backfilled.
+  @Column('int', { nullable: true })
+  estimatedTodayUnits: number | null;
+
   @Column('jsonb', { default: () => "'[]'::jsonb" })
   reconciliation: SerializedReconciliationEntry[];
 

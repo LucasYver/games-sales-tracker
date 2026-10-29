@@ -27,6 +27,11 @@ export interface GameListItem {
 export interface HeadlineSales {
   low: number;
   high: number;
+  /**
+   * The figure to display, picked by the API: the ML estimate itself (its
+   * range is estimate ÷/× a factor) or the midpoint of the platform sum.
+   */
+  units: number;
 }
 
 export interface PopularGame extends GameListItem {
@@ -35,6 +40,8 @@ export interface PopularGame extends GameListItem {
   reviews: number;
   estimatedLow: number | null;
   estimatedHigh: number | null;
+  /** Same figure as `HeadlineSales.units`. */
+  estimatedUnits: number | null;
 }
 
 export interface GenreOption {
@@ -119,6 +126,7 @@ export interface PublicEstimateSnapshot {
   computedAt: string;
   estimatedTodayLow: number;
   estimatedTodayHigh: number;
+  estimatedTodayUnits: number | null;
 }
 
 export interface StoreRatings {
@@ -148,7 +156,7 @@ export interface GameDetail {
   salesBreakdown: PlatformSales[];
   totalSales: TotalSales | null;
   headline: HeadlineSales | null;
-  estimatedToday: { low: number; high: number } | null;
+  estimatedToday: HeadlineSales | null;
   estimateSnapshots: PublicEstimateSnapshot[];
   reviewHistory: ReviewPoint[];
   followersHistory: ReviewPoint[];
@@ -171,29 +179,24 @@ export interface GameDetail {
 }
 
 /**
- * One number out of a range: the midpoint, rounded so we never imply precision
- * we do not have (nearest 100K above a million, nearest 10K below).
+ * The API's figure, rounded so we never imply precision we do not have
+ * (nearest 100K above a million, nearest 10K below).
  */
-function roundedUnits(
-  low: number | null,
-  high: number | null,
-): number | null {
-  if (low == null || high == null) return null;
-  const mid = (low + high) / 2;
-  if (mid <= 0) return null;
-  const step = mid >= 1_000_000 ? 100_000 : 10_000;
-  return Math.max(step, Math.round(mid / step) * step);
+function roundedUnits(units: number | null): number | null {
+  if (units == null || units <= 0) return null;
+  const step = units >= 1_000_000 ? 100_000 : 10_000;
+  return Math.max(step, Math.round(units / step) * step);
 }
 
 /** Listing and search rows. */
 export function listingUnits(game: PopularGame): number | null {
-  return roundedUnits(game.estimatedLow, game.estimatedHigh);
+  return roundedUnits(game.estimatedUnits);
 }
 
 /** Game page. Same resolution as the listing — the API decides, not the page. */
 export function headlineUnits(game: GameDetail): number | null {
   if (!game.headline) return null;
-  return roundedUnits(game.headline.low, game.headline.high);
+  return roundedUnits(game.headline.units);
 }
 
 export async function searchGames(

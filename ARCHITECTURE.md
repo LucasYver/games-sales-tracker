@@ -11,8 +11,10 @@
 
 Estimate video-game unit sales from public signals, per platform, as a
 range. The number the site shows (`headline` / `estimatedToday`) is always
-that model. Dated publisher, Wikipedia, and press figures are stored as
-milestones and shown as a cross-check. They do not calibrate a per-game
+that model: the platform sum, or for established games the worldwide ML
+estimate trained in `ml/` (see `ESTIMATION.md` §6). Dated publisher,
+Wikipedia, and press figures are stored as milestones and shown as a
+cross-check. They do not calibrate a per-game
 multiplier.
 
 ## Layout
@@ -21,6 +23,7 @@ multiplier.
 game-sales-tracker/
 ├── backend/             NestJS API (TypeScript, TypeORM, PostgreSQL 16)
 ├── frontend/            Next.js 16 (App Router, next-intl, Tailwind, shadcn/ui)
+├── ml/                  Python lab: read-only snapshots, backtest, model bench, frozen models (ml/README.md)
 ├── docker-compose.yml   PostgreSQL 16 + Redis (ports 5433 / 6380)
 └── vercel.json          Production routes and cron schedules
 ```
@@ -40,7 +43,7 @@ NestJS modules under `backend/src/`. Entry points worth knowing:
 | Admin API | `admin/admin.controller.ts` (`X-Admin-Session`) |
 | Public blog | `blog/blog.controller.ts` (published posts only) |
 | Vercel crons | `scheduler/cron.controller.ts` + `scheduler/refresh.service.ts` |
-| Estimation | `estimation/estimation.service.ts` |
+| Estimation | `estimation/estimation.service.ts`; worldwide ML estimate in `estimation/ml/` |
 | Matcher | `reference-profiles/` |
 | Schema | `entities/` + `db/migrations/` (explicit registry in `db/migrations/index.ts`) |
 
@@ -63,7 +66,7 @@ on `DATABASE_URL_DIRECT`, then `DATABASE_URL`.
 | `PriceSnapshot` | `price_snapshot` | Regional store price. Display only. |
 | `AchievementSnapshot` | `achievement_snapshot` | Exophase / Steam unlock sample. Collected, not estimated from. |
 | `SalesEstimate` | `sales_estimate` | Append-only per-method range, plus the `aggregated` row. |
-| `EstimateSnapshot` | `estimate_snapshot` | Append-only headline range (`estimatedToday`) and reconciliation JSON. |
+| `EstimateSnapshot` | `estimate_snapshot` | Append-only headline range (`estimatedToday`), its displayed figure and reconciliation JSON. |
 | `EstimationMethod` | `estimation_method` | Method code, family, weight, enabled flag. |
 | `Milestone` | `milestone` | Dated declared figure with provenance. Soft-deleted via `rejectedAt`. |
 | `TrustedSource` | `trusted_source` | Outlet registry for article extraction. `feedUrl` is reference data; RSS is not polled. |

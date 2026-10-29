@@ -145,7 +145,7 @@ const GENRE_STOPLIST = new Set(['indie']);
 const TRACK_RECORD_HIT_UNITS = 5_000_000;
 const TRACK_RECORD_MID_UNITS = 1_000_000;
 
-type PlayMode = 'SOLO' | 'COOP' | 'MULTI' | 'MMO' | 'MIXED' | 'UNKNOWN';
+export type PlayMode = 'SOLO' | 'COOP' | 'MULTI' | 'MMO' | 'MIXED' | 'UNKNOWN';
 
 // Developer pedigree at the game's release: HIT = prior >5M title,
 // MID = prior >1M title, NONE = has a developer but no prior hit,
@@ -1033,7 +1033,7 @@ class TrackRecordIndex {
 
 // ─── Feature extraction helpers ──────────────────────────────────────
 
-function playModeFromCategories(cats: string[] | null): PlayMode {
+export function playModeFromCategories(cats: string[] | null): PlayMode {
   if (!cats || cats.length === 0) return 'UNKNOWN';
   const set = new Set(cats.map((c) => c.toLowerCase()));
   const hasSolo = set.has('single-player');

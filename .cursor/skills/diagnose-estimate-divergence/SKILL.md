@@ -3,7 +3,8 @@ name: diagnose-estimate-divergence
 description: >-
   Diagnose why a game's sales estimate diverges from its declared worldwide
   milestone in game-sales-tracker. The headline (estimatedToday) is the
-  matcher-driven model sum and is never adjusted by that milestone. Given one
+  matcher-driven model sum (or, for established games, the worldwide ML
+  estimate) and is never adjusted by that milestone. Given one
   or more games, recompute Boxleiter, first-week PC, console splits, and the
   aggregate, locate the shared parameter or anchor at fault, and propose a
   fix. Use when the user says an estimate is wrong / "on diverge" / "on est
@@ -20,6 +21,15 @@ Read `ESTIMATION.md` first. It is the contract. This skill is the workflow.
 `estimate_snapshot.estimatedTodayLow/High` is the sum of per-platform
 **aggregated** estimates. Declared milestones do **not** floor, cap, or
 calibrate it.
+
+Exception: where `mlEstimateApplies` (platform-sum midpoint ≥ 300k and
+≥ 1,000 Steam reviews), the headline is the GLOBAL `ml-ensemble` row, and
+`estimatedTodayUnits` is the ML estimate (`ESTIMATION.md` §6). The breakdown
+endpoint returns both: `total` (platform sum) and `ml` (`shown` says which
+one the site displays). A divergence of the ML figure is fixed in `ml/`
+(new snapshot, bench, `freeze.py`, `freeze.py --install`), never by a
+constant; the platform recompute below still explains the split and the
+gate.
 
 There is no `pureEstimatedToday*`, no `calibratedMultiplier*`, and no
 `genreProfileId`. Those columns were dropped. Do not query them and do not
@@ -57,7 +67,7 @@ multiplier source (`matcher` or `global`), first-week inputs, splits, and
 aggregates. Use SQL when the API is down.
 
 ```sql
-SELECT "estimatedTodayLow", "estimatedTodayHigh", "computedAt", reconciliation
+SELECT "estimatedTodayLow", "estimatedTodayHigh", "estimatedTodayUnits", "computedAt", reconciliation
 FROM estimate_snapshot
 WHERE "gameId" = '<id>'
 ORDER BY "computedAt" DESC
@@ -154,6 +164,9 @@ Headline high = PC agg + PS agg + Xbox agg. No freshness cap, no declared floor.
 ```
 ratio = estimatedTodayHigh / bestGlobalMilestone.units
 ```
+
+For an ML headline use `estimatedTodayUnits` instead of the high: the ML
+range is estimate ÷/× 2.37, so its high is not comparable.
 
 About ×1 is the target. ×0.5–×1.5 can be normal uncertainty. Well above ×2
 or below ×0.5 means a shared parameter or a bad anchor, not a display bug.

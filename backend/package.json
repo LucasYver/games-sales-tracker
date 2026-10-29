@@ -22,6 +22,7 @@
     "backfill:is-free": "ts-node src/scripts/backfill-is-free.ts",
     "backfill:platform-release-dates": "ts-node src/scripts/backfill-platform-release-dates.ts",
     "backfill:ps-reconstruction": "ts-node src/scripts/backfill-ps-reconstruction.ts",
+    "backfill:ml-estimates": "ts-node src/scripts/backfill-ml-estimates.ts",
     "validate:matcher-holdout": "ts-node src/scripts/validate-matcher-holdout.ts",
     "typeorm": "typeorm-ts-node-commonjs",
     "migration:generate": "npm run typeorm -- migration:generate -d src/db/data-source.ts",

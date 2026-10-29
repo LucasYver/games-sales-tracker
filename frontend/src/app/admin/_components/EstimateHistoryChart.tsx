@@ -111,7 +111,9 @@ export function EstimateHistoryChart({ snapshots }: Props) {
         t: new Date(s.computedAt).getTime(),
         low: s.estimatedTodayLow,
         high: s.estimatedTodayHigh,
-        mid: Math.round((s.estimatedTodayLow + s.estimatedTodayHigh) / 2),
+        mid:
+          s.estimatedTodayUnits ??
+          Math.round((s.estimatedTodayLow + s.estimatedTodayHigh) / 2),
         range: [s.estimatedTodayLow, s.estimatedTodayHigh],
       };
       for (const r of s.reconciliation) {

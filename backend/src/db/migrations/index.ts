@@ -63,6 +63,7 @@ import { AddAdminUser1788800000000 } from './1788800000000-AddAdminUser';
 import { AddProviderCooldown1788810000000 } from './1788810000000-AddProviderCooldown';
 import { AddBlogPost1788820000000 } from './1788820000000-AddBlogPost';
 import { AddBlogPostRefresh1788830000000 } from './1788830000000-AddBlogPostRefresh';
+import { AddMlEnsembleEstimate1788840000000 } from './1788840000000-AddMlEnsembleEstimate';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -137,4 +138,5 @@ export const migrations: MixedList<Function | string> = [
   AddProviderCooldown1788810000000,
   AddBlogPost1788820000000,
   AddBlogPostRefresh1788830000000,
+  AddMlEnsembleEstimate1788840000000,
 ];

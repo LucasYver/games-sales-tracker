@@ -68,9 +68,9 @@ newly inserted stub.
 
 One game: the existing admin refresh or the matching backfill script.
 Do not rebuild estimate history unless the signal itself feeds
-`estimatedToday` (`STEAM_REVIEWS`, launch-window `STEAM_CONCURRENT`,
-`PS_RATINGS`, `XBOX_RATINGS`). Followers, Twitch, prices, and playtime
-do not.
+`estimatedToday` (`STEAM_REVIEWS`, `STEAM_CONCURRENT`, `PS_RATINGS`,
+`XBOX_RATINGS`, and `STEAM_FOLLOWERS`, which only the worldwide ML estimate
+reads — see `ESTIMATION.md` §6). Twitch, prices, and playtime do not.
 
 Then hit the cron once locally:
 

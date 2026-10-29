@@ -265,6 +265,7 @@ export interface AdminEstimateSnapshot {
   computedAt: Date;
   estimatedTodayLow: number;
   estimatedTodayHigh: number;
+  estimatedTodayUnits: number | null;
   reconciliation: SerializedReconciliationEntry[];
 }
 
@@ -375,6 +376,7 @@ export interface AdminGameSummary2 {
     computedAt: Date;
     estimatedTodayLow: number;
     estimatedTodayHigh: number;
+    estimatedTodayUnits: number | null;
     reconciliation: unknown;
   } | null;
   milestones: Milestone[];
@@ -986,6 +988,7 @@ export class AdminService {
         computedAt: s.computedAt,
         estimatedTodayLow: s.estimatedTodayLow,
         estimatedTodayHigh: s.estimatedTodayHigh,
+        estimatedTodayUnits: s.estimatedTodayUnits,
         reconciliation: s.reconciliation,
       }),
     );
@@ -1162,6 +1165,7 @@ export class AdminService {
             computedAt: latestSnap.computedAt,
             estimatedTodayLow: latestSnap.estimatedTodayLow,
             estimatedTodayHigh: latestSnap.estimatedTodayHigh,
+            estimatedTodayUnits: latestSnap.estimatedTodayUnits,
             reconciliation: latestSnap.reconciliation,
           }
         : null,

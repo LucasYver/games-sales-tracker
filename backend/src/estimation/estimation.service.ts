@@ -20,6 +20,11 @@ import { type ResolvedGenreProfile } from '../reference-profiles/sales-profile-r
 import { SalesProfileResolverService } from '../reference-profiles/sales-profile-resolver.service';
 import { reconstructPsCurveMonthly } from './ps-curve-reconstruction';
 import {
+  ML_METHOD_CODE,
+  mlEstimateApplies,
+  MlEstimateService,
+} from './ml/ml-estimate.service';
+import {
   FIRST_WEEK_BUCKET_LARGE_YEAR1_RATIO,
   FIRST_WEEK_BUCKET_SMALL_YEAR1_RATIO,
   FIRST_WEEK_BUCKET_THRESHOLD,
@@ -136,6 +141,11 @@ export interface EstimateBreakdownResult {
   computedAt: string;
   platforms: PlatformBreakdownResult[];
   total: { low: number; high: number } | null;
+  /**
+   * Worldwide ML estimate (`MlEstimateService`), computed live; `shown`
+   * when it is the figure the site displays (`mlEstimateApplies`).
+   */
+  ml: { low: number; high: number; units: number; shown: boolean } | null;
   declared: {
     units: number;
     source: string;
@@ -207,6 +217,7 @@ export class EstimationService {
     private readonly achievements: Repository<AchievementSnapshot>,
     private readonly methods: EstimationMethodService,
     private readonly salesProfile: SalesProfileResolverService,
+    private readonly mlEstimate: MlEstimateService,
   ) {
     this.platforms = [
       {
@@ -265,12 +276,7 @@ export class EstimationService {
     for (const platform of game.platforms) {
       const cfg = this.platforms.find((p) => p.platform === platform);
       if (!cfg) continue;
-      const boxleiter = await this.estimateForPlatform(
-        game,
-        cfg,
-        asOf,
-        trace,
-      );
+      const boxleiter = await this.estimateForPlatform(game, cfg, asOf, trace);
       if (boxleiter) results.push(boxleiter);
     }
 
@@ -350,6 +356,44 @@ export class EstimationService {
 
     if (aggregateRows.length > 0) {
       await this.estimates.save(aggregateRows);
+      await this.persistMlEstimate(gameId, aggregateRows, asOf);
+    }
+  }
+
+  /**
+   * Worldwide ML estimate (`MlEstimateService`), stored as a GLOBAL row at the
+   * same `computedAt` as the per-platform batch, and only where
+   * `mlEstimateApplies` to this batch's platform sum: the row's presence is
+   * what makes it the displayed figure. A failure is logged and leaves the
+   * site on the platform sum.
+   */
+  private async persistMlEstimate(
+    gameId: string,
+    aggregateRows: SalesEstimate[],
+    asOf?: Date,
+  ): Promise<void> {
+    const siteUnits = aggregateRows.reduce(
+      (sum, r) => sum + (r.estimatedLow + r.estimatedHigh) / 2,
+      0,
+    );
+    try {
+      const ml = await this.mlEstimate.estimate(gameId, asOf);
+      if (!ml || !mlEstimateApplies(siteUnits, ml.steamReviews)) return;
+      await this.estimates.save(
+        this.estimates.create({
+          gameId,
+          platform: Platform.GLOBAL,
+          estimatedLow: Math.round(ml.low),
+          estimatedHigh: Math.round(ml.high),
+          method: ML_METHOD_CODE,
+          methodId: this.methods.requireByCode(ML_METHOD_CODE).id,
+          ...(asOf ? { computedAt: asOf } : {}),
+        }),
+      );
+    } catch (err) {
+      this.logger.error(
+        `ML estimate failed for game ${gameId}: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -973,7 +1017,8 @@ export class EstimationService {
       },
       order: { capturedAt: 'ASC' },
     });
-    if (realPoints.length === 0) return { pointsWritten: 0, skipped: 'no-anchor' };
+    if (realPoints.length === 0)
+      return { pointsWritten: 0, skipped: 'no-anchor' };
     const earliestReal = realPoints[0];
     const anchor = realPoints[realPoints.length - 1];
     if (anchor.value <= 0) return { pointsWritten: 0, skipped: 'no-anchor' };
@@ -987,7 +1032,8 @@ export class EstimationService {
       order: { capturedAt: 'ASC' },
       select: { capturedAt: true, value: true },
     });
-    if (steamRows.length === 0) return { pointsWritten: 0, skipped: 'no-steam' };
+    if (steamRows.length === 0)
+      return { pointsWritten: 0, skipped: 'no-steam' };
 
     const game = await this.games.findOne({
       where: { id: gameId },
@@ -1001,7 +1047,9 @@ export class EstimationService {
     // before the first real PS snapshot — we only reconstruct the unobserved
     // early stretch, never overwrite a real point.
     const fromDate = psReleaseDate ?? steamRows[0].capturedAt;
-    const toDate = new Date(earliestReal.capturedAt.getTime() - 24 * 3600 * 1000);
+    const toDate = new Date(
+      earliestReal.capturedAt.getTime() - 24 * 3600 * 1000,
+    );
     if (fromDate.getTime() > toDate.getTime()) {
       return { pointsWritten: 0, skipped: 'no-gap' };
     }
@@ -1128,11 +1176,24 @@ export class EstimationService {
             ),
           }
         : null;
+    const ml = total ? await this.mlEstimate.estimate(gameId) : null;
 
     return {
       computedAt,
       platforms,
       total,
+      ml:
+        ml && total
+          ? {
+              low: Math.round(ml.low),
+              high: Math.round(ml.high),
+              units: Math.round(ml.units),
+              shown: mlEstimateApplies(
+                (total.low + total.high) / 2,
+                ml.steamReviews,
+              ),
+            }
+          : null,
       declared: bestDeclared
         ? {
             units: bestDeclared.units,

@@ -24,6 +24,7 @@ import {
   EstimationMethodService,
 } from '../estimation/estimation-method.service';
 import { EstimationService } from '../estimation/estimation.service';
+import { ML_METHOD_CODE } from '../estimation/ml/ml-estimate.service';
 import {
   AGREEMENT_GROWTH_PER_YEAR,
   AGREEMENT_OVERSHOOT_RATIO,
@@ -55,6 +56,8 @@ export interface PopularGame {
   reviews: number;
   estimatedLow: number | null;
   estimatedHigh: number | null;
+  /** The figure to display (see `EstimatedToday`). */
+  estimatedUnits: number | null;
 }
 
 export interface GenreOption {
@@ -195,7 +198,27 @@ export interface PublicEstimateSnapshot {
   computedAt: Date;
   estimatedTodayLow: number;
   estimatedTodayHigh: number;
+  estimatedTodayUnits: number | null;
 }
+
+/** Latest estimate batch of a game: per-platform rows + the worldwide ML row. */
+interface LatestEstimates {
+  byPlatform: Map<Platform, SalesEstimate>;
+  ml: SalesEstimate | null;
+}
+
+/**
+ * The headline "today" estimate: a range plus the single figure the site
+ * displays. For the platform sum that figure is the range's midpoint; for the
+ * ML estimate (estimate ÷/× a factor) it is the estimate itself.
+ */
+export interface EstimatedToday {
+  low: number;
+  high: number;
+  units: number;
+}
+
+const midpoint = (low: number, high: number): number => (low + high) / 2;
 
 // Map a numeric milestone confidence score (0–100) to the qualitative
 // `ConfidenceLevel` the public API still surfaces on per-platform sales
@@ -328,6 +351,7 @@ export class GamesService {
         reviews: reviewsByGame.get(game.id) ?? 0,
         estimatedLow: headline?.low ?? null,
         estimatedHigh: headline?.high ?? null,
+        estimatedUnits: headline?.units ?? null,
       };
     });
   }
@@ -373,10 +397,7 @@ export class GamesService {
     // Default to staying power, not a lucky week: a game charted once at #1
     // would otherwise sit above one that held the top decile for two years.
     if (sort === 'peak') {
-      qb.orderBy('r."peakRank"', 'ASC').addOrderBy(
-        'r."weeksCharted"',
-        'DESC',
-      );
+      qb.orderBy('r."peakRank"', 'ASC').addOrderBy('r."weeksCharted"', 'DESC');
     } else if (sort === 'weeks') {
       qb.orderBy('r."weeksCharted"', 'DESC').addOrderBy('r."avgRank"', 'ASC');
     } else {
@@ -426,6 +447,7 @@ export class GamesService {
         reviews: Number(r.reviews),
         estimatedLow: headline?.low ?? null,
         estimatedHigh: headline?.high ?? null,
+        estimatedUnits: headline?.units ?? null,
         weeksCharted: Number(r.weeksCharted),
         peakRank: Number(r.peakRank),
         avgRank: Number(r.avgRank),
@@ -542,7 +564,8 @@ export class GamesService {
           SELECT DISTINCT ON ("gameId")
             "gameId",
             "estimatedTodayLow" AS low,
-            "estimatedTodayHigh" AS high
+            "estimatedTodayHigh" AS high,
+            "estimatedTodayUnits" AS units
           FROM estimate_snapshot
           ORDER BY "gameId", "computedAt" DESC
         )`,
@@ -550,7 +573,8 @@ export class GamesService {
         'snap."gameId" = g.id',
       );
       qb.addSelect(
-        'MAX((COALESCE(snap.low, 0) + COALESCE(snap.high, 0)) / 2.0)',
+        // The figure listingUnits() displays (midpoint for pre-ML rows).
+        'MAX(COALESCE(snap.units, (COALESCE(snap.low, 0) + COALESCE(snap.high, 0)) / 2.0))',
         'sales_mid',
       );
       qb.orderBy('sales_mid', 'DESC');
@@ -606,6 +630,7 @@ export class GamesService {
         reviews: Number(r.reviews),
         estimatedLow: headline?.low ?? null,
         estimatedHigh: headline?.high ?? null,
+        estimatedUnits: headline?.units ?? null,
       };
     });
 
@@ -698,8 +723,8 @@ export class GamesService {
     const visibleMilestones = game.isFree ? [] : game.milestones;
 
     const latestEstimates = game.isFree
-      ? new Map<Platform, SalesEstimate>()
-      : await this.latestEstimatesByPlatform(game.id);
+      ? { byPlatform: new Map<Platform, SalesEstimate>(), ml: null }
+      : await this.latestEstimates(game.id);
 
     const { breakdown, total, reconciliation, estimatedToday } = game.isFree
       ? {
@@ -846,6 +871,7 @@ export class GamesService {
             computedAt: true,
             estimatedTodayLow: true,
             estimatedTodayHigh: true,
+            estimatedTodayUnits: true,
           },
           take: 500,
         });
@@ -854,6 +880,7 @@ export class GamesService {
         computedAt: s.computedAt,
         estimatedTodayLow: s.estimatedTodayLow,
         estimatedTodayHigh: s.estimatedTodayHigh,
+        estimatedTodayUnits: s.estimatedTodayUnits,
       }));
 
     return {
@@ -1009,7 +1036,7 @@ export class GamesService {
     if (!game) return;
 
     const milestones = await this.milestonesAsOf(gameId, asOf);
-    const estimates = await this.latestEstimatesByPlatform(gameId, asOf);
+    const estimates = await this.latestEstimates(gameId, asOf);
     const { reconciliation, estimatedToday } = this.aggregateSales(
       milestones,
       estimates,
@@ -1024,6 +1051,7 @@ export class GamesService {
         gameId,
         estimatedTodayLow: Math.round(estimatedToday.low),
         estimatedTodayHigh: Math.round(estimatedToday.high),
+        estimatedTodayUnits: Math.round(estimatedToday.units),
         reconciliation: reconciliation.map(serializeReconciliationEntry),
         computedAt: asOf ?? new Date(),
       }),
@@ -1262,14 +1290,14 @@ export class GamesService {
    */
   private aggregateSales(
     milestones: Milestone[],
-    estimates: Map<Platform, SalesEstimate>,
+    estimates: LatestEstimates,
     releaseDate: Date | null,
     asOf?: Date,
   ): {
     breakdown: PlatformSales[];
     total: TotalSales | null;
     reconciliation: ReconciliationEntry[];
-    estimatedToday: { low: number; high: number } | null;
+    estimatedToday: EstimatedToday | null;
   } {
     // Milestones are worldwide totals only — there is no per-platform
     // declared figure anymore, so every milestone is a global milestone and
@@ -1291,7 +1319,7 @@ export class GamesService {
       null,
     );
 
-    const { reconciliation, estimatedToday } = this.reconcile(
+    const { reconciliation, estimatedToday, usesMl } = this.reconcile(
       bestByPlatform,
       estimates,
       bestGlobal,
@@ -1311,12 +1339,26 @@ export class GamesService {
     // headline total via `buildTotal` below.
     const breakdown: PlatformSales[] = [];
 
-    for (const [platform, estimate] of estimates) {
-      if (bestByPlatform.has(platform)) continue;
+    // When the headline is the ML estimate, the platform methods still give
+    // the split: every platform range is scaled by the same factor, so the
+    // platform figures (midpoints) add up to the headline.
+    const platformRows = [...estimates.byPlatform].filter(
+      ([platform]) => !bestByPlatform.has(platform),
+    );
+    const platformUnits = platformRows.reduce(
+      (sum, [, e]) => sum + midpoint(e.estimatedLow, e.estimatedHigh),
+      0,
+    );
+    const scale =
+      usesMl && estimatedToday && platformUnits > 0
+        ? estimatedToday.units / platformUnits
+        : 1;
+
+    for (const [platform, estimate] of platformRows) {
       breakdown.push({
         platform,
-        low: estimate.estimatedLow,
-        high: estimate.estimatedHigh,
+        low: Math.round(estimate.estimatedLow * scale),
+        high: Math.round(estimate.estimatedHigh * scale),
         source: 'ESTIMATE',
         confidence: null,
         sourceUrl: null,
@@ -1342,13 +1384,14 @@ export class GamesService {
    */
   private reconcile(
     bestByPlatform: Map<Platform, Milestone>,
-    estimates: Map<Platform, SalesEstimate>,
+    { byPlatform: estimates, ml }: LatestEstimates,
     globalDeclared: Milestone | null,
     releaseDate: Date | null,
     asOf?: Date,
   ): {
     reconciliation: ReconciliationEntry[];
-    estimatedToday: { low: number; high: number } | null;
+    estimatedToday: EstimatedToday | null;
+    usesMl: boolean;
   } {
     const reconciliation: ReconciliationEntry[] = [];
     let todayLow = 0;
@@ -1397,6 +1440,7 @@ export class GamesService {
           declared.reportedAt,
           estimate.estimatedLow,
           estimate.estimatedHigh,
+          midpoint(estimate.estimatedLow, estimate.estimatedHigh),
           asOf,
         );
         reconciliation.push({
@@ -1436,17 +1480,40 @@ export class GamesService {
       }
     }
 
+    // The worldwide ML estimate, when the batch has one, replaces the platform
+    // sum: it is only stored where the model was validated (see
+    // `mlEstimateApplies`). Its single figure is the geometric midpoint of
+    // estimate ÷/× factor, i.e. the estimate itself.
+    const usesMl = hasToday && ml !== null;
+    const today =
+      usesMl && ml
+        ? {
+            low: ml.estimatedLow,
+            high: ml.estimatedHigh,
+            units: Math.sqrt(ml.estimatedLow * ml.estimatedHigh),
+            method: ML_METHOD_CODE,
+          }
+        : hasToday
+          ? {
+              low: todayLow,
+              high: todayHigh,
+              units: midpoint(todayLow, todayHigh),
+              method: 'platform-sum',
+            }
+          : null;
+
     // A worldwide declared figure (e.g. "30M copies sold worldwide") no longer
     // adjusts the headline estimate: the estimate reflects the corpus model
     // alone. The declared figure is surfaced purely as a reconciliation entry
     // (informational cross-check) and still drives `buildTotal`'s reported
     // headline, but it never floors or caps `estimatedToday`.
-    if (globalDeclared && hasToday) {
+    if (globalDeclared && today) {
       const cls = this.classifyAgreement(
         globalDeclared.units,
         globalDeclared.reportedAt,
-        todayLow,
-        todayHigh,
+        today.low,
+        today.high,
+        today.units,
         asOf,
       );
       reconciliation.push({
@@ -1454,9 +1521,9 @@ export class GamesService {
         declaredUnits: globalDeclared.units,
         declaredSource: globalDeclared.source,
         declaredAt: globalDeclared.reportedAt,
-        estimateLow: todayLow,
-        estimateHigh: todayHigh,
-        estimateMethod: 'platform-sum',
+        estimateLow: today.low,
+        estimateHigh: today.high,
+        estimateMethod: today.method,
         agreement: cls.agreement,
         ratio: Math.round(cls.ratio * 100) / 100,
         detail: cls.detail,
@@ -1467,7 +1534,12 @@ export class GamesService {
 
     return {
       reconciliation,
-      estimatedToday: hasToday ? { low: todayLow, high: todayHigh } : null,
+      estimatedToday: today && {
+        low: today.low,
+        high: today.high,
+        units: today.units,
+      },
+      usesMl,
     };
   }
 
@@ -1538,10 +1610,10 @@ export class GamesService {
     declaredAt: Date | null,
     estLow: number,
     estHigh: number,
+    estUnits: number,
     asOf: Date = new Date(),
   ): { agreement: Agreement; ratio: number; detail: string } {
-    const mid = (estLow + estHigh) / 2;
-    const ratio = declared > 0 ? mid / declared : 0;
+    const ratio = declared > 0 ? estUnits / declared : 0;
 
     if (declared >= estLow && declared <= estHigh) {
       return {
@@ -1722,13 +1794,14 @@ export class GamesService {
    * the rollout while encouraging the aggregate to take over once
    * `rebuildEstimateHistory` has been replayed.
    */
-  private async latestEstimatesByPlatform(
+  private async latestEstimates(
     gameId: string,
     asOf?: Date,
-  ): Promise<Map<Platform, SalesEstimate>> {
+  ): Promise<LatestEstimates> {
     const aggregateMethod = this.estimationMethods.findByCode(
       AGGREGATED_METHOD_CODE,
     );
+    const mlMethod = this.estimationMethods.findByCode(ML_METHOD_CODE);
 
     const estimates = await this.estimates.find({
       where: {
@@ -1740,7 +1813,12 @@ export class GamesService {
 
     const aggregateByPlatform = new Map<Platform, SalesEstimate>();
     const fallbackByPlatform = new Map<Platform, SalesEstimate>();
+    let ml: SalesEstimate | null = null;
     for (const estimate of estimates) {
+      if (mlMethod && estimate.methodId === mlMethod.id) {
+        ml ??= estimate;
+        continue;
+      }
       if (
         aggregateMethod &&
         estimate.methodId === aggregateMethod.id &&
@@ -1754,11 +1832,17 @@ export class GamesService {
       }
     }
 
-    const map = new Map<Platform, SalesEstimate>();
+    const byPlatform = new Map<Platform, SalesEstimate>();
     for (const [platform, estimate] of fallbackByPlatform) {
-      map.set(platform, aggregateByPlatform.get(platform) ?? estimate);
+      byPlatform.set(platform, aggregateByPlatform.get(platform) ?? estimate);
     }
-    return map;
+    // Only the ML row of the same batch: a platform batch newer than it (a
+    // failed ML run) falls back to the platform sum rather than mixing runs.
+    const newestPlatform = Math.max(
+      ...[...byPlatform.values()].map((e) => e.computedAt.getTime()),
+    );
+    if (ml && ml.computedAt.getTime() < newestPlatform) ml = null;
+    return { byPlatform, ml };
   }
 
   /**
@@ -1771,8 +1855,8 @@ export class GamesService {
    */
   private async latestReconciledEstimates(
     gameIds: string[],
-  ): Promise<Map<string, { low: number; high: number }>> {
-    const map = new Map<string, { low: number; high: number }>();
+  ): Promise<Map<string, EstimatedToday>> {
+    const map = new Map<string, EstimatedToday>();
     if (gameIds.length === 0) return map;
 
     const rows = await this.estimateSnapshots
@@ -1781,13 +1865,23 @@ export class GamesService {
       .select('s.gameId', 'gameId')
       .addSelect('s.estimatedTodayLow', 'low')
       .addSelect('s.estimatedTodayHigh', 'high')
+      .addSelect('s.estimatedTodayUnits', 'units')
       .where('s.gameId IN (:...gameIds)', { gameIds })
       .orderBy('s.gameId')
       .addOrderBy('s.computedAt', 'DESC')
-      .getRawMany<{ gameId: string; low: number; high: number }>();
+      .getRawMany<{
+        gameId: string;
+        low: number;
+        high: number;
+        units: number | null;
+      }>();
 
     for (const row of rows) {
-      map.set(row.gameId, { low: Number(row.low), high: Number(row.high) });
+      const low = Number(row.low);
+      const high = Number(row.high);
+      const units =
+        row.units !== null ? Number(row.units) : midpoint(low, high);
+      map.set(row.gameId, { low, high, units });
     }
     return map;
   }

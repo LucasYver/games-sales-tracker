@@ -62,6 +62,18 @@ function midpoint(low: number, high: number): number {
 function compactMid(low: number, high: number): string {
   return compact(midpoint(low, high));
 }
+// A snapshot carries the figure the site displayed: the ML estimate itself
+// (its range is estimate ÷/× a factor, so its midpoint would overstate it) or
+// the platform-sum midpoint. Older rows only have the range.
+function compactSnapshot(s: {
+  estimatedTodayLow: number;
+  estimatedTodayHigh: number;
+  estimatedTodayUnits: number | null;
+}): string {
+  return s.estimatedTodayUnits != null
+    ? compact(s.estimatedTodayUnits)
+    : compactMid(s.estimatedTodayLow, s.estimatedTodayHigh);
+}
 function fmtRange(low: number, high: number): string {
   return `${compact(low)}–${compact(high)}`;
 }
@@ -203,10 +215,7 @@ export default async function AdminGameDetailPage({
             s.isFree
               ? 'n/a'
               : estToday
-                ? compactMid(
-                    estToday.estimatedTodayLow,
-                    estToday.estimatedTodayHigh,
-                  )
+                ? compactSnapshot(estToday)
                 : '—'
           }
           hint={
@@ -385,10 +394,7 @@ function OverviewTab({ s }: { s: AdminGamePageSummary }) {
             <>
               <div>
                 <div className="text-3xl font-bold tracking-tight tabular-nums">
-                  {compactMid(
-                    s.latestEstimate.estimatedTodayLow,
-                    s.latestEstimate.estimatedTodayHigh,
-                  )}
+                  {compactSnapshot(s.latestEstimate)}
                 </div>
                 <div className="text-muted-foreground text-xs">
                   {fmtRange(
@@ -456,7 +462,15 @@ async function EstimatesTab({
     `/games/${gameId}/estimate-breakdown`,
   ).catch(() => null);
 
-  const algo = b?.total ?? null; // corpus-derived estimate
+  const algo = b?.total ?? null; // sum of the per-platform methods
+  // What the public site displays: the ML estimate where it applies (platform
+  // sum at 300k+ and 1,000+ Steam reviews), the platform sum otherwise.
+  const ml = b?.ml ?? null;
+  const shown = ml?.shown
+    ? { low: ml.low, high: ml.high, units: ml.units, label: 'ML model' }
+    : algo
+      ? { ...algo, units: midpoint(algo.low, algo.high), label: 'corpus model' }
+      : null;
   const latestEstimate = s.latestEstimate;
   const declared = b?.declared ?? null;
 
@@ -483,32 +497,31 @@ async function EstimatesTab({
             Estimate today
           </div>
           <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums">
-            {algo
-              ? compactMid(algo.low, algo.high)
+            {shown
+              ? compact(shown.units)
               : latestEstimate
-                ? compactMid(
-                    latestEstimate.estimatedTodayLow,
-                    latestEstimate.estimatedTodayHigh,
-                  )
+                ? compactSnapshot(latestEstimate)
                 : '—'}
           </div>
           <div className="text-muted-foreground mt-0.5 text-[11px]">
-            {algo
-              ? `${fmtRange(algo.low, algo.high)} · corpus model`
+            {shown
+              ? `${fmtRange(shown.low, shown.high)} · ${shown.label}`
               : 'no snapshot — hit Rebuild'}
           </div>
         </CardContent>
       </Card>
 
-      {b && algo ? (
+      {b && algo && shown ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-              How the estimate {compactMid(algo.low, algo.high)} is built
+              How the estimate {compact(shown.units)} is built
             </CardTitle>
             <p className="text-muted-foreground text-xs">
               Each platform aggregates its methods; consoles are ventilated from
-              PC/PS via the matcher split.
+              PC/PS via the matcher split. From a 300k platform sum and 1,000
+              Steam reviews up, the ML model sets the worldwide figure and the
+              public page scales the platform split to it.
             </p>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
@@ -537,8 +550,19 @@ async function EstimatesTab({
                 label="Algo total"
                 value={compactMid(algo.low, algo.high)}
                 sub={fmtRange(algo.low, algo.high)}
-                final
+                final={!ml?.shown}
               />
+              {ml && (
+                <>
+                  <PipeOp>ML model</PipeOp>
+                  <PipeNode
+                    label={ml.shown ? 'Shown on site' : 'ML (not shown)'}
+                    value={compact(ml.units)}
+                    sub={fmtRange(ml.low, ml.high)}
+                    final={ml.shown}
+                  />
+                </>
+              )}
             </div>
 
             {declared && (
@@ -551,14 +575,14 @@ async function EstimatesTab({
                 {declared.reportedAt
                   ? `, ${fmtDate(declared.reportedAt)}`
                   : ''}){' · '}
-                algo <span className="text-foreground">today</span>{' '}
-                {compactMid(algo.low, algo.high)}
+                estimate <span className="text-foreground">today</span>{' '}
+                {compact(shown.units)}
                 {' — '}
-                {algo.high < declared.units ? (
+                {shown.high < declared.units ? (
                   <span className="font-semibold text-red-600 dark:text-red-400">
                     below a past declared figure — possible under-estimate
                   </span>
-                ) : declared.units >= algo.low ? (
+                ) : declared.units >= shown.low ? (
                   <span className="font-semibold text-amber-600 dark:text-amber-400">
                     declared falls within today&apos;s range
                   </span>

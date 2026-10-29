@@ -8,6 +8,7 @@ Le chiffre affiché est toujours la fourchette du modèle (`estimatedToday`), pa
 1. Collecte des **snapshots de signaux** datés (avis Steam, notes PS/Xbox, CCU, etc.).
 2. Dérive un **profil** depuis les jeux voisins (matcher), sinon des constantes globales.
 3. Combine Boxleiter, extrapolation first-week PC et splits console.
+   Pour les jeux établis (≥ 300 000 ventes estimées, ≥ 1 000 avis Steam), le total monde vient d'un modèle appris dans `ml/` (forêt aléatoire + régression), voir `ESTIMATION.md` §6.
 4. Conserve les **chiffres déclarés** à part, comme cross-check. Ils ne calibrent plus un multiplicateur par jeu.
 
 ## Prérequis
