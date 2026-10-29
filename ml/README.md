@@ -517,6 +517,33 @@ viennent de relevés de joueurs connectés complétés après le snapshot).
 Le test neutre continue sur les deux gels : `--models models/2026-10-27` et
 `--models models/2026-10-29T13`.
 
+## Fuite Steam 2018 dans le site (29/10)
+
+1 725 jeux du catalogue (sortis depuis 2013) ont reçu leur chiffre de la
+fuite (`import-leak-2018.ts` sur un fichier limité au catalogue) ; les 424
+chiffres sous 10 000 joueurs ont été rejetés (le matcher ignore aussi leur
+signal). Corpus du matcher : 2 108 jeux de référence, dont 1 409 n'ont que la
+fuite.
+
+| Mesure | Corpus de midi (866) | Corpus final (2 108) |
+| ------ | -------------------: | -------------------: |
+| Estimation PC du site ÷ joueurs de la fuite (1 551 jeux) | ×2,46 (biais ×0,42) | ×2,19 (biais ×0,49), mieux pour 60 % |
+| Site, chiffres monde publiés | ×1,83 | ×1,85 |
+| v1.1 réentraînée, validation croisée | ×1,48 | ×1,51 |
+| v1.1 réentraînée, test dans le temps | ×1,51 | ×1,49 |
+
+Effet de bord : les jeux de la fuite n'ont pas de répartition par
+plateforme ; la part PC des voisins retombe souvent à 0,50 par défaut.
+
+### v1.2 figée (29/10, 17 h)
+
+`models/2026-10-29T17/` : les informations de la v1.1, réentraînées sur le
+corpus final (2 093 chiffres propres de 624 jeux). Avec la règle en prod :
+×1,52 en validation croisée, ×1,50 dans le temps ; fourchette ÷/× 2,44.
+Le backend donne le même chiffre que `predict_never_down` sur 332 cas sur
+332. Par rapport à la v1.1 sur le même corpus : médiane ×0,99, 90 % des jeux
+affichés entre ×0,85 et ×1,13.
+
 ## Prochaines étapes
 
 1. **Des étiquettes pour les petits jeux.** Sans elles, aucun modèle appris
