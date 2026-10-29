@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import math
 
+import numpy as np
 import pandas as pd
 
 from backtest import BacktestResult, to_us
@@ -65,6 +66,21 @@ LAUNCH_FEATURES = ["log_topseller_best", "has_topseller", "log_followers_max", "
                    "has_followers_at_release", "log_price", "has_price"]
 # v2. Vitesse des reviews depuis la sortie : forte au lancement, puis baisse.
 VELOCITY_FEATURES = ["log_reviews_per_day"]
+# Alternative simple aux jeux voisins : ce que la série et le studio ont
+# déjà vendu, d'après les chiffres monde publiés AVANT la date (jeux sortis
+# avant celui-ci). Ex. Transport Fever 3 → le meilleur chiffre de Transport
+# Fever 2 connu à la date.
+TRACK_RECORD_FEATURES = ["log_series_best", "has_series_best", "log_developer_best", "has_developer_best"]
+# Détails des jeux voisins (pistes 2, 5 et 6 du banc des voisins) :
+# - où en est le jeu sur la courbe de vie des voisins à son âge ;
+# - à quel point les voisins ressemblent au jeu ;
+# - à quel point leurs ventes par review se contredisent.
+CURVE_FEATURES = ["log_curve_position", "has_curve"]
+SIMILARITY_FEATURES = ["matcher_sim_mean", "matcher_sim_max"]
+SPREAD_FEATURES = ["matcher_ratio_spread", "has_ratio_spread"]
+# Points de la courbe des voisins : part de la 1re année vendue à cet âge (jours).
+CURVE_POINTS = (("s1", 7), ("m1", 30), ("m3", 91), ("m6", 182), ("a1", 365), ("a2", 730))
+CURVE_DEFAULTS = {"s1": 0.37, "m1": 0.46, "m3": 0.59, "m6": 0.74, "a1": 1.0, "a2": 1.47}  # médianes du corpus
 BASELINE_FEATURE = "log_baseline"
 # Produits de deux informations : permettent à un modèle linéaire d'appliquer
 # une règle différente selon le contexte (ex. le poids des reviews qui
@@ -121,7 +137,47 @@ FEATURE_LABELS = {
     "log_price": "prix plein Steam",
     "has_price": "prix Steam connu",
     "log_reviews_per_day": "reviews par jour depuis la sortie",
+    "log_series_best": "meilleur chiffre publié d'un jeu précédent de la série",
+    "has_series_best": "un jeu précédent de la série a publié un chiffre",
+    "log_developer_best": "meilleur chiffre publié d'un jeu précédent du studio",
+    "log_curve_position": "part de la 1re année que les voisins avaient vendue à cet âge",
+    "has_curve": "courbe de vie des voisins connue",
+    "matcher_sim_mean": "similarité moyenne des voisins",
+    "matcher_sim_max": "similarité du voisin le plus proche",
+    "matcher_ratio_spread": "désaccord des voisins sur les ventes par review",
+    "has_ratio_spread": "désaccord des voisins mesurable",
+    "has_developer_best": "un jeu précédent du studio a publié un chiffre",
 }
+
+
+def curve_position(curve: dict | None, age_days: float) -> tuple[float, bool]:
+    """Part de la 1re année vendue à `age_days`, d'après la courbe des voisins.
+
+    Interpolation en log(âge) entre les points connus ; avant 7 jours, au
+    prorata de la 1re semaine ; après 2 ans, la valeur de la 2e année.
+    """
+    known = {k: curve.get(k) for k, _ in CURVE_POINTS} if curve else {}
+    has = any(v is not None and v > 0 for v in known.values())
+    pts = [(d, known[k] if known.get(k) is not None and known[k] > 0 else CURVE_DEFAULTS[k]) for k, d in CURVE_POINTS]
+    age = max(age_days, 1.0)
+    if age <= pts[0][0]:
+        return pts[0][1] * age / pts[0][0], has
+    for (d0, v0), (d1, v1) in zip(pts, pts[1:]):
+        if age <= d1:
+            w = (math.log(age) - math.log(d0)) / (math.log(d1) - math.log(d0))
+            return v0 + w * (v1 - v0), has
+    return pts[-1][1], has
+
+
+def neighbour_details(match) -> dict[str, float]:
+    """Similarité et désaccord des voisins retenus par le matcher (jeu exclu)."""
+    anchors = getattr(match, "anchors", None) or []
+    if not anchors:
+        return {"matcher_sim_mean": 0.0, "matcher_sim_max": 0.0, "matcher_ratio_spread": 0.0, "has_ratio_spread": 0.0}
+    sims = np.array([s for _, s, _ in anchors])
+    weights = np.array([w for _, _, w in anchors])
+    return {"matcher_sim_mean": float(np.average(sims, weights=weights)) if weights.sum() > 0 else float(sims.mean()),
+            "matcher_sim_max": float(sims.max()), "matcher_ratio_spread": 0.0, "has_ratio_spread": 0.0}
 
 
 def is_final_test(game_id: str) -> bool:
@@ -160,6 +216,38 @@ class FeatureBuilder:
         ranks = snap.signals[snap.signals.metric == "STEAM_TOPSELLER_RANK"]
         self.ranks = SignalStore(ranks.assign(value=-ranks.value)) if len(ranks) else None
         self.prices = snap.prices.set_index("gameId").priceCents if len(snap.prices) else pd.Series(dtype=float)
+        # Chiffres monde réels publiés, par jeu : (date en µs, ventes), pour le
+        # palmarès de la série et du studio.
+        ms = snap.milestones
+        ms = ms[~ms.rejected & ~ms.isEngagement & ~ms.isEstimate & (ms.platform == "GLOBAL") & ms.reportedAt.notna()
+                & (ms.units > 0)]
+        self.figures = {gid: (d.reportedAt.map(_time_us).to_numpy(), d.units.to_numpy())
+                        for gid, d in ms.sort_values("reportedAt").groupby("gameId")}
+        self.release_us = {gid: _time_us(r) for gid, r in self.games.releaseDate.items()}
+        self.anchors = {a.game_id: a for a in est.matcher.corpus}
+        self.by_series: dict[str, list[str]] = {}
+        self.by_developer: dict[str, list[str]] = {}
+        for gid, g in self.games.iterrows():
+            if _none(g.deletedAt) is not None:
+                continue
+            if isinstance(g.franchiseSlug, str) and g.franchiseSlug:
+                self.by_series.setdefault(g.franchiseSlug, []).append(gid)
+            if isinstance(g.developer, str) and g.developer.strip():
+                self.by_developer.setdefault(g.developer.strip().lower(), []).append(gid)
+
+    def _best_before(self, game_id: str, others: list[str], t: int) -> float | None:
+        """Meilleur chiffre publié avant t par un autre jeu sorti avant celui-ci."""
+        mine = self.release_us.get(game_id)
+        best = None
+        for o in others:
+            rel = self.release_us.get(o)
+            if o == game_id or o not in self.figures or (mine is not None and (rel is None or rel >= mine)):
+                continue
+            ts, units = self.figures[o]
+            known = units[ts <= t]
+            if len(known):
+                best = max(best or 0, float(known.max()))
+        return best
 
     def row(self, game_id: str, t: int) -> dict | None:
         """None si le modèle actuel n'a aucun signal à cette date (comme à l'entraînement)."""
@@ -196,6 +284,28 @@ class FeatureBuilder:
         followers_release = self.followers.latest(game_id, "STEAM_FOLLOWERS", min(t, release)) \
             if self.followers and release else None
         price = self.prices.get(game_id)
+        series = g.franchiseSlug if isinstance(g.franchiseSlug, str) and g.franchiseSlug else None
+        developer = g.developer.strip().lower() if isinstance(g.developer, str) and g.developer.strip() else None
+        match = est.match(game_id, game_id)
+        curve_pos, has_curve = curve_position(match.curve if match else None, age_days)
+        details = neighbour_details(match)
+        if match and match.anchors:
+            ratios, weights = [], []
+            for gid, _, w in match.anchors:
+                a = self.anchors.get(gid)
+                r = a.reviews_to_units if a else None
+                if r is None and a and a.global_reviews_to_units and a.platform_shares and a.platform_shares.get("pc"):
+                    r = a.global_reviews_to_units * a.platform_shares["pc"]
+                if r and r > 0:
+                    ratios.append(math.log(r))
+                    weights.append(w)
+            if len(ratios) >= 2 and sum(weights) > 0:
+                mean = np.average(ratios, weights=weights)
+                details["matcher_ratio_spread"] = float(math.sqrt(np.average((np.array(ratios) - mean) ** 2,
+                                                                                weights=weights)))
+                details["has_ratio_spread"] = 1.0
+        series_best = self._best_before(game_id, self.by_series.get(series, []), t) if series else None
+        developer_best = self._best_before(game_id, self.by_developer.get(developer, []), t) if developer else None
         pc_delay = max((release - first_release) / US_PER_DAY, 0.0) if release and first_release else 0.0
 
         row = {
@@ -255,6 +365,15 @@ class FeatureBuilder:
             "log_price": _log1p(price / 100 if price is not None and not pd.isna(price) else None),
             "has_price": float(price is not None and not pd.isna(price)),
             "log_reviews_per_day": _log1p(reviews[0] / max(age_days, 1.0) if reviews else None),
+            # palmarès de la série et du studio
+            "log_series_best": _log1p(series_best),
+            "has_series_best": float(series_best is not None),
+            "log_developer_best": _log1p(developer_best),
+            "has_developer_best": float(developer_best is not None),
+            # détails des voisins
+            "log_curve_position": math.log(max(curve_pos, 1e-3)),
+            "has_curve": float(has_curve),
+            **details,
         }
         tags = {tag_col(tag) for tag in game_tags(self.games, game_id)}
         for col in self.tag_cols:

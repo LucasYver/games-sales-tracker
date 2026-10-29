@@ -465,6 +465,58 @@ chiffres publiés dans les 3 premiers jours, laissés au site. Référence
 Python : `predict_never_down` dans `frozen.py` ; le backend donne le même
 chiffre sur 264 cas (lecture seule).
 
+## Faut-il repenser les jeux voisins ? (29/10)
+
+**Le défaut trouvé était le corpus, pas le principe.** Les profils de
+référence n'étaient recalculés qu'à la main : Transport Fever 2 (4 chiffres
+monde) n'y était pas, 68 profils n'avaient plus aucun chiffre valide, 343
+avaient vu leurs chiffres changer. Un cron quotidien les tient maintenant à
+jour (`/api/cron/reference-profiles`) ; le recalcul complet du 29/10 a donné
+866 jeux de référence (160 ajoutés, 71 retirés).
+
+`bench_matcher.py`, snapshot du 29/10 après ce recalcul :
+
+| Variante | Erreur | Jeux avec un prédécesseur chiffré |
+| -------- | -----: | --------------------------------: |
+| Avec voisins (actuel) | ×1,49 | ×1,44 |
+| Sans voisins | ×1,53 | ×1,57 |
+| Série + studio, sans voisins | ×1,51 | ×1,46 |
+| Voisins + série + studio | ×1,48 | ×1,40 |
+
+« Série + studio » = le meilleur chiffre monde déjà publié par un jeu
+précédent de la même série et du même studio (`TRACK_RECORD_FEATURES`).
+Les voisins sont utiles (sans eux, le modèle fait moins bien dans 99 % des
+tirages), et le palmarès de la série en apporte presque autant à lui seul,
+de façon lisible. Les deux ensemble font le mieux.
+
+### Trois détails des voisins testés en plus (29/10)
+
+Sur la v1.1, ajoutés un par un (`bench_matcher.py`) :
+
+| Ajout | Erreur | Fait mieux que la v1.1 dans |
+| ----- | -----: | --------------------------: |
+| — (v1.1 seule) | ×1,48 | |
+| Courbe de vie des voisins à l'âge du jeu | ×1,49 | 24 % des tirages |
+| Similarité moyenne et maximale des voisins | ×1,47 | 71 % des tirages |
+| Désaccord des voisins sur les ventes par review | ×1,48 | 25 % des tirages |
+| Les trois | ×1,48 | 68 % des tirages |
+
+Aucun n'est un gain net (seuil : mieux dans une large majorité des tirages).
+La similarité donne un petit mieux régulier (séries ×1,40 → ×1,38, studio
+×1,48 → ×1,46), à revérifier quand il y aura plus de chiffres.
+
+### v1.1 figée (29/10)
+
+`models/2026-10-29T13/` : « v1.1 : voisins + série + studio », entraînée sur
+2 092 chiffres propres de 625 jeux, après le recalcul complet des jeux de
+référence. Au banc : ×1,48 (×1,50 avec la règle en prod « jamais en baisse
+dès J+3 », contre ×1,52 pour la v1). Fourchette ÷/× 2,48. Le backend donne
+le même chiffre que `predict_never_down` (320 cas sur 340 ; les écarts
+viennent de relevés de joueurs connectés complétés après le snapshot).
+
+Le test neutre continue sur les deux gels : `--models models/2026-10-27` et
+`--models models/2026-10-29T13`.
+
 ## Prochaines étapes
 
 1. **Des étiquettes pour les petits jeux.** Sans elles, aucun modèle appris

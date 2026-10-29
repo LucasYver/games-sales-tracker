@@ -122,14 +122,21 @@ class Estimator:
             if r.platform == "PC" and r.gameId not in self.pc_release:
                 self.pc_release[r.gameId] = _time_us(r.releaseDate)
         self._profiles: dict[tuple[str, str | None], Profile | None] = {}
+        self._matches: dict[tuple[str, str | None], object] = {}
 
     # ─── Profil (matcher) ─────────────────────────────────────────────────
     def profile(self, game_id: str, holdout_game_id: str | None) -> Profile | None:
         key = (game_id, holdout_game_id)
         if key not in self._profiles:
-            match = self.matcher.find_neighbours(game_id, holdout_game_id=holdout_game_id)
-            self._profiles[key] = overlay(match)
+            self._profiles[key] = overlay(self.match(game_id, holdout_game_id))
         return self._profiles[key]
+
+    def match(self, game_id: str, holdout_game_id: str | None):
+        """Résultat brut du matcher (voisins, similarités, courbe), gardé en cache."""
+        key = (game_id, holdout_game_id)
+        if key not in self._matches:
+            self._matches[key] = self.matcher.find_neighbours(game_id, holdout_game_id=holdout_game_id)
+        return self._matches[key]
 
     # ─── Point d'entrée ───────────────────────────────────────────────────
     def estimate(self, game_id: str, as_of_us: int, holdout_game_id: str | None = None) -> Estimate | None:

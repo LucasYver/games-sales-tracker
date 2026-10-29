@@ -23,7 +23,7 @@ from sklearn.model_selection import GroupKFold
 from bench import N_FOLDS, SEED, BenchResult, _fit_core, fit
 
 # Les deux premiers sont affichés par défaut dans l'UI (les meilleurs du banc).
-LEARNED_MODELS = ["Moyenne forêt + linéaire", "Forêt + voisins", "Forêt aléatoire", "Linéaire + interactions",
+LEARNED_MODELS = ["v1.1 : voisins + série + studio", "Moyenne forêt + linéaire", "Forêt + voisins", "Forêt aléatoire", "Linéaire + interactions",
                   "Gradient boosting"]
 
 

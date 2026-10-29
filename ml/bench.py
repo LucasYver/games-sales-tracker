@@ -52,7 +52,7 @@ from baseline import Estimator
 import baseline.matcher as matcher_mod
 from features import (BASELINE_FEATURE, FEATURE_LABELS, FeatureBuilder, FOLLOWER_FEATURES, GAME_FEATURES, INTERACTION_FEATURES,
                       MATCHER_FEATURES, RELEASE_FEATURES, REVIEW_DYNAMICS_FEATURES, SIGNAL_FEATURES, TIME_FEATURES,
-                      build_feature_table)
+                      TRACK_RECORD_FEATURES, build_feature_table)
 from frozen import NEVER_DOWN_MIN_DAYS, NEVER_DOWN_MIN_REVIEWS
 from labels import flag_suspects
 from metrics import add_error_columns, format_table, game_weights, summarize, weighted_median
@@ -176,8 +176,10 @@ def feature_families() -> dict[str, list[str]]:
     }
 
 
-# Règle en prod (backend `MlEstimateService`, référence `frozen.predict_never_down`).
+# Règle en prod (backend `MlEstimateService`, référence `frozen.predict_never_down`),
+# appliquée au modèle v1.1.
 PROD_MODEL = "En prod : jamais en baisse dès J+3"
+V11_MODEL = "v1.1 : voisins + série + studio"
 
 
 def model_specs(tag_cols: list[str]) -> list[ModelSpec]:
@@ -213,10 +215,16 @@ def model_specs(tag_cols: list[str]) -> list[ModelSpec]:
                                               "Deux façons de raisonner très différentes : leurs erreurs se compensent "
                                               "en partie.", "ensemble",
                   members=[forest, ModelSpec("Linéaire + interactions", "", "ridge", signals + INTERACTION_FEATURES)]),
-        ModelSpec(PROD_MODEL, "Le modèle en ligne : la moyenne forêt + linéaire, rien avant 3 jours après la sortie PC "
-                              "(le site garde son chiffre), puis jamais en baisse : le plus haut chiffre déjà donné "
-                              f"aux dates où le jeu avait au moins {NEVER_DOWN_MIN_REVIEWS:,} reviews Steam.",
-                  "running_max", members=[ensemble], min_days=NEVER_DOWN_MIN_DAYS, min_reviews=NEVER_DOWN_MIN_REVIEWS),
+        v11 := ModelSpec(V11_MODEL, "La moyenne forêt + linéaire, plus le palmarès de la série et du studio : le "
+                                    "meilleur chiffre monde déjà publié par un jeu précédent de la même série et du "
+                                    "même studio.", "ensemble", members=[
+                             ModelSpec(f"{V11_MODEL} (forêt)", "", "forest", TREE_FEATURES + TRACK_RECORD_FEATURES),
+                             ModelSpec(f"{V11_MODEL} (linéaire)", "", "ridge",
+                                       signals + TRACK_RECORD_FEATURES + INTERACTION_FEATURES)]),
+        ModelSpec(PROD_MODEL, "Le modèle en ligne : la v1.1, rien avant 3 jours après la sortie PC (le site garde son "
+                              "chiffre), puis jamais en baisse : le plus haut chiffre déjà donné aux dates où le jeu "
+                              f"avait au moins {NEVER_DOWN_MIN_REVIEWS:,} reviews Steam.",
+                  "running_max", members=[v11], min_days=NEVER_DOWN_MIN_DAYS, min_reviews=NEVER_DOWN_MIN_REVIEWS),
     ]
 
 
@@ -543,7 +551,7 @@ LOCKED_GAMES_SPENT = True
 
 # Modèles passés aux contrôles de la courbe et du catalogue (les plus longs).
 CHECKED_MODELS = ["Modèle actuel", "Linéaire + interactions", "Gradient boosting", "Forêt aléatoire",
-                  "Moyenne forêt + linéaire", PROD_MODEL]
+                  "Moyenne forêt + linéaire", V11_MODEL, PROD_MODEL]
 
 
 def run_bench(snap, est: Estimator, res, bootstrap: int = 300) -> BenchResult:

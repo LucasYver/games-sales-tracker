@@ -18,7 +18,7 @@ from plotly.subplots import make_subplots
 import streamlit as st
 
 from backtest import compute_backtest, to_us
-from bench import (PROD_MODEL, ABLATION_MODEL, error_by_age, load_final, load_saved_bench, paired_gain, run_bench, save_bench,
+from bench import (PROD_MODEL, V11_MODEL, ABLATION_MODEL, error_by_age, load_final, load_saved_bench, paired_gain, run_bench, save_bench,
                    set_similarity)
 from features import FeatureBuilder
 from frozen import NEVER_DOWN_MIN_DAYS, NEVER_DOWN_MIN_REVIEWS, US_PER_DAY, never_down_dates
@@ -719,6 +719,7 @@ def timeline(game_id: str, platform: str, with_holdout: bool, end: str) -> pd.Da
 # (le bleu reste au modèle actuel, l'orange aux chiffres publiés).
 LEARNED_COLORS = {
     PROD_MODEL: ("#2e3a4d", "#c9d1de"),
+    V11_MODEL: ("#8d5524", "#c08457"),
     "Moyenne forêt + linéaire": ("#6250d6", "#9085e9"),
     "Forêt + voisins": ("#008300", "#008300"),
     "Forêt aléatoire": ("#1baf7a", "#199e70"),
@@ -742,7 +743,7 @@ def feature_builder():
     return FeatureBuilder(snap, est, [c for c in load_bench().table.columns if c.startswith("tag_")])
 
 
-PROD_BASE = "Moyenne forêt + linéaire"  # le modèle suivi par la règle en prod
+PROD_BASE = V11_MODEL  # le modèle suivi par la règle en prod
 
 
 def prod_curve(game_id: str, X: pd.DataFrame, honest: bool) -> pd.DataFrame:
@@ -834,8 +835,8 @@ with tab_game:
     if bench_ready:
         names = st.multiselect(
             "Modèles appris à comparer au site", [PROD_MODEL] + LEARNED_MODELS, default=[PROD_MODEL, PROD_BASE],
-            help="Par défaut, le modèle en ligne et le modèle qu'il suit. « En prod » = la moyenne forêt + "
-                 f"linéaire, rien avant {NEVER_DOWN_MIN_DAYS} jours après la sortie PC, puis jamais en baisse (le "
+            help="Par défaut, le modèle en ligne et le modèle qu'il suit. « En prod » = la v1.1 (voisins + "
+                 f"série + studio), rien avant {NEVER_DOWN_MIN_DAYS} jours après la sortie PC, puis jamais en baisse (le "
                  f"plus haut chiffre déjà donné aux dates où le jeu avait au moins {NEVER_DOWN_MIN_REVIEWS:,} "
                  "reviews Steam). Le site ne l'affiche que pour les jeux qu'il estime déjà à 300 000 ventes et plus.")
         st.caption(
@@ -1071,7 +1072,8 @@ with tab_game:
 # passe après la moyenne : il s'appuie encore plus sur la similarité du site (à re-challenger) et sur une
 # table d'erreurs des jeux connus à maintenir.
 COMPLEXITY = {"Linéaire (sans les voisins)": 1, "Linéaire (toutes les infos)": 1, "Linéaire + interactions": 2,
-              "Gradient boosting": 3, "Forêt aléatoire": 4, "Moyenne forêt + linéaire": 5, PROD_MODEL: 5.5,
+              "Gradient boosting": 3, "Forêt aléatoire": 4, "Moyenne forêt + linéaire": 5, V11_MODEL: 5.2,
+              PROD_MODEL: 5.5,
               "Forêt + voisins": 6}
 NOT_CANDIDATES = {"Modèle actuel", "Actuel recalibré"}
 
