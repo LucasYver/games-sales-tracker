@@ -18,9 +18,10 @@ from plotly.subplots import make_subplots
 import streamlit as st
 
 from backtest import compute_backtest, to_us
-from bench import (ABLATION_MODEL, error_by_age, load_final, load_saved_bench, paired_gain, run_bench, save_bench,
+from bench import (PROD_MODEL, ABLATION_MODEL, error_by_age, load_final, load_saved_bench, paired_gain, run_bench, save_bench,
                    set_similarity)
 from features import FeatureBuilder
+from frozen import NEVER_DOWN_MIN_DAYS, NEVER_DOWN_MIN_REVIEWS, US_PER_DAY, never_down_dates
 from playground import LEARNED_MODELS, train as train_playable
 from baseline import Estimator
 from metrics import add_error_columns, segment_table, summarize
@@ -717,6 +718,7 @@ def timeline(game_id: str, platform: str, with_holdout: bool, end: str) -> pd.Da
 # Couleurs des modèles appris : emplacements catégoriels 3, 7 et 5 de la palette
 # (le bleu reste au modèle actuel, l'orange aux chiffres publiés).
 LEARNED_COLORS = {
+    PROD_MODEL: ("#2e3a4d", "#c9d1de"),
     "Moyenne forêt + linéaire": ("#6250d6", "#9085e9"),
     "Forêt + voisins": ("#008300", "#008300"),
     "Forêt aléatoire": ("#1baf7a", "#199e70"),
@@ -740,6 +742,35 @@ def feature_builder():
     return FeatureBuilder(snap, est, [c for c in load_bench().table.columns if c.startswith("tag_")])
 
 
+PROD_BASE = "Moyenne forêt + linéaire"  # le modèle suivi par la règle en prod
+
+
+def prod_curve(game_id: str, X: pd.DataFrame, honest: bool) -> pd.DataFrame:
+    """La règle en prod sur la frise, comme le backend : rien avant J+3, puis jamais en baisse."""
+    base = playable(PROD_BASE)
+    g = games.loc[game_id]
+    rel = est.pc_release.get(game_id) or (to_us(g.releaseDate) if pd.notna(g.releaseDate) else None)
+    t = np.array([to_us(pd.Timestamp(d)) for d in X.date])
+    log = np.log(base.predict(game_id, X, honest).point.to_numpy())
+    if rel is None:
+        log[:] = np.nan
+    else:
+        fb = feature_builder()
+        grid = [(tt, r) for tt in never_down_dates(rel, int(t.max())) if (r := fb.row(game_id, tt))
+                and r["log_reviews"] >= math.log1p(NEVER_DOWN_MIN_REVIEWS)]
+        if grid:
+            gt = np.array([tt for tt, _ in grid])
+            gp = np.log(base.predict(game_id, pd.DataFrame([r for _, r in grid]), honest).point.to_numpy())
+            for i, ti in enumerate(t):
+                past = gp[gt <= ti]
+                if len(past):
+                    log[i] = max(log[i], past.max())
+        log[t - rel < NEVER_DOWN_MIN_DAYS * US_PER_DAY] = np.nan
+    point = np.exp(log)
+    k = math.exp(base.log_halfwidth)
+    return pd.DataFrame({"point": point, "low": point / k, "high": point * k}, index=X.index)
+
+
 @st.cache_data(show_spinner=False)
 def learned_at(game_id: str, dates: tuple[str, ...], names: tuple[str, ...], honest: bool) -> pd.DataFrame:
     """Estimation de chaque modèle appris pour ce jeu, à chaque date demandée."""
@@ -748,8 +779,9 @@ def learned_at(game_id: str, dates: tuple[str, ...], names: tuple[str, ...], hon
     if not feats:
         return pd.DataFrame(columns=["date", "model", "point", "low", "high"])
     X = pd.DataFrame(feats)
-    out = [playable(n).predict(game_id, X, honest).assign(date=X.date.to_numpy(), model=n) for n in names]
-    return pd.concat(out, ignore_index=True)
+    out = [(prod_curve(game_id, X, honest) if n == PROD_MODEL else playable(n).predict(game_id, X, honest))
+           .assign(date=X.date.to_numpy(), model=n) for n in names]
+    return pd.concat(out, ignore_index=True).dropna(subset=["point"])
 
 
 def ranges_chart(df: pd.DataFrame, actual: list[float]) -> go.Figure:
@@ -801,9 +833,11 @@ with tab_game:
     bench_ready = load_bench() is not None
     if bench_ready:
         names = st.multiselect(
-            "Modèles appris à comparer au site", LEARNED_MODELS, default=LEARNED_MODELS[:2],
-            help="Par défaut, les deux meilleurs du banc d'essai : la moyenne forêt + linéaire et la forêt corrigée "
-                 "par les voisins. Les autres sont là pour comparaison.")
+            "Modèles appris à comparer au site", [PROD_MODEL] + LEARNED_MODELS, default=[PROD_MODEL, PROD_BASE],
+            help="Par défaut, le modèle en ligne et le modèle qu'il suit. « En prod » = la moyenne forêt + "
+                 f"linéaire, rien avant {NEVER_DOWN_MIN_DAYS} jours après la sortie PC, puis jamais en baisse (le "
+                 f"plus haut chiffre déjà donné aux dates où le jeu avait au moins {NEVER_DOWN_MIN_REVIEWS:,} "
+                 "reviews Steam). Le site ne l'affiche que pour les jeux qu'il estime déjà à 300 000 ventes et plus.")
         st.caption(
             ("**Mode honnête** (barre latérale) : chaque modèle appris prédit ce jeu **sans l'avoir vu** à "
              "l'entraînement, comme un jeu nouveau. Passez en « Avec fuite » pour voir le modèle entraîné sur tous "
@@ -1037,8 +1071,56 @@ with tab_game:
 # passe après la moyenne : il s'appuie encore plus sur la similarité du site (à re-challenger) et sur une
 # table d'erreurs des jeux connus à maintenir.
 COMPLEXITY = {"Linéaire (sans les voisins)": 1, "Linéaire (toutes les infos)": 1, "Linéaire + interactions": 2,
-              "Gradient boosting": 3, "Forêt aléatoire": 4, "Moyenne forêt + linéaire": 5, "Forêt + voisins": 6}
+              "Gradient boosting": 3, "Forêt aléatoire": 4, "Moyenne forêt + linéaire": 5, PROD_MODEL: 5.5,
+              "Forêt + voisins": 6}
 NOT_CANDIDATES = {"Modèle actuel", "Actuel recalibré"}
+
+
+def render_checks(b) -> None:
+    """Contrôles au-delà de l'erreur moyenne (checks.py)."""
+    c = b.checks
+    st.subheader("Au lancement : l'erreur selon l'âge du jeu au chiffre")
+    st.dataframe(c["age"], width="stretch", hide_index=True)
+    how_to_read(
+        "chaque case donne l'erreur typique, puis entre parenthèses le **biais** : ×0,80 veut dire 20 % trop bas en "
+        "médiane. Entre parenthèses dans les titres, le nombre de chiffres. Les chiffres publiés 0 à 3 jours après "
+        "la sortie sont les plus durs, et beaucoup sont faux (voir plus bas). La règle en prod laisse ces 3 premiers "
+        "jours au site : d'où son erreur sur cette colonne.")
+
+    st.subheader("La courbe d'un jeu baisse-t-elle ?")
+    st.markdown(
+        "Des ventes **cumulées** ne baissent jamais. On fait prédire chaque jeu à une série de dates (J+1, J+3, … "
+        f"puis tous les 180 jours, {thousands(c['timeline_dates'])} dates en tout), par un modèle qui n'a jamais vu "
+        "ce jeu, et on compte les baisses de plus de 5 % d'une date à la suivante.")
+    st.dataframe(c["drops"], width="stretch", hide_index=True, column_config={
+        "modèle": "modèle",
+        "pas_en_baisse": st.column_config.NumberColumn("dates en baisse", format="percent"),
+        "jeux_avec_baisse": st.column_config.NumberColumn("jeux avec au moins une baisse", format="percent"),
+        "pire_baisse": st.column_config.NumberColumn("pire baisse", format="×%.2f")})
+    how_to_read(
+        "les modèles appris baissent plus souvent que le site, à cause des informations « du moment » (joueurs "
+        "connectés, reviews récentes). La règle en prod ne baisse plus une fois le modèle affiché ; les baisses "
+        "restantes sont au passage entre le chiffre du site (avant J+3, ou trop peu de reviews) et le modèle.")
+
+    st.subheader("Tout le catalogue, pas seulement les jeux qui publient leurs ventes")
+    st.dataframe(c["catalog"], width="stretch", hide_index=True)
+    how_to_read(
+        "chaque case est la médiane de **modèle ÷ site actuel** pour les jeux du catalogue d'une taille donnée "
+        "(nombre de reviews Steam). Les modèles appris n'ont vu que des jeux qui publient leurs ventes, presque "
+        "tous des succès : sur les petits jeux, ils donnent 5 à 35 fois le site, ce qui est absurde. C'est pour ça "
+        "que le site n'affiche le modèle que dans la « zone affichée » (site ≥ 300 000 ventes et ≥ 1 000 reviews).")
+
+    st.subheader("Chiffres « de lancement » à vérifier dans la base")
+    suspects = c["launch_suspects"]
+    if suspects.empty:
+        st.success("Aucun chiffre de lancement suspect.")
+    else:
+        st.dataframe(suspects, width="stretch", hide_index=True)
+        how_to_read(
+            "chiffres publiés 3 jours ou moins après la sortie PC, plus de 3 fois au-dessus de **tous** les "
+            "modèles. Le plus souvent : un chiffre daté du jour de sortie mais publié bien plus tard, le chiffre "
+            "de toute une série rattaché à une réédition, une date de première sortie fausse, ou des joueurs d'un "
+            "free-to-play comptés comme des ventes.")
 
 
 def render_models(b) -> None:
@@ -1205,6 +1287,9 @@ def render_models(b) -> None:
         f"modèle actuel, ×{fr(old['Linéaire (toutes les infos)'])} pour le linéaire, **×{fr(old[best_old])}** pour "
         f"« {best_old} ». Pour ces vieux jeux, le lien entre reviews et ventes dépend de l'âge et de l'époque ; une "
         "formule unique le rate, alors que les arbres posent des questions différentes selon le jeu.")
+
+    if getattr(b, "checks", None):
+        render_checks(b)
 
     st.subheader(f"Qu'apporte chaque type d'information ? (testé avec le {ABLATION_MODEL.lower()})")
     abl = b.ablation[b.ablation.modèle != "toutes les infos"].sort_values("écart")

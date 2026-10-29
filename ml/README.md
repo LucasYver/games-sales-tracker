@@ -71,7 +71,7 @@ Pour expérimenter en Python :
 | `metrics.py` | Erreur en facteur ×, parts à ×1,5 / ×2, couverture, biais, intervalles de confiance. |
 | `backtest.py` | Recalcule l'estimation à la date de chaque milestone → `reports/backtest.md` + `backtest_rows.parquet`. |
 | `features.py` | Table d'apprentissage : une ligne par chiffre monde réel, features calculées à la date du chiffre ; définit le test final sous clé (hachage de l'id du jeu). |
-| `bench.py` | Banc d'essai : validation croisée par jeu (réglages imbriqués), test dans le temps, ablation, modèles comparés à l'actuel → `reports/bench.md`. `--final` = test final, une seule fois. |
+| `bench.py` | Banc d'essai : validation croisée par jeu (réglages imbriqués), test dans le temps, ablation, contrôles de `checks.py`, modèles comparés à l'actuel, dont la règle en prod (« jamais en baisse dès J+3 ») → `reports/bench.md`. `--final` = test final, une seule fois. |
 | `app.py` | Mini-UI Streamlit : « Commencer ici » (tout expliqué sur un exemple réel), vue d'ensemble, segments, estimé vs réel, un jeu décortiqué étape par étape avec les modèles appris (forêt, linéaire + interactions, boosting) sur la même frise, comparaison des modèles, qualité des données. |
 | `learn_matcher.py` | Audit des 13 poids du matcher : les réapprend à partir des données (validation croisée par jeu + test dans le temps) et les compare aux poids actuels → `reports/matcher_weights.md`. |
 | `labels.py` | Chiffres publiés suspects (incohérents dans le temps, partiels probables, écarts extrêmes) : écartés de l'ENTRAÎNEMENT des modèles seulement, la base n'est pas modifiée. |
@@ -79,6 +79,8 @@ Pour expérimenter en Python :
 | `explorer.ipynb` | Exploration guidée + un premier mini-modèle de ML appris sans tricher. |
 | `frozen.py` | Relit les modèles figés depuis leurs fichiers JSON, sans scikit-learn (lecture de référence du backend). |
 | `freeze.py` | Fige les deux finalistes dans `models/<snapshot>/` (à garder dans git, ne plus modifier) ; `--install` copie `ensemble.json` dans le backend. |
+| `checks.py` | Contrôles du banc au-delà de l'erreur moyenne : erreur selon l'âge du jeu, courbe qui baisse, catalogue entier, chiffres « de lancement » suspects. Affichés dans l'onglet des modèles de l'UI. |
+| `bench_v2.py` | Essai des variantes v2 (sans informations « du moment », signaux de lancement, « jamais en baisse ») → `reports/bench_v2.md`. |
 | `prospective_test.py` | Test neutre : juge les modèles figés sur les chiffres arrivés dans la base après le gel, à partir d'un snapshot rangé dans `data/neutral/<date>/`. |
 
 `data/` et `reports/` sont ignorés par git : ils contiennent des données de prod.

@@ -32,6 +32,7 @@ Usage (depuis ml/) :
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import pickle
 import time
@@ -46,12 +47,13 @@ from sklearn.model_selection import GroupKFold
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-from backtest import compute_backtest
+from backtest import compute_backtest, to_us
 from baseline import Estimator
 import baseline.matcher as matcher_mod
-from features import (BASELINE_FEATURE, FEATURE_LABELS, FOLLOWER_FEATURES, GAME_FEATURES, INTERACTION_FEATURES,
+from features import (BASELINE_FEATURE, FEATURE_LABELS, FeatureBuilder, FOLLOWER_FEATURES, GAME_FEATURES, INTERACTION_FEATURES,
                       MATCHER_FEATURES, RELEASE_FEATURES, REVIEW_DYNAMICS_FEATURES, SIGNAL_FEATURES, TIME_FEATURES,
                       build_feature_table)
+from frozen import NEVER_DOWN_MIN_DAYS, NEVER_DOWN_MIN_REVIEWS
 from labels import flag_suspects
 from metrics import add_error_columns, format_table, game_weights, summarize, weighted_median
 from snapshot import load_snapshot
@@ -174,6 +176,10 @@ def feature_families() -> dict[str, list[str]]:
     }
 
 
+# Règle en prod (backend `MlEstimateService`, référence `frozen.predict_never_down`).
+PROD_MODEL = "En prod : jamais en baisse dès J+3"
+
+
 def model_specs(tag_cols: list[str]) -> list[ModelSpec]:
     signals = all_features(tag_cols)
     no_neighbours = [f for f in signals if f not in MATCHER_FEATURES]
@@ -203,10 +209,14 @@ def model_specs(tag_cols: list[str]) -> list[ModelSpec]:
         ModelSpec("Forêt + voisins", "La forêt, puis une correction : on regarde de combien elle se trompe sur les "
                                      "15 jeux les plus similaires (similarité du site) dont on connaît les ventes, et "
                                      f"on corrige de {KNN_ALPHA:.0%} de cette erreur.", "forest_knn", TREE_FEATURES),
-        ModelSpec("Moyenne forêt + linéaire", "La moyenne des estimations de la forêt et du linéaire + interactions. "
+        ensemble := ModelSpec("Moyenne forêt + linéaire", "La moyenne des estimations de la forêt et du linéaire + interactions. "
                                               "Deux façons de raisonner très différentes : leurs erreurs se compensent "
                                               "en partie.", "ensemble",
                   members=[forest, ModelSpec("Linéaire + interactions", "", "ridge", signals + INTERACTION_FEATURES)]),
+        ModelSpec(PROD_MODEL, "Le modèle en ligne : la moyenne forêt + linéaire, rien avant 3 jours après la sortie PC "
+                              "(le site garde son chiffre), puis jamais en baisse : le plus haut chiffre déjà donné "
+                              f"aux dates où le jeu avait au moins {NEVER_DOWN_MIN_REVIEWS:,} reviews Steam.",
+                  "running_max", members=[ensemble], min_days=NEVER_DOWN_MIN_DAYS, min_reviews=NEVER_DOWN_MIN_REVIEWS),
     ]
 
 
@@ -522,6 +532,7 @@ class BenchResult:
     duel: dict                 # boosting contre forêt, sur les mêmes chiffres
     cv_scores_clean: pd.DataFrame = None       # mêmes prédictions, jugées sans les chiffres suspects
     temporal_scores_clean: pd.DataFrame = None
+    checks: dict = None                        # contrôles de checks.py : âge, courbe, catalogue, lancement
 
 
 # Le test final sous clé a été lancé une fois (28/10/2026) et a donc servi :
@@ -530,13 +541,25 @@ class BenchResult:
 LOCKED_GAMES_SPENT = True
 
 
+# Modèles passés aux contrôles de la courbe et du catalogue (les plus longs).
+CHECKED_MODELS = ["Modèle actuel", "Linéaire + interactions", "Gradient boosting", "Forêt aléatoire",
+                  "Moyenne forêt + linéaire", PROD_MODEL]
+
+
 def run_bench(snap, est: Estimator, res, bootstrap: int = 300) -> BenchResult:
     table, tag_cols = build_feature_table(snap, est, res)
     set_similarity(est)
     specs = model_specs(tag_cols)
     by_name = {s.name: s for s in specs}
     table = table.join(flag_suspects(table, [by_name["Forêt aléatoire"], by_name["Linéaire + interactions"]], SEED))
+    table["t_us"] = table.reportedAt.map(to_us)
     dev = (table if LOCKED_GAMES_SPENT else table[~table.finalTest]).reset_index(drop=True)
+    # Frise de chaque jeu, pour « jamais en baisse » et le contrôle de la courbe.
+    import checks  # import local : checks importe ce module
+    games = snap.games.set_index("id")
+    builder = FeatureBuilder(snap, est, tag_cols)
+    now_us = to_us(pd.Timestamp(json.loads((snap.path / "manifest.json").read_text())["exportedAt"]))
+    set_timeline(checks.build_timeline(builder, est, games, dev.gameId.unique(), now_us))
     cv_preds, choices = cross_validate(specs, dev)
     temporal = temporal_check(specs, dev)
     clean_dev = _clean(dev)
@@ -555,10 +578,18 @@ def run_bench(snap, est: Estimator, res, bootstrap: int = 300) -> BenchResult:
     forest = scored[scored.model == "Forêt aléatoire"].set_index("milestoneId")
     duel = {"proba_boosting_meilleur": paired_gain(forest, gbm, bootstrap)["proba_meilleur"]}
     current = temporal[temporal.model == "Modèle actuel"]
+    watched = [s for s in specs if s.name in CHECKED_MODELS]
+    check_results = {
+        "age": checks.age_table(cv_preds, dev),
+        "drops": checks.timeline_check(watched, dev, TIMELINE),
+        "catalog": checks.catalog_check(watched, dev, checks.catalog_rows(builder, games, now_us)),
+        "launch_suspects": checks.launch_suspects(cv_preds, dev, games, est),
+        "timeline_dates": len(TIMELINE),
+    }
     return BenchResult(table, specs, cv_preds, score(cv_preds, bootstrap), choices, score(temporal),
                        (len(current), current.gameId.nunique()), coefs, ablation(dev), snap.path.name,
                        pd.DataFrame(trees), duel, score(cv_preds, bootstrap, clean=True),
-                       score(temporal, clean=True))
+                       score(temporal, clean=True), check_results)
 
 
 def save_bench(b: BenchResult) -> None:
@@ -649,6 +680,19 @@ def main() -> None:
         format_table(b.temporal_scores_clean[["modèle", "n", "facteur_median", "part_x2", "couverture", "biais"]]), "",
         "## Réglages choisis à l'intérieur de chaque pli\n", b.choices.to_markdown(index=False), "",
     ]
+    if b.checks:
+        c = b.checks
+        drops = c["drops"].assign(pas_en_baisse=c["drops"].pas_en_baisse.map(lambda v: f"{v:.1%}"),
+                                  jeux_avec_baisse=c["drops"].jeux_avec_baisse.map(lambda v: f"{v:.0%}"),
+                                  pire_baisse=c["drops"].pire_baisse.map(lambda v: f"×{v:.2f}"))
+        lines += ["## Erreur typique selon l'âge du jeu au chiffre (chiffres nettoyés)\n",
+                  c["age"].to_markdown(index=False), "",
+                  f"## La courbe baisse-t-elle ? (frise de {c['timeline_dates']} dates)\n",
+                  drops.to_markdown(index=False), "",
+                  "## Tout le catalogue : modèle ÷ site actuel, par nombre de reviews Steam\n",
+                  c["catalog"].to_markdown(index=False), "",
+                  "## Chiffres « de lancement » suspects\n",
+                  c["launch_suspects"].to_markdown(index=False), ""]
     lines += ["## Modèles à arbres : réglages et taille\n",
               b.trees.to_markdown(index=False), "",
               f"Duel sur les mêmes chiffres : le boosting bat la forêt dans "
