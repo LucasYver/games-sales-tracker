@@ -38,6 +38,8 @@ SIGNAL_METRICS = (
     "XBOX_RATINGS",
     "STEAM_PLAYERS_LEAK",
     "STEAM_REVIEWER_MEDIAN_PLAYTIME",
+    # Rang dans les meilleures ventes Steam (1 = n° 1), depuis 2023.
+    "STEAM_TOPSELLER_RANK",
 )
 
 QUERIES: dict[str, str] = {
@@ -95,6 +97,14 @@ QUERIES: dict[str, str] = {
          WHERE g.developer IS NOT NULL
            AND g."deletedAt" IS NULL
          GROUP BY g.developer, g.id, g."releaseDate"
+    """,
+    # Prix plein Steam actuel (en cents, US) : une caractéristique du jeu, comme
+    # ses tags. Relevé depuis juin 2026 seulement, donc pas « à la date ».
+    "prices": """
+        SELECT DISTINCT ON ("gameId") "gameId"::text AS "gameId", initial AS "priceCents"
+          FROM price_snapshot
+         WHERE country = 'us' AND source = 'STEAM' AND initial > 0
+         ORDER BY "gameId", "capturedAt" DESC
     """,
     # Dernier lot complet d'estimations (toutes méthodes + `aggregated`)
     # calculé par la prod pour chaque jeu : sert à vérifier que le portage

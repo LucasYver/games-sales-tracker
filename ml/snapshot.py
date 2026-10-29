@@ -23,6 +23,7 @@ class Snapshot:
     prod_latest_estimates: pd.DataFrame
     signals: pd.DataFrame
     followers: pd.DataFrame  # followers Steam (depuis 2024) ; vide si non exportés
+    prices: pd.DataFrame  # prix plein Steam actuel (US) ; vide si non exporté
 
 
 def latest_snapshot_dir() -> Path:

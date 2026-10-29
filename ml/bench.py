@@ -140,9 +140,14 @@ def tree_nodes(model) -> int | None:
 class ModelSpec:
     name: str
     description: str           # en clair, affiché dans le rapport et l'UI
-    kind: str                  # "baseline" | "recalibrated" | "ridge" | "gbm" | "forest" | "forest_knn" | "ensemble"
+    kind: str                  # "baseline" | "recalibrated" | "ridge" | "gbm" | "forest" | "forest_knn" | "ensemble" | "running_max"
     features: list[str] = field(default_factory=list)
-    members: list["ModelSpec"] = field(default_factory=list)  # modèles moyennés (kind "ensemble")
+    members: list["ModelSpec"] = field(default_factory=list)  # modèles moyennés (ensemble) ou suivi (running_max)
+    # running_max : pas d'estimation avant `min_days` jours après la sortie PC
+    # (le site garde alors son chiffre), et seules les dates passées où le jeu
+    # avait au moins `min_reviews` reviews Steam comptent.
+    min_days: int = 0
+    min_reviews: int = 0
 
 
 NEW_FEATURES = REVIEW_DYNAMICS_FEATURES + FOLLOWER_FEATURES + RELEASE_FEATURES
@@ -230,6 +235,8 @@ def _fit_core(spec: ModelSpec, train: pd.DataFrame, hp):
         return (lambda df: np.mean([p(df) for p in members], axis=0)), None
     if spec.kind == "forest_knn":
         return _fit_forest_knn(spec, train)
+    if spec.kind == "running_max":
+        return _fit_running_max(spec, train)
     if spec.kind.startswith(("gbm", "forest")):
         model = make_gbm(spec.features, hp) if spec.kind.startswith("gbm") else make_forest(hp)
         model.fit(train[spec.features], train.y, sample_weight=_weights(train))
@@ -290,6 +297,46 @@ def _fit_forest_knn(spec: ModelSpec, train: pd.DataFrame):
         corr = {g: correction(g) for g in df.gameId.unique()}
         return predict(df) + KNN_ALPHA * df.gameId.map(corr).to_numpy()
     return predict_knn, model
+
+
+# Frise de chaque jeu : ses features à une série de dates (voir set_timeline).
+# « Jamais en baisse » s'en sert pour connaître les estimations passées.
+TIMELINE: pd.DataFrame | None = None
+TIMELINE_DAYS = [1, 3, 7, 14, 30, 60, 90, 180, 270, 365]  # puis tous les 180 jours
+
+
+def set_timeline(timeline: pd.DataFrame) -> None:
+    global TIMELINE
+    TIMELINE = timeline
+
+
+def _fit_running_max(spec: ModelSpec, train: pd.DataFrame):
+    """Le modèle suivi, puis le plus haut chiffre qu'il a déjà donné pour ce jeu.
+
+    Les ventes cumulées ne baissent jamais : à une date t, on affiche le maximum
+    des estimations du modèle aux dates de la frise jusqu'à t (t compris).
+    Les lignes à prédire doivent porter `gameId` et `t_us`.
+    """
+    member = spec.members[0]
+    base = fit(member, train).predict if member.kind == "ridge" else _fit_core(member, train, None)[0]
+    # getattr : les résultats enregistrés avant ces champs restent relisibles.
+    min_days, min_reviews = getattr(spec, "min_days", 0), getattr(spec, "min_reviews", 0)
+
+    def predict(df: pd.DataFrame) -> np.ndarray:
+        out = np.asarray(base(df), dtype=float).copy()
+        tl = TIMELINE[TIMELINE.gameId.isin(set(df.gameId)) & (TIMELINE.day >= min_days)
+                      & (TIMELINE.log_reviews >= math.log1p(min_reviews))]
+        if len(tl):
+            past = pd.DataFrame({"gameId": tl.gameId.to_numpy(), "t": tl.t_us.to_numpy(), "p": base(tl)})
+            rows = pd.DataFrame({"gameId": df.gameId.to_numpy(), "t": df.t_us.to_numpy(), "i": np.arange(len(df))})
+            m = rows.merge(past, on="gameId", suffixes=("", "_past"))
+            best = m[m.t_past <= m.t].groupby("i").p.max()
+            out[best.index] = np.maximum(out[best.index], best.to_numpy())
+        if min_days:
+            too_early = np.expm1(df.log_age_days.to_numpy()) < min_days
+            out[too_early] = np.log(df.baselineMid.to_numpy()[too_early])
+        return out
+    return predict, None
 
 
 def _inner_oof(spec: ModelSpec, train: pd.DataFrame, hp) -> np.ndarray:

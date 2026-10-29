@@ -431,6 +431,38 @@ et plus (il n'en a vu que 5).
 Règle dans le backend : `mlEstimateApplies`
 (`backend/src/estimation/ml/ml-estimate.service.ts`).
 
+## Banc d'essai v2 : la courbe qui descend et le lancement (29/10)
+
+`bench_v2.py`, snapshot du 29/10 (avec le nettoyage des chiffres), mêmes
+2 146 chiffres pour tous les modèles → `reports/bench_v2.md`.
+
+- **La courbe qui descend** venait surtout des informations « du moment »
+  (joueurs connectés, reviews récentes, ancienneté du relevé, followers) :
+  le modèle v1 baisse de plus de 5 % au moins une fois pour 36 % des jeux.
+  - Sans ces informations (v2) : 10 % des jeux.
+  - **« Jamais en baisse »** (à une date, le plus haut chiffre déjà donné par
+    le modèle pour ce jeu) : 0 %, sans rien perdre en précision (×1,51,
+    72 % à ×2, couverture 80 %, comme la v1).
+- **Le lancement** : les nouvelles informations (rang dans les ventes
+  Steam, followers le jour de la sortie, prix, reviews par jour) ne
+  changent rien (×1,57 → ×1,58 sur les chiffres publiés 0 à 3 jours après
+  la sortie). La plupart des chiffres « de lancement » très au-dessus des
+  modèles sont des erreurs de données : chiffre daté du jour de sortie mais
+  publié bien plus tard, chiffre de la série rattaché à une réédition, date
+  de première sortie fausse, joueurs d'un free-to-play
+  (`reports/launch_suspects.csv`).
+
+Verdict : garder le modèle v1, ajouter « jamais en baisse », nettoyer les
+chiffres de lancement suspects, puis réentraîner.
+
+**En prod (29/10)** : « jamais en baisse dès J+3 ». Pas d'estimation ML
+avant 3 jours après la sortie PC (le site garde son chiffre), puis le plus
+haut chiffre déjà donné aux dates J+3, J+7, … où le jeu avait au moins
+1 000 reviews Steam. Au banc : ×1,52 (contre ×1,51), l'écart venant des
+chiffres publiés dans les 3 premiers jours, laissés au site. Référence
+Python : `predict_never_down` dans `frozen.py` ; le backend donne le même
+chiffre sur 264 cas (lecture seule).
+
 ## Prochaines étapes
 
 1. **Des étiquettes pour les petits jeux.** Sans elles, aucun modèle appris

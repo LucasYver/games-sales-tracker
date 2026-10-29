@@ -53,6 +53,18 @@ FOLLOWER_FEATURES = ["log_followers", "has_followers"]
 # Sortie PC après les consoles (ou après une exclusivité) : les reviews Steam
 # sous-estiment alors les ventes totales.
 RELEASE_FEATURES = ["log_pc_delay_days", "pc_later"]
+# v2. Informations « du moment » : elles peuvent baisser (joueurs connectés,
+# reviews récentes…) alors que les ventes cumulées ne baissent jamais. Elles
+# font descendre la courbe d'un jeu dans le temps.
+MOMENTARY_FEATURES = ["log_ccu_now", "log_reviews_growth_90d", "has_reviews_growth", "log_reviews_stale_days",
+                      "log_followers"]
+# v2. Attente et lancement : ce qui distingue un jeu vendu à 1 million le
+# jour de sa sortie, quand les reviews n'ont pas encore suivi. Toutes ne font
+# que monter dans le temps (record, valeur figée à la sortie, caractéristique).
+LAUNCH_FEATURES = ["log_topseller_best", "has_topseller", "log_followers_max", "log_followers_at_release",
+                   "has_followers_at_release", "log_price", "has_price"]
+# v2. Vitesse des reviews depuis la sortie : forte au lancement, puis baisse.
+VELOCITY_FEATURES = ["log_reviews_per_day"]
 BASELINE_FEATURE = "log_baseline"
 # Produits de deux informations : permettent à un modèle linéaire d'appliquer
 # une règle différente selon le contexte (ex. le poids des reviews qui
@@ -101,6 +113,14 @@ FEATURE_LABELS = {
     "launch_x_age": "pic de lancement × âge",
     "reviews_x_age": "reviews × âge",
     "reviews_x_onps": "reviews × sorti sur PlayStation",
+    "log_topseller_best": "meilleur rang dans les ventes Steam",
+    "has_topseller": "classé dans les ventes Steam",
+    "log_followers_max": "record de followers Steam",
+    "log_followers_at_release": "followers Steam le jour de la sortie",
+    "has_followers_at_release": "followers de la sortie connus",
+    "log_price": "prix plein Steam",
+    "has_price": "prix Steam connu",
+    "log_reviews_per_day": "reviews par jour depuis la sortie",
 }
 
 
@@ -136,6 +156,10 @@ class FeatureBuilder:
         followers = snap.followers
         self.followers = SignalStore(followers.assign(metric="STEAM_FOLLOWERS", synthetic=False)) \
             if len(followers) else None
+        # Rang inversé : le plus grand « −rang » jusqu'à une date est le meilleur rang.
+        ranks = snap.signals[snap.signals.metric == "STEAM_TOPSELLER_RANK"]
+        self.ranks = SignalStore(ranks.assign(value=-ranks.value)) if len(ranks) else None
+        self.prices = snap.prices.set_index("gameId").priceCents if len(snap.prices) else pd.Series(dtype=float)
 
     def row(self, game_id: str, t: int) -> dict | None:
         """None si le modèle actuel n'a aucun signal à cette date (comme à l'entraînement)."""
@@ -167,6 +191,11 @@ class FeatureBuilder:
         rv_before = est.signals.latest(game_id, "STEAM_REVIEWS", t - 90 * US_PER_DAY)
         followers = self.followers.latest(game_id, "STEAM_FOLLOWERS", t) if self.followers else None
         first_release = _time_us(g.releaseDate)
+        best_rank = self.ranks.max_between(game_id, "STEAM_TOPSELLER_RANK", 0, t) if self.ranks else None
+        followers_max = self.followers.max_between(game_id, "STEAM_FOLLOWERS", 0, t) if self.followers else None
+        followers_release = self.followers.latest(game_id, "STEAM_FOLLOWERS", min(t, release)) \
+            if self.followers and release else None
+        price = self.prices.get(game_id)
         pc_delay = max((release - first_release) / US_PER_DAY, 0.0) if release and first_release else 0.0
 
         row = {
@@ -217,6 +246,15 @@ class FeatureBuilder:
             # sortie PC différée
             "log_pc_delay_days": math.log1p(pc_delay),
             "pc_later": float(pc_delay > 30),
+            # v2 : attente et lancement
+            "log_topseller_best": math.log(10_000 / -best_rank) if best_rank else 0.0,
+            "has_topseller": float(best_rank is not None),
+            "log_followers_max": _log1p(followers_max),
+            "log_followers_at_release": _log1p(followers_release[0] if followers_release else None),
+            "has_followers_at_release": float(followers_release is not None),
+            "log_price": _log1p(price / 100 if price is not None and not pd.isna(price) else None),
+            "has_price": float(price is not None and not pd.isna(price)),
+            "log_reviews_per_day": _log1p(reviews[0] / max(age_days, 1.0) if reviews else None),
         }
         tags = {tag_col(tag) for tag in game_tags(self.games, game_id)}
         for col in self.tag_cols:
