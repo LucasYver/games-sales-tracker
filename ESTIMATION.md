@@ -210,7 +210,8 @@ even if the code emits the tag.
 - **Worldwide ML estimate** (`MlEstimateService`, method `ml-ensemble`,
   platform GLOBAL): the model chosen in `ml/` (random forest + ridge, mean
   in log space), frozen by `ml/freeze.py` into
-  `estimation/ml/ensemble-model.json` (v1.1). Its inputs mirror
+  `estimation/ml/ensemble-model.json` (v1.2: the v1.1 inputs, retrained after
+  the Steam-leak import changed the matcher corpus). Its inputs mirror
   `ml/features.py`: signals at the date, game fields, the matcher profile
   with the game itself held out (as in training), and the series / developer
   track record — the best real worldwide figure published by the date for
