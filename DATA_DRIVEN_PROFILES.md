@@ -73,7 +73,9 @@ score 0.6. `developerTrackRecord` is computed in memory and is leak-safe
 
 An anchor needs a dated non-engagement milestone or a
 `STEAM_PLAYERS_LEAK` snapshot. The leak is PC player counts from July 2018
-and is the holdout ground truth. It is not a live estimate input.
+and is the holdout ground truth. It is not a live estimate input. The leak is
+stored twice (signal + `STEAM_LEAK` milestone); once its milestone is
+rejected, the signal is ignored too (`isLeakRejected`).
 
 `peakCcuRatio` uses the launch month plus the next month
 (`LAUNCH_CCU_WINDOW_MONTHS`), the same window as the first-week estimate.

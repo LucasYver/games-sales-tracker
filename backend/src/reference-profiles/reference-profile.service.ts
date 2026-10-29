@@ -365,6 +365,32 @@ export class ReferenceProfileService {
    * that never disclosed a figure. When both are absent we return null,
    * which drops the anchor.
    */
+  /**
+   * The Steam leak is stored twice (signal + `STEAM_LEAK` milestone). Once
+   * its milestone is rejected (e.g. a count too small to mean anything) and
+   * none is active, the signal is not a figure anymore either.
+   */
+  private async isLeakRejected(gameId: string): Promise<boolean> {
+    const [rejected, active] = await Promise.all([
+      this.milestones.count({
+        withDeleted: true,
+        where: {
+          gameId,
+          source: SalesSource.STEAM_LEAK,
+          ...Milestone.rejected(),
+        },
+      }),
+      this.milestones.count({
+        where: {
+          gameId,
+          source: SalesSource.STEAM_LEAK,
+          ...Milestone.notRejected(),
+        },
+      }),
+    ]);
+    return rejected > 0 && active === 0;
+  }
+
   private async pickAnchor(gameId: string): Promise<AnchorSelection | null> {
     const milestones = await Milestone.applyDefault(
       this.milestones
@@ -378,7 +404,7 @@ export class ReferenceProfileService {
       .orderBy('m."reportedAt"', 'DESC')
       .getMany();
 
-    const leak = await this.signals
+    const leakSignal = await this.signals
       .createQueryBuilder('s')
       .where('s."gameId" = :gameId', { gameId })
       .andWhere('s.metric = :metric', {
@@ -386,6 +412,8 @@ export class ReferenceProfileService {
       })
       .orderBy('s."capturedAt"', 'DESC')
       .getOne();
+    const leak =
+      leakSignal && !(await this.isLeakRejected(gameId)) ? leakSignal : null;
 
     // Latest figure per scope. Milestones come newest-first, so the first seen
     // per platform is the most recent — and, since cumulative figures only
