@@ -545,15 +545,72 @@ Le backend donne le même chiffre que `predict_never_down` sur 332 cas sur
 332. Par rapport à la v1.1 sur le même corpus : médiane ×0,99, 90 % des jeux
 affichés entre ×0,85 et ×1,13.
 
+## Où on en est par rapport à l'objectif (29/10)
+
+Objectif : ±10 % pour les gros jeux, ±20 % pour les plus petits. Modèle en
+prod (v1.2 + règle de prod), jeux jamais vus, chiffres nettoyés :
+
+| Chiffres publiés | À ±10 % | À ±20 % | Erreur typique |
+| ---------------- | ------: | ------: | -------------: |
+| Gros (≥ 1 M) | 15 % | 30 % | ±47 % |
+| Plus petits (< 1 M) | 6 % | 15 % | ±83 % (formule du site : ±59 %) |
+
+±10 % est sous la précision des chiffres publiés eux-mêmes (81 % sont des
+chiffres ronds, souvent annoncés au passage d'un palier). Étape réaliste :
+la moitié des gros jeux à ±20 % et une erreur typique vers ±30 %.
+
+## Le « jeu typique » de départ (explication admin)
+
+L'explication part d'un jeu typique, puis chaque famille d'informations
+multiplie le chiffre :
+- **forêt** : la valeur à la racine de chaque arbre, c'est-à-dire la moyenne
+  (en log) des chiffres d'entraînement que l'arbre a vus, chaque jeu pesant
+  autant ; moyenne des 300 arbres = 1,95 M (de 1,77 à 2,10 M selon l'arbre,
+  chacun voyant un tirage différent des jeux) ;
+- **linéaire** : la constante, l'estimation pour un jeu dont chaque
+  information vaudrait la moyenne des chiffres d'entraînement = 2,41 M (plus
+  haut que la forêt : les gros succès publient plus souvent, ils pèsent plus
+  dans ces moyennes) ;
+- **modèle** : la moyenne des deux en log = 2,17 M.
+
+Ce départ est celui d'un succès : les jeux qui publient leurs ventes en sont
+presque tous. C'est pourquoi un petit jeu reçoit de forts multiplicateurs à
+la baisse, et pourquoi le modèle surestime encore les ventes moyennes.
+
 ## Prochaines étapes
 
-1. **Des étiquettes pour les petits jeux.** Sans elles, aucun modèle appris
-   ne peut être jugé sur l'ensemble du catalogue. La fuite Steam de 2018 en
-   base ne couvre que 350 gros jeux (570 000 joueurs et plus), mais le
-   fichier complet est dans le dépôt : `scripts/steam_players_2018.csv`,
-   13 281 jeux, 4 161 joueurs en médiane. Ce sont des joueurs PC en
-   juillet 2018, pas des ventes monde : à traiter comme une étiquette PC.
-2. **Juger le catalogue entier, pas seulement les jeux qui publient** :
-   ajouter au banc un contrôle « modèle ÷ site par taille de jeu », pour
-   repérer ce biais avant toute mise en ligne.
-3. **Relancer le test neutre** chaque mois sur les modèles figés.
+Par ordre d'intérêt :
+
+1. **Nettoyer les chiffres signalés.** 156 chiffres à vérifier
+   (`suspects.py`, onglet « Qualité des données »), dont des dates de sortie
+   à corriger (accès anticipé, portages, rééditions). Un chiffre faux à
+   l'entraînement se paie partout.
+2. **Apprendre les petits jeux avec la fuite Steam.** 1 651 chiffres de la
+   fuite (10 000 joueurs et plus) sont en base, avec des signaux de juillet
+   2018. Les ajouter à l'entraînement comme chiffres PC (marqués comme tels),
+   puis mesurer au banc les jeux à moins d'un million, où le modèle fait
+   aujourd'hui moins bien que la formule du site. Si ça marche, revoir le
+   seuil d'affichage (300 000 ventes, 1 000 reviews).
+3. **Réentraîner chaque mois, avec le test neutre.** Nouveau snapshot,
+   `prospective_test.py` sur les gels v1, v1.1 et v1.2 (notre juge le plus
+   honnête), banc, gel, parité backend, déploiement. À regrouper dans un
+   seul script.
+4. **Part PC des voisins.** Les jeux de la fuite n'ont pas de répartition
+   par plateforme : la part PC des voisins retombe souvent à 0,50 par défaut.
+   La calculer seulement avec les voisins qui la connaissent (matcher, côté
+   backend et Python).
+5. **Comprendre l'écart PC du site face à la fuite.** L'estimation PC du
+   site vaut environ la moitié des joueurs de la fuite (jeux de 10 000
+   joueurs et plus) : ventes PC sous-estimées, ou joueurs gonflés par les
+   week-ends gratuits et les bundles ? À démêler sur les jeux qui ont les
+   deux chiffres.
+6. **Affiner le palmarès de la série.** Prendre le jeu de la série le plus
+   similaire (ou l'épisode précédent) plutôt que le meilleur chiffre de toute
+   la série : un jeu dérivé hérite aujourd'hui des records de la série
+   principale (ex. Stranger of Paradise et Final Fantasy).
+7. **Des fourchettes adaptées.** ÷/× 2,44 pour tous les jeux, alors que le
+   modèle se trompe moins sur les jeux d'une série : resserrer là où il est
+   fiable, élargir ailleurs (même méthode, mesurée par groupe).
+8. **Plus tard** : la similarité des voisins (piste 5, petit gain non prouvé)
+   avec plus de chiffres ; un modèle dédié à la répartition PC / consoles,
+   qui vient encore de l'ancienne formule.
