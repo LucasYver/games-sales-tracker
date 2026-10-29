@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+# Copie de la base de prod : ne jamais committer.
+data/
+# Rapports générés (contiennent des chiffres par jeu issus de la prod).
+reports/
