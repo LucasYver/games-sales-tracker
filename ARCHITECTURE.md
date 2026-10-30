@@ -146,7 +146,9 @@ Bootstrap the first user with `ADMIN_BOOTSTRAP_EMAIL` /
 sends a Chart Room–styled welcome email via Resend when `RESEND_API_KEY` is
 set. Pages: dashboard, games, milestones, trusted sources, publishers, genres,
 reference profiles, ranks, blog. Draft-ready and leftover-draft digest
-mails reuse Resend. The controller is the endpoint list; the UI covers
+mails reuse Resend, as does the daily alert sent while Steam reviews are not
+being collected (`steamReviewsHealth`, also a banner on the dashboard). The
+controller is the endpoint list; the UI covers
 refresh, CSV import, histogram / SteamCharts backfill, follower backfill,
 estimate rebuild, and matcher inspection.
 

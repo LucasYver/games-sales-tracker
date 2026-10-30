@@ -13,6 +13,12 @@ export class CronController {
     return this.refresh.pollAllSteamReviews();
   }
 
+  @Get('steam-reviews-health')
+  @HttpCode(200)
+  steamReviewsHealth() {
+    return this.refresh.checkSteamReviewsHealth();
+  }
+
   @Get('steam-reviewer-playtime')
   @HttpCode(200)
   steamReviewerPlaytime() {

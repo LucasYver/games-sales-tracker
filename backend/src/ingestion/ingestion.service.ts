@@ -69,6 +69,25 @@ const STORE_SOURCE_BY_PLATFORM: Partial<Record<Platform, SourceType>> = {
 // "missing" by the incremental Steam/PS backfill.
 const BACKFILL_HISTORY_STALE_DAYS = 7;
 
+// Steam review alert (`steamReviewsHealth`). The poll runs six times a day, so
+// a full day without a stored value means every run came back empty. The
+// budget covers the catalog in about 4 days, so 7 days leaves a margin.
+const STEAM_REVIEWS_SILENCE_HOURS = 24;
+const STEAM_REVIEWS_STALE_DAYS = 7;
+const STEAM_REVIEWS_MAX_STALE_SHARE = 0.25;
+const STEAM_REVIEWS_MIN_ATTEMPTS = 50;
+const STEAM_REVIEWS_MAX_FAILED_SHARE = 0.2;
+
+export interface SteamReviewsHealth {
+  trackedGames: number;
+  staleGames: number;
+  staleDays: number;
+  attemptedLast24h: number;
+  failedLast24h: number;
+  lastCapturedAt: Date | null;
+  problems: string[];
+}
+
 // Per-metric counts for the incremental Steam/PS backfill.
 export interface BackfillTaskCounts {
   ccu: number;
@@ -1066,10 +1085,24 @@ export class IngestionService {
    * (`ingestSteamApp`) and the daily refresh (`refreshGame`).
    *
    * Best-effort: a fetch failure leaves the value already on record in place.
+   * `strict` (the review cron) throws instead, so the failure reaches
+   * `lastError` rather than counting as a success.
    */
-  private async pollSteamReviews(gameId: string, appId: number): Promise<void> {
-    const reviews = await this.steam.getTotalReviews(appId);
-    if (reviews === null) return;
+  private async pollSteamReviews(
+    gameId: string,
+    appId: number,
+    { strict = false }: { strict?: boolean } = {},
+  ): Promise<void> {
+    let reviews = await this.steam.getTotalReviews(appId);
+    if (reviews === 0) {
+      reviews = await this.confirmZeroReviews(gameId, appId);
+    }
+    if (reviews === null) {
+      if (strict) {
+        throw new Error(`Steam returned no review total for app ${appId}`);
+      }
+      return;
+    }
 
     await this.signals.save(
       this.signals.create({
@@ -1088,6 +1121,36 @@ export class IngestionService {
   }
 
   /**
+   * Steam answered zero reviews. Believe it only for a game that never had any:
+   * a total does not fall to zero, and a stored zero would collapse the
+   * estimate. Otherwise retry on Steam's own id for the app, and report no
+   * value (null) if that does not give a total either.
+   */
+  private async confirmZeroReviews(
+    gameId: string,
+    appId: number,
+  ): Promise<number | null> {
+    const previous = await this.signals.findOne({
+      where: { gameId, metric: SignalMetric.STEAM_REVIEWS, synthetic: false },
+      order: { capturedAt: 'DESC' },
+      select: { value: true },
+    });
+    if (!previous || previous.value === 0) return 0;
+
+    const canonical = await this.steam.getCanonicalAppId(appId);
+    const reviews =
+      canonical !== null && canonical !== appId
+        ? await this.steam.getTotalReviews(canonical)
+        : null;
+    if (reviews) return reviews;
+
+    this.logger.warn(
+      `Ignoring zero reviews for app ${appId}: last stored value is ${previous.value}.`,
+    );
+    return null;
+  }
+
+  /**
    * Sample reviewer lifetime playtime from Steam and persist a
    * `STEAM_REVIEWER_MEDIAN_PLAYTIME` snapshot (value in MINUTES). This is a
    * directional, SteamSpy-style proxy derived from `author.playtime_forever`
@@ -1095,13 +1158,24 @@ export class IngestionService {
    * an estimate input; see the metric's doc comment in `enums.ts`.
    *
    * Best-effort: a fetch failure (or a game whose reviews carry no playtime)
-   * leaves any value already on record in place.
+   * leaves any value already on record in place. `strict` (the playtime cron)
+   * lets a fetch failure through, so it reaches `lastError`.
    */
   private async pollSteamReviewerPlaytime(
     gameId: string,
     appId: number,
+    { strict = false }: { strict?: boolean } = {},
   ): Promise<void> {
-    const playtime = await this.steam.fetchReviewerPlaytime(appId);
+    let playtime: Awaited<ReturnType<SteamClient['fetchReviewerPlaytime']>>;
+    try {
+      playtime = await this.steam.fetchReviewerPlaytime(appId);
+    } catch (error) {
+      if (strict) throw error;
+      this.logger.warn(
+        `Reviewer playtime fetch failed for app ${appId}: ${error}`,
+      );
+      return;
+    }
     if (playtime === null) return;
 
     await this.signals.save(
@@ -2331,7 +2405,7 @@ export class IngestionService {
 
   /**
    * Reconstruct and persist a game's daily review history straight from
-   * Steam's public `appreviews` API — the API-only equivalent of importing a
+   * Steam's public `GetAppReviews` API — the API-only equivalent of importing a
    * SteamDB review CSV. Paginates every individual review, aggregates new
    * positive/negative counts per UTC day, then accumulates them into the same
    * cumulative `STEAM_REVIEWS` daily series the CSV import produces (`value` =
@@ -2630,7 +2704,7 @@ export class IngestionService {
   }
 
   /**
-   * Densify `STEAM_REVIEWS` around dated milestones via Steam `appreviews`.
+   * Densify `STEAM_REVIEWS` around dated milestones via Steam `GetAppReviews`.
    *
    * For each non-engagement milestone with a `reportedAt`, target the UTC days
    * `[reportedAt - windowDays … reportedAt + windowDays]`. Days that already
@@ -2777,7 +2851,7 @@ export class IngestionService {
     }
     if (!fetched) {
       throw new BadRequestException(
-        `Steam appreviews returned no usable totals for app ${appId}.`,
+        `Steam GetAppReviews returned no usable totals for app ${appId}.`,
       );
     }
     if (!fetched.reachedFloor) {
@@ -4122,7 +4196,7 @@ export class IngestionService {
 
       try {
         await this.ingestionState.track(gameId, 'STEAM_REVIEWS', () =>
-          this.pollSteamReviews(gameId, appId),
+          this.pollSteamReviews(gameId, appId, { strict: true }),
         );
         await this.games.update(gameId, { lastRefreshedAt: new Date() });
         polled++;
@@ -4138,6 +4212,73 @@ export class IngestionService {
       `[reviews] poll complete: ${polled} polled, ${failed} failed, ${leftover} left.`,
     );
     return { polled, failed, leftover };
+  }
+
+  /**
+   * Is the Steam review signal still being collected? Reads what was actually
+   * stored, not `lastSuccessAt`, so it holds even if a poll wrongly reports
+   * success or the review cron stops running. `problems` is empty when healthy.
+   */
+  async steamReviewsHealth(): Promise<SteamReviewsHealth> {
+    const gameIds = [...(await this.trackedSteamSources()).keys()];
+    const [stored] = await this.signals.query(
+      `SELECT MAX("capturedAt") FILTER (WHERE "capturedAt" <= now()) AS "lastCapturedAt",
+              COUNT(DISTINCT "gameId") FILTER (
+                WHERE "capturedAt" > now() - make_interval(days => $3)
+              )::int AS "freshGames"
+       FROM signal_snapshot
+       WHERE metric = $1 AND synthetic = false AND "gameId" = ANY($2::uuid[])`,
+      [SignalMetric.STEAM_REVIEWS, gameIds, STEAM_REVIEWS_STALE_DAYS],
+    );
+    const [polled] = await this.signals.query(
+      `SELECT COUNT(*)::int AS attempted,
+              COUNT(*) FILTER (WHERE "lastError" IS NOT NULL)::int AS failed
+       FROM game_ingestion_state
+       WHERE pipeline = 'STEAM_REVIEWS'
+         AND "lastAttemptAt" > now() - make_interval(hours => $1)`,
+      [STEAM_REVIEWS_SILENCE_HOURS],
+    );
+
+    const lastCapturedAt: Date | null = stored.lastCapturedAt ?? null;
+    const staleGames = gameIds.length - stored.freshGames;
+    const hoursSilent = lastCapturedAt
+      ? (Date.now() - new Date(lastCapturedAt).getTime()) / 3_600_000
+      : null;
+
+    const problems: string[] = [];
+    if (hoursSilent === null || hoursSilent >= STEAM_REVIEWS_SILENCE_HOURS) {
+      problems.push(
+        hoursSilent === null
+          ? 'No Steam review count has ever been stored.'
+          : `No Steam review count stored for ${Math.round(hoursSilent)} hours.`,
+      );
+    }
+    if (
+      gameIds.length > 0 &&
+      staleGames / gameIds.length >= STEAM_REVIEWS_MAX_STALE_SHARE
+    ) {
+      problems.push(
+        `${staleGames} of ${gameIds.length} games have no review count from the last ${STEAM_REVIEWS_STALE_DAYS} days.`,
+      );
+    }
+    if (
+      polled.attempted >= STEAM_REVIEWS_MIN_ATTEMPTS &&
+      polled.failed / polled.attempted >= STEAM_REVIEWS_MAX_FAILED_SHARE
+    ) {
+      problems.push(
+        `${polled.failed} of ${polled.attempted} review polls failed in the last ${STEAM_REVIEWS_SILENCE_HOURS} hours.`,
+      );
+    }
+
+    return {
+      trackedGames: gameIds.length,
+      staleGames,
+      staleDays: STEAM_REVIEWS_STALE_DAYS,
+      attemptedLast24h: polled.attempted,
+      failedLast24h: polled.failed,
+      lastCapturedAt,
+      problems,
+    };
   }
 
   /**
@@ -4167,7 +4308,7 @@ export class IngestionService {
 
       try {
         await this.ingestionState.track(gameId, 'STEAM_REVIEWER_PLAYTIME', () =>
-          this.pollSteamReviewerPlaytime(gameId, appId),
+          this.pollSteamReviewerPlaytime(gameId, appId, { strict: true }),
         );
         polled++;
       } catch (error) {

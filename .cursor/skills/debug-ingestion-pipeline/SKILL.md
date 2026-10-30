@@ -23,6 +23,7 @@ in `vercel.json`. Per-game progress is `game_ingestion_state`.
 | `lastAttemptAt` in this cycle, `lastSuccessAt` older, `lastError` set | The call threw | Read `lastError`. Fix that. |
 | No `game_ingestion_state` row | Game not in the target set, or this job does not track per game | Check filters below before assuming the cron is dead. |
 | Attempted this cycle, no success, no error | `track()` stamps the attempt first; the process was killed mid-call | Same as a budget kill. It will not retry until the next cadence window. |
+| Red banner on `/admin` or `ALERT — Steam reviews` email | `steamReviewsHealth` read what was stored: no value for a day, too many stale games, or too many failed polls. The email repeats daily until it recovers | Read `lastError` on `STEAM_REVIEWS`, then call `GetAppReviews` by hand. Stale games can take days to clear after a fix, at the poll's pace. |
 | Harvest logs `Perplexity in credit cooldown` / `falling back to Tavily` | A credit or billing error wrote a 24h row in `provider_cooldown` | Expected while out of credit. After a recharge, delete the `perplexity` row to retry now. Tavily costs far more per game; check its plan. |
 
 `isDue` uses `lastAttemptAt`, not `lastSuccessAt`. A failed game waits

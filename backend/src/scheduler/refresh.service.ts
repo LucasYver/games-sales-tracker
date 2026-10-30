@@ -52,6 +52,24 @@ export class RefreshService {
     }
   }
 
+  /**
+   * Daily email to the admins while the review signal is broken, repeated
+   * until it recovers. A separate job so it still fires if the poll cron dies.
+   */
+  async checkSteamReviewsHealth() {
+    try {
+      const health = await this.ingestion.steamReviewsHealth();
+      if (health.problems.length === 0) {
+        this.logger.log('Steam reviews health: ok.');
+        return;
+      }
+      this.logger.error(`Steam reviews health: ${health.problems.join(' ')}`);
+      await this.mail.sendSteamReviewsAlert(health);
+    } catch (error) {
+      this.logger.error(`Steam reviews health check failed: ${error}`);
+    }
+  }
+
   async pollAllSteamReviewerPlaytime() {
     try {
       const result = await this.ingestion.pollAllSteamReviewerPlaytime({

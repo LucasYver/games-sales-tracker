@@ -191,6 +191,27 @@ export default async function AdminDashboard() {
         <SteamPsBackfillButton />
       </header>
 
+      {stats.steamReviewsHealth.problems.length > 0 && (
+        <section
+          role="alert"
+          className="border-destructive bg-destructive/10 rounded-lg border p-4"
+        >
+          <h2 className="text-destructive font-semibold">
+            Steam reviews are not being collected
+          </h2>
+          <ul className="mt-2 list-disc pl-5 text-sm">
+            {stats.steamReviewsHealth.problems.map((problem) => (
+              <li key={problem}>{problem}</li>
+            ))}
+          </ul>
+          <p className="text-muted-foreground mt-2 text-xs">
+            Last value stored:{' '}
+            {formatTimestamp(stats.steamReviewsHealth.lastCapturedAt)}. Sales
+            estimates are running on frozen values.
+          </p>
+        </section>
+      )}
+
       <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatCard
           label="Games"

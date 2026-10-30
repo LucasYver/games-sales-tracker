@@ -108,6 +108,15 @@ export interface AdminStats {
     lastAttemptAt: string | null;
     lastSuccessAt: string | null;
   };
+  steamReviewsHealth: {
+    trackedGames: number;
+    staleGames: number;
+    staleDays: number;
+    attemptedLast24h: number;
+    failedLast24h: number;
+    lastCapturedAt: string | null;
+    problems: string[];
+  };
 }
 
 export interface AdminGameSummary {

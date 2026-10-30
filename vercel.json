@@ -19,6 +19,7 @@
     ],
     "crons": [
         { "path": "/api/cron/steam-reviews", "schedule": "15 0,4,8,12,16,20 * * *" },
+        { "path": "/api/cron/steam-reviews-health", "schedule": "30 7 * * *" },
         { "path": "/api/cron/steam-reviewer-playtime", "schedule": "40 0,6,12,18 * * *" },
         { "path": "/api/cron/reference-profiles", "schedule": "30 3 * * *" },
         { "path": "/api/cron/estimate-rebuild", "schedule": "45 4 * * *" },

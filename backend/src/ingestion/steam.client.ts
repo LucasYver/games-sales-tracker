@@ -81,13 +81,18 @@ export interface SteamReviewHistogram {
   buckets: SteamReviewDailyCount[];
 }
 
-// Process-wide store API gate. Steam's public store (~200 req / 5 min / IP)
-// is shared across every `appreviews` / `appdetails` call; nested per-request
+// Process-wide Steam gate. Steam's public store (~200 req / 5 min / IP) and the
+// keyless `GetAppReviews` limit are shared by every call that goes through it; nested per-request
 // retries were burning the budget and thrashing the same app. One gap + one
 // 429 circuit-breaker keeps the batch script moving without hammering.
 let storeGateChain: Promise<void> = Promise.resolve();
 let storeNextSlotAt = 0;
 let storeCooldownUntil = 0;
+
+const APP_REVIEWS_URL =
+  'https://api.steampowered.com/IUserReviewsService/GetAppReviews/v1/';
+/** `filter` value for newest-created first, which paginates stably. */
+const APP_REVIEWS_FILTER_NEWEST = 1;
 
 @Injectable()
 export class SteamClient {
@@ -135,6 +140,25 @@ export class SteamClient {
     this.logger.warn(
       `Steam 429 circuit open — no store requests for ${Math.round(ms / 1000)}s`,
     );
+  }
+
+  /**
+   * The app id Steam itself uses for `appId`. `appdetails` follows retired or
+   * regional ids (DOOM's 430910 answers as 379720), which `GetAppReviews` does
+   * not: it reports zero reviews for them.
+   */
+  async getCanonicalAppId(appId: number): Promise<number | null> {
+    try {
+      const data = await this.getStoreJson(
+        'https://store.steampowered.com/api/appdetails',
+        { appids: appId, filters: 'basic' },
+      );
+      const canonical = data?.[String(appId)]?.data?.steam_appid;
+      return typeof canonical === 'number' ? canonical : null;
+    } catch (error) {
+      this.logger.warn(`getCanonicalAppId failed for ${appId}: ${error}`);
+      return null;
+    }
   }
 
   async getAppDetails(appId: number): Promise<SteamAppDetails | null> {
@@ -399,17 +423,10 @@ export class SteamClient {
    */
   async getTotalReviews(appId: number): Promise<number | null> {
     try {
-      const data = await this.getStoreJson(
-        `https://store.steampowered.com/appreviews/${appId}`,
-        {
-          json: 1,
-          language: 'all',
-          purchase_type: 'all',
-          num_per_page: 0,
-        },
-      );
+      // A page size of 0 is read as the default, so ask for a single review.
+      const data = await this.getAppReviewsPage(appId, { num_per_page: 1 });
 
-      const total = data?.query_summary?.total_reviews;
+      const total = data.query_summary?.total_reviews;
       return typeof total === 'number' ? total : null;
     } catch (error) {
       this.logger.warn(`getTotalReviews failed for ${appId}: ${error}`);
@@ -418,8 +435,8 @@ export class SteamClient {
   }
 
   /**
-   * Reconstruct the game's full review history from the public `appreviews`
-   * endpoint. Steam doesn't expose a cumulative time series, but it does
+   * Reconstruct the game's full review history from the public `GetAppReviews`
+   * method. Steam doesn't expose a cumulative time series, but it does
    * return every individual review (with its creation timestamp and verdict)
    * when paginated chronologically via the `cursor` token. We aggregate those
    * into per-UTC-day counts of new positive/negative reviews; the caller turns
@@ -430,8 +447,8 @@ export class SteamClient {
    * from the API, so the reconstructed totals can run slightly below SteamDB's
    * live-recorded history, but the curve shape is faithful.
    *
-   * `appreviews` shares the store's ~200 req/5 min IP rate limit, so pages are
-   * throttled and retried on 429. Pagination stops when Steam returns no more
+   * Callers without a publisher key share a rate limit, so pages are throttled
+   * and retried on 429. Pagination stops when Steam returns no more
    * reviews or repeats a cursor; `maxPages` is a safety ceiling against loops.
    */
   async fetchReviewHistory(
@@ -451,18 +468,11 @@ export class SteamClient {
     while (pages < maxPages) {
       let data: any;
       try {
-        data = await this.getStoreJson(
-          `https://store.steampowered.com/appreviews/${appId}`,
-          {
-            json: 1,
-            filter: 'recent',
-            language: 'all',
-            purchase_type: 'all',
-            review_type: 'all',
-            num_per_page: 100,
-            cursor,
-          },
-        );
+        data = await this.getAppReviewsPage(appId, {
+          filter: APP_REVIEWS_FILTER_NEWEST,
+          num_per_page: 100,
+          cursor,
+        });
       } catch (error) {
         this.logger.warn(
           `fetchReviewHistory page ${pages + 1} failed for ${appId}: ${error}`,
@@ -514,7 +524,7 @@ export class SteamClient {
    * Reconstruct cumulative review totals on specific UTC calendar days without
    * walking the full history back to launch.
    *
-   * Strategy: page `appreviews` newest-first until every review after the
+   * Strategy: page `GetAppReviews` newest-first until every review after the
    * oldest requested day has been seen, then for each day D compute
    * `reportedTotal - count(reviews created after end-of-D)`. Stops early once
    * pagination crosses that floor — typically cheap when the target days are
@@ -580,18 +590,11 @@ export class SteamClient {
     while (pagesFetched < maxPages) {
       let data: any;
       try {
-        data = await this.getStoreJson(
-          `https://store.steampowered.com/appreviews/${appId}`,
-          {
-            json: 1,
-            filter: 'recent',
-            language: 'all',
-            purchase_type: 'all',
-            review_type: 'all',
-            num_per_page: 100,
-            cursor,
-          },
-        );
+        data = await this.getAppReviewsPage(appId, {
+          filter: APP_REVIEWS_FILTER_NEWEST,
+          num_per_page: 100,
+          cursor,
+        });
       } catch (error) {
         const status = axios.isAxiosError(error)
           ? error.response?.status
@@ -689,7 +692,7 @@ export class SteamClient {
   }
 
   /**
-   * Sample reviewer lifetime playtime from the public `appreviews` endpoint and
+   * Sample reviewer lifetime playtime from the public `GetAppReviews` method and
    * return the median/mean (in minutes) over the sample. Each review carries an
    * `author.playtime_forever` field (minutes played in this app, as of the
    * author's last library sync); we page through the most recent reviews and
@@ -702,10 +705,10 @@ export class SteamClient {
    * is dragged upward by the handful of reviewers who leave a game idling for
    * thousands of hours.
    *
-   * `appreviews` shares the store's ~200 req/5 min IP rate limit, so pages are
-   * throttled; `filter=recent` gives stable chronological pagination (unlike
-   * `all`, whose sliding helpfulness window never terminates). Returns null
-   * when no review carried a usable playtime value.
+   * Callers without a publisher key share a rate limit, so pages are throttled;
+   * newest-first gives stable chronological pagination. Returns null when no
+   * review carried a usable playtime value, and throws when not a single page
+   * could be read, so a dead endpoint is not mistaken for a game without reviews.
    */
   async fetchReviewerPlaytime(
     appId: number,
@@ -722,19 +725,13 @@ export class SteamClient {
     while (pages < maxPages) {
       let data: any;
       try {
-        data = await this.getStoreJson(
-          `https://store.steampowered.com/appreviews/${appId}`,
-          {
-            json: 1,
-            filter: 'recent',
-            language: 'all',
-            purchase_type: 'all',
-            review_type: 'all',
-            num_per_page: 100,
-            cursor,
-          },
-        );
+        data = await this.getAppReviewsPage(appId, {
+          filter: APP_REVIEWS_FILTER_NEWEST,
+          num_per_page: 100,
+          cursor,
+        });
       } catch (error) {
+        if (pages === 0) throw error;
         this.logger.warn(
           `fetchReviewerPlaytime page ${pages + 1} failed for ${appId}: ${error}`,
         );
@@ -921,7 +918,35 @@ export class SteamClient {
   }
 
   /**
-   * GET a Steam store endpoint through the process-wide rate gate.
+   * One page of `IUserReviewsService/GetAppReviews`. Arguments must travel as
+   * JSON in `input_json`: given as plain parameters they are ignored without an
+   * error, and the totals silently fall back to English-only Steam purchases.
+   * Purchase type 1 counts every purchase (keys and gifts included).
+   *
+   * Throws when the payload is not the expected envelope. An app Steam has no
+   * data for answers `{"response":{}}`, which is valid and carries no total.
+   */
+  private async getAppReviewsPage(
+    appId: number,
+    query: { num_per_page: number; filter?: number; cursor?: string },
+  ): Promise<any> {
+    const data = await this.getStoreJson(APP_REVIEWS_URL, {
+      input_json: JSON.stringify({
+        appid: appId,
+        languages: ['all'],
+        purchase_type: 1,
+        ...query,
+      }),
+    });
+    const response = data?.response;
+    if (!response || typeof response !== 'object') {
+      throw new Error(`GetAppReviews sent no response object for app ${appId}`);
+    }
+    return response;
+  }
+
+  /**
+   * GET a Steam endpoint through the process-wide rate gate.
    * On 429: open a 5‑minute circuit, wait once, retry once, then throw.
    * Avoids the old nested 15/30/60/120s loops that kept burning the same app.
    */

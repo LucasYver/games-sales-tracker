@@ -77,7 +77,7 @@ export enum SignalMetric {
   TWITCH_VIEWERS = 'TWITCH_VIEWERS',
   // Median lifetime playtime (in MINUTES) across a sample of the game's Steam
   // reviewers, computed from `author.playtime_forever` on the public
-  // `appreviews` endpoint. This is NOT a whole-population figure: it reflects
+  // `GetAppReviews` method. This is NOT a whole-population figure: it reflects
   // only users who left a review (a self-selected, engaged subset) and is
   // sampled from the most recent reviews, so treat it as a directional proxy
   // à la SteamSpy's `median_forever`, not ground truth. Median (not mean) is

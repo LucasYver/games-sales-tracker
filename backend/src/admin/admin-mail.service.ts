@@ -144,6 +144,35 @@ export class AdminMailService {
     await this.sendToAdmins(subject, html, text);
   }
 
+  async sendSteamReviewsAlert(health: {
+    trackedGames: number;
+    staleGames: number;
+    lastCapturedAt: Date | null;
+    problems: string[];
+  }): Promise<void> {
+    const subject = `ALERT — Steam reviews not collected: ${health.staleGames} of ${health.trackedGames} games stale`;
+    const dashboardUrl = `${publicAppUrl()}/admin`;
+    const lastCaptured = health.lastCapturedAt
+      ? new Date(health.lastCapturedAt).toISOString()
+      : 'never';
+    const text = [
+      'Steam review counts are not being collected. Sales estimates are running on frozen values.',
+      '',
+      ...health.problems.map((problem) => `- ${problem}`),
+      '',
+      `Last value stored: ${lastCaptured}`,
+      `Dashboard: ${dashboardUrl}`,
+      '',
+      'This email repeats daily until collection recovers.',
+    ].join('\n');
+    const html = buildSteamReviewsAlertHtml({
+      problems: health.problems,
+      lastCaptured,
+      dashboardUrl,
+    });
+    await this.sendToAdmins(subject, html, text);
+  }
+
   private async sendToAdmins(
     subject: string,
     html: string,
@@ -365,6 +394,45 @@ function buildDraftReadyHtml(opts: {
         </table>
       </td>
     </tr>
+  </table>
+</body>
+</html>`;
+}
+
+function buildSteamReviewsAlertHtml(opts: {
+  problems: string[];
+  lastCaptured: string;
+  dashboardUrl: string;
+}): string {
+  const items = opts.problems
+    .map(
+      (problem) =>
+        `<li style="margin:0 0 6px;font-family:DM Sans,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#cfd8e3;">${escapeHtml(problem)}</li>`,
+    )
+    .join('');
+  return `<!DOCTYPE html>
+<html lang="en">
+<body style="margin:0;padding:0;background:#0e1420;color:#cfd8e3;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0e1420;padding:32px 16px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" style="max-width:520px;background:#141b28;border:1px solid #e5484d;border-radius:4px;">
+        <tr><td style="padding:24px 28px;">
+          <p style="margin:0 0 8px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:15px;font-weight:700;color:#cfd8e3;">Game Sales Tracker</p>
+          <h1 style="margin:0 0 12px;font-family:DM Sans,Helvetica,Arial,sans-serif;font-size:20px;color:#e5484d;">Steam reviews are not being collected</h1>
+          <p style="margin:0 0 16px;font-family:DM Sans,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.55;color:#7c8a9a;">Sales estimates are running on frozen values.</p>
+          <ul style="margin:0 0 16px;padding-left:18px;">${items}</ul>
+          <p style="margin:0 0 20px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;color:#7c8a9a;">Last value stored: ${escapeHtml(opts.lastCaptured)}</p>
+          <table role="presentation" cellspacing="0" cellpadding="0">
+            <tr>
+              <td style="border-radius:4px;background:#d9a441;">
+                <a href="${escapeAttr(opts.dashboardUrl)}" style="display:inline-block;padding:12px 20px;font-family:DM Sans,Helvetica,Arial,sans-serif;font-size:14px;font-weight:600;color:#0e1013;text-decoration:none;">Open dashboard</a>
+              </td>
+            </tr>
+          </table>
+          <p style="margin:16px 0 0;font-family:DM Sans,Helvetica,Arial,sans-serif;font-size:12px;color:#5a6675;">This email repeats daily until collection recovers.</p>
+        </td></tr>
+      </table>
+    </td></tr>
   </table>
 </body>
 </html>`;

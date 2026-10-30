@@ -30,7 +30,11 @@ import {
   cycleWindow,
   type IngestionCadence,
 } from '../ingestion/ingestion-cadence';
-import { DEFAULT_CONFIDENCE_SCORE } from '../ingestion/ingestion.service';
+import {
+  DEFAULT_CONFIDENCE_SCORE,
+  IngestionService,
+  type SteamReviewsHealth,
+} from '../ingestion/ingestion.service';
 import { slugify } from '../common/slug';
 import { EXTENDED_HARVEST_PERCENTILE } from '../scheduler/harvest-eligibility';
 import { harvestDueSql } from '../scheduler/refresh-interval';
@@ -231,6 +235,7 @@ export interface AdminStats {
     lastAttemptAt: Date | null;
     lastSuccessAt: Date | null;
   };
+  steamReviewsHealth: SteamReviewsHealth;
 }
 
 export interface AdminGameSummary {
@@ -454,6 +459,7 @@ export class AdminService {
     private readonly ingestionStates: Repository<GameIngestionState>,
     private readonly gamesService: GamesService,
     private readonly referenceProfiles: ReferenceProfileService,
+    private readonly ingestion: IngestionService,
   ) {}
 
   /**
@@ -691,7 +697,10 @@ export class AdminService {
       }),
     );
 
-    const milestoneHarvest = await this.milestoneHarvestProgress();
+    const [milestoneHarvest, steamReviewsHealth] = await Promise.all([
+      this.milestoneHarvestProgress(),
+      this.ingestion.steamReviewsHealth(),
+    ]);
 
     return {
       games: {
@@ -717,6 +726,7 @@ export class AdminService {
       estimates: { total: estimatesTotal },
       ingestionPipelines,
       milestoneHarvest,
+      steamReviewsHealth,
     };
   }
 
