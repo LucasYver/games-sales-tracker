@@ -29,7 +29,8 @@ REPORTS = Path(__file__).resolve().parent / "reports"
 
 NUM_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(million|millions|m\b|k\b|thousand|billion)?", re.I)
 ENGAGEMENT_RE = re.compile(r"\b(players?|joueurs|wishlists?|game pass|subscri\w*|downloads?|téléchargements|accounts|registered|claims?|acquired)\b", re.I)
-ESTIMATE_RE = re.compile(r"\b(alinea|estimat\w*|approximate|reportedly|according to (?:steamdb|gamalytic|vg ?insights))\b", re.I)
+ESTIMATE_RE = re.compile(r"\b(estimat\w*|approximate|reportedly|according to (?:steamdb|gamalytic|vg ?insights))\b", re.I)
+ALINEA_RE = re.compile(r"alinea|aliena|rhys\s*elliott?|\belliott?\b", re.I)  # jamais isEstimate : skill alinea-milestones
 REGIONAL_RE = re.compile(r"\b(japan|japanese|famitsu|media create|uk boxed|gfk|circana|npd|in the us|europe)\b|jap-sales", re.I)
 STALE_DAYS = 14
 
@@ -58,11 +59,14 @@ def load(since: str):
     with connect_read_only() as c:
         new = pd.read_sql(
             """SELECT m.id, m."gameId", g.name, g."releaseDate"::date rel, g.platforms, m.platform, m.source,
-                      m."isEstimate", m."isEngagement", m.units, m."reportedAt"::date rep, m."sourceUrl", m.note
+                      m."isEstimate", m."isEngagement", m.units, m."reportedAt"::date rep, m."sourceUrl", m.note, m.publisher
                  FROM milestone m JOIN game g ON g.id = m."gameId"
                 WHERE m."capturedAt" >= %s AND m."rejectedAt" IS NULL AND g."deletedAt" IS NULL
                 ORDER BY g.name, m."reportedAt" """,
             c, params=(since,))
+        # pandas renvoie NaN pour un texte NULL, et NaN est vrai pour `if not url`.
+        texts = ["sourceUrl", "note", "publisher"]
+        new[texts] = new[texts].astype(object).where(new[texts].notna(), None)
         new["id"] = new.id.astype(str)
         new["gameId"] = new.gameId.astype(str)
         ids = list(new.gameId.unique())
@@ -85,7 +89,7 @@ def load(since: str):
             c, params=(ids,))
     hist["id"] = hist.id.astype(str)
     hist["gameId"] = hist.gameId.astype(str)
-    hist["host"] = hist.sourceUrl.map(host_of)
+    hist["host"] = hist.sourceUrl.astype(object).where(hist.sourceUrl.notna(), None).map(host_of)
     est["gameId"] = est.gameId.astype(str)
     prd["gameId"] = prd.gameId.astype(str)
     return new, hist, sources, est.set_index("gameId"), prd
@@ -108,7 +112,10 @@ def flags_for(m, r0, same, source, e, earliest_rel) -> list[str]:
         flags.append("CHIFFRE_ABSENT_CITATION")
     if m.note and ENGAGEMENT_RE.search(m.note) and not m.isEngagement:
         flags.append("JOUEURS_OU_GAME_PASS?")
-    if m.note and ESTIMATE_RE.search(m.note) and not m.isEstimate:
+    alinea = ALINEA_RE.search(" ".join(filter(None, (m.publisher, m.note, m.sourceUrl))))
+    if alinea and m.isEstimate:
+        flags.append("ALINEA_A_DEMARQUER")
+    if m.note and ESTIMATE_RE.search(m.note) and not m.isEstimate and not alinea:
         flags.append("ESTIMATION_PRESENTEE_COMME_REELLE?")
     if (m.note and REGIONAL_RE.search(m.note)) or REGIONAL_RE.search(m.sourceUrl or ""):
         flags.append("CHIFFRE_REGIONAL?")

@@ -22,7 +22,7 @@ alwaysApply: true
 - Treat “Rhys Elliot” as a generic industry analyst to junk (he is Alinea).
 - Lump this family with SteamSpy / SteamDB / Sensor Tower / VG Insights / “third-party statistics”.
 - Blacklist Alinea hosts or block them in discovery/ingest.
-- Assume `isEstimate=true` means “discard” for this family — they remain useful for the algo.
+- Set `isEstimate=true` on this family: the flag removes them from the ML (see the `alinea-milestones` skill).
 
 ## Contrast (OK to treat as low-trust estimates)
 

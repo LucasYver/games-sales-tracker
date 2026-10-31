@@ -12,8 +12,9 @@ import { Platform, SalesSource } from '../entities/enums';
  * estimates from `alinea-game-sales.csv` into the `milestone` table.
  *
  * Each CSV row is a cumulative units-sold total for a game at the article's
- * snapshot date. Rows are imported as MEDIA milestones flagged `isEstimate`
- * (third-party analyst estimates), scoped to the CSV platform.
+ * snapshot date. Rows are imported as MEDIA milestones, scoped to the CSV
+ * platform. They are not flagged `isEstimate`, which would remove them from
+ * the ML (see the `alinea-milestones` skill).
  *
  * Matching CSV game names to `game` rows: exact (case-insensitive) first,
  * then pg_trgm similarity above `--min-similarity`. Unmatched names are
@@ -291,7 +292,7 @@ async function main(): Promise<void> {
         source: SalesSource.MEDIA,
         units,
         platform,
-        isEstimate: true,
+        isEstimate: false,
         isEngagement: false,
         confidenceScore: null,
         publisher: null,
