@@ -5,7 +5,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, In, IsNull, MoreThanOrEqual, Not, Repository } from 'typeorm';
+import {
+  Between,
+  In,
+  IsNull,
+  MoreThan,
+  MoreThanOrEqual,
+  Not,
+  Repository,
+} from 'typeorm';
 import {
   AchievementSnapshot,
   CatalogTier,
@@ -70,13 +78,17 @@ const STORE_SOURCE_BY_PLATFORM: Partial<Record<Platform, SourceType>> = {
 const BACKFILL_HISTORY_STALE_DAYS = 7;
 
 // Steam review alert (`steamReviewsHealth`). The poll runs six times a day, so
-// a full day without a stored value means every run came back empty. The
-// budget covers the catalog in about 4 days, so 7 days leaves a margin.
+// a full day without a stored value means every run came back empty. Every game
+// is due once per UTC day, so 2 days without a value means it missed a full day.
+// Apps Steam no longer answers for sit below the 10% share.
 const STEAM_REVIEWS_SILENCE_HOURS = 24;
-const STEAM_REVIEWS_STALE_DAYS = 7;
-const STEAM_REVIEWS_MAX_STALE_SHARE = 0.25;
+const STEAM_REVIEWS_STALE_DAYS = 2;
+const STEAM_REVIEWS_MAX_STALE_SHARE = 0.1;
 const STEAM_REVIEWS_MIN_ATTEMPTS = 50;
 const STEAM_REVIEWS_MAX_FAILED_SHARE = 0.2;
+// The rate gate in `SteamClient` sets the pace. Concurrency only stops the
+// database round trips of each game from slowing it down.
+const STEAM_REVIEWS_CONCURRENCY = 4;
 
 export interface SteamReviewsHealth {
   trackedGames: number;
@@ -1124,28 +1136,40 @@ export class IngestionService {
    * Steam answered zero reviews. Believe it only for a game that never had any:
    * a total does not fall to zero, and a stored zero would collapse the
    * estimate. Otherwise retry on Steam's own id for the app, and report no
-   * value (null) if that does not give a total either.
+   * value (null) unless that gives a total close to the known one: an old id
+   * can point at a bigger shared app (Call of Duty) whose total is not the game's.
    */
   private async confirmZeroReviews(
     gameId: string,
     appId: number,
   ): Promise<number | null> {
     const previous = await this.signals.findOne({
-      where: { gameId, metric: SignalMetric.STEAM_REVIEWS, synthetic: false },
+      where: {
+        gameId,
+        metric: SignalMetric.STEAM_REVIEWS,
+        synthetic: false,
+        value: MoreThan(0),
+      },
       order: { capturedAt: 'DESC' },
       select: { value: true },
     });
-    if (!previous || previous.value === 0) return 0;
+    if (!previous) return 0;
 
     const canonical = await this.steam.getCanonicalAppId(appId);
     const reviews =
       canonical !== null && canonical !== appId
         ? await this.steam.getTotalReviews(canonical)
         : null;
-    if (reviews) return reviews;
+    if (
+      reviews !== null &&
+      reviews >= previous.value * 0.9 &&
+      reviews <= previous.value * 2
+    ) {
+      return reviews;
+    }
 
     this.logger.warn(
-      `Ignoring zero reviews for app ${appId}: last stored value is ${previous.value}.`,
+      `Ignoring zero reviews for app ${appId}: last known value is ${previous.value}.`,
     );
     return null;
   }
@@ -4186,26 +4210,32 @@ export class IngestionService {
       'day',
     );
 
-    let polled = 0;
-    let failed = 0;
-    let attempted = 0;
-    for (const gameId of dueGameIds) {
-      if (Date.now() - startedAt >= budgetMs) break;
-      const appId = Number(sourceByGameId.get(gameId)?.externalId);
-      if (!Number.isFinite(appId)) continue;
+    const {
+      succeeded: polled,
+      failed,
+      attempted,
+    } = await this.runInBatches(
+      dueGameIds,
+      STEAM_REVIEWS_CONCURRENCY,
+      budgetMs,
+      startedAt,
+      async (gameId) => {
+        const appId = Number(sourceByGameId.get(gameId)?.externalId);
+        if (!Number.isFinite(appId)) return;
 
-      try {
-        await this.ingestionState.track(gameId, 'STEAM_REVIEWS', () =>
-          this.pollSteamReviews(gameId, appId, { strict: true }),
-        );
-        await this.games.update(gameId, { lastRefreshedAt: new Date() });
-        polled++;
-      } catch (error) {
-        failed++;
-        this.logger.warn(`[reviews] poll failed for game ${gameId}: ${error}`);
-      }
-      attempted += 1;
-    }
+        try {
+          await this.ingestionState.track(gameId, 'STEAM_REVIEWS', () =>
+            this.pollSteamReviews(gameId, appId, { strict: true }),
+          );
+          await this.games.update(gameId, { lastRefreshedAt: new Date() });
+        } catch (error) {
+          this.logger.warn(
+            `[reviews] poll failed for game ${gameId}: ${error}`,
+          );
+          throw error;
+        }
+      },
+    );
 
     const leftover = dueGameIds.length - attempted;
     this.logger.log(

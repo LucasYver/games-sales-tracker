@@ -81,13 +81,31 @@ export interface SteamReviewHistogram {
   buckets: SteamReviewDailyCount[];
 }
 
-// Process-wide Steam gate. Steam's public store (~200 req / 5 min / IP) and the
-// keyless `GetAppReviews` limit are shared by every call that goes through it; nested per-request
-// retries were burning the budget and thrashing the same app. One gap + one
-// 429 circuit-breaker keeps the batch script moving without hammering.
-let storeGateChain: Promise<void> = Promise.resolve();
-let storeNextSlotAt = 0;
-let storeCooldownUntil = 0;
+// Process-wide gates, one per Steam rate limit. Nested per-request retries were
+// burning the budget and thrashing the same app, so each limit gets one spacing
+// and one 429 circuit-breaker, which also keeps batch scripts moving.
+interface SteamGate {
+  label: string;
+  minGapMs: number;
+  chain: Promise<void>;
+  nextSlotAt: number;
+  cooldownUntil: number;
+}
+
+const createGate = (label: string, minGapMs: number): SteamGate => ({
+  label,
+  minGapMs,
+  chain: Promise.resolve(),
+  nextSlotAt: 0,
+  cooldownUntil: 0,
+});
+
+// The store allows ~200 req / 5 min / IP; this stays under it at ~150.
+const storeGate = createGate('store', 2_000);
+// `GetAppReviews` is off the store domain. Valve publishes no number for its
+// keyless limit. 2.5 req/s is about 1,650 games per 11-minute cron run, so the
+// catalog is covered every day with runs to spare.
+const appReviewsGate = createGate('GetAppReviews', 400);
 
 const APP_REVIEWS_URL =
   'https://api.steampowered.com/IUserReviewsService/GetAppReviews/v1/';
@@ -98,33 +116,33 @@ const APP_REVIEWS_FILTER_NEWEST = 1;
 export class SteamClient {
   private readonly logger = new Logger(SteamClient.name);
 
-  /** Min spacing between store JSON calls (~150 req / 5 min, under the cap). */
-  private static readonly STORE_MIN_GAP_MS = 2_000;
   /** After a 429, freeze the gate for a full Steam window. */
   private static readonly STORE_429_COOLDOWN_MS = 5 * 60_000;
 
   constructor(private readonly config: ConfigService) {}
 
-  private async acquireStoreSlot(): Promise<void> {
+  private async acquireSlot(gate: SteamGate): Promise<void> {
     const run = async (): Promise<void> => {
       const now = Date.now();
-      const waitUntil = Math.max(storeNextSlotAt, storeCooldownUntil);
+      const waitUntil = Math.max(gate.nextSlotAt, gate.cooldownUntil);
       if (waitUntil > now) {
         const waitMs = waitUntil - now;
         if (waitMs >= 3_000) {
           this.logger.warn(
-            `Steam store gate: waiting ${Math.round(waitMs / 1000)}s ` +
-              (waitUntil === storeCooldownUntil ? '(429 cooldown)' : '(spacing)'),
+            `Steam ${gate.label} gate: waiting ${Math.round(waitMs / 1000)}s ` +
+              (waitUntil === gate.cooldownUntil
+                ? '(429 cooldown)'
+                : '(spacing)'),
           );
         }
         await new Promise((r) => setTimeout(r, waitMs));
       }
-      storeNextSlotAt = Date.now() + SteamClient.STORE_MIN_GAP_MS;
+      gate.nextSlotAt = Date.now() + gate.minGapMs;
     };
 
-    const previous = storeGateChain;
+    const previous = gate.chain;
     let release!: () => void;
-    storeGateChain = new Promise<void>((resolve) => {
+    gate.chain = new Promise<void>((resolve) => {
       release = resolve;
     });
     await previous;
@@ -135,10 +153,13 @@ export class SteamClient {
     }
   }
 
-  private tripStoreCooldown(ms = SteamClient.STORE_429_COOLDOWN_MS): void {
-    storeCooldownUntil = Math.max(storeCooldownUntil, Date.now() + ms);
+  private tripCooldown(
+    gate: SteamGate,
+    ms = SteamClient.STORE_429_COOLDOWN_MS,
+  ): void {
+    gate.cooldownUntil = Math.max(gate.cooldownUntil, Date.now() + ms);
     this.logger.warn(
-      `Steam 429 circuit open — no store requests for ${Math.round(ms / 1000)}s`,
+      `Steam 429 circuit open — no ${gate.label} requests for ${Math.round(ms / 1000)}s`,
     );
   }
 
@@ -930,14 +951,18 @@ export class SteamClient {
     appId: number,
     query: { num_per_page: number; filter?: number; cursor?: string },
   ): Promise<any> {
-    const data = await this.getStoreJson(APP_REVIEWS_URL, {
-      input_json: JSON.stringify({
-        appid: appId,
-        languages: ['all'],
-        purchase_type: 1,
-        ...query,
-      }),
-    });
+    const data = await this.getStoreJson(
+      APP_REVIEWS_URL,
+      {
+        input_json: JSON.stringify({
+          appid: appId,
+          languages: ['all'],
+          purchase_type: 1,
+          ...query,
+        }),
+      },
+      appReviewsGate,
+    );
     const response = data?.response;
     if (!response || typeof response !== 'object') {
       throw new Error(`GetAppReviews sent no response object for app ${appId}`);
@@ -953,9 +978,10 @@ export class SteamClient {
   private async getStoreJson(
     url: string,
     params: Record<string, unknown>,
+    gate: SteamGate = storeGate,
   ): Promise<any> {
     for (let attempt = 1; attempt <= 2; attempt++) {
-      await this.acquireStoreSlot();
+      await this.acquireSlot(gate);
       try {
         const { data } = await axios.get(url, { params, timeout: 20000 });
         return data;
@@ -980,11 +1006,11 @@ export class SteamClient {
           this.logger.warn(
             `Steam 429 on ${url} — opening ${Math.round(cooldownMs / 1000)}s circuit, then one retry`,
           );
-          this.tripStoreCooldown(cooldownMs);
+          this.tripCooldown(gate, cooldownMs);
           continue;
         }
         if (status === 429) {
-          this.tripStoreCooldown(SteamClient.STORE_429_COOLDOWN_MS);
+          this.tripCooldown(gate);
         }
         throw error;
       }
