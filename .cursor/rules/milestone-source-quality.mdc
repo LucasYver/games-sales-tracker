@@ -31,6 +31,10 @@ well corroborated is worse than no milestone.
   plus AI republish farms `edgechat.ai`, `findings.oreate.ai`,
   `podcasttranscript.ai`. Also listed in `TAVILY_EXCLUDED_DOMAINS` so discovery
   does not resurface them.
+- 67 more hosts from the 2026-10-31 audit (generated sites, fan wikis, key
+  resellers such as `g2a.com` and `smartcdkeys.com`) — inactive in
+  `trusted_source`, which is the list of record; milestones soft-rejected. Never
+  re-activate without an explicit user request.
 
 ## Keepers (high value)
 

@@ -96,9 +96,9 @@ const PLATFORM_TOKENS: ReadonlyArray<[string, Platform]> = [
 // skipped outright when bucketing per-platform dates.
 const RELEASE_STATUS_EXCLUDE = new Set(['Cancelled', 'Rumored', 'Delisted']);
 
-// Pre-release statuses: used only when a platform has no "Full Release" (or
-// unstatused, which IGDB treats the same) entry to prefer instead.
-const RELEASE_STATUS_PRERELEASE = new Set(['Early Access', 'Alpha', 'Beta']);
+// Test phases: used only when a platform has no Early Access, "Full Release"
+// (or unstatused, which IGDB treats the same) entry to prefer instead.
+const RELEASE_STATUS_PRERELEASE = new Set(['Alpha', 'Beta']);
 
 @Injectable()
 export class IgdbClient {
@@ -502,12 +502,13 @@ export class IgdbClient {
   }
 
   // Buckets IGDB's per-release-date-entry platform (e.g. "PS4", "PS5") into
-  // our coarser Platform enum. Within a bucket, prefers a "Full Release" (or
-  // unstatused, which IGDB uses for the same thing) entry over an Early
-  // Access / Alpha / Beta one — e.g. Baldur's Gate 3 has a PC "Early Access"
-  // row dated 2020-10-06 *and* a PC "Full Release" row dated 2023-08-03; we
-  // want the latter, matching what a console "Full Release" date represents.
-  // Only falls back to a pre-release entry when no full release exists yet.
+  // our coarser Platform enum. Within a bucket, keeps the earliest date among
+  // Early Access, "Full Release" and unstatused entries (IGDB uses the last two
+  // for the same thing), because sales start with Early Access — e.g. Baldur's
+  // Gate 3 has a PC "Early Access" row dated 2020-10-06 *and* a PC "Full
+  // Release" row dated 2023-08-03; we want the former. Falling on a 1.0 date
+  // makes a game on sale for years look unreleased to the estimates.
+  // Only falls back to an Alpha / Beta entry when nothing else exists yet.
   // Cancelled / rumored / delisted entries are never real releases and are
   // skipped outright. Ties within a tier keep the earliest date (regions).
   private mapReleaseDates(
