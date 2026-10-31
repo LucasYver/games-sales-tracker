@@ -32,6 +32,7 @@ import numpy as np
 import pandas as pd
 
 import bench
+import exclusions
 from labels import REASONS
 from snapshot import load_snapshot, usable_milestones
 
@@ -60,7 +61,7 @@ def review_list(snap, b) -> pd.DataFrame:
     preds = b.cv_preds.pivot_table(index="milestoneId", columns="model", values="estPoint")
     learned = preds.drop(columns=["Modèle actuel"], errors="ignore")
     t = b.table.set_index("milestoneId")
-    for mid, r in t[t.suspect].iterrows():
+    for mid, r in t[t.suspect & (t.suspectReason != exclusions.REASON)].iterrows():
         flag([mid], REASON_LABELS.get(r.suspectReason, r.suspectReason))
     above = t.units > 4 * preds.max(axis=1).reindex(t.index)
     flag(t.index[above & ~t.suspect], "bien au-dessus des modèles")

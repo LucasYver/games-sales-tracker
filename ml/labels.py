@@ -21,6 +21,9 @@ Trois règles, volontairement prudentes :
 
 Les prédictions utilisées sont « hors pli » : chaque jeu est prédit par des
 modèles qui ne l'ont jamais vu.
+
+S'y ajoutent les jeux exclus à la main (`exclusions.py`) : tous leurs chiffres
+sont écartés de la même façon.
 """
 
 from __future__ import annotations
@@ -30,6 +33,8 @@ import math
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import GroupKFold
+
+import exclusions
 
 PARTIAL_FACTOR = 4.0
 AGREEMENT_FACTOR = 2.5
@@ -49,6 +54,7 @@ def _oof_predictions(table: pd.DataFrame, specs: list, seed: int) -> pd.DataFram
     folds = GroupKFold(n_splits=5, shuffle=True, random_state=seed).split(table, groups=table.gameId)
     for tr, te in folds:
         train, test = table.iloc[tr], table.iloc[te]
+        train = train[~train.gameId.isin(exclusions.excluded_ids())]
         for spec in specs:
             predict = fit(spec, train).predict if spec.kind == "ridge" else _fit_core(spec, train, None)[0]
             out.loc[test.index, spec.name] = predict(test)
@@ -71,8 +77,10 @@ def flag_suspects(table: pd.DataFrame, specs: list, seed: int) -> pd.DataFrame:
         running_max = d.units.cummax().shift(1)
         in_time.loc[d.index] = (d.units < running_max / 2).fillna(False).to_numpy()
 
-    reason = np.select([in_time, extreme, partial], [REASONS["temps"], REASONS["extrême"], REASONS["partiel"]], "")
-    out = pd.DataFrame({"suspect": reason != "", "suspectReason": reason}, index=table.index)
+    excluded = table.gameId.isin(exclusions.excluded_ids())
+    reason = np.select([in_time, extreme, partial, excluded],
+                       [REASONS["temps"], REASONS["extrême"], REASONS["partiel"], exclusions.REASON], "")
+    out = pd.DataFrame({"suspect": reason != "", "suspectReason": reason, "excludedGame": excluded}, index=table.index)
     for name in preds.columns:
         out[f"pred_{name}"] = np.exp(preds[name])
     return out

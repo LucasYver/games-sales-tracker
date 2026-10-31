@@ -79,6 +79,7 @@ Pour expérimenter en Python :
 | `explorer.ipynb` | Exploration guidée + un premier mini-modèle de ML appris sans tricher. |
 | `frozen.py` | Relit les modèles figés depuis leurs fichiers JSON, sans scikit-learn (lecture de référence du backend). |
 | `freeze.py` | Fige les deux finalistes dans `models/<snapshot>/` (à garder dans git, ne plus modifier) ; `--install` copie `ensemble.json` dans le backend. Les arbres portent aussi la valeur de chaque nœud (`v`), qui sert seulement à expliquer une estimation dans l'admin ; `--add-node-values` l'ajoute à un gel existant après avoir vérifié que ses arbres sont identiques. |
+| `exclusions.py` | Jeux exclus à la main de l'ENTRAÎNEMENT (`excluded_games.csv`, avec la raison de chacun), à gérer depuis « Qualité des données ». Mesure l'effet avec et sans, jugé sur les mêmes chiffres. Ni la base ni le site ne changent tant qu'un nouveau modèle n'est pas figé et installé. |
 | `suspects.py` | Liste de travail des chiffres de ventes à vérifier dans la base (priorités 1 à 3, raisons, estimations des modèles, liens source et admin) → `reports/milestones_a_verifier.csv`. Aussi produite par `bench.py` et affichée dans « Qualité des données ». |
 | `checks.py` | Contrôles du banc au-delà de l'erreur moyenne : erreur selon l'âge du jeu, courbe qui baisse, catalogue entier, chiffres « de lancement » suspects. Affichés dans l'onglet des modèles de l'UI. |
 | `bench_v2.py` | Essai des variantes v2 (sans informations « du moment », signaux de lancement, « jamais en baisse ») → `reports/bench_v2.md`. |

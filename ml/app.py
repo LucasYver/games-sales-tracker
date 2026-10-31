@@ -26,6 +26,7 @@ from playground import LEARNED_MODELS, train as train_playable
 from baseline import Estimator
 from metrics import add_error_columns, segment_table, summarize
 from snapshot import load_snapshot
+import exclusions
 from suspects import PRIORITY, review_list
 
 st.set_page_config(page_title="Labo estimation des ventes", page_icon=":material/query_stats:", layout="wide")
@@ -1142,7 +1143,8 @@ def render_models(b) -> None:
         "2. **Test dans le temps** : on entraîne sur les chiffres d'avant 2025 et on prédit ceux de 2025 et après, "
         "sur des jeux jamais vus. C'est la situation réelle : prédire le présent avec le passé.\n"
         + (f"3. **{n_suspect} chiffres suspects ne servent pas à l'entraînement** ({n_suspect / len(b.table):.0%} : "
-           "chiffres partiels, incohérents ou rattachés au mauvais jeu). La base n'est pas modifiée ; la liste est "
+           "chiffres partiels, incohérents, rattachés au mauvais jeu, ou jeux exclus à la main). La base n'est pas "
+           "modifiée ; la liste est "
            "dans « Qualité des données ».\n" if n_suspect else "")
         + "4. **Le test final sous clé a servi le 28/10** (résultat en bas de page) : ses jeux ont rejoint les "
         "autres. Le prochain test neutre sera fait des chiffres publiés après ce snapshot.")
@@ -1413,6 +1415,64 @@ def render_review(b) -> None:
                        "text/csv")
 
 
+def render_exclusions(b) -> None:
+    st.subheader("Jeux exclus de l'entraînement")
+    st.markdown(
+        "Un jeu de cette liste **ne sert plus à entraîner les modèles**, tous ses chiffres compris. Le modèle peut "
+        "toujours l'estimer. **La base n'est pas modifiée**, et le site ne change qu'une fois un nouveau modèle figé "
+        "et installé.\n\n"
+        "- **Choisissez un jeu pour une raison que vous pouvez écrire** (réédition, jeu devenu gratuit, abonnement…), pas "
+        "parce que le modèle se trompe dessus : ce serait cacher ses erreurs.\n"
+        "- **Ses chiffres servent encore** aux voisins et au palmarès de la série et du studio, comme en prod.\n"
+        "- **Le score « chiffres nettoyés » monte tout seul** quand on retire un jeu difficile. Pour savoir si "
+        "l'exclusion aide vraiment, utilisez le bouton de mesure : il juge sur les mêmes chiffres avec et sans.")
+    excluded = exclusions.load()
+    names = b.table.drop_duplicates("gameId").set_index("gameId").gameName
+    counts = b.table.groupby("gameId").size()
+    available = names[~names.index.isin(excluded.gameId)].sort_values()
+    with st.form("exclude_game", clear_on_submit=True):
+        c1, c2 = st.columns([1, 2])
+        game = c1.selectbox("Jeu", available.index, index=None, placeholder="Chercher un jeu…",
+                            format_func=lambda g: f"{names[g]} ({counts[g]} chiffres)")
+        reason = c2.text_input("Raison", placeholder="Ex. : réédition, le chiffre compte aussi le jeu d'origine")
+        if st.form_submit_button("Exclure ce jeu"):
+            if game is None or not reason.strip():
+                st.error("Choisissez un jeu et écrivez la raison.")
+            else:
+                exclusions.add(game, names[game], reason.strip())
+                st.rerun()
+    if excluded.empty:
+        st.caption("Aucun jeu exclu pour l'instant.")
+        return
+    for row in excluded.itertuples():
+        c1, c2, c3, c4 = st.columns([3, 5, 2, 2], vertical_alignment="center")
+        c1.markdown(f"**{row.jeu}**")
+        c2.markdown(row.raison)
+        c3.caption(f"ajouté le {row[4]}")
+        if c4.button("Réintégrer", key=f"restore_{row.gameId}"):
+            exclusions.remove(row.gameId)
+            st.rerun()
+    wanted = set(excluded.gameId) & set(b.table.gameId)
+    applied = set(b.table.gameId[b.table.excludedGame]) if "excludedGame" in b.table.columns else set()
+    if wanted != applied:
+        st.warning("La liste a changé depuis le dernier banc d'essai : relancez `bench.py`, puis redémarrez l'UI, pour "
+                   "que les scores en tiennent compte. La mesure ci-dessous n'en a pas besoin.")
+    if st.button("Mesurer l'effet de l'exclusion"):
+        with st.spinner("Deux entraînements complets, quelques secondes…"):
+            r = exclusions.measure(b)
+        if r is None:
+            st.info("Aucun jeu de la liste n'a de chiffre dans le banc d'essai.")
+            return
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Avec ces jeux", f"×{fr(r['avec'])}", help="Erreur typique du modèle en prod, sur des jeux jamais vus.")
+        c2.metric("Sans ces jeux", f"×{fr(r['sans'])}", help="Mêmes chiffres jugés, entraînement sans les jeux exclus.")
+        c3.metric("Sans eux, mieux dans", pct(r["proba_meilleur"]) + " des tirages",
+                  help="Au-dessus de 95 %, le gain est solide ; autour de 50 %, c'est du hasard.")
+        st.caption(f"Jeux exclus : {r['jeux_exclus']} ({thousands(r['chiffres_exclus'])} chiffres). Jugé sur "
+                   f"{thousands(r['chiffres_jugés'])} chiffres, à ×2 près : {pct(r['avec_x2'])} avec eux, "
+                   f"{pct(r['sans_x2'])} sans eux.")
+
+
 with tab_data:
     st.markdown("Le test ne vaut que ce que valent les chiffres publiés. Cet onglet montre d'où ils viennent et ce "
                 "qu'il a fallu écarter.")
@@ -1474,7 +1534,8 @@ with tab_data:
             "alors qu'ils sont d'accord entre eux ;\n"
             "- **écart extrême** : plus de ×20 avec les trois modèles (mauvais jeu, ou annonce du jour de sortie).\n\n"
             "On ne retire **pas** les chiffres bien plus **grands** que les modèles (sauf écart extrême) : ce sont "
-            "souvent de vrais succès console que tous les modèles sous-estiment, et les cacher masquerait un défaut.")
+            "souvent de vrais succès console que tous les modèles sous-estiment, et les cacher masquerait un défaut.\n\n"
+            "Les chiffres des jeux exclus à la main (section suivante) figurent aussi dans ce tableau.")
         urls = snap.milestones.set_index("id").sourceUrl
         table = pd.DataFrame({
             "jeu": sus.gameName, "date": sus.reportedAt.dt.date, "chiffre publié": sus.units,
@@ -1493,6 +1554,7 @@ with tab_data:
         })
 
     if bench_b is not None:
+        render_exclusions(bench_b)
         render_review(bench_b)
 
     st.subheader("Jeux avec le plus de doublons")

@@ -674,7 +674,8 @@ def main() -> None:
         f"Lignes : {len(b.table)} chiffres monde réels ({b.table.gameId.nunique()} jeux), tous en développement "
         "(le test final sous clé a servi le 28/10/2026). "
         f"Chiffres suspects écartés de l'entraînement : {int(b.table.suspect.sum())} "
-        f"({b.table.suspect.mean():.1%}), la base n'est pas modifiée.\n",
+        f"({b.table.suspect.mean():.1%}), dont ceux de {b.table.gameId[b.table.excludedGame].nunique()} jeux exclus "
+        "à la main ; la base n'est pas modifiée.\n",
         "## Validation croisée par jeu (5 groupes, réglages imbriqués) — jugée sur TOUS les chiffres\n",
         format_table(cv.drop(columns=[c for c in cv.columns if c.endswith("_ic90") and c != "facteur_median_ic90"])),
         "",
