@@ -223,16 +223,18 @@ even if the code emits the tag.
   model only saw games that publish their sales; outside that zone it
   overshoots by ×10 or more (`ml/README.md`).
 - The ML estimate starts `ML_MIN_DAYS_AFTER_RELEASE` (3) days after the PC
-  release; before, the platform sum stays. It never goes down: it is the
-  highest model estimate over the grid J+3, 7, 14, 30, 60, 90, 180, 270, 365,
-  then every 180 days, up to the date, counting a past date only if the game
-  then had ≥ `ML_MIN_STEAM_REVIEWS` Steam reviews (`neverDownDates`; Python
-  reference `predict_never_down` in `ml/frozen.py`). A switch between the
-  platform sum and the ML estimate can still move the figure either way.
+  release; before, the platform sum stays. It is the model at the date, so it
+  may go down when new data corrects it. A switch between the platform sum and
+  the ML estimate can also move the figure either way.
 - The admin estimate tab explains it (`MlEstimateService.explain`): why it
   is shown or not, the inputs, the exact split of the estimate by family of
   inputs (forest: value moves along each tree's path; ridge: coefficient ×
-  standardised input) and the « never down » steps.
+  standardised input).
+- **Scope:** the public API publishes no estimate for games released before
+  2017 (`estimateOutOfScope` on `game.releaseDate`, `games/estimate-scope.ts`):
+  no headline, platform lines or history, and they rank last when sorting by
+  sales. The game page says so. Estimates are still computed and stay visible
+  in the admin. Why: skill `estimate-scope-2017`.
 - `estimatedToday` = the ML range when the batch has an `ml-ensemble` row,
   else the platform sum. It carries `units`, the figure to display: the ML
   estimate itself (never the midpoint of its range, which would overstate

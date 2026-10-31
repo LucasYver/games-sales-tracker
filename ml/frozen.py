@@ -13,7 +13,6 @@ exactement les prédictions de scikit-learn.
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 
 import numpy as np
@@ -22,20 +21,10 @@ import pandas as pd
 MODELS = Path(__file__).resolve().parent / "models"
 US_PER_DAY = 86_400 * 1_000_000
 
-# Règle de prod « jamais en baisse » (backend : `MlEstimateService`), mesurée
-# au banc v2 : pas d'estimation avant J+3 après la sortie PC, puis le plus haut
-# chiffre déjà donné aux dates J+3, J+7, … J+365 puis tous les 180 jours
-# (= bench.TIMELINE_DAYS à partir de J+3), là où le jeu avait au moins
-# 1 000 reviews Steam.
-NEVER_DOWN_MIN_DAYS = 3
-NEVER_DOWN_MIN_REVIEWS = 1_000
-NEVER_DOWN_DAYS = (3, 7, 14, 30, 60, 90, 180, 270, 365)
-
-
-def never_down_dates(release_us: int, t_us: int) -> list[int]:
-    span = (t_us - release_us) / US_PER_DAY
-    days = list(NEVER_DOWN_DAYS) + list(range(540, int(span) + 1, 180))
-    return [release_us + d * US_PER_DAY for d in days if release_us + d * US_PER_DAY <= t_us]
+# Règles de prod (backend : `MlEstimateService`) : pas d'estimation avant J+3
+# après la sortie PC, et le site n'affiche le modèle qu'à partir de 1 000 reviews.
+ML_MIN_DAYS = 3
+ML_MIN_REVIEWS = 1_000
 
 
 def _tree_predict(tree: dict, X32: np.ndarray) -> np.ndarray:
@@ -84,20 +73,6 @@ class FrozenEnsemble:
         point = np.exp(self.predict_log(df))
         return pd.DataFrame({"point": point, "low": point / self.halfwidth, "high": point * self.halfwidth},
                             index=df.index)
-
-    def predict_never_down(self, row_at, release_us: int | None, t_us: int) -> float | None:
-        """log(ventes) à `t_us` selon la règle « jamais en baisse » de la prod.
-
-        `row_at(t)` renvoie les features du jeu à la date t (dict), ou None.
-        """
-        if release_us is None or t_us - release_us < NEVER_DOWN_MIN_DAYS * US_PER_DAY:
-            return None
-        now = row_at(t_us)
-        if now is None:
-            return None
-        past = [r for t in never_down_dates(release_us, t_us) if (r := row_at(t)) is not None
-                and r["log_reviews"] >= math.log1p(NEVER_DOWN_MIN_REVIEWS)]
-        return float(self.predict_log(pd.DataFrame([now, *past])).max())
 
 
 class FrozenForestKnn:

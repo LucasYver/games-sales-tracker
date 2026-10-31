@@ -157,6 +157,8 @@ export interface GameDetail {
   totalSales: TotalSales | null;
   headline: HeadlineSales | null;
   estimatedToday: HeadlineSales | null;
+  /** Released before 2017: the site publishes no estimate for this game. */
+  estimateOutOfScope: boolean;
   estimateSnapshots: PublicEstimateSnapshot[];
   reviewHistory: ReviewPoint[];
   followersHistory: ReviewPoint[];

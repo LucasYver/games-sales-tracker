@@ -12,7 +12,8 @@
 Estimate video-game unit sales from public signals, per platform, as a
 range. The number the site shows (`headline` / `estimatedToday`) is always
 that model: the platform sum, or for established games the worldwide ML
-estimate trained in `ml/` (see `ESTIMATION.md` §6). Dated publisher,
+estimate trained in `ml/` (see `ESTIMATION.md` §6). Games released before
+2017 show no estimate. Dated publisher,
 Wikipedia, and press figures are stored as milestones and shown as a
 cross-check. They do not calibrate a per-game
 multiplier.

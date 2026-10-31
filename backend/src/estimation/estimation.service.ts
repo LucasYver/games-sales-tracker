@@ -50,6 +50,7 @@ import {
   firstWeekProjectionMultiplier,
   genreProjectionMultiplier,
 } from '../games/sales-modeling.constants';
+import { estimateOutOfScope } from '../games/estimate-scope';
 import { platformReleaseDate } from '../games/platform-release-date';
 
 // How aggressively `aggregateMethods` widens the combined band when the
@@ -147,8 +148,10 @@ export interface EstimateBreakdownResult {
    * when it is the figure the site displays (`mlEstimateApplies`).
    */
   ml: { low: number; high: number; units: number; shown: boolean } | null;
-  /** How the ML estimate was computed (inputs, split by family, steps). */
+  /** How the ML estimate was computed (inputs, split by family). */
   mlExplanation: MlExplanation | null;
+  /** Released before the estimate scope: the public site shows no estimate. */
+  hiddenOnSite: boolean;
   declared: {
     units: number;
     source: string;
@@ -1181,6 +1184,11 @@ export class EstimationService {
         : null;
     const mlExplanation = total ? await this.mlEstimate.explain(gameId) : null;
     const ml = mlExplanation?.estimate ?? null;
+    const game = await this.games.findOne({
+      where: { id: gameId },
+      select: { id: true, releaseDate: true },
+    });
+    const hiddenOnSite = estimateOutOfScope(game?.releaseDate ?? null);
 
     return {
       computedAt,
@@ -1192,13 +1200,16 @@ export class EstimationService {
               low: Math.round(ml.low),
               high: Math.round(ml.high),
               units: Math.round(ml.units),
-              shown: mlEstimateApplies(
-                (total.low + total.high) / 2,
-                mlExplanation?.steamReviews ?? null,
-              ),
+              shown:
+                !hiddenOnSite &&
+                mlEstimateApplies(
+                  (total.low + total.high) / 2,
+                  mlExplanation?.steamReviews ?? null,
+                ),
             }
           : null,
       mlExplanation,
+      hiddenOnSite,
       declared: bestDeclared
         ? {
             units: bestDeclared.units,

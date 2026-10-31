@@ -86,28 +86,12 @@ export interface MlSignalWindows {
  */
 export const ML_MIN_DAYS_AFTER_RELEASE = 3;
 
-// « Never down » grid, same as `NEVER_DOWN_DAYS` in ml/frozen.py: J+3 … J+365,
-// then every 180 days from J+540.
-const NEVER_DOWN_DAYS = [3, 7, 14, 30, 60, 90, 180, 270, 365];
-
 export function mlTooEarly(pcReleaseDate: Date | null, at: Date): boolean {
   return (
     pcReleaseDate === null ||
     at.getTime() - pcReleaseDate.getTime() <
       ML_MIN_DAYS_AFTER_RELEASE * MS_PER_DAY
   );
-}
-
-/** Past dates whose estimate the one at `at` may not go below. */
-export function neverDownDates(pcReleaseDate: Date, at: Date): Date[] {
-  const release = pcReleaseDate.getTime();
-  const span = Math.floor((at.getTime() - release) / MS_PER_DAY);
-  const days = [...NEVER_DOWN_DAYS];
-  for (let d = 540; d <= span; d += 180) days.push(d);
-  return days
-    .map((d) => release + d * MS_PER_DAY)
-    .filter((t) => t <= at.getTime())
-    .map((t) => new Date(t));
 }
 
 export function mlSignalWindows(

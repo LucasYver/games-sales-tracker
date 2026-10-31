@@ -37,7 +37,7 @@ from baseline import Estimator
 from features import FeatureBuilder
 from frozen import MODELS, FrozenEnsemble, FrozenForestKnn
 from metrics import add_error_columns, format_table, summarize
-from snapshot import DATA_DIR, load_snapshot, usable_milestones
+from snapshot import DATA_DIR, load_snapshot, released_in_scope, usable_milestones
 
 NEUTRAL_DIR = DATA_DIR / "neutral"
 REPORTS = Path(__file__).resolve().parent / "reports"
@@ -49,6 +49,7 @@ def new_figures(snap, training: dict) -> pd.DataFrame:
     """Chiffres monde réels absents de la base au moment du gel."""
     ms = usable_milestones(snap)
     ms = ms[~ms.gameDeleted & ~ms.gameIsFree & (ms.platform == "GLOBAL") & ~ms.isEstimate & (ms.units > 0)]
+    ms = ms[released_in_scope(ms.gameId.map(snap.games.set_index("id").releaseDate))]
     # Doublon d'un chiffre déjà connu (même jeu, chiffre et jour) : même fait, déjà vu.
     ms = ms.sort_values(["gameId", "reportedAt", "capturedAt"])
     ms = ms[~ms.assign(day=ms.reportedAt.dt.date).duplicated(["gameId", "units", "day"])]

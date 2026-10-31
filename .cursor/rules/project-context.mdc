@@ -19,6 +19,7 @@ When documentation and code disagree, treat the code as the current behavior, re
 ## Invariants
 
 - The public headline (`estimatedToday`) is the sum of per-platform model estimates, or the worldwide ML estimate where `mlEstimateApplies` (see `ESTIMATION.md` §6). Display its `units`, never the midpoint of an ML range.
+- The public site publishes no estimate for games released before 2017; the lab trains and judges on 2017+ only (see `estimate-scope-2017` skill).
 - Declared milestones are cross-checks; they never floor, cap, or calibrate the model.
 - Do not reintroduce per-game calibration, `GenreProfile`, or `pureEstimatedToday`.
 - Alinea Analytics / Rhys Elliot milestones are high-value: never soft-reject or junk-clean them as low-trust estimates (see `alinea-milestones` rule).

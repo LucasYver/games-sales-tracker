@@ -21,13 +21,13 @@ from backtest import compute_backtest, to_us
 from bench import (PROD_MODEL, ML_MODEL, ABLATION_MODEL, error_by_age, load_final, load_saved_bench, paired_gain, run_bench, save_bench,
                    set_similarity)
 from features import FeatureBuilder
-from frozen import NEVER_DOWN_MIN_DAYS, NEVER_DOWN_MIN_REVIEWS, US_PER_DAY, never_down_dates
+from frozen import ML_MIN_DAYS, US_PER_DAY
 from playground import LEARNED_MODELS, train as train_playable
 from baseline import Estimator
 from metrics import add_error_columns, segment_table, summarize
-from snapshot import load_snapshot
+from snapshot import load_snapshot, released_in_scope
 import exclusions
-from suspects import PRIORITY, review_list
+from suspects import FAR_FACTOR, FAR_REPORT, PRIORITY, SHOWN_COLUMN, far_games, review_list
 
 st.set_page_config(page_title="Labo estimation des ventes", page_icon=":material/query_stats:", layout="wide")
 
@@ -291,7 +291,8 @@ anchors_by_id = {a.game_id: a for a in est.matcher.corpus}
 
 with st.sidebar:
     st.markdown(f"**Données du {snap.path.name}** · {thousands(len(res.rows))} chiffres de ventes totales à vérifier")
-    st.caption("Les réglages ci-dessous filtrent tous les onglets. Survolez les :material/help: pour une explication.")
+    st.caption("Jeux sortis depuis 2017 seulement. Les réglages ci-dessous filtrent tous les onglets. Survolez les "
+               ":material/help: pour une explication.")
     bench_now = load_bench()
     evaluated = st.selectbox(
         "Modèle évalué", [SITE] + ([s.name for s in bench_now.specs if s.name != "Modèle actuel"] if bench_now else []),
@@ -749,27 +750,16 @@ PROD_BASE = ML_MODEL  # le modèle suivi par la règle en prod
 
 
 def prod_curve(game_id: str, X: pd.DataFrame, honest: bool) -> pd.DataFrame:
-    """La règle en prod sur la frise, comme le backend : rien avant J+3, puis jamais en baisse."""
+    """La règle en prod sur la frise, comme le backend : rien avant J+3."""
     base = playable(PROD_BASE)
     g = games.loc[game_id]
     rel = est.pc_release.get(game_id) or (to_us(g.releaseDate) if pd.notna(g.releaseDate) else None)
     t = np.array([to_us(pd.Timestamp(d)) for d in X.date])
-    log = np.log(base.predict(game_id, X, honest).point.to_numpy())
+    point = base.predict(game_id, X, honest).point.to_numpy().copy()
     if rel is None:
-        log[:] = np.nan
+        point[:] = np.nan
     else:
-        fb = feature_builder()
-        grid = [(tt, r) for tt in never_down_dates(rel, int(t.max())) if (r := fb.row(game_id, tt))
-                and r["log_reviews"] >= math.log1p(NEVER_DOWN_MIN_REVIEWS)]
-        if grid:
-            gt = np.array([tt for tt, _ in grid])
-            gp = np.log(base.predict(game_id, pd.DataFrame([r for _, r in grid]), honest).point.to_numpy())
-            for i, ti in enumerate(t):
-                past = gp[gt <= ti]
-                if len(past):
-                    log[i] = max(log[i], past.max())
-        log[t - rel < NEVER_DOWN_MIN_DAYS * US_PER_DAY] = np.nan
-    point = np.exp(log)
+        point[t - rel < ML_MIN_DAYS * US_PER_DAY] = np.nan
     k = math.exp(base.log_halfwidth)
     return pd.DataFrame({"point": point, "low": point / k, "high": point * k}, index=X.index)
 
@@ -820,7 +810,8 @@ with tab_game:
     if pool == "Avec chiffres publiés":
         options = list(counts.index)
     else:
-        catalog = snap.games[snap.games.deletedAt.isna() & ~snap.games.isFree].sort_values("name")
+        catalog = snap.games[snap.games.deletedAt.isna() & ~snap.games.isFree
+                             & released_in_scope(snap.games.releaseDate)].sort_values("name")
         options = list(catalog.id)
     default_id = st.session_state.get("game_id") or next(
         (gid for gid in options if games.loc[gid, "name"] == "Hollow Knight"), options[0])
@@ -838,9 +829,8 @@ with tab_game:
         names = st.multiselect(
             "Modèles appris à comparer au site", [PROD_MODEL] + LEARNED_MODELS, default=[PROD_MODEL, PROD_BASE],
             help="Par défaut, le modèle en ligne et le modèle qu'il suit. « En prod » = la v1.2 (voisins + "
-                 f"série + studio), rien avant {NEVER_DOWN_MIN_DAYS} jours après la sortie PC, puis jamais en baisse (le "
-                 f"plus haut chiffre déjà donné aux dates où le jeu avait au moins {NEVER_DOWN_MIN_REVIEWS:,} "
-                 "reviews Steam). Le site ne l'affiche que pour les jeux qu'il estime déjà à 300 000 ventes et plus.")
+                 f"série + studio), rien avant {ML_MIN_DAYS} jours après la sortie PC. Le site ne l'affiche que pour les "
+                 "jeux qu'il estime déjà à 300 000 ventes et plus.")
         st.caption(
             ("**Mode honnête** (barre latérale) : chaque modèle appris prédit ce jeu **sans l'avoir vu** à "
              "l'entraînement, comme un jeu nouveau. Passez en « Avec fuite » pour voir le modèle entraîné sur tous "
@@ -1378,6 +1368,46 @@ def review_table(snapshot: str) -> pd.DataFrame:
     return review_list(snap, load_bench())
 
 
+@st.cache_data(show_spinner="Recherche des jeux les plus loin…")
+def far_table(snapshot: str, excluded: tuple[str, ...]) -> pd.DataFrame:
+    return far_games(snap, load_bench())
+
+
+def render_far_games(b) -> None:
+    st.subheader("Jeux les plus loin du modèle")
+    far = far_table(snap.path.name, tuple(sorted(exclusions.excluded_ids())))
+    if far.empty:
+        st.success("Aucun jeu aussi loin.")
+        return
+    st.markdown(
+        f"**{len(far)} jeux** ont une erreur typique d'au moins ×{FAR_FACTOR:.0f} : le modèle, qui n'avait pas vu le jeu, "
+        "se trompe au moins du simple au double. Rien n'est modifié en base : à vérifier un par un, avec les liens "
+        "vers les sources et la page admin.\n\n"
+        "- **Un écart ne prouve pas que le chiffre est faux.** Le modèle peut aussi se tromper, ou la date de sortie et "
+        "les signaux du jeu. Décidez d'après la source, et gardez un chiffre juste même s'il est très loin.\n"
+        "- **« Piste »** dit par où commencer, ce n'est pas un verdict.\n"
+        f"- **« {SHOWN_COLUMN} »** : le jeu dépassait-il, à la date du dernier chiffre, les seuils d'affichage du modèle "
+        "sur le site (300 000 ventes et 1 000 reviews) ? Si « non », il est souvent moins urgent à vérifier.\n"
+        "- **« verdict » et « note »** sont vides dans le CSV, pour votre suivi.")
+    c1, c2 = st.columns(2)
+    direction = c1.selectbox("Sens de l'erreur", ["tous", "modèle trop bas", "modèle trop haut"])
+    shown_only = c2.checkbox(f"Seulement « {SHOWN_COLUMN} » : oui")
+    shown = far if direction == "tous" else far[far.sens == direction]
+    if shown_only:
+        shown = shown[shown[SHOWN_COLUMN] == "oui"]
+    st.dataframe(shown.drop(columns=["gameId", "verdict", "note", "tous les chiffres", "sources"]), hide_index=True,
+                 width="stretch", height=420, column_config={
+        "erreur typique": st.column_config.NumberColumn(format="×%.2f"),
+        "dernier chiffre": st.column_config.NumberColumn(format="localized"),
+        "estimation ML": st.column_config.NumberColumn(format="localized", help="Modèle en prod, à la date du chiffre."),
+        "estimation site": st.column_config.NumberColumn(format="localized", help="Ancienne formule du site."),
+        "reviews Steam": st.column_config.NumberColumn(format="localized", help="À la date du dernier chiffre."),
+        "page admin": st.column_config.LinkColumn(display_text="admin"),
+    })
+    st.download_button("Télécharger les jeux (CSV)", shown.to_csv(index=False).encode("utf-8-sig"), FAR_REPORT,
+                       "text/csv")
+
+
 def render_review(b) -> None:
     st.subheader("Chiffres à vérifier dans la base")
     review = review_table(snap.path.name)
@@ -1480,7 +1510,7 @@ with tab_data:
     usable = m[~m.rejected & ~m.isEngagement & m.reportedAt.notna()]
     funnel = pd.DataFrame({"étape": [
         "Chiffres en base", "Non rejetés", "Hors chiffres d'engagement", "Datés (= utilisables)",
-        "Chiffres monde (le total)", "Sur un jeu actif et payant", "Sans les chiffres à 0 ni les doublons", "Estimables à leur date",
+        "Chiffres monde (le total)", "Sur un jeu actif, payant, sorti depuis 2017", "Sans les chiffres à 0 ni les doublons", "Estimables à leur date",
     ], "n": [
         len(m), int((~m.rejected).sum()), int((~m.rejected & ~m.isEngagement).sum()), len(usable),
         int((usable.platform == "GLOBAL").sum()), res.n_start, len(res.rows), int(res.rows.hasEstimate.sum()),
@@ -1500,7 +1530,8 @@ with tab_data:
         "- **Datés** : sans date, impossible de remonter le temps.\n"
         "- **Chiffres monde** : pour l'instant on n'évalue que le total ; les chiffres d'une seule plateforme "
         "(PC, PlayStation, Xbox, Switch) sont mis de côté.\n"
-        "- **Jeu actif et payant** : les jeux gratuits ou supprimés ne sont pas estimés par le site.\n"
+        "- **Jeu actif, payant, sorti depuis 2017** : le site n'estime ni les jeux gratuits ou supprimés, ni les jeux "
+        "plus anciens, trop différents. Leurs chiffres servent encore aux voisins et au palmarès du studio.\n"
         "- **Sans les chiffres à 0 ni les doublons** : un chiffre à 0 est une erreur de saisie ; un doublon est la "
         "même annonce (même jeu, plateforme, chiffre et jour) reprise par plusieurs médias, qu'on ne compte "
         "qu'une fois.\n"
@@ -1555,6 +1586,7 @@ with tab_data:
 
     if bench_b is not None:
         render_exclusions(bench_b)
+        render_far_games(bench_b)
         render_review(bench_b)
 
     st.subheader("Jeux avec le plus de doublons")

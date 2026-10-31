@@ -71,7 +71,7 @@ Pour expérimenter en Python :
 | `metrics.py` | Erreur en facteur ×, parts à ×1,5 / ×2, couverture, biais, intervalles de confiance. |
 | `backtest.py` | Recalcule l'estimation à la date de chaque milestone → `reports/backtest.md` + `backtest_rows.parquet`. |
 | `features.py` | Table d'apprentissage : une ligne par chiffre monde réel, features calculées à la date du chiffre ; définit le test final sous clé (hachage de l'id du jeu). |
-| `bench.py` | Banc d'essai : validation croisée par jeu (réglages imbriqués), test dans le temps, ablation, contrôles de `checks.py`, modèles comparés à l'actuel, dont la règle en prod (« jamais en baisse dès J+3 ») → `reports/bench.md`. `--final` = test final, une seule fois. |
+| `bench.py` | Banc d'essai : validation croisée par jeu (réglages imbriqués), test dans le temps, ablation, contrôles de `checks.py`, modèles comparés à l'actuel, dont la règle en prod (dès J+3) → `reports/bench.md`. `--final` = test final, une seule fois. |
 | `app.py` | Mini-UI Streamlit : « Commencer ici » (tout expliqué sur un exemple réel), vue d'ensemble, segments, estimé vs réel, un jeu décortiqué étape par étape avec les modèles appris (forêt, linéaire + interactions, boosting) sur la même frise, comparaison des modèles, qualité des données. |
 | `learn_matcher.py` | Audit des 13 poids du matcher : les réapprend à partir des données (validation croisée par jeu + test dans le temps) et les compare aux poids actuels → `reports/matcher_weights.md`. |
 | `labels.py` | Chiffres publiés suspects (incohérents dans le temps, partiels probables, écarts extrêmes) : écartés de l'ENTRAÎNEMENT des modèles seulement, la base n'est pas modifiée. |
@@ -80,7 +80,7 @@ Pour expérimenter en Python :
 | `frozen.py` | Relit les modèles figés depuis leurs fichiers JSON, sans scikit-learn (lecture de référence du backend). |
 | `freeze.py` | Fige les deux finalistes dans `models/<snapshot>/` (à garder dans git, ne plus modifier) ; `--install` copie `ensemble.json` dans le backend. Les arbres portent aussi la valeur de chaque nœud (`v`), qui sert seulement à expliquer une estimation dans l'admin ; `--add-node-values` l'ajoute à un gel existant après avoir vérifié que ses arbres sont identiques. |
 | `exclusions.py` | Jeux exclus à la main de l'ENTRAÎNEMENT (`excluded_games.csv`, avec la raison de chacun), à gérer depuis « Qualité des données ». Mesure l'effet avec et sans, jugé sur les mêmes chiffres. Ni la base ni le site ne changent tant qu'un nouveau modèle n'est pas figé et installé. |
-| `suspects.py` | Liste de travail des chiffres de ventes à vérifier dans la base (priorités 1 à 3, raisons, estimations des modèles, liens source et admin) → `reports/milestones_a_verifier.csv`. Aussi produite par `bench.py` et affichée dans « Qualité des données ». |
+| `suspects.py` | Liste de travail des chiffres de ventes à vérifier dans la base (priorités 1 à 3, raisons, estimations des modèles, liens source et admin) → `reports/milestones_a_verifier.csv`. Aussi produite par `bench.py` et affichée dans « Qualité des données ». Donne aussi, par jeu, ceux dont l'erreur typique atteint ×2, avec leurs chiffres et leurs sources → `reports/jeux_les_plus_loin.csv`. |
 | `checks.py` | Contrôles du banc au-delà de l'erreur moyenne : erreur selon l'âge du jeu, courbe qui baisse, catalogue entier, chiffres « de lancement » suspects. Affichés dans l'onglet des modèles de l'UI. |
 | `bench_v2.py` | Essai des variantes v2 (sans informations « du moment », signaux de lancement, « jamais en baisse ») → `reports/bench_v2.md`. |
 | `prospective_test.py` | Test neutre : juge les modèles figés sur les chiffres arrivés dans la base après le gel, à partir d'un snapshot rangé dans `data/neutral/<date>/`. |
@@ -459,7 +459,7 @@ Règle dans le backend : `mlEstimateApplies`
 Verdict : garder le modèle v1, ajouter « jamais en baisse », nettoyer les
 chiffres de lancement suspects, puis réentraîner.
 
-**En prod (29/10)** : « jamais en baisse dès J+3 ». Pas d'estimation ML
+**En prod (29/10, retirée le 31/10)** : « jamais en baisse dès J+3 ». Pas d'estimation ML
 avant 3 jours après la sortie PC (le site garde son chiffre), puis le plus
 haut chiffre déjà donné aux dates J+3, J+7, … où le jeu avait au moins
 1 000 reviews Steam. Au banc : ×1,52 (contre ×1,51), l'écart venant des
@@ -577,6 +577,38 @@ multiplie le chiffre :
 Ce départ est celui d'un succès : les jeux qui publient leurs ventes en sont
 presque tous. C'est pourquoi un petit jeu reçoit de forts multiplicateurs à
 la baisse, et pourquoi le modèle surestime encore les ventes moyennes.
+
+## Périmètre : jeux sortis depuis 2017 (31/10)
+
+Le site n'estime plus les jeux sortis avant 2017 : notre modèle n'est pas assez
+fiable pour eux (skill `estimate-scope-2017`). Le labo apprend et juge sur ces
+jeux seulement (`released_in_scope` dans `snapshot.py`). Leurs chiffres servent
+encore aux voisins et au palmarès de la série et du studio.
+
+La règle « jamais en baisse » est retirée de la prod : l'estimation peut baisser
+quand de nouvelles données la corrigent. Au banc, elle n'apportait aucun gain
+net (×1,467 avec, ×1,471 sans ; ×1,432 dans les deux cas depuis 2017). La ligne
+« En prod » garde la règle J+3 et le seuil d'affichage. `bench_v2.py` garde cet
+essai pour mémoire.
+
+Banc sur le snapshot `2026-10-31T1334` : 1 586 chiffres de 419 jeux jamais vus.
+
+| Modèle | Validation croisée | À ×2 | Dans le temps (796 chiffres, 196 jeux) |
+|---|---|---|---|
+| Modèle actuel (site) | ×1,74 | 61 % | ×1,74 |
+| Forêt aléatoire | ×1,47 | 75 % | ×1,54 |
+| Forêt + voisins | ×1,44 | 78 % | ×1,56 |
+| Moyenne forêt + linéaire | ×1,42 | 78 % | ×1,53 |
+| v1.2 : voisins + série + studio | ×1,42 | 79 % | ×1,49 |
+| En prod : dès J+3 | ×1,42 | 78 % | ×1,49 |
+
+Sur les chiffres nettoyés, la ligne « En prod » donne : gros jeux (1 M et plus)
+30 % à ±20 %, erreur typique ±39 % ; plus petits 14 % à ±20 %, erreur typique
+±73 %.
+
+Attention : ce score monte surtout parce que les vieux jeux, plus difficiles, ne
+sont plus jugés. Ces lignes sont aussi entraînées depuis 2017, alors que le modèle
+réellement en ligne reste le gel `2026-10-29T17`, entraîné sur tous les jeux.
 
 ## Prochaines étapes
 

@@ -126,6 +126,8 @@
     "headingUnits": "{units} exemplaires",
     "interestTitle": "Signaux d’audience",
     "officialRecap": "Combien d'exemplaires {name} a-t-il vendus ?",
+    "outOfScopeNote": "Notre modèle n’est pas assez fiable pour donner une estimation précise sur les jeux sortis avant 2017.",
+    "outOfScopeTitle": "Non estimé",
     "officialRecapLead": "Ce que l'on sait officiellement",
     "noData": "Aucun chiffre de vente pour ce jeu.",
     "peakCcuHint": "joueurs simultanés Steam · {date}",

@@ -2,9 +2,9 @@ import type { MlContributions } from './ml-ensemble';
 import type { MlNeighbours, MlSignals } from './ml-features';
 
 /**
- * Admin explanation of an ML estimate: what the model read, how much each
- * family of inputs moved the figure, and the « never down » steps. Pure —
- * `MlEstimateService.explain` gathers the inputs.
+ * Admin explanation of an ML estimate: what the model read and how much each
+ * family of inputs moved the figure. Pure — `MlEstimateService.explain`
+ * gathers the inputs.
  */
 
 const FAMILIES: Array<{ family: string; features: string[] }> = [

@@ -52,15 +52,17 @@ function FactorCell({ factor }: { factor: number }) {
 
 /**
  * How the worldwide ML estimate was computed: why it is (not) shown, the
- * exact split by family of inputs, the inputs, and the « never down » steps.
+ * exact split by family of inputs, and the inputs.
  */
 export function MlExplanationPanel({
   explanation: e,
   shown,
+  hiddenOnSite,
   siteUnits,
 }: {
   explanation: AdminMlExplanation;
   shown: boolean;
+  hiddenOnSite: boolean;
   siteUnits: number | null;
 }) {
   const reasons: string[] = [];
@@ -96,16 +98,18 @@ export function MlExplanationPanel({
           )}
         </CardTitle>
         <p className="text-muted-foreground text-xs">
-          {shown
-            ? 'The public site displays this estimate.'
-            : `The public site shows the platform sum instead: ${reasons.join('; ') || 'outside the zone the model was tested on'}.`}{' '}
+          {hiddenOnSite
+            ? 'The public site shows no estimate: this game was released before 2017.'
+            : shown
+              ? 'The public site displays this estimate.'
+              : `The public site shows the platform sum instead: ${reasons.join('; ') || 'outside the zone the model was tested on'}.`}{' '}
           It is shown only for games the platform sum puts at{' '}
           {fmt(e.rule.minSiteUnits)}+ with{' '}
           {e.rule.minSteamReviews.toLocaleString('en-US')}+ Steam reviews,
           from {e.rule.minDaysAfterRelease} days after the PC release.
         </p>
       </CardHeader>
-      {e.estimate && d && e.usedDate && (
+      {e.estimate && d && (
         <CardContent className="flex flex-col gap-5">
           <div className="flex flex-col gap-2">
             <h3 className="text-xs font-semibold tracking-wide uppercase">
@@ -150,7 +154,7 @@ export function MlExplanationPanel({
                   </TableRow>
                 ))}
                 <TableRow className="font-semibold">
-                  <TableCell>Estimate on {day(e.usedDate)}</TableCell>
+                  <TableCell>Estimate on {day(e.asOf)}</TableCell>
                   <TableCell className="text-right tabular-nums">
                     {fmt(d.result.forest)}
                   </TableCell>
@@ -172,7 +176,7 @@ export function MlExplanationPanel({
 
           <div className="flex flex-col gap-2">
             <h3 className="text-xs font-semibold tracking-wide uppercase">
-              Inputs on {day(e.usedDate)}
+              Inputs on {day(e.asOf)}
             </h3>
             <Table>
               <TableBody>
@@ -183,54 +187,6 @@ export function MlExplanationPanel({
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {fmtValue(i.value)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <h3 className="text-xs font-semibold tracking-wide uppercase">
-              Never down
-            </h3>
-            <p className="text-muted-foreground text-xs">
-              Cumulative sales cannot drop: the displayed figure is the highest
-              the model gave on these dates. A past date counts only if the game
-              already had {e.rule.minSteamReviews.toLocaleString('en-US')}+
-              Steam reviews.
-            </p>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="text-right">Steam reviews</TableHead>
-                  <TableHead className="text-right">Model</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {e.steps.map((s) => (
-                  <TableRow
-                    key={s.date}
-                    className={cn(
-                      s.used && 'font-semibold',
-                      !s.counted && 'text-muted-foreground',
-                    )}
-                  >
-                    <TableCell>{day(s.date)}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {fmtValue(s.steamReviews)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {fmt(s.units)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {s.used ? (
-                        <Badge>shown</Badge>
-                      ) : !s.counted ? (
-                        <span className="text-xs">not counted</span>
-                      ) : null}
                     </TableCell>
                   </TableRow>
                 ))}

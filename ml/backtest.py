@@ -35,7 +35,7 @@ import pandas as pd
 
 from baseline import Estimator
 from metrics import add_error_columns, format_table, segment_table, summarize
-from snapshot import load_snapshot, usable_milestones
+from snapshot import load_snapshot, released_in_scope, usable_milestones
 
 REPORTS = Path(__file__).resolve().parent / "reports"
 EPOCH = pd.Timestamp("1970-01-01", tz="UTC")
@@ -110,6 +110,7 @@ def compute_backtest(snap, est: Estimator, platforms: set[str] | None = frozense
     """
     ms = usable_milestones(snap)
     ms = ms[~ms.gameDeleted & ~ms.gameIsFree].sort_values(["gameId", "reportedAt"])
+    ms = ms[released_in_scope(ms.gameId.map(snap.games.set_index("id").releaseDate))]
     if platforms is not None:
         ms = ms[ms.platform.isin(platforms)]
 

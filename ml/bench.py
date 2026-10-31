@@ -53,7 +53,7 @@ import baseline.matcher as matcher_mod
 from features import (BASELINE_FEATURE, FEATURE_LABELS, FeatureBuilder, FOLLOWER_FEATURES, GAME_FEATURES, INTERACTION_FEATURES,
                       MATCHER_FEATURES, RELEASE_FEATURES, REVIEW_DYNAMICS_FEATURES, SIGNAL_FEATURES, TIME_FEATURES,
                       TRACK_RECORD_FEATURES, build_feature_table)
-from frozen import NEVER_DOWN_MIN_DAYS, NEVER_DOWN_MIN_REVIEWS
+from frozen import ML_MIN_DAYS
 from labels import flag_suspects
 from metrics import add_error_columns, format_table, game_weights, summarize, weighted_median
 from snapshot import load_snapshot
@@ -142,7 +142,7 @@ def tree_nodes(model) -> int | None:
 class ModelSpec:
     name: str
     description: str           # en clair, affiché dans le rapport et l'UI
-    kind: str                  # "baseline" | "recalibrated" | "ridge" | "gbm" | "forest" | "forest_knn" | "ensemble" | "running_max"
+    kind: str                  # "baseline" | "recalibrated" | "ridge" | "gbm" | "forest" | "forest_knn" | "ensemble" | "running_max" | "from_day"
     features: list[str] = field(default_factory=list)
     members: list["ModelSpec"] = field(default_factory=list)  # modèles moyennés (ensemble) ou suivi (running_max)
     # running_max : pas d'estimation avant `min_days` jours après la sortie PC
@@ -176,9 +176,8 @@ def feature_families() -> dict[str, list[str]]:
     }
 
 
-# Règle en prod (backend `MlEstimateService`, référence `frozen.predict_never_down`),
-# appliquée au modèle v1.1.
-PROD_MODEL = "En prod : jamais en baisse dès J+3"
+# Règle en prod (backend `MlEstimateService`), appliquée au modèle v1.2.
+PROD_MODEL = "En prod : dès J+3"
 # Le modèle en prod : mêmes informations depuis la v1.1, réentraîné à chaque gel
 # (v1.2 = gel du 29/10 17 h, models/2026-10-29T17).
 ML_MODEL = "v1.2 : voisins + série + studio"
@@ -223,10 +222,9 @@ def model_specs(tag_cols: list[str]) -> list[ModelSpec]:
                              ModelSpec(f"{ML_MODEL} (forêt)", "", "forest", TREE_FEATURES + TRACK_RECORD_FEATURES),
                              ModelSpec(f"{ML_MODEL} (linéaire)", "", "ridge",
                                        signals + TRACK_RECORD_FEATURES + INTERACTION_FEATURES)]),
-        ModelSpec(PROD_MODEL, "Le modèle en ligne : la v1.2, rien avant 3 jours après la sortie PC (le site garde son "
-                              "chiffre), puis jamais en baisse : le plus haut chiffre déjà donné aux dates où le jeu "
-                              f"avait au moins {NEVER_DOWN_MIN_REVIEWS:,} reviews Steam.",
-                  "running_max", members=[v11], min_days=NEVER_DOWN_MIN_DAYS, min_reviews=NEVER_DOWN_MIN_REVIEWS),
+        ModelSpec(PROD_MODEL, "La règle en ligne : la v1.2, rien avant 3 jours après la sortie PC (le site garde son "
+                              "chiffre). L'estimation peut baisser quand de nouvelles données la corrigent.",
+                  "from_day", members=[v11], min_days=ML_MIN_DAYS),
     ]
 
 
@@ -257,6 +255,8 @@ def _fit_core(spec: ModelSpec, train: pd.DataFrame, hp):
         return _fit_forest_knn(spec, train)
     if spec.kind == "running_max":
         return _fit_running_max(spec, train)
+    if spec.kind == "from_day":
+        return _fit_from_day(spec, train)
     if spec.kind.startswith(("gbm", "forest")):
         model = make_gbm(spec.features, hp) if spec.kind.startswith("gbm") else make_forest(hp)
         model.fit(train[spec.features], train.y, sample_weight=_weights(train))
@@ -320,7 +320,7 @@ def _fit_forest_knn(spec: ModelSpec, train: pd.DataFrame):
 
 
 # Frise de chaque jeu : ses features à une série de dates (voir set_timeline).
-# « Jamais en baisse » s'en sert pour connaître les estimations passées.
+# « Jamais en baisse » (essai de bench_v2, retiré de la prod) s'en sert pour connaître les estimations passées.
 TIMELINE: pd.DataFrame | None = None
 TIMELINE_DAYS = [1, 3, 7, 14, 30, 60, 90, 180, 270, 365]  # puis tous les 180 jours
 
@@ -328,6 +328,18 @@ TIMELINE_DAYS = [1, 3, 7, 14, 30, 60, 90, 180, 270, 365]  # puis tous les 180 jo
 def set_timeline(timeline: pd.DataFrame) -> None:
     global TIMELINE
     TIMELINE = timeline
+
+
+def _fit_from_day(spec: ModelSpec, train: pd.DataFrame):
+    """Le modèle suivi, et le chiffre du site avant `min_days` jours après la sortie PC."""
+    base = _fit_core(spec.members[0], train, None)[0]
+
+    def predict(df: pd.DataFrame) -> np.ndarray:
+        out = np.asarray(base(df), dtype=float).copy()
+        too_early = np.expm1(df.log_age_days.to_numpy()) < spec.min_days
+        out[too_early] = np.log(df.baselineMid.to_numpy()[too_early])
+        return out
+    return predict, None
 
 
 def _fit_running_max(spec: ModelSpec, train: pd.DataFrame):
@@ -564,7 +576,7 @@ def run_bench(snap, est: Estimator, res, bootstrap: int = 300) -> BenchResult:
     table = table.join(flag_suspects(table, [by_name["Forêt aléatoire"], by_name["Linéaire + interactions"]], SEED))
     table["t_us"] = table.reportedAt.map(to_us)
     dev = (table if LOCKED_GAMES_SPENT else table[~table.finalTest]).reset_index(drop=True)
-    # Frise de chaque jeu, pour « jamais en baisse » et le contrôle de la courbe.
+    # Frise de chaque jeu, pour le contrôle de la courbe.
     import checks  # import local : checks importe ce module
     games = snap.games.set_index("id")
     builder = FeatureBuilder(snap, est, tag_cols)

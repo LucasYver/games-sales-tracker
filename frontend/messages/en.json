@@ -126,6 +126,8 @@
     "headingUnits": "{units} copies",
     "interestTitle": "Audience signals",
     "officialRecap": "How many copies has {name} sold?",
+    "outOfScopeNote": "Our model is not reliable enough to give a precise estimate for games released before 2017.",
+    "outOfScopeTitle": "Not estimated",
     "officialRecapLead": "Official sales recap",
     "noData": "No sales figure yet for this game.",
     "peakCcuHint": "Steam concurrent players · {date}",

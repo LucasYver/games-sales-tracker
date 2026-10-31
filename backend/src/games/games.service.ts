@@ -41,6 +41,7 @@ import {
   ageInYears,
   lifetimeSalesPct,
 } from './sales-modeling.constants';
+import { ESTIMATE_MIN_RELEASE, estimateOutOfScope } from './estimate-scope';
 import { platformReleaseDate } from './platform-release-date';
 import { normalizeSteamPriceCountry } from '../ingestion/steam-store-countries';
 
@@ -570,7 +571,9 @@ export class GamesService {
           ORDER BY "gameId", "computedAt" DESC
         )`,
         'snap',
-        'snap."gameId" = g.id',
+        // Games out of the estimate scope show no figure, so they rank last.
+        'snap."gameId" = g.id AND (g."releaseDate" IS NULL OR g."releaseDate" >= :estimateMinRelease)',
+        { estimateMinRelease: ESTIMATE_MIN_RELEASE },
       );
       qb.addSelect(
         // The figure listingUnits() displays (midpoint for pre-ML rows).
@@ -722,7 +725,10 @@ export class GamesService {
 
     const visibleMilestones = game.isFree ? [] : game.milestones;
 
-    const latestEstimates = game.isFree
+    const outOfScope = estimateOutOfScope(game.releaseDate);
+    const noEstimate = game.isFree || outOfScope;
+
+    const latestEstimates = noEstimate
       ? { byPlatform: new Map<Platform, SalesEstimate>(), ml: null }
       : await this.latestEstimates(game.id);
 
@@ -862,7 +868,7 @@ export class GamesService {
         }
       : null;
 
-    const estimateSnapshotRows = game.isFree
+    const estimateSnapshotRows = noEstimate
       ? []
       : await this.estimateSnapshots.find({
           where: { gameId: game.id },
@@ -906,6 +912,7 @@ export class GamesService {
       headline: estimatedToday,
       reconciliation,
       estimatedToday,
+      estimateOutOfScope: outOfScope,
       estimateSnapshots,
       reviewHistory,
       followersHistory,
@@ -1867,6 +1874,10 @@ export class GamesService {
       .addSelect('s.estimatedTodayHigh', 'high')
       .addSelect('s.estimatedTodayUnits', 'units')
       .where('s.gameId IN (:...gameIds)', { gameIds })
+      .andWhere(
+        `s.gameId NOT IN (SELECT id FROM game WHERE "releaseDate" < :estimateMinRelease)`,
+        { estimateMinRelease: ESTIMATE_MIN_RELEASE },
+      )
       .orderBy('s.gameId')
       .addOrderBy('s.computedAt', 'DESC')
       .getRawMany<{

@@ -20,12 +20,13 @@ from baseline import Estimator
 from baseline.matcher import _time_us
 from bench import N_FOLDS, SEED, ModelSpec, _clean
 from features import US_PER_DAY, FeatureBuilder
-from frozen import NEVER_DOWN_MIN_REVIEWS
+from frozen import ML_MIN_REVIEWS
 from metrics import add_error_columns
+from snapshot import released_in_scope
 
 SITE = "Modèle actuel"
 # Règle d'affichage du backend (`mlEstimateApplies`).
-ML_MIN_SITE_UNITS, ML_MIN_STEAM_REVIEWS = 300_000, NEVER_DOWN_MIN_REVIEWS
+ML_MIN_SITE_UNITS, ML_MIN_STEAM_REVIEWS = 300_000, ML_MIN_REVIEWS
 AGE_BUCKETS = ([-1, 3, 30, 365, 1e9], ["0-3 jours", "4-30 jours", "1-12 mois", "1 an et +"])
 REVIEW_BUCKETS = ([-1, 100, 1_000, 10_000, 100_000, 1e12], ["< 100", "100-1k", "1k-10k", "10k-100k", "100k+"])
 
@@ -136,6 +137,7 @@ def launch_suspects(cv_preds: pd.DataFrame, dev: pd.DataFrame, games: pd.DataFra
 
 
 def catalog_rows(builder: FeatureBuilder, games: pd.DataFrame, now_us: int) -> pd.DataFrame:
-    """Features de tous les jeux vivants et payants du catalogue, à la date du snapshot."""
-    alive = games[games.deletedAt.isna() & ~games.isFree.fillna(False).astype(bool)].index
+    """Features des jeux vivants, payants et sortis depuis 2017, à la date du snapshot."""
+    alive = games[games.deletedAt.isna() & ~games.isFree.fillna(False).astype(bool)
+                  & released_in_scope(games.releaseDate)].index
     return pd.DataFrame([{"gameId": g, "t_us": now_us, **f} for g in alive if (f := builder.row(g, now_us))])

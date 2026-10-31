@@ -625,6 +625,7 @@ async function EstimatesTab({
         <MlExplanationPanel
           explanation={b.mlExplanation}
           shown={b.ml?.shown ?? false}
+          hiddenOnSite={b.hiddenOnSite}
           siteUnits={algo ? midpoint(algo.low, algo.high) : null}
         />
       )}

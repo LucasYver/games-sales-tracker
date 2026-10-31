@@ -287,6 +287,15 @@ function SalesHeadline({ game }: { game: GameDetail }) {
                 {asOfLabel ? ` · ${t('asOf', { date: asOfLabel })}` : ''}
               </p>
             </>
+          ) : game.estimateOutOfScope ? (
+            <>
+              <p className="mt-1 font-mono text-xl font-bold text-muted-foreground">
+                {t('outOfScopeTitle')}
+              </p>
+              <p className="mt-1 max-w-[42ch] text-sm text-muted-foreground">
+                {t('outOfScopeNote')}
+              </p>
+            </>
           ) : (
             <p className="mt-1 text-sm text-muted-foreground">{t('noData')}</p>
           )}

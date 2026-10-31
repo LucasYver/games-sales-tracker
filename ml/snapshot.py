@@ -10,6 +10,12 @@ import pandas as pd
 DATA_DIR = Path(__file__).resolve().parent / "data"
 
 
+# Le site n'estime que les jeux sortis depuis 2017 (backend `games/estimate-scope.ts`).
+# Le labo apprend et juge sur ces jeux seulement. Les chiffres plus anciens
+# restent lus pour les voisins et le palmarès de la série et du studio.
+ESTIMATE_MIN_RELEASE = pd.Timestamp("2017-01-01", tz="UTC")
+
+
 @dataclass
 class Snapshot:
     path: Path
@@ -43,6 +49,12 @@ def load_snapshot(path: Path | str | None = None) -> Snapshot:
         # Tables ajoutées après coup (ex. followers) : vides si absentes.
         tables[name] = pd.read_parquet(file) if file.exists() else pd.DataFrame()
     return Snapshot(path=path, **tables)
+
+
+def released_in_scope(release_dates: pd.Series) -> pd.Series:
+    """Jeux que le site estime : sortis depuis 2017, ou sans date connue."""
+    release = pd.to_datetime(release_dates, utc=True)
+    return release.isna() | (release >= ESTIMATE_MIN_RELEASE)
 
 
 def usable_milestones(snap: Snapshot) -> pd.DataFrame:
