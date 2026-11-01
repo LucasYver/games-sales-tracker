@@ -28,16 +28,18 @@ session knows where to resume.
 | `essai-20` | largest, no figure at all | 20 | 8 | 12 | Done, without platform searches |
 | `t1-50k` | 50,000+ | 105 | 21 | 31 | Done, few platform searches |
 | `t2-20k-50k-a` | 29,000 to 50,000 | 105 | 15 | 20 | Cut off at 200 searches, 22 games not searched |
-| `t2-20k-50k-b` | 20,000 to 50,000 | 0 | 0 | 0 | **Next: batches prepared, 50 of about 199 left** |
+| `t2-20k-50k-b` | 20,000 to 50,000 | 50 | 4 | 4 | Done, 166 searches, no cutoff; 2 of the 4 games were already in base |
+| `t2-20k-50k-c` | 20,000 to 50,000 | 0 | 0 | 0 | **Next: run `prepare`. 159 left: 139 never searched, 20 searched too few times** |
 
-After that tier: 10,000 to 20,000 reviews (about 360 games), then the rest.
+After that tier: 10,000 to 20,000 reviews (366 games), then the rest.
 
 ## Resume
 
 From `ml/`, with `<tranche>` as the next name in the table.
 
 1. **Check the quota** with `mcp__ccd_session_mgmt__get_usage`. A wave of 50 games
-   should take about 15% of the 5-hour limit and 2% of the weekly limit. Do not
+   took 20% of the 5-hour limit and 4% of the weekly limit on Pro (`t2-20k-50k-b`,
+   review included). Do not
    start one that would cross either limit: running agents would stop midway. Say
    when the window resets and stop.
 2. **Prepare the batches.** Skip this if the table says they are ready.
@@ -122,12 +124,16 @@ All of these happened on real figures:
 
 - **Web search stopped at exactly 200 searches** shared across 5 agents in one wave,
   while an earlier wave reported 202. The cause is unknown. This is why a wave is 50
-  games, not 105.
+  games, not 105. The 50-game wave `t2-20k-50k-b` used 166 searches and was not cut off.
 - **Yield** falls as games get smaller: 40% of the first 20, 20% at 50,000+ reviews,
-  18% of those really searched at 29,000 to 50,000.
-- **Platform figures are rare**: 4 console figures in 230 games, though console
-  searches were often skipped or cut off. Judge this again on a wave where every
-  game gets its 4 searches.
+  18% of those really searched at 29,000 to 50,000, then 8% (4 of 50) at 20,000 to
+  50,000, where most finds were old console games (Heavy Rain, Beyond: Two Souls).
+- **Platform figures are rare**: 4 console figures in 230 games, then 2 PlayStation
+  figures in `t2-20k-50k-b`, where 39 of 50 games got all their searches. Console
+  searches mostly surface Alinea relays or nothing.
+- **Games with one console family** (Heavy Rain, AI Limit: no Xbox version) can only
+  reach 3 searches, so `prepare` keeps picking them again. Agents also sometimes
+  search PlayStation and Xbox in one query, which counts as one search.
 
 ## Files
 
