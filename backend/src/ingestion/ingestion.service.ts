@@ -1174,7 +1174,8 @@ export class IngestionService {
 
   /**
    * Sample reviewer lifetime playtime from Steam and persist a
-   * `STEAM_REVIEWER_MEDIAN_PLAYTIME` snapshot (value in MINUTES). This is a
+   * `STEAM_REVIEWER_MEDIAN_PLAYTIME` snapshot (value in MINUTES), plus the
+   * language counts of the same reviews on `Game.reviewLanguages`. This is a
    * directional, SteamSpy-style proxy derived from `author.playtime_forever`
    * over a sample of recent reviews — not a whole-population figure and never
    * an estimate input; see the metric's doc comment in `enums.ts`.
@@ -1208,6 +1209,9 @@ export class IngestionService {
         value: playtime.medianMinutes,
       }),
     );
+    await this.games.update(gameId, {
+      reviewLanguages: playtime.languageCounts,
+    });
   }
 
   /**

@@ -177,6 +177,8 @@ export interface GameDetail {
   regionalPrices: RegionalPrice[];
   rank: RankInfo | null;
   storeRatings: StoreRatings;
+  // Recent Steam reviews counted per Steam language code.
+  reviewLanguages: Record<string, number> | null;
   blog: { slugByLocale: Partial<Record<string, string>> } | null;
 }
 

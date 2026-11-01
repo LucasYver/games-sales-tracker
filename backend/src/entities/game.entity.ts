@@ -173,6 +173,12 @@ export class Game {
   @Column({ type: 'timestamptz', nullable: true })
   priceRefreshedAt: Date | null;
 
+  // Latest sample of recent Steam reviews, counted per Steam language code.
+  // Display only: the language of a review, not the player's country. Not
+  // selected by default, because the catalog-wide reads do not need it.
+  @Column({ type: 'jsonb', nullable: true, select: false })
+  reviewLanguages: Record<string, number> | null;
+
   @OneToMany(() => GameSource, (source) => source.game)
   sources: GameSource[];
 

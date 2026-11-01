@@ -70,6 +70,8 @@ export interface SteamReviewerPlaytime {
   averageMinutes: number;
   // Number of reviews that carried a usable `playtime_forever` value.
   sampleSize: number;
+  // Reviews read per Steam language code (`schinese`, `english`, ...).
+  languageCounts: Record<string, number>;
 }
 
 export interface SteamReviewHistogram {
@@ -739,6 +741,7 @@ export class SteamClient {
     const maxPages = options.maxPages ?? 10;
 
     const playtimes: number[] = [];
+    const languageCounts: Record<string, number> = {};
     const seenCursors = new Set<string>();
     let cursor = '*';
     let pages = 0;
@@ -763,10 +766,15 @@ export class SteamClient {
       if (reviews.length === 0) break;
 
       for (const review of reviews as Array<{
+        language?: unknown;
         author?: { playtime_forever?: unknown };
       }>) {
         const minutes = Number(review.author?.playtime_forever);
         if (Number.isFinite(minutes) && minutes >= 0) playtimes.push(minutes);
+        if (typeof review.language === 'string') {
+          languageCounts[review.language] =
+            (languageCounts[review.language] ?? 0) + 1;
+        }
       }
 
       const nextCursor = typeof data?.cursor === 'string' ? data.cursor : null;
@@ -793,6 +801,7 @@ export class SteamClient {
       medianMinutes: Math.round(medianMinutes),
       averageMinutes: Math.round(averageMinutes),
       sampleSize: playtimes.length,
+      languageCounts,
     };
   }
 

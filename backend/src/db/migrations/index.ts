@@ -64,6 +64,7 @@ import { AddProviderCooldown1788810000000 } from './1788810000000-AddProviderCoo
 import { AddBlogPost1788820000000 } from './1788820000000-AddBlogPost';
 import { AddBlogPostRefresh1788830000000 } from './1788830000000-AddBlogPostRefresh';
 import { AddMlEnsembleEstimate1788840000000 } from './1788840000000-AddMlEnsembleEstimate';
+import { AddGameReviewLanguages1788850000000 } from './1788850000000-AddGameReviewLanguages';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -139,4 +140,5 @@ export const migrations: MixedList<Function | string> = [
   AddBlogPost1788820000000,
   AddBlogPostRefresh1788830000000,
   AddMlEnsembleEstimate1788840000000,
+  AddGameReviewLanguages1788850000000,
 ];

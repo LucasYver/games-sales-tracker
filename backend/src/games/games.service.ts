@@ -913,6 +913,11 @@ export class GamesService {
       : null;
 
     const storeRatings = await this.buildStoreRatings(game.id);
+    const { reviewLanguages } =
+      (await this.games.findOne({
+        where: { id: game.id },
+        select: { id: true, reviewLanguages: true },
+      })) ?? {};
 
     const publishedBlog = await this.blogPosts.findOne({
       // Live includes a published article whose refresh is in review.
@@ -996,6 +1001,7 @@ export class GamesService {
       regionalPrices,
       rank,
       storeRatings,
+      reviewLanguages: reviewLanguages ?? null,
       blog,
     };
   }

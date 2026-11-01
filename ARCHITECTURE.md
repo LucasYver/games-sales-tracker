@@ -109,6 +109,8 @@ Other clients in `ingestion/`:
 - Wikipedia and backlog search (Perplexity first; Tavily on credit
   cooldown / missing key / error). Credit exhaustion trips a 24h
   `provider_cooldown` so harvest does not re-probe a dead balance.
+- Steam review languages (`Game.reviewLanguages`), counted by the monthly
+  reviewer-playtime cron on the reviews it already reads. Display only.
 - Steam achievements. Exophase is off by default (`EXOPHASE_ENABLED`): it
   blocks automated requests.
 - LLM extraction (`llm/llm-extractor.service.ts`): grounded tool call on

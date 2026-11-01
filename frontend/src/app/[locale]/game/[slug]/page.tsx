@@ -606,6 +606,95 @@ function PriceTab({ game }: { game: GameDetail }) {
   );
 }
 
+// Steam language codes to BCP 47, so the browser's Intl names them in the
+// visitor's language. Anything unmapped falls into "other".
+const STEAM_LANGUAGES: Record<string, string> = {
+  arabic: 'ar',
+  brazilian: 'pt-BR',
+  bulgarian: 'bg',
+  czech: 'cs',
+  danish: 'da',
+  dutch: 'nl',
+  english: 'en',
+  finnish: 'fi',
+  french: 'fr',
+  german: 'de',
+  greek: 'el',
+  hungarian: 'hu',
+  indonesian: 'id',
+  italian: 'it',
+  japanese: 'ja',
+  koreana: 'ko',
+  latam: 'es-419',
+  norwegian: 'no',
+  polish: 'pl',
+  portuguese: 'pt-PT',
+  romanian: 'ro',
+  russian: 'ru',
+  schinese: 'zh-Hans',
+  spanish: 'es-ES',
+  swedish: 'sv',
+  tchinese: 'zh-Hant',
+  thai: 'th',
+  turkish: 'tr',
+  ukrainian: 'uk',
+  vietnamese: 'vi',
+};
+// Under this, a share moves too much from one review to the next to be shown.
+const MIN_REVIEW_LANGUAGE_SAMPLE = 100;
+const REVIEW_LANGUAGES_SHOWN = 5;
+
+function ReviewLanguages({ counts }: { counts: Record<string, number> }) {
+  const t = useTranslations('gamePage');
+  const locale = useLocale();
+  const format = useFormatter();
+
+  const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
+  if (total < MIN_REVIEW_LANGUAGE_SAMPLE) return null;
+
+  const names = new Intl.DisplayNames(locale, { type: 'language' });
+  const known = Object.entries(counts)
+    .filter(([code]) => STEAM_LANGUAGES[code])
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, REVIEW_LANGUAGES_SHOWN);
+  const shown = known.reduce((sum, [, n]) => sum + n, 0);
+  const rows: [string, number][] = known.map(([code, n]) => [
+    names.of(STEAM_LANGUAGES[code]) ?? code,
+    n / total,
+  ]);
+  if (total > shown)
+    rows.push([t('reviewLanguagesOther'), (total - shown) / total]);
+
+  return (
+    <div className="mt-4 border-t border-border-soft pt-3">
+      <h3 className="mb-2 font-mono text-[0.64rem] tracking-wider text-muted-foreground uppercase">
+        {t('reviewLanguagesTitle')}
+      </h3>
+      <ul className="m-0 list-none space-y-1.5 p-0 text-[0.82rem]">
+        {rows.map(([label, share]) => (
+          <li key={label}>
+            <div className="flex justify-between gap-3">
+              <span className="first-letter:uppercase">{label}</span>
+              <span className="font-mono text-[0.75rem] text-muted-foreground">
+                {format.number(share, { style: 'percent' })}
+              </span>
+            </div>
+            <div className="mt-0.5 h-1 bg-muted" aria-hidden="true">
+              <div
+                className="h-full bg-primary"
+                style={{ width: `${share * 100}%` }}
+              />
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 mb-0 text-[0.7rem] leading-snug text-muted-foreground">
+        {t('reviewLanguagesNote', { count: format.number(total) })}
+      </p>
+    </div>
+  );
+}
+
 function TechSheet({ game }: { game: GameDetail }) {
   const t = useTranslations('gamePage');
   const tPlatform = useTranslations('platform');
@@ -698,6 +787,10 @@ function TechSheet({ game }: { game: GameDetail }) {
           </div>
         ))}
       </dl>
+
+      {game.reviewLanguages && (
+        <ReviewLanguages counts={game.reviewLanguages} />
+      )}
 
       {links.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 border-t border-border-soft pt-3 font-mono text-[0.7rem]">
