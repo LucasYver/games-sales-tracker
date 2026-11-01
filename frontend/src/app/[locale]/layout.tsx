@@ -3,10 +3,13 @@ import { DM_Sans, IBM_Plex_Mono } from 'next/font/google';
 import { NextIntlClientProvider, hasLocale } from 'next-intl';
 import { getMessages, getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
+import Script from 'next/script';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Analytics } from '@vercel/analytics/next';
 import { routing } from '@/i18n/routing';
+import { ADSENSE_CLIENT } from '@/lib/ads';
 import { SITE_URL } from '@/lib/site-url';
+import { SiteFooter } from '@/components/SiteFooter';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import '../globals.css';
 
@@ -75,9 +78,16 @@ export default async function LocaleLayout({
       <body className="flex min-h-full flex-col">
         <NextIntlClientProvider messages={messages}>
           <TooltipProvider>{children}</TooltipProvider>
+          <SiteFooter />
         </NextIntlClientProvider>
         <Analytics />
         <SpeedInsights />
+        {ADSENSE_CLIENT && (
+          <Script
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`}
+            crossOrigin="anonymous"
+          />
+        )}
       </body>
     </html>
   );

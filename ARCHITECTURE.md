@@ -165,6 +165,7 @@ the locale prefix.
 | `/[locale]/game/[slug]` | Headline estimate, history, signals, regional prices |
 | `/[locale]/blog` | Published official-sales articles (human-reviewed) |
 | `/[locale]/blog/[slug]` | One article, FR/EN, no model estimates |
+| `/[locale]/privacy` | Privacy page: audience measurement, ads, contact |
 | `/admin/*` | Back-office |
 
 The public game page shows `headline` (the model range). `totalSales` is
@@ -173,6 +174,8 @@ not shown on the public page.
 
 Default API base: `NEXT_PUBLIC_API_URL` or `http://localhost:3001/api`
 (`frontend/src/lib/api.ts`). The sitemap is split (`app/sitemap/[file]/route.ts`, served at `/sitemap/{id}.xml`: 0 = home, blog and posts, then 2,000 games per file) behind an index at `/sitemap.xml` (`app/sitemap.xml/route.ts`); it reads `GET /games/sitemap` and `GET /blog/sitemap`. Fonts are Inter and JetBrains Mono.
+
+Ads are off unless `NEXT_PUBLIC_ADSENSE_CLIENT` is set (`frontend/src/lib/ads.ts`): it loads the AdSense script on public pages and serves `/ads.txt`. `NEXT_PUBLIC_ADSENSE_GAME_SLOT` adds the unit at the bottom of game pages. `NEXT_PUBLIC_CONTACT_EMAIL` adds the contact section of the privacy page. All three are read at build time, so changing one needs a redeploy.
 
 ## Environment
 

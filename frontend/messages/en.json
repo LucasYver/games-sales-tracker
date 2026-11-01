@@ -22,6 +22,7 @@
   "nav": {
     "blog": "Blog",
     "langSwitch": "Français",
+    "privacy": "Privacy",
     "ranking": "Ranking"
   },
   "siteMeta": {
@@ -98,6 +99,7 @@
     "yearTo": "To"
   },
   "gamePage": {
+    "adLabel": "Advertisement",
     "allPlatforms": "all platforms",
     "asOf": "as of {date}",
     "back": "Home",
@@ -267,5 +269,18 @@
     "publishedOn": "Published {date}",
     "tldrTitle": "In short",
     "updatedOn": "Updated {date}"
+  },
+  "privacy": {
+    "adsBody": "This site may show ads provided by Google AdSense. Google and its partners may use cookies to serve these ads and to personalize them based on your visits to this site and other sites.",
+    "adsConsent": "In the European Economic Area, the United Kingdom and Switzerland, you are asked for your choice before any of this happens.",
+    "adsGooglePolicy": "How Google uses data from sites that show its ads",
+    "adsGoogleSettings": "Manage ad personalization in your Google settings",
+    "adsTitle": "Advertising",
+    "analyticsBody": "We measure page views and page speed with Vercel Analytics and Speed Insights. These tools do not use cookies and only produce aggregate statistics.",
+    "analyticsTitle": "Audience measurement",
+    "contactBody": "For any question about this page or your data:",
+    "contactTitle": "Contact",
+    "intro": "This page explains what data is processed when you visit this site. There is no user account here.",
+    "title": "Privacy"
   }
 }

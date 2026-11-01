@@ -10,8 +10,10 @@ import {
   type Platform,
 } from '@/lib/api';
 import { routing } from '@/i18n/routing';
+import { ADSENSE_CLIENT, ADSENSE_GAME_SLOT } from '@/lib/ads';
 import { SITE_URL } from '@/lib/site-url';
 import { Link } from '@/i18n/navigation';
+import { AdSlot } from '@/components/AdSlot';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
 import { RangedChart } from '@/components/chart-room/RangedChart';
 import {
@@ -936,6 +938,15 @@ function GamePageContent({
 
           <TechSheet game={game} />
         </div>
+
+        {ADSENSE_CLIENT && ADSENSE_GAME_SLOT && (
+          <AdSlot
+            key={game.slug}
+            client={ADSENSE_CLIENT}
+            slot={ADSENSE_GAME_SLOT}
+            label={t('adLabel')}
+          />
+        )}
 
         <footer className="px-4 py-5 text-xs leading-relaxed text-text-faint">
           {asOf
