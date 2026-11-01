@@ -637,6 +637,29 @@ Limite : 37 profils sans aucun chiffre actif restaient dans ce snapshot, car
 `rebuildAll` ne visite que les jeux qui ont encore un chiffre. Le cron quotidien,
 lui, les reprend.
 
+## v1.3 figée et mise en prod (01/11)
+
+`models/2026-11-01T1054/` : les mêmes informations que la v1.2, réentraînées sur
+les chiffres nettoyés des jeux sortis depuis 2017 (1 328 chiffres de 382 jeux,
+contre 2 093 chiffres de 624 jeux). Fourchette ÷/× 2,01 au lieu de ÷/× 2,44.
+
+| Mesure | Résultat |
+|---|---|
+| Validation croisée (1 350 chiffres, 390 jeux) | ×1,42, 78 % à ×2, couverture 77 % |
+| Dans le temps (657 chiffres, 177 jeux) | ×1,50, couverture 83 % |
+| Formule du site, mêmes chiffres | ×1,71 en validation croisée |
+| Jeux jamais vus par la v1.2 (10 chiffres, 7 jeux) | v1.3 ×2,48, v1.2 ×2,56 (mieux dans 69 % des tirages) |
+| Test neutre de la v1.2 (8 chiffres, 7 jeux) | ×1,85 contre ×2,82 pour le site |
+| Parité backend (150 jeux à la date du snapshot) | 142 à moins de 0,1 %, écart maximal 2,5 % |
+
+Le gain sur la v1.2 n'est pas prouvé : trop peu de chiffres échappent aux deux
+modèles pour trancher. Cette mise à jour applique le choix du périmètre et retire
+de l'entraînement les chiffres rejetés depuis le gel (303 sur 2 093).
+
+Sur 300 jeux éligibles tirés au hasard, la v1.3 donne en médiane ×1,17 par rapport
+à la v1.2 (de ×0,98 à ×1,38 pour 80 % des jeux ; 4 % bougent de plus de ×1,5). Elle
+atteint chaque jeu à son prochain recalcul par le cron.
+
 ## Prochaines étapes
 
 Par ordre d'intérêt :
@@ -650,7 +673,7 @@ Par ordre d'intérêt :
    aujourd'hui moins bien que la formule du site. Si ça marche, revoir le
    seuil d'affichage (300 000 ventes, 1 000 reviews).
 3. **Réentraîner chaque mois, avec le test neutre.** Nouveau snapshot,
-   `prospective_test.py` sur les gels v1, v1.1 et v1.2 (notre juge le plus
+   `prospective_test.py` sur les gels v1, v1.1, v1.2 et v1.3 (notre juge le plus
    honnête), banc, gel, parité backend, déploiement. À regrouper dans un
    seul script.
 4. **Part PC des voisins.** Les jeux de la fuite n'ont pas de répartition
@@ -666,7 +689,7 @@ Par ordre d'intérêt :
    similaire (ou l'épisode précédent) plutôt que le meilleur chiffre de toute
    la série : un jeu dérivé hérite aujourd'hui des records de la série
    principale (ex. Stranger of Paradise et Final Fantasy).
-7. **Des fourchettes adaptées.** ÷/× 2,44 pour tous les jeux, alors que le
+7. **Des fourchettes adaptées.** ÷/× 2,01 pour tous les jeux, alors que le
    modèle se trompe moins sur les jeux d'une série : resserrer là où il est
    fiable, élargir ailleurs (même méthode, mesurée par groupe).
 8. **Plus tard** : la similarité des voisins (piste 5, petit gain non prouvé)
