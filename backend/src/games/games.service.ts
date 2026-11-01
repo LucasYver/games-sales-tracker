@@ -45,6 +45,13 @@ import { ESTIMATE_MIN_RELEASE, estimateOutOfScope } from './estimate-scope';
 import { platformReleaseDate } from './platform-release-date';
 import { normalizeSteamPriceCountry } from '../ingestion/steam-store-countries';
 
+// The `trending` listing sort: games released in the window, with enough Steam
+// reviews and console ratings to mean something, and a gain measured over the
+// last two weeks.
+const TRENDING_WINDOW_DAYS = 365;
+const TRENDING_MIN_REVIEWS = 1000;
+const TRENDING_GAIN_DAYS = 14;
+
 export interface PopularGame {
   id: string;
   name: string;
@@ -462,7 +469,7 @@ export class GamesService {
   async listPopular(
     options: {
       limit?: number;
-      sort?: 'popular' | 'recent' | 'oldest' | 'sales';
+      sort?: 'trending' | 'popular' | 'recent' | 'oldest' | 'sales';
       platform?: string;
       offset?: number;
       genre?: string;
@@ -581,6 +588,62 @@ export class GamesService {
         'sales_mid',
       );
       qb.orderBy('sales_mid', 'DESC');
+    } else if (sort === 'trending') {
+      // Steam reviews and console ratings per day, summed across platforms and
+      // averaged since launch plus over the last two weeks: the first favours
+      // recent hits, the second what is moving right now. A game released
+      // inside the window has no baseline, so its whole count is its gain. Any
+      // other game without a baseline has an unmeasured gain. Games outside the
+      // window have no score and follow by total Steam reviews, so every filter
+      // and page still lists the whole catalog.
+      qb.leftJoin(
+        `(
+          SELECT
+            recent.id AS "gameId",
+            SUM(
+              total.value::float / (recent.age + ${TRENDING_GAIN_DAYS})
+              + COALESCE(
+                GREATEST(total.value - base.value, 0)::float
+                  / GREATEST(EXTRACT(EPOCH FROM total.last - base."capturedAt") / 86400, 1),
+                CASE WHEN recent.age < ${TRENDING_GAIN_DAYS}
+                  THEN total.value::float / ${TRENDING_GAIN_DAYS}
+                  ELSE 0
+                END
+              )
+            ) AS score
+          FROM (
+            SELECT id, GREATEST(EXTRACT(EPOCH FROM NOW() - "releaseDate") / 86400, 0) AS age
+            FROM game
+            WHERE "releaseDate" <= NOW()
+              AND "releaseDate" >= NOW() - INTERVAL '${TRENDING_WINDOW_DAYS} days'
+          ) recent
+          CROSS JOIN unnest(
+            ARRAY['STEAM_REVIEWS', 'PS_RATINGS', 'XBOX_RATINGS', 'SWITCH_RATINGS']::signal_snapshot_metric_enum[]
+          ) AS m(metric)
+          JOIN LATERAL (
+            SELECT MAX(value) AS value, MAX("capturedAt") AS last
+            FROM signal_snapshot
+            WHERE "gameId" = recent.id AND metric = m.metric AND NOT synthetic
+          ) total ON total.value IS NOT NULL
+          LEFT JOIN LATERAL (
+            SELECT value, "capturedAt"
+            FROM signal_snapshot
+            WHERE "gameId" = recent.id
+              AND metric = m.metric
+              AND NOT synthetic
+              AND "capturedAt" < NOW() - INTERVAL '${TRENDING_GAIN_DAYS} days'
+            ORDER BY "capturedAt" DESC
+            LIMIT 1
+          ) base ON TRUE
+          GROUP BY recent.id
+          HAVING SUM(total.value) >= ${TRENDING_MIN_REVIEWS}
+        )`,
+        'trend',
+        'trend."gameId" = g.id',
+      );
+      qb.addSelect('MAX(trend.score)', 'trending_score');
+      qb.orderBy('trending_score', 'DESC', 'NULLS LAST');
+      qb.addOrderBy('reviews', 'DESC');
     } else if (sort === 'recent') {
       qb.orderBy('g.releaseDate', 'DESC', 'NULLS LAST');
     } else if (sort === 'oldest') {

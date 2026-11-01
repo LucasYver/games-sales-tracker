@@ -213,7 +213,7 @@ export async function searchGames(
   return res.json();
 }
 
-export type SortOption = 'popular' | 'recent' | 'oldest' | 'sales';
+export type SortOption = 'trending' | 'popular' | 'recent' | 'oldest' | 'sales';
 
 export type StatusOption = 'released' | 'new' | 'upcoming';
 

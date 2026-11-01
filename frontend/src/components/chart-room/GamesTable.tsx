@@ -29,8 +29,7 @@ function SortableTh({
   const active = current === sortKey;
   const query: Record<string, string> = { ...params };
   delete query.page;
-  if (sortKey === 'popular') delete query.sort;
-  else query.sort = sortKey;
+  query.sort = sortKey;
 
   return (
     <th

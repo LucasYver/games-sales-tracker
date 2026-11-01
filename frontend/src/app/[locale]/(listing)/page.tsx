@@ -195,11 +195,12 @@ export default async function Home({
   } = await searchParams;
   const query = q?.trim() ?? '';
   const sort: SortOption =
+    sortParam === 'popular' ||
     sortParam === 'recent' ||
     sortParam === 'oldest' ||
     sortParam === 'sales'
       ? sortParam
-      : 'popular';
+      : 'trending';
   const platform = platformParam ?? '';
   const genre = (genreParam ?? '').trim();
   // Public home never lists unreleased titles. "new" stays available as a
@@ -238,7 +239,7 @@ export default async function Home({
 
   const pageCount = Math.ceil(popular.total / PAGE_SIZE);
   const listParams: Record<string, string> = {};
-  if (sort !== 'popular') listParams.sort = sort;
+  if (sort !== 'trending') listParams.sort = sort;
   if (platform) listParams.platform = platform;
   if (genre) listParams.genre = genre;
   if (status === 'new') listParams.status = status;
@@ -287,7 +288,12 @@ export default async function Home({
 
 function hasListingFilters(sp: HomeSearchParams): boolean {
   if (sp.q?.trim()) return true;
-  if (sp.sort === 'recent' || sp.sort === 'oldest' || sp.sort === 'sales') {
+  if (
+    sp.sort === 'popular' ||
+    sp.sort === 'recent' ||
+    sp.sort === 'oldest' ||
+    sp.sort === 'sales'
+  ) {
     return true;
   }
   if (sp.platform) return true;

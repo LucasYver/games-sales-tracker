@@ -25,10 +25,14 @@ export class GamesController {
     @Query('yearMax') yearMax?: string,
     @Query('minReviews') minReviews?: string,
   ) {
-    const validSort = ['popular', 'recent', 'oldest', 'sales'].includes(
-      sort ?? '',
-    )
-      ? (sort as 'popular' | 'recent' | 'oldest' | 'sales')
+    const validSort = [
+      'trending',
+      'popular',
+      'recent',
+      'oldest',
+      'sales',
+    ].includes(sort ?? '')
+      ? (sort as 'trending' | 'popular' | 'recent' | 'oldest' | 'sales')
       : 'popular';
     const validStatus = ['released', 'new', 'upcoming'].includes(status ?? '')
       ? (status as 'released' | 'new' | 'upcoming')

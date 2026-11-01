@@ -71,7 +71,7 @@ export function GamesFilter({
   }, []);
 
   const hasActiveFilter = Boolean(
-    (sort && sort !== 'popular') ||
+    (sort && sort !== 'trending') ||
       platform ||
       genre ||
       (status && status !== 'released') ||
@@ -127,13 +127,14 @@ export function GamesFilter({
         <Select
           value={sort}
           onValueChange={(v) =>
-            update([['sort', v === 'popular' ? '' : v]])
+            update([['sort', v === 'trending' ? '' : v]])
           }
         >
           <SelectTrigger id="sort-select" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="trending">{t('sortTrending')}</SelectItem>
             <SelectItem value="popular">{t('sortPopular')}</SelectItem>
             <SelectItem value="sales">{t('sortSales')}</SelectItem>
             <SelectItem value="recent">{t('sortRecent')}</SelectItem>
