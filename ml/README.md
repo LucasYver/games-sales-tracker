@@ -82,6 +82,7 @@ Pour expérimenter en Python :
 | `exclusions.py` | Jeux exclus à la main de l'ENTRAÎNEMENT (`excluded_games.csv`, avec la raison de chacun), à gérer depuis « Qualité des données ». Mesure l'effet avec et sans, jugé sur les mêmes chiffres. Ni la base ni le site ne changent tant qu'un nouveau modèle n'est pas figé et installé. |
 | `suspects.py` | Liste de travail des chiffres de ventes à vérifier dans la base (priorités 1 à 3, raisons, estimations des modèles, liens source et admin) → `reports/milestones_a_verifier.csv`. Aussi produite par `bench.py` et affichée dans « Qualité des données ». Donne aussi, par jeu, ceux dont l'erreur typique atteint ×2, avec leurs chiffres et leurs sources → `reports/jeux_les_plus_loin.csv`. |
 | `checks.py` | Contrôles du banc au-delà de l'erreur moyenne : erreur selon l'âge du jeu, courbe qui baisse, catalogue entier, chiffres « de lancement » suspects. Affichés dans l'onglet des modèles de l'UI. |
+| `research_figures.py` | Recherche à la main des chiffres de ventes manquants : prépare les lots, revérifie les citations, écrit en base (skill `research-sales-figures`). |
 | `bench_v2.py` | Essai des variantes v2 (sans informations « du moment », signaux de lancement, « jamais en baisse ») → `reports/bench_v2.md`. |
 | `prospective_test.py` | Test neutre : juge les modèles figés sur les chiffres arrivés dans la base après le gel, à partir d'un snapshot rangé dans `data/neutral/<date>/`. |
 
