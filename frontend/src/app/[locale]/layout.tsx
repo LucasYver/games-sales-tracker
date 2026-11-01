@@ -3,7 +3,6 @@ import { DM_Sans, IBM_Plex_Mono } from 'next/font/google';
 import { NextIntlClientProvider, hasLocale } from 'next-intl';
 import { getMessages, getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
-import Script from 'next/script';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Analytics } from '@vercel/analytics/next';
 import { routing } from '@/i18n/routing';
@@ -50,6 +49,9 @@ export async function generateMetadata({
     },
     twitter: { card: 'summary_large_image' },
     robots: { index: true, follow: true },
+    ...(ADSENSE_CLIENT && {
+      other: { 'google-adsense-account': ADSENSE_CLIENT },
+    }),
   };
 }
 
@@ -82,8 +84,12 @@ export default async function LocaleLayout({
         </NextIntlClientProvider>
         <Analytics />
         <SpeedInsights />
+        {/* A plain tag, not next/script: AdSense verifies the site by looking
+            for this tag in the server HTML, and next/script only adds it in
+            the browser. */}
         {ADSENSE_CLIENT && (
-          <Script
+          <script
+            async
             src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`}
             crossOrigin="anonymous"
           />
