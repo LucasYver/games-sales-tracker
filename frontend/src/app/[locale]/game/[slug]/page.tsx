@@ -288,6 +288,12 @@ function SalesHeadline({ game }: { game: GameDetail }) {
                 {t('allPlatforms')}
                 {asOfLabel ? ` · ${t('asOf', { date: asOfLabel })}` : ''}
               </p>
+              <Link
+                href="/methodology"
+                className="mt-1 inline-block font-mono text-xs text-primary hover:underline"
+              >
+                {t('methodologyLink')}
+              </Link>
             </>
           ) : game.estimateOutOfScope ? (
             <>
@@ -297,6 +303,12 @@ function SalesHeadline({ game }: { game: GameDetail }) {
               <p className="mt-1 max-w-[42ch] text-sm text-muted-foreground">
                 {t('outOfScopeNote')}
               </p>
+              <Link
+                href="/methodology"
+                className="mt-1 inline-block font-mono text-xs text-primary hover:underline"
+              >
+                {t('methodologyLink')}
+              </Link>
             </>
           ) : (
             <p className="mt-1 text-sm text-muted-foreground">{t('noData')}</p>

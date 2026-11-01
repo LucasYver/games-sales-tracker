@@ -166,6 +166,7 @@ the locale prefix.
 | `/[locale]/blog` | Published official-sales articles (human-reviewed) |
 | `/[locale]/blog/[slug]` | One article, FR/EN, no model estimates |
 | `/[locale]/privacy` | Privacy page: audience measurement, ads, contact |
+| `/[locale]/methodology` | Public explanation of the estimates (FR/EN, no backend call), linked from the game headline and the footer |
 | `/admin/*` | Back-office |
 
 The public game page shows `headline` (the model range). `totalSales` is

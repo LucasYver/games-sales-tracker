@@ -67,6 +67,15 @@ async function pagesSitemap(
     });
   }
 
+  for (const locale of routing.locales) {
+    entries.push({
+      url: `${SITE_URL}/${locale}/methodology`,
+      changeFrequency: 'monthly',
+      priority: 0.6,
+      alternates: localeAlternates('/methodology'),
+    });
+  }
+
   const blogModified = latest(posts.map((p) => p.updatedAt ?? p.publishedAt));
   for (const locale of routing.locales) {
     entries.push({

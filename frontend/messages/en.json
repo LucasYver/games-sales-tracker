@@ -23,7 +23,8 @@
     "blog": "Blog",
     "langSwitch": "Français",
     "privacy": "Privacy",
-    "ranking": "Ranking"
+    "ranking": "Ranking",
+    "methodology": "How we estimate"
   },
   "siteMeta": {
     "description": "How many copies did that game sell? Video game sales figures for PC, PlayStation, Xbox and Switch, updated daily.",
@@ -184,7 +185,8 @@
     "techTitle": "Game details",
     "twitchViewersSeries": "Twitch viewers",
     "updatedAt": "Figures updated on {date}.",
-    "updatedUnknown": "Figures updated daily."
+    "updatedUnknown": "Figures updated daily.",
+    "methodologyLink": "How we estimate"
   },
   "refreshButton": {
     "error": "Refresh failed. Try again.",
@@ -282,5 +284,36 @@
     "contactTitle": "Contact",
     "intro": "This page explains what data is processed when you visit this site. There is no user account here.",
     "title": "Privacy"
+  },
+  "methodology": {
+    "title": "How we estimate sales",
+    "intro": "Publishers rarely announce their sales. But every game leaves public traces. We track them, compare them with what we know about other games, and turn them into an estimate.",
+    "recipeTitle": "Going beyond the usual recipe",
+    "recipeBody1": "The best-known way to guess a game's sales fits in one line: take its number of Steam reviews and multiply it. But the same number of reviews doesn't mean the same thing for a 2018 game and for one released last week, or for a PC exclusive and a console hit.",
+    "recipeBody2": "So we went further, with an approach that takes each game's profile into account.",
+    "signalsTitle": "What we observe",
+    "signalsBody": "Our catalog follows more than 6,000 games, through more than 2.6 million public data points:",
+    "signalReviews": "<strong>Steam reviews</strong>: how many and how fast, at launch and today",
+    "signalPlayers": "<strong>Concurrent players</strong>, especially the launch peak",
+    "signalRatings": "<strong>PlayStation Store and Xbox Store ratings</strong>",
+    "signalFollowers": "<strong>Steam followers</strong>",
+    "signalProfile": "<strong>The game's profile</strong>: age, platforms, multiplayer, live service, annual release, late PC release",
+    "signalTrackRecord": "<strong>The track record of its series and studio</strong>",
+    "similarTitle": "Every game is compared with its peers",
+    "similarBody1": "No game can be understood on its own. For each one, we look for the games most like it in our library of more than 2,000 reference games: same kind of game, same scale, same era.",
+    "similarBody2": "Their history tells us how many sales a review represents in that family of games, how their sales evolve after launch, and how much of them happen on PC.",
+    "figuresTitle": "A base of more than 5,000 published figures",
+    "figuresBody1": "We have gathered more than 5,000 public sales figures across more than 2,000 games, including publisher announcements, specialist press articles and data from analyst firms. They feed our reference games and are used to train our estimation model. Every figure is dated: the model only sees what was known on that date, never how the story continued.",
+    "figuresBody2": "These figures also go through quality control: duplicates, misattributed editions and wrong dates are tracked down, and inconsistent figures are left out of training.",
+    "testTitle": "A model tested blind",
+    "testBody1": "Measuring a model on games it already knows proves nothing. So we judge it on games it has never seen, and on figures published after its training. In this test, it does clearly better than the classic method.",
+    "testBody2": "And we only use it where it has proven itself: established games. Other games are estimated with a dedicated method, based on their signals and similar games.",
+    "readTitle": "How to read our figures",
+    "readBody": "Our figures are estimates, not official sales: a publisher announcement never replaces our estimate. They change with the data, upward as well as downward if new information corrects the picture.",
+    "notEstimatedTitle": "Where we prefer to show nothing",
+    "notEstimatedOld": "<strong>Games released before 2017</strong>: data from that era doesn't let us reach the level of reliability we aim for.",
+    "notEstimatedFree": "<strong>Free-to-play games</strong>: without a purchase, there are no copies to count.",
+    "notEstimatedPlatforms": "<strong>Nintendo Switch and mobile</strong>: without a reliable signal, we don't give them a line of their own.",
+    "notEstimatedBody": "We would rather show \"not estimated\" than a figure we don't believe in."
   }
 }

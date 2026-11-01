@@ -23,7 +23,8 @@
     "blog": "Blog",
     "langSwitch": "English",
     "privacy": "Confidentialité",
-    "ranking": "Classement"
+    "ranking": "Classement",
+    "methodology": "Notre méthode"
   },
   "siteMeta": {
     "description": "Combien d'exemplaires ce jeu a-t-il vendus ? Chiffres de ventes jeu vidéo sur PC, PlayStation, Xbox et Switch, mis à jour chaque jour.",
@@ -184,7 +185,8 @@
     "techTitle": "Fiche technique",
     "twitchViewersSeries": "Spectateurs Twitch",
     "updatedAt": "Chiffres mis à jour le {date}.",
-    "updatedUnknown": "Chiffres mis à jour quotidiennement."
+    "updatedUnknown": "Chiffres mis à jour quotidiennement.",
+    "methodologyLink": "Comment nous estimons"
   },
   "refreshButton": {
     "error": "L'actualisation a échoué. Réessayez.",
@@ -282,5 +284,36 @@
     "contactTitle": "Contact",
     "intro": "Cette page explique quelles données sont traitées lorsque vous visitez ce site. Il n'y a pas de compte utilisateur ici.",
     "title": "Confidentialité"
+  },
+  "methodology": {
+    "title": "Comment nous estimons les ventes",
+    "intro": "Les éditeurs annoncent rarement leurs ventes. Mais chaque jeu laisse des traces publiques. Nous les suivons, nous les comparons à ce que l'on sait des autres jeux, et nous en tirons une estimation.",
+    "recipeTitle": "Dépasser la recette habituelle",
+    "recipeBody1": "Pour deviner les ventes d'un jeu, la méthode la plus connue tient en une ligne : prendre son nombre d'avis Steam et le multiplier. Mais un même nombre d'avis ne veut pas dire la même chose pour un jeu de 2018 et pour un jeu sorti la semaine dernière, ni pour une exclusivité PC et pour un succès console.",
+    "recipeBody2": "Nous sommes donc allés plus loin, avec une approche qui tient compte du profil de chaque jeu.",
+    "signalsTitle": "Ce que nous observons",
+    "signalsBody": "Notre catalogue suit plus de 6 000 jeux, à travers plus de 2,6 millions de relevés publics :",
+    "signalReviews": "<strong>Les avis Steam</strong>, leur nombre et leur rythme, au lancement comme aujourd'hui",
+    "signalPlayers": "<strong>Les joueurs connectés</strong>, notamment le pic de lancement",
+    "signalRatings": "<strong>Les notes du PlayStation Store et du Xbox Store</strong>",
+    "signalFollowers": "<strong>Les abonnés Steam</strong>",
+    "signalProfile": "<strong>La carte d'identité du jeu</strong> : âge, plateformes, multijoueur, jeu service, épisode annuel, sortie PC tardive",
+    "signalTrackRecord": "<strong>Le passé de la série et du studio</strong>",
+    "similarTitle": "Chaque jeu est comparé à ses semblables",
+    "similarBody1": "Un jeu ne se comprend pas seul. Pour chacun, nous cherchons les jeux qui lui ressemblent le plus dans notre bibliothèque de plus de 2 000 jeux de référence : même type de jeu, même échelle, même époque.",
+    "similarBody2": "Leur histoire nous apprend combien de ventes représente un avis dans cette famille de jeux, comment leurs ventes évoluent après le lancement, et quelle part se fait sur PC.",
+    "figuresTitle": "Une base de plus de 5 000 chiffres publiés",
+    "figuresBody1": "Nous avons réuni plus de 5 000 chiffres de ventes publics sur plus de 2 000 jeux, notamment des annonces d'éditeurs, des articles de presse spécialisée et des données de cabinets d'analyse. Ils alimentent nos jeux de référence et servent à entraîner notre modèle d'estimation. Chaque chiffre est daté : le modèle ne voit que ce qui était connu à cette date, jamais la suite de l'histoire.",
+    "figuresBody2": "Ces chiffres passent aussi par un contrôle qualité : doublons, éditions mal attribuées et dates fausses sont traqués, et les chiffres incohérents sont écartés de l'apprentissage.",
+    "testTitle": "Un modèle testé à l'aveugle",
+    "testBody1": "Mesurer un modèle sur des jeux qu'il connaît déjà ne prouve rien. Nous le jugeons donc sur des jeux qu'il n'a jamais vus, et sur des chiffres publiés après son entraînement. Sur ce test, il fait nettement mieux que la méthode classique.",
+    "testBody2": "Et nous l'utilisons seulement là où il a fait ses preuves : les jeux bien installés. Les autres jeux sont estimés avec une méthode dédiée, fondée sur leurs signaux et leurs jeux similaires.",
+    "readTitle": "Comment lire nos chiffres",
+    "readBody": "Nos chiffres sont des estimations, pas des ventes officielles : une annonce d'éditeur ne remplace jamais notre estimation. Ils évoluent avec les données, à la hausse comme à la baisse si de nouvelles informations corrigent le tableau.",
+    "notEstimatedTitle": "Là où nous préférons ne rien afficher",
+    "notEstimatedOld": "<strong>Les jeux sortis avant 2017</strong> : les données de cette époque ne nous permettent pas d'atteindre le niveau de fiabilité que nous visons.",
+    "notEstimatedFree": "<strong>Les free-to-play</strong> : sans achat, il n'y a pas d'exemplaires à compter.",
+    "notEstimatedPlatforms": "<strong>Nintendo Switch et mobile</strong> : sans signal fiable, nous ne donnons pas de ligne dédiée.",
+    "notEstimatedBody": "Nous préférons afficher « non estimé » plutôt qu'un chiffre auquel nous ne croyons pas."
   }
 }
