@@ -1,6 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { Platform, SignalMetric } from '../entities';
+import {
+  psConceptMatchesGame,
+  psRomanNumeralsToDigits,
+  psTitleBaseNames,
+  psTitleRelation,
+  type PsTitleRelation,
+} from './playstation-title-match';
 import { XboxCatalogClient } from './xbox-catalog.client';
 
 export interface StoreRating {
@@ -14,7 +21,20 @@ export interface StoreRating {
 export interface StoreLookupResult {
   ratings: StoreRating[];
   playstationConceptUrl: string | null;
+  /**
+   * The stored concept page loaded fine but is another game. Everything
+   * captured from it (ratings, prices) belongs to that other game.
+   */
+  playstationUrlRejected: boolean;
 }
+
+/** Catalog dates a store release can be compared with (first, PlayStation). */
+export type GameReleaseDates = Array<Date | null | undefined>;
+
+type PsPageOutcome =
+  | { kind: 'match'; sourceUrl: string; rating: StoreRating | null }
+  | { kind: 'mismatch' }
+  | { kind: 'unavailable' };
 
 export interface KnownStoreUrls {
   playstationUrl?: string;
@@ -35,6 +55,20 @@ const XBOX_MAX_CANDIDATES = 5;
 // HTML search page is a client-only SPA shell. Cap probes the same way.
 const PS_MAX_CANDIDATES = 5;
 
+// Bounds the requests a game with no store page costs on each daily pass.
+const PS_MAX_SEARCH_QUERIES = 6;
+const PS_MAX_PORTAL_SLUGS = 4;
+
+// Rendered in place of a game title when the store has no real page.
+const PS_GENERIC_TITLE = 'PlayStation';
+
+const PS_RELATION_RANK: Record<PsTitleRelation, number> = {
+  exact: 0,
+  edition: 1,
+  subtitle: 2,
+  none: 3,
+};
+
 const CHIHIRO_SEARCH_URL =
   'https://store.playstation.com/store/api/chihiro/00_09_000/tumbler/US/en/999';
 
@@ -53,28 +87,40 @@ export class StoreRatingsClient {
   async getRatings(
     name: string,
     known: KnownStoreUrls = {},
+    releaseDates: GameReleaseDates = [],
   ): Promise<StoreLookupResult> {
     const [ps, xbox] = await Promise.all([
-      this.getPlaystation(name, known.playstationUrl),
+      this.getPlaystation(name, known.playstationUrl, releaseDates),
       this.getXbox(name, known.xboxUrl),
     ]);
     const ratings: StoreRating[] = [];
-    if (ps?.rating) ratings.push(ps.rating);
+    if (ps.match?.rating) ratings.push(ps.match.rating);
     if (xbox) ratings.push(xbox);
     return {
       ratings,
-      playstationConceptUrl: ps?.sourceUrl ?? null,
+      playstationConceptUrl: ps.match?.sourceUrl ?? null,
+      playstationUrlRejected: ps.urlRejected,
     };
   }
 
   private async getPlaystation(
     name: string,
-    knownUrl?: string,
-  ): Promise<{ sourceUrl: string; rating: StoreRating | null } | null> {
+    knownUrl: string | undefined,
+    releaseDates: GameReleaseDates,
+  ): Promise<{
+    match: { sourceUrl: string; rating: StoreRating | null } | null;
+    urlRejected: boolean;
+  }> {
+    let urlRejected = false;
     try {
       if (knownUrl) {
-        const cached = await this.playstationFromUrl(name, knownUrl);
-        if (cached) return cached;
+        const cached = await this.playstationFromUrl(
+          name,
+          knownUrl,
+          releaseDates,
+        );
+        if (cached.kind === 'match') return { match: cached, urlRejected };
+        urlRejected = cached.kind === 'mismatch';
       }
       // Resolve the parent concept rather than a single SKU. PSN exposes
       // a per-SKU `totalRatingsCount` on every product page (PS4 vs PS5,
@@ -90,28 +136,33 @@ export class StoreRatingsClient {
       //  2. Chihiro tumbler search → product page → parent conceptId.
       //     The HTML `/search/...` page is a client-only SPA shell and no
       //     longer inlines `/product/...` links, so we cannot scrape it.
-      //     Title match on the concept page is the safety net against a
-      //     wrong Chihiro hit.
+      //
+      // Each concept page must pass `psConceptMatchesGame`, whichever path
+      // found it: both paths can land on another game.
       const portalId = await this.resolvePsConceptIdFromPortal(name);
       if (portalId) {
         const fromPortal = await this.playstationFromUrl(
           name,
           this.psConceptUrl(portalId),
+          releaseDates,
         );
-        if (fromPortal) return fromPortal;
+        if (fromPortal.kind === 'match') {
+          return { match: fromPortal, urlRejected };
+        }
       }
 
       for (const conceptId of await this.resolvePsConceptIdsFromSearch(name)) {
         const result = await this.playstationFromUrl(
           name,
           this.psConceptUrl(conceptId),
+          releaseDates,
         );
-        if (result) return result;
+        if (result.kind === 'match') return { match: result, urlRejected };
       }
-      return null;
+      return { match: null, urlRejected };
     } catch (error) {
       this.logger.warn(`PlayStation lookup failed for "${name}": ${error}`);
-      return null;
+      return { match: null, urlRejected };
     }
   }
 
@@ -122,20 +173,34 @@ export class StoreRatingsClient {
   private async playstationFromUrl(
     name: string,
     url: string,
-  ): Promise<{ sourceUrl: string; rating: StoreRating | null } | null> {
+    releaseDates: GameReleaseDates,
+  ): Promise<PsPageOutcome> {
     const page = await this.fetchOptional(url);
-    if (!page) return null;
+    if (!page) return { kind: 'unavailable' };
 
     const title = this.extractPsTitle(page);
-    if (!title || !this.titleMatches(name, title)) return null;
+    if (!title || title === PS_GENERIC_TITLE) return { kind: 'unavailable' };
+    const productName = this.extractPsProductName(page);
+    const storeRelease = this.extractPsReleaseDate(page, url);
+    const matches = [title, productName].some(
+      (storeTitle) =>
+        storeTitle &&
+        psConceptMatchesGame(name, storeTitle, storeRelease, releaseDates),
+    );
+    if (!matches) {
+      // A mismatch deletes data, so it takes two independent names: a change
+      // in the page's <title> format alone must not read as "another game".
+      return productName ? { kind: 'mismatch' } : { kind: 'unavailable' };
+    }
 
     const sourceUrl = url.split('?')[0];
     const rating = this.extractPsStarRating(page);
     if (!rating || rating.ratingCount <= 0) {
-      return { sourceUrl, rating: null };
+      return { kind: 'match', sourceUrl, rating: null };
     }
 
     return {
+      kind: 'match',
       sourceUrl,
       rating: {
         platform: Platform.PLAYSTATION,
@@ -272,7 +337,10 @@ export class StoreRatingsClient {
   private async resolvePsConceptIdFromPortal(
     name: string,
   ): Promise<string | null> {
-    for (const slug of this.psnPortalSlugs(name)) {
+    const slugs = psTitleBaseNames(name).flatMap((base) =>
+      this.psnPortalSlugs(base),
+    );
+    for (const slug of [...new Set(slugs)].slice(0, PS_MAX_PORTAL_SLUGS)) {
       const page = await this.fetchOptional(
         `https://www.playstation.com/en-us/games/${slug}/`,
       );
@@ -291,9 +359,7 @@ export class StoreRatingsClient {
    * `Warhammer 40,000: …`), so we also try a punctuation-stripped form
    * and the subtitle after `:`.
    */
-  private async resolvePsConceptIdsFromSearch(
-    name: string,
-  ): Promise<string[]> {
+  private async resolvePsConceptIdsFromSearch(name: string): Promise<string[]> {
     const productIds = await this.searchPsProductIds(name);
     const conceptIds: string[] = [];
     const seen = new Set<string>();
@@ -312,7 +378,7 @@ export class StoreRatingsClient {
 
   private async searchPsProductIds(name: string): Promise<string[]> {
     const seen = new Set<string>();
-    const matched: string[] = [];
+    const matched: Array<{ id: string; rank: number }> = [];
     // Keep the first non-empty raw tumbler list as a last resort when no
     // variant produced a title-plausible hit (over-strict normalize edge
     // cases). Prefer continuing across query variants before using it —
@@ -321,17 +387,19 @@ export class StoreRatingsClient {
     let rawFallback: string[] = [];
     for (const query of this.psSearchQueries(name)) {
       const batch = await this.chihiroSearchProductIds(query, name);
-      for (const id of batch.matched) {
-        if (seen.has(id)) continue;
-        seen.add(id);
-        matched.push(id);
+      for (const hit of batch.matched) {
+        if (seen.has(hit.id)) continue;
+        seen.add(hit.id);
+        matched.push(hit);
       }
       if (rawFallback.length === 0 && batch.raw.length > 0) {
         rawFallback = batch.raw;
       }
-      if (matched.length > 0) break;
+      // A subtitle hit may be a spin-off, so keep looking for a closer title.
+      if (matched.some((hit) => hit.rank < PS_RELATION_RANK.subtitle)) break;
     }
-    return matched.length > 0 ? matched : rawFallback;
+    if (matched.length === 0) return rawFallback;
+    return [...matched].sort((a, b) => a.rank - b.rank).map((hit) => hit.id);
   }
 
   private psSearchQueries(name: string): string[] {
@@ -340,16 +408,22 @@ export class StoreRatingsClient {
       const q = raw.replace(/\s+/g, ' ').trim();
       if (q.length >= 2 && !queries.includes(q)) queries.push(q);
     };
-    add(name);
-    add(this.simplifyPsQuery(name));
-    const colonParts = name.split(':').map((p) => p.trim()).filter(Boolean);
+    for (const base of psTitleBaseNames(name)) {
+      add(base);
+      add(this.simplifyPsQuery(base));
+      add(psRomanNumeralsToDigits(this.simplifyPsQuery(base)));
+    }
+    const colonParts = name
+      .split(':')
+      .map((p) => p.trim())
+      .filter(Boolean);
     if (colonParts.length > 1) {
       add(colonParts[0]);
       add(this.simplifyPsQuery(colonParts[0]));
       add(colonParts[colonParts.length - 1]);
       add(this.simplifyPsQuery(colonParts[colonParts.length - 1]));
     }
-    return queries;
+    return queries.slice(0, PS_MAX_SEARCH_QUERIES);
   }
 
   private simplifyPsQuery(name: string): string {
@@ -370,7 +444,7 @@ export class StoreRatingsClient {
   private async chihiroSearchProductIds(
     query: string,
     gameName: string,
-  ): Promise<{ matched: string[]; raw: string[] }> {
+  ): Promise<{ matched: Array<{ id: string; rank: number }>; raw: string[] }> {
     try {
       const { data } = await axios.get<{
         links?: Array<{ id?: string; name?: string; container_type?: string }>;
@@ -379,14 +453,17 @@ export class StoreRatingsClient {
         headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
         timeout: 20000,
       });
-      const matched: string[] = [];
+      const matched: Array<{ id: string; rank: number }> = [];
       const raw: string[] = [];
       for (const link of data.links ?? []) {
         if (!link.id || link.container_type !== 'product') continue;
         raw.push(link.id);
-        // Edition suffixes still pass via prefix titleMatches.
-        if (!link.name || this.titleMatches(gameName, link.name)) {
-          matched.push(link.id);
+        // Only a cheap filter: the concept page makes the final decision.
+        const relation = link.name
+          ? psTitleRelation(gameName, link.name)
+          : 'subtitle';
+        if (relation !== 'none') {
+          matched.push({ id: link.id, rank: PS_RELATION_RANK[relation] });
         }
       }
       return { matched, raw };
@@ -494,6 +571,31 @@ export class StoreRatingsClient {
     return null;
   }
 
+  /**
+   * Release date of this concept, not of a cross-sell tile elsewhere on the
+   * page, so look inside its own Apollo cache entry first.
+   */
+  private extractPsReleaseDate(page: string, url: string): Date | null {
+    const conceptId = url.match(/\/concept\/(\d+)/)?.[1];
+    const entry = conceptId ? page.indexOf(`"Concept:${conceptId}":{`) : -1;
+    const scope = entry >= 0 ? page.slice(entry, entry + 6000) : page;
+    const value =
+      scope.match(
+        /"releaseDate":\{"__typename":"ReleaseDate","type":"[A-Z_]*","value":"([^"]+)"/,
+      )?.[1] ?? page.match(/"releaseDate":"(\d{4}-[^"]+)"/)?.[1];
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  /** The schema.org product name, independent of the page's <title>. */
+  private extractPsProductName(page: string): string | null {
+    const name = page.match(
+      /"@type":"Product","name":"((?:[^"\\]|\\.)+)"/,
+    )?.[1];
+    return name ? this.decodeHtmlEntities(name) : null;
+  }
+
   private extractPsTitle(page: string): string | null {
     const match = page.match(/<title>([^<]+)<\/title>/);
     if (!match) return null;
@@ -505,7 +607,7 @@ export class StoreRatingsClient {
 
   // PSN encodes apostrophes and other punctuation as numeric HTML entities in
   // the <title> (e.g. `Assassin&#x27;s Creed`). Left undecoded, the literal
-  // `x27` leaks into the normalized title and breaks the `titleMatches` prefix
+  // `x27` leaks into the normalized title and breaks the title
   // check, dropping valid ratings for any title with an apostrophe.
   private decodeHtmlEntities(value: string): string {
     const named: Record<string, string> = {

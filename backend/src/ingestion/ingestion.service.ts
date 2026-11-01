@@ -984,8 +984,16 @@ export class IngestionService {
     }
 
     const urls = knownUrls ?? (await this.knownStoreUrlsFor(gameId));
-    const { ratings, playstationConceptUrl } =
-      await this.storeRatings.getRatings(name, urls);
+    const { ratings, playstationConceptUrl, playstationUrlRejected } =
+      await this.storeRatings.getRatings(
+        name,
+        urls,
+        await this.releaseDatesForStoreMatch(gameId),
+      );
+
+    if (playstationUrlRejected) {
+      await this.forgetWrongPlaystationConcept(gameId, name, urls);
+    }
 
     for (const rating of ratings) {
       const source = STORE_SOURCE_BY_PLATFORM[rating.platform];
@@ -5237,6 +5245,39 @@ export class IngestionService {
     }
     return candidate;
   }
+  private async releaseDatesForStoreMatch(gameId: string): Promise<Date[]> {
+    const [game, playstation] = await Promise.all([
+      this.games.findOne({
+        where: { id: gameId },
+        select: { id: true, releaseDate: true },
+      }),
+      this.platformReleaseDates.findOne({
+        where: { gameId, platform: Platform.PLAYSTATION },
+      }),
+    ]);
+    return [game?.releaseDate, playstation?.releaseDate].filter(
+      (date): date is Date => !!date,
+    );
+  }
+
+  /**
+   * The stored PS concept is another game (see `psConceptMatchesGame`), so its
+   * ratings and prices must stop feeding this game. Removing them also frees
+   * the next successful lookup to start a clean series.
+   */
+  private async forgetWrongPlaystationConcept(
+    gameId: string,
+    name: string,
+    urls: KnownStoreUrls,
+  ): Promise<void> {
+    this.logger.warn(
+      `[stores] "${name}" — dropping wrong PS concept ${urls.playstationUrl}`,
+    );
+    await this.signals.delete({ gameId, metric: SignalMetric.PS_RATINGS });
+    await this.prices.delete({ gameId, source: SourceType.PS_STORE });
+    await this.gameSources.delete({ gameId, source: SourceType.PS_STORE });
+  }
+
   private async knownStoreUrlsFor(gameId: string): Promise<KnownStoreUrls> {
     const sources = await this.gameSources.find({
       where: {
