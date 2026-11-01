@@ -65,7 +65,7 @@ on `DATABASE_URL_DIRECT`, then `DATABASE_URL`.
 | `Genre` | `genre` | IGDB genre dictionary. Not an estimation profile. |
 | `SignalSnapshot` | `signal_snapshot` | Dated public counts (reviews, CCU, ratings, followers, Twitch, leak, playtime). |
 | `PriceSnapshot` | `price_snapshot` | Regional store price. Display only. |
-| `AchievementSnapshot` | `achievement_snapshot` | Exophase / Steam unlock sample. Collected, not estimated from. |
+| `AchievementSnapshot` | `achievement_snapshot` | Most common achievement per capture (Steam; Exophase when enabled). Collected, not estimated from. |
 | `SalesEstimate` | `sales_estimate` | Append-only per-method range, plus the `aggregated` row. |
 | `EstimateSnapshot` | `estimate_snapshot` | Append-only headline range (`estimatedToday`), its displayed figure and reconciliation JSON. |
 | `EstimationMethod` | `estimation_method` | Method code, family, weight, enabled flag. |
@@ -109,7 +109,8 @@ Other clients in `ingestion/`:
 - Wikipedia and backlog search (Perplexity first; Tavily on credit
   cooldown / missing key / error). Credit exhaustion trips a 24h
   `provider_cooldown` so harvest does not re-probe a dead balance.
-- Exophase achievements.
+- Steam achievements. Exophase is off by default (`EXOPHASE_ENABLED`): it
+  blocks automated requests.
 - LLM extraction (`llm/llm-extractor.service.ts`): grounded tool call on
   fetched text. `OPENAI_MODEL` in `backend/.env.example` is `gpt-4o-mini`.
   If that variable is unset, the code falls back to `gpt-5.6-luna`.

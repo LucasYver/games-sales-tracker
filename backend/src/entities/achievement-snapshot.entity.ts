@@ -11,9 +11,11 @@ import { Platform, SourceType } from './enums';
 import { Game } from './game.entity';
 
 /**
- * One row per achievement, per capture. Two complementary sources feed it:
+ * One row per capture, for the game's most common achievement (captures before
+ * 2026-11 hold one row per achievement). Two complementary sources feed it:
  *
- *   - `SourceType.EXOPHASE` (Steam/PSN/Xbox): sample-based, exposes a finite
+ *   - `SourceType.EXOPHASE` (Steam/PSN/Xbox, off unless `EXOPHASE_ENABLED` is
+ *     `true`, see `ExophaseClient`): sample-based, exposes a finite
  *     `playersTracked` count plus per-achievement unlock percentages biased
  *     high (Exophase users are completionists). Both `playersTracked` and
  *     `playersWithAchievement` are populated.

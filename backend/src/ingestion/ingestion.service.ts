@@ -1033,7 +1033,7 @@ export class IngestionService {
 
   /**
    * Capture achievement-unlock stats from Exophase for the given platform and
-   * persist one row per achievement in `AchievementSnapshot`. Best-effort: a
+   * persist the most common achievement in `AchievementSnapshot`. Best-effort: a
    * silent skip on title mismatch, small sample, or HTTP error. Used later
    * for sales estimation via the most-common-achievement player count, once
    * the tracker→real coverage ratio is calibrated against publisher figures.
@@ -1058,28 +1058,26 @@ export class IngestionService {
       const list = await this.steam.getGlobalAchievementPercentages(appId);
       if (!list || list.length === 0) return;
 
-      const capturedAt = new Date();
-      const rows = list.map((a) =>
+      const mostCommon = list.reduce((max, a) =>
+        a.percent > max.percent ? a : max,
+      );
+
+      await this.achievements.save(
         this.achievements.create({
           gameId,
           platform: Platform.PC,
           source: SourceType.STEAM,
-          achievementSlug: a.apiName,
+          achievementSlug: mostCommon.apiName,
           // Steam's API does not return localized titles; keep the api name
           // as both slug and display name for symmetry with Exophase rows.
-          achievementName: a.apiName,
-          percentEarned: a.percent,
+          achievementName: mostCommon.apiName,
+          percentEarned: mostCommon.percent,
           playersTracked: null,
           playersWithAchievement: null,
-          capturedAt,
+          capturedAt: new Date(),
         }),
       );
 
-      await this.achievements.save(rows);
-
-      const mostCommon = list.reduce((max, a) =>
-        a.percent > max.percent ? a : max,
-      );
       this.logger.log(
         `[achievements:steam-api] "${name}" (appId=${appId}) — ` +
           `count=${list.length}, mostCommon="${mostCommon.apiName}" ${mostCommon.percent}%`,
@@ -3743,31 +3741,27 @@ export class IngestionService {
       const result = await this.exophase.getAchievements(name, platform);
       if (!result) return;
 
-      const capturedAt = new Date();
-      const rows = result.achievements.map((a) =>
-        this.achievements.create({
-          gameId,
-          platform,
-          source: SourceType.EXOPHASE,
-          achievementSlug: a.slug,
-          achievementName: a.name,
-          percentEarned: a.percentEarned,
-          playersTracked: result.playersTracked,
-          playersWithAchievement: Math.round(
-            (result.playersTracked * a.percentEarned) / 100,
-          ),
-          capturedAt,
-        }),
-      );
-
-      await this.achievements.save(rows);
-
       const mostCommon = result.achievements.reduce((max, a) =>
         a.percentEarned > max.percentEarned ? a : max,
       );
       const mostCommonPlayers = Math.round(
         (result.playersTracked * mostCommon.percentEarned) / 100,
       );
+
+      await this.achievements.save(
+        this.achievements.create({
+          gameId,
+          platform,
+          source: SourceType.EXOPHASE,
+          achievementSlug: mostCommon.slug,
+          achievementName: mostCommon.name,
+          percentEarned: mostCommon.percentEarned,
+          playersTracked: result.playersTracked,
+          playersWithAchievement: mostCommonPlayers,
+          capturedAt: new Date(),
+        }),
+      );
+
       this.logger.log(
         `[achievements] "${name}" (${platform}) — tracked=${result.playersTracked.toLocaleString()}, ` +
           `achievements=${result.achievements.length}/${result.totalAchievements}, ` +
@@ -4090,7 +4084,7 @@ export class IngestionService {
       }
 
       this.logger.log(
-        `[signals] "${game.name}" — achievements (Exophase Steam / PSN / Xbox + Steam official %)…`,
+        `[signals] "${game.name}" — achievements (Steam official %, Exophase if enabled)…`,
       );
       const steamSource = await this.gameSources.findOne({
         where: { gameId: game.id, source: SourceType.STEAM },
@@ -4435,8 +4429,8 @@ export class IngestionService {
   }
 
   /**
-   * Scrape Exophase achievement rarities (Steam/PSN/Xbox) plus Steam's own
-   * global achievement percentages. Once per UTC calendar month.
+   * Capture Steam's own global achievement percentages, plus Exophase rarities
+   * (Steam/PSN/Xbox) if enabled. Once per UTC calendar month.
    */
   async captureAllAchievements(options: { budgetMs?: number } = {}): Promise<{
     scraped: number;

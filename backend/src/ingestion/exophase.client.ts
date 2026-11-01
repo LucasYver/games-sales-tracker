@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { Platform } from '../entities';
@@ -64,6 +65,14 @@ interface ExophaseSearchResponse {
 @Injectable()
 export class ExophaseClient {
   private readonly logger = new Logger(ExophaseClient.name);
+  private readonly enabled: boolean;
+
+  constructor(config: ConfigService) {
+    // Off by default: since 2026-09-09 Exophase answers every automated
+    // request with a Cloudflare challenge. Turn it on only with access
+    // granted by Exophase; do not work around the challenge.
+    this.enabled = config.get<string>('EXOPHASE_ENABLED') === 'true';
+  }
 
   /**
    * Fetch achievement stats for a game on a given platform from Exophase.
@@ -77,6 +86,8 @@ export class ExophaseClient {
     name: string,
     platform: Platform,
   ): Promise<ExophaseGameAchievements | null> {
+    if (!this.enabled) return null;
+
     const environment = EXOPHASE_ENVIRONMENT[platform];
     if (!environment) {
       this.logger.debug(
@@ -114,6 +125,15 @@ export class ExophaseClient {
         match.endpoint_awards,
       );
     } catch (error) {
+      if (
+        axios.isAxiosError(error) &&
+        error.response?.headers['cf-mitigated'] === 'challenge'
+      ) {
+        this.logger.error(
+          `[exophase] blocked by a Cloudflare challenge for "${name}" (${platform})`,
+        );
+        return null;
+      }
       this.logger.warn(
         `[exophase] lookup failed for "${name}" (${platform}): ${error}`,
       );

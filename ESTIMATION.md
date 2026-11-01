@@ -268,10 +268,18 @@ Free-to-play games (`Game.isFree`) get no estimate.
 
 ## 8. Achievements
 
-Exophase and Steam achievement snapshots are still collected. No
-`SalesEstimate` is produced from them. Coverage constants
-(`EXOPHASE_COVERAGE_*`) remain in `sales-modeling.constants.ts` for a
-possible later method. There is no `BACKLOG.md`.
+Steam achievement snapshots are still collected, one row per capture for the
+most common achievement. No `SalesEstimate` is produced from them.
+
+Exophase is off (`EXOPHASE_ENABLED`, default off). Since 2026-09-09 it answers
+automated requests with a Cloudflare challenge. Do not work around it: turn it
+back on only with access granted by Exophase.
+
+Coverage constants (`EXOPHASE_COVERAGE_*`) remain in
+`sales-modeling.constants.ts` for a possible later method. They are too low:
+on captures from June to September 2026, published sales divided by Exophase
+players had a median of 69 to 86× on PC, 45 to 58× on PlayStation and about 38×
+on Xbox, and the ratio grows with the game's size. There is no `BACKLOG.md`.
 
 ## 9. Time series and rebuild
 

@@ -1265,9 +1265,8 @@ export class AdminService {
   /**
    * Collapse the achievement_snapshot rows for a game into one row per
    * (platform, source). For each group we keep the *latest* capture
-   * (max capturedAt) and reduce its individual achievements to: how many
-   * achievements were captured, total achievements declared for the game
-   * (from any row in the capture, all equal), the sample size, and the
+   * (max capturedAt) and reduce it to: how many rows it holds (1 since 2026-11,
+   * when only the most common achievement is stored), the sample size, and the
    * single most-common achievement (highest unlock %).
    */
   private async aggregateAchievementSnapshots(
