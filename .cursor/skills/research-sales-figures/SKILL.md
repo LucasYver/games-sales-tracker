@@ -31,7 +31,8 @@ session knows where to resume.
 | `t2-20k-50k-b` | 20,000 to 50,000 | 50 | 4 | 4 | Done, 166 searches, no cutoff; 2 of the 4 games were already in base |
 | `t2-20k-50k-c` | 20,000 to 50,000 | 50 | 6 | 5 | Done, 167 searches, no cutoff; UBoat skipped (blocked host) |
 | `t2-20k-50k-d` | 20,000 to 50,000 | 50 | 10 | 12 | Done, 157 searches, no cutoff; Squad 44 skipped (figures were for Squad) |
-| `t2-20k-50k-e` | 20,000 to 50,000 | 0 | 0 | 0 | **Next: run `prepare`. 65 left: 63 never searched, 2 searched too few times** |
+| `t2-20k-50k-e` | 20,000 to 50,000 | 50 | 10 | 12 | Done, 161 searches, no cutoff; Hardspace and one Townscaper figure skipped |
+| `t2-20k-50k-f` | 20,000 to 50,000 | 0 | 0 | 0 | **Next: run `prepare`. 19 left: 15 never searched, 4 searched too few times** |
 
 After that tier: 10,000 to 20,000 reviews (366 games), then the rest.
 
@@ -129,12 +130,14 @@ All of these happened on real figures:
   while an earlier wave reported 202. The cause is unknown. This is why a wave is 50
   games, not 105. The 50-game wave `t2-20k-50k-b` used 166 searches and was not cut off.
 - **Yield** falls as games get smaller: 40% of the first 20, 20% at 50,000+ reviews,
-  18% of those really searched at 29,000 to 50,000, then 8%, 10% and 18% (4, 5 and 9
-  of 50) at 20,000 to 50,000. At that size, most finds are developer quotes relayed by
+  18% of those really searched at 29,000 to 50,000, then 8%, 10%, 18% and 18% (4, 5,
+  9 and 9 of 50) at 20,000 to 50,000. At that size, most finds are developer quotes relayed by
   the GameDiscoverCo newsletter or Game Developer, not estimates.
 - **Platform figures are rare**: 4 console figures in 230 games, then 2 PlayStation
   figures in `t2-20k-50k-b`, where 39 of 50 games got all their searches. Console
-  searches mostly surface Alinea relays or nothing.
+  searches mostly surface Alinea relays or nothing. Polish publishers' ESPI filings
+  (PlayWay, Movie Games) are the exception: they give exact Xbox and PS5 units.
+- **Four waves fit in one 5-hour window** on Pro (3% to 85%), not five.
 - **Games with one console family** (Heavy Rain, AI Limit: no Xbox version) can only
   reach 3 searches, so `prepare` keeps picking them again. Agents also sometimes
   search PlayStation and Xbox in one query, which counts as one search.
