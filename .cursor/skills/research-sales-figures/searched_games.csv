@@ -214,8 +214,6 @@ b070359a-8113-4439-b0bc-d9de317a3b30,Trailmakers,t2-20k-50k-b,2026-11-01,4,4,0
 6a13b4e7-208b-4ff8-b24d-320e09b19219,AI Limit,t2-20k-50k-c,2026-11-01,4,4,0
 9d4840d3-41ce-4fff-afaf-2e074b50e52a,Aliens: Fireteam Elite,t2-20k-50k-c,2026-11-01,4,4,0
 ece84244-77a7-4a56-b8c1-a409d5dec151,Aniimo,t2-20k-50k-c,2026-11-01,4,4,0
-da6dc4d5-c565-42ff-8d7b-4935cffd4216,Atlas,t2-20k-50k-c,2026-11-01,3,4,0
-cca03c5d-345d-40ba-ba9c-7db4e4f0d492,Battle Brothers,t2-20k-50k-c,2026-11-01,3,4,0
 ae2589fb-4d8e-4ce4-be3b-f84650559b93,Bright Memory: Infinite,t2-20k-50k-c,2026-11-01,4,4,0
 a355c9b8-db2a-471e-97fd-c65f93f56735,Chinese Parents,t2-20k-50k-c,2026-11-01,3,2,0
 12709447-11d4-4a20-a637-20ea40672797,Conqueror's Blade,t2-20k-50k-c,2026-11-01,2,2,0
@@ -243,10 +241,8 @@ ce209608-1531-458d-8636-c2cacea6384f,IdleOn,t2-20k-50k-c,2026-11-01,2,2,0
 48d5b788-051f-4055-8590-e92dd3263900,Mindustry,t2-20k-50k-c,2026-11-01,2,2,0
 4b232f0c-eeb9-4f29-925a-b1b2cb05d19f,My Friend Pedro,t2-20k-50k-c,2026-11-01,4,4,1
 2244cc61-a9cb-4288-90d7-a34fd9883411,My Time at Sandrock,t2-20k-50k-c,2026-11-01,4,4,0
-602c85b9-0b59-4188-8052-cd5ac97a54ad,Need for Speed™ Most Wanted,t2-20k-50k-c,2026-11-01,3,4,0
 de1be235-889c-4c23-857e-30d5fa1ceca6,Paint the Town Red,t2-20k-50k-c,2026-11-01,4,4,0
 004a16e8-d6a4-4397-a51f-8a22c168bb9c,PlateUp!,t2-20k-50k-c,2026-11-01,4,4,1
-1483e522-f9e7-46bb-a9b3-8c14cef9b725,Rhythm Doctor,t2-20k-50k-c,2026-11-01,3,4,0
 b7da84f5-80e9-4872-9aa4-78df08391794,Road 96 🛣️,t2-20k-50k-c,2026-11-01,4,4,0
 ec70a12f-20ee-462a-9f3b-b38922623f8d,Shatterline,t2-20k-50k-c,2026-11-01,4,4,0
 40c56751-0758-4ca6-91f2-fe9026a92496,Stacklands,t2-20k-50k-c,2026-11-01,2,2,1
@@ -259,3 +255,53 @@ b50be24b-e3c1-41d4-aca8-f5d363ef35b5,Tropico 6,t2-20k-50k-c,2026-11-01,4,4,0
 60c7e6fe-f346-40c3-8c83-d58d9749198c,UBoat,t2-20k-50k-c,2026-11-01,4,4,1
 42f493d1-c112-4c63-bbdb-0cd1097fe917,Wayfinder,t2-20k-50k-c,2026-11-01,4,4,0
 d28ade66-4dce-4f0f-a37a-bf80bc22c9bf,X4: Foundations,t2-20k-50k-c,2026-11-01,2,2,0
+7514fa4b-d3ef-4aeb-b084-3cdcb14ba144,Age of Mythology: Retold,t2-20k-50k-d,2026-11-01,4,4,0
+da6dc4d5-c565-42ff-8d7b-4935cffd4216,Atlas,t2-20k-50k-d,2026-11-01,4,4,0
+1771370b-4764-4ab7-ad8a-7f5613edd594,Baba Is You,t2-20k-50k-d,2026-11-01,3,2,0
+cca03c5d-345d-40ba-ba9c-7db4e4f0d492,Battle Brothers,t2-20k-50k-d,2026-11-01,4,4,0
+4f2ce60c-15a8-491f-9beb-c46859bbabaf,Before Your Eyes,t2-20k-50k-d,2026-11-01,3,2,0
+fd683905-b9ec-48ff-be98-c8c020afd998,Blackwake,t2-20k-50k-d,2026-11-01,2,2,0
+ff67a8dc-00d9-4dbc-84d0-11de968b6685,Bopl Battle,t2-20k-50k-d,2026-11-01,2,2,0
+e024f5e6-5546-4188-98bf-76c022e44f05,Call to Arms,t2-20k-50k-d,2026-11-01,2,2,0
+dc62a378-c2f5-4581-ae35-2c9a4adf5f1e,Contraband Police,t2-20k-50k-d,2026-11-01,4,4,2
+87fbc4dd-df53-4df6-b6be-e7868490047d,Cruelty Squad,t2-20k-50k-d,2026-11-01,2,2,0
+8c7dc4b4-549d-4db3-a893-6752ac290b90,Dark Deception,t2-20k-50k-d,2026-11-01,4,4,0
+b739b035-8655-4174-b67f-6ee87ede9632,Demonologist,t2-20k-50k-d,2026-11-01,3,2,0
+0ca04f4b-5ec3-44c5-995c-36d9c8cd5333,Descenders,t2-20k-50k-d,2026-11-01,4,4,0
+29bea262-6260-42ca-9405-a4ac01ab28c4,F1 22,t2-20k-50k-d,2026-11-01,4,4,0
+9d43460c-f1d8-4496-81f3-3a59d44085f7,Farthest Frontier,t2-20k-50k-d,2026-11-01,2,2,1
+46c110a3-b855-4989-bb7e-85869f4d8b00,Football Manager 2021,t2-20k-50k-d,2026-11-01,2,2,0
+2c0e4594-931e-414f-9b35-db40e99f8fe5,Forts,t2-20k-50k-d,2026-11-01,2,2,1
+e5685ca6-4e9f-4200-9a2f-01a8456c2ae3,Foundation,t2-20k-50k-d,2026-11-01,2,2,0
+7ccf477f-bf40-4ae0-8fdc-f382ca9e0dd8,Gears 5,t2-20k-50k-d,2026-11-01,4,4,0
+19481042-d9a2-42f5-b459-b2a06cb2ceb8,Ground Branch,t2-20k-50k-d,2026-11-01,3,2,0
+5fbb8e11-5b32-4bdb-a721-76a42289d0c5,Grounded 2,t2-20k-50k-d,2026-11-01,3,4,0
+02f5c470-8c4e-4f07-b741-3ec54ee9de27,High On Life,t2-20k-50k-d,2026-11-01,4,4,0
+6b812728-bdd0-485a-93b8-4571352d5c5f,Injustice™ 2,t2-20k-50k-d,2026-11-01,4,4,0
+5d58b162-7d0d-4cb8-9b93-e40ae62c6793,Just Shapes & Beats,t2-20k-50k-d,2026-11-01,4,4,0
+44751327-fe99-479d-b6f2-a1b70934fc5d,Krunker,t2-20k-50k-d,2026-11-01,2,2,0
+34c3165c-0d68-47b1-8fc5-0ac8bbd03436,Last Oasis,t2-20k-50k-d,2026-11-01,4,4,0
+9c3d9ce2-2781-4fad-89c6-74a7be0e06a5,Lizards Must Die,t2-20k-50k-d,2026-11-01,3,2,2
+3a4c87f1-2e0e-48c3-a647-b784dec9a177,Marvel's Midnight Suns,t2-20k-50k-d,2026-11-01,4,4,0
+a8ad867b-b74f-4192-bb21-0aa98b5fd4f2,Mini Motorways,t2-20k-50k-d,2026-11-01,2,2,1
+602c85b9-0b59-4188-8052-cd5ac97a54ad,Need for Speed™ Most Wanted,t2-20k-50k-d,2026-11-01,3,4,0
+1483e522-f9e7-46bb-a9b3-8c14cef9b725,Rhythm Doctor,t2-20k-50k-d,2026-11-01,4,4,0
+22c958f7-169e-4842-820c-f991bee5ed83,Shadowverse: Worlds Beyond,t2-20k-50k-d,2026-11-01,2,2,0
+d4baf656-e6e6-40ca-b431-cfb20ffa19db,Smite 2,t2-20k-50k-d,2026-11-01,4,4,0
+07615ae3-8c48-4c41-8a35-fc378faab445,Squad 44,t2-20k-50k-d,2026-11-01,2,2,2
+1625a744-1543-4c02-b6b2-94186a69b884,Straftat,t2-20k-50k-d,2026-11-01,2,2,0
+2dddc0f4-f16e-40df-a80d-4ffe84bebd10,Summer Memories,t2-20k-50k-d,2026-11-01,2,2,0
+fc333bd2-f9b7-4838-8f11-c76c93a786d6,Sun Haven,t2-20k-50k-d,2026-11-01,3,2,0
+3c01aab2-c9b8-423b-9796-b5d3cd9fbff3,Sunkenland,t2-20k-50k-d,2026-11-01,3,2,0
+1e6c8082-cfd0-4711-8c0d-7d310d53b396,Supervive,t2-20k-50k-d,2026-11-01,2,2,0
+e878d8af-b654-4049-ab78-a3dcaeaefd14,TerraTech,t2-20k-50k-d,2026-11-01,4,4,0
+98d08e0b-fc7c-4182-979c-6ad67b3e47b5,The Ascent,t2-20k-50k-d,2026-11-01,4,4,1
+29c75ed5-ced0-49bd-b3f0-db896c3dd8fb,The Riftbreaker,t2-20k-50k-d,2026-11-01,4,4,2
+5b41e5e9-2703-448e-b832-435b053a23bc,The Texas Chain Saw Massacre,t2-20k-50k-d,2026-11-01,4,4,1
+7687c831-e19a-43a7-9274-1d7cbf6d96f5,There Is No Game: Wrong Dimension,t2-20k-50k-d,2026-11-01,3,2,0
+1fa024fd-559f-4f69-b287-44f8463e4c53,Tiny Glade,t2-20k-50k-d,2026-11-01,2,2,0
+c22f17f0-c003-492a-8ff8-85bfafb35b80,Tiny Tina's Wonderlands,t2-20k-50k-d,2026-11-01,5,4,0
+04076007-25de-4c06-a43d-02625ada0ae1,Untitled Goose Game,t2-20k-50k-d,2026-11-01,4,4,1
+8e27f131-700a-4bbf-8d07-184dd66a11a7,"Warhammer 40,000: Dawn of War III",t2-20k-50k-d,2026-11-01,2,2,0
+47da3f06-2261-4a27-b707-ba88f957bf4d,We Were Here Expeditions: The FriendShip,t2-20k-50k-d,2026-11-01,4,4,0
+1345fe82-3276-4b62-b979-88621b733abe,eFootball PES 2020,t2-20k-50k-d,2026-11-01,4,4,0
