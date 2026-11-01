@@ -610,14 +610,39 @@ Attention : ce score monte surtout parce que les vieux jeux, plus difficiles, ne
 sont plus jugés. Ces lignes sont aussi entraînées depuis 2017, alors que le modèle
 réellement en ligne reste le gel `2026-10-29T17`, entraîné sur tous les jeux.
 
+## Après le grand nettoyage des chiffres (31/10, 19 h 32)
+
+Banc sur le snapshot `2026-10-31T2013`, pris après le recalcul complet des profils
+de référence (2 108 → 2 015) : 1 350 chiffres de 390 jeux jamais vus.
+
+| Modèle | Validation croisée | À ×2 | Dans le temps (657 chiffres, 177 jeux) |
+|---|---|---|---|
+| Modèle actuel (site) | ×1,70 | 65 % | ×1,75 |
+| Forêt aléatoire | ×1,48 | 74 % | ×1,57 |
+| Forêt + voisins | ×1,46 | 75 % | ×1,52 |
+| Moyenne forêt + linéaire | ×1,43 | 77 % | ×1,50 |
+| v1.2 : voisins + série + studio | ×1,43 | 78 % | ×1,50 |
+| En prod : dès J+3 | ×1,43 | 78 % | ×1,49 |
+
+**Le nettoyage ne fait pas gagner les modèles appris.** Avant le recalcul, sur les
+1 338 chiffres communs avec le banc de 13 h 34, la ligne « En prod » restait à ×1,41.
+Le recalcul la fait passer de ×1,41 à ×1,43 (mieux dans 8 % des tirages seulement).
+Il aide la formule du site : ×1,74 → ×1,70 (mieux dans 90 % des tirages).
+
+Sur les chiffres nettoyés, la ligne « En prod » donne : gros jeux 29 % à ±20 %,
+erreur typique ±40 % ; plus petits 18 % à ±20 %, erreur typique ±66 % (formule
+du site : ±57 %).
+
+Limite : 37 profils sans aucun chiffre actif restaient dans ce snapshot, car
+`rebuildAll` ne visite que les jeux qui ont encore un chiffre. Le cron quotidien,
+lui, les reprend.
+
 ## Prochaines étapes
 
 Par ordre d'intérêt :
 
-1. **Nettoyer les chiffres signalés.** 156 chiffres à vérifier
-   (`suspects.py`, onglet « Qualité des données »), dont des dates de sortie
-   à corriger (accès anticipé, portages, rééditions). Un chiffre faux à
-   l'entraînement se paie partout.
+1. **Nettoyer les chiffres signalés.** 77 chiffres à vérifier
+   (`suspects.py`, onglet « Qualité des données »). Un chiffre faux à l'entraînement se paie partout.
 2. **Apprendre les petits jeux avec la fuite Steam.** 1 651 chiffres de la
    fuite (10 000 joueurs et plus) sont en base, avec des signaux de juillet
    2018. Les ajouter à l'entraînement comme chiffres PC (marqués comme tels),
