@@ -2,13 +2,16 @@ import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { Platform, SignalMetric } from '../entities';
 import {
-  psConceptMatchesGame,
-  psRomanNumeralsToDigits,
-  psTitleBaseNames,
-  psTitleRelation,
-  type PsTitleRelation,
-} from './playstation-title-match';
-import { XboxCatalogClient } from './xbox-catalog.client';
+  storeProductMatchesGame,
+  romanNumeralsToDigits,
+  storeTitleBaseNames,
+  storeTitleRelation,
+  type StoreTitleRelation,
+} from './store-title-match';
+import {
+  XboxCatalogClient,
+  type XboxCatalogProduct,
+} from './xbox-catalog.client';
 
 export interface StoreRating {
   platform: Platform;
@@ -26,6 +29,8 @@ export interface StoreLookupResult {
    * captured from it (ratings, prices) belongs to that other game.
    */
   playstationUrlRejected: boolean;
+  /** Same for the stored Xbox product. */
+  xboxUrlRejected: boolean;
 }
 
 /** Catalog dates a store release can be compared with (first, PlayStation). */
@@ -50,6 +55,8 @@ const USER_AGENT =
 // product page. Cap how many candidates we probe before giving up to keep
 // a no-match (e.g. a PlayStation exclusive) bounded.
 const XBOX_MAX_CANDIDATES = 5;
+// Bounds the requests a game with no store product costs on each daily pass.
+const XBOX_MAX_SEARCH_QUERIES = 4;
 
 // Chihiro tumbler search still returns product ids when the storefront
 // HTML search page is a client-only SPA shell. Cap probes the same way.
@@ -62,7 +69,7 @@ const PS_MAX_PORTAL_SLUGS = 4;
 // Rendered in place of a game title when the store has no real page.
 const PS_GENERIC_TITLE = 'PlayStation';
 
-const PS_RELATION_RANK: Record<PsTitleRelation, number> = {
+const STORE_RELATION_RANK: Record<StoreTitleRelation, number> = {
   exact: 0,
   edition: 1,
   subtitle: 2,
@@ -91,15 +98,16 @@ export class StoreRatingsClient {
   ): Promise<StoreLookupResult> {
     const [ps, xbox] = await Promise.all([
       this.getPlaystation(name, known.playstationUrl, releaseDates),
-      this.getXbox(name, known.xboxUrl),
+      this.getXbox(name, known.xboxUrl, releaseDates),
     ]);
     const ratings: StoreRating[] = [];
     if (ps.match?.rating) ratings.push(ps.match.rating);
-    if (xbox) ratings.push(xbox);
+    if (xbox.rating) ratings.push(xbox.rating);
     return {
       ratings,
       playstationConceptUrl: ps.match?.sourceUrl ?? null,
       playstationUrlRejected: ps.urlRejected,
+      xboxUrlRejected: xbox.urlRejected,
     };
   }
 
@@ -137,7 +145,7 @@ export class StoreRatingsClient {
       //     The HTML `/search/...` page is a client-only SPA shell and no
       //     longer inlines `/product/...` links, so we cannot scrape it.
       //
-      // Each concept page must pass `psConceptMatchesGame`, whichever path
+      // Each concept page must pass `storeProductMatchesGame`, whichever path
       // found it: both paths can land on another game.
       const portalId = await this.resolvePsConceptIdFromPortal(name);
       if (portalId) {
@@ -185,7 +193,7 @@ export class StoreRatingsClient {
     const matches = [title, productName].some(
       (storeTitle) =>
         storeTitle &&
-        psConceptMatchesGame(name, storeTitle, storeRelease, releaseDates),
+        storeProductMatchesGame(name, storeTitle, storeRelease, releaseDates),
     );
     if (!matches) {
       // A mismatch deletes data, so it takes two independent names: a change
@@ -216,59 +224,106 @@ export class StoreRatingsClient {
    * Xbox Store lookup. Search still goes through xbox.com (no titles in the
    * HTML bucket). Ratings come from Display Catalog AllTime — worldwide,
    * not the en-US page. We batch the top candidates in one catalog call
-   * and keep a rating only when the catalog title confirms the match.
+   * and keep a rating only when `storeProductMatchesGame` confirms the match.
    */
   private async getXbox(
     name: string,
-    knownUrl?: string,
-  ): Promise<StoreRating | null> {
+    knownUrl: string | undefined,
+    releaseDates: GameReleaseDates,
+  ): Promise<{ rating: StoreRating | null; urlRejected: boolean }> {
+    let urlRejected = false;
     try {
       if (knownUrl) {
-        const cached = await this.xboxRatingFromUrl(name, knownUrl);
-        if (cached) return cached;
+        const productId = this.xboxCatalog.xboxProductIdFromUrl(knownUrl);
+        if (productId) {
+          const catalog = await this.xboxCatalog.getProducts([productId], 'US');
+          const product = catalog.get(productId);
+          if (product?.title) {
+            if (this.xboxProductMatches(name, product, releaseDates)) {
+              if (product.rating) {
+                return {
+                  rating: this.xboxRatingResult(
+                    knownUrl.split('?')[0],
+                    product.rating,
+                  ),
+                  urlRejected,
+                };
+              }
+            } else {
+              urlRejected = true;
+            }
+          }
+        }
       }
 
-      const productIds = await this.resolveXboxProductIds(name);
-      if (productIds.length === 0) return null;
+      let subtitleMatch: StoreRating | null = null;
+      for (const query of this.xboxSearchQueries(name)) {
+        const productIds = await this.searchXboxProductIds(query);
+        if (productIds.length === 0) continue;
+        const candidates = productIds.slice(0, XBOX_MAX_CANDIDATES);
+        const catalog = await this.xboxCatalog.getProducts(candidates, 'US');
 
-      const catalog = await this.xboxCatalog.getProducts(
-        productIds.slice(0, XBOX_MAX_CANDIDATES),
-        'US',
-      );
-
-      let firstPrefixMatch: StoreRating | null = null;
-      for (const productId of productIds.slice(0, XBOX_MAX_CANDIDATES)) {
-        const product = catalog.get(productId.toUpperCase());
-        if (!product?.title || !product.rating) continue;
-        if (!this.titleMatches(name, product.title)) continue;
-
-        const url = `https://www.xbox.com/en-US/games/store/x/${product.productId}`;
-        const result = this.xboxRatingResult(url, product.rating);
-        if (this.isExactTitleMatch(name, product.title)) return result;
-        if (!firstPrefixMatch) firstPrefixMatch = result;
+        let best: { rank: number; rating: StoreRating } | null = null;
+        for (const productId of candidates) {
+          const product = catalog.get(productId.toUpperCase());
+          if (!product?.title || !product.rating) continue;
+          if (!this.xboxProductMatches(name, product, releaseDates)) continue;
+          const rank =
+            STORE_RELATION_RANK[storeTitleRelation(name, product.title)];
+          if (best && best.rank <= rank) continue;
+          best = {
+            rank,
+            rating: this.xboxRatingResult(
+              `https://www.xbox.com/en-US/games/store/x/${product.productId}`,
+              product.rating,
+            ),
+          };
+        }
+        if (best && best.rank < STORE_RELATION_RANK.subtitle) {
+          return { rating: best.rating, urlRejected };
+        }
+        // A subtitle hit may be a spin-off, so keep looking for a closer title.
+        if (best && !subtitleMatch) subtitleMatch = best.rating;
       }
-      return firstPrefixMatch;
+      return { rating: subtitleMatch, urlRejected };
     } catch (error) {
       this.logger.warn(`Xbox lookup failed for "${name}": ${error}`);
-      return null;
+      return { rating: null, urlRejected };
     }
   }
 
-  /**
-   * Resolve candidate product ids from the Xbox Store search. A bare `:`
-   * between words makes the search return zero results (e.g.
-   * "NieR:Automata"), so on an empty first pass we retry with a
-   * punctuation-stripped query before giving up.
-   */
-  private async resolveXboxProductIds(name: string): Promise<string[]> {
-    const ids = await this.searchXboxProductIds(name);
-    if (ids.length > 0) return ids;
+  private xboxProductMatches(
+    name: string,
+    product: XboxCatalogProduct,
+    releaseDates: GameReleaseDates,
+  ): boolean {
+    return (
+      !!product.title &&
+      storeProductMatchesGame(
+        name,
+        product.title,
+        product.releaseDate,
+        releaseDates,
+      )
+    );
+  }
 
-    const simplified = this.simplifyXboxQuery(name);
-    if (simplified && simplified !== name) {
-      return this.searchXboxProductIds(simplified);
+  /**
+   * A bare `:` between words makes the search return zero results (e.g.
+   * "NieR:Automata"), so punctuation-stripped forms follow the plain name.
+   */
+  private xboxSearchQueries(name: string): string[] {
+    const queries: string[] = [];
+    const add = (raw: string) => {
+      const q = raw.replace(/\s+/g, ' ').trim();
+      if (q.length >= 2 && !queries.includes(q)) queries.push(q);
+    };
+    add(name);
+    for (const base of storeTitleBaseNames(name)) {
+      add(this.simplifyXboxQuery(base));
+      add(romanNumeralsToDigits(this.simplifyXboxQuery(base)));
     }
-    return [];
+    return queries.slice(0, XBOX_MAX_SEARCH_QUERIES);
   }
 
   private async searchXboxProductIds(query: string): Promise<string[]> {
@@ -286,19 +341,6 @@ export class StoreRatingsClient {
     return [...bucket[1].matchAll(/"productId":"([A-Z0-9]{12})"/g)].map(
       (m) => m[1],
     );
-  }
-
-  private async xboxRatingFromUrl(
-    name: string,
-    url: string,
-  ): Promise<StoreRating | null> {
-    const productId = this.xboxCatalog.xboxProductIdFromUrl(url);
-    if (!productId) return null;
-    const catalog = await this.xboxCatalog.getProducts([productId], 'US');
-    const product = catalog.get(productId);
-    if (!product?.title || !product.rating) return null;
-    if (!this.titleMatches(name, product.title)) return null;
-    return this.xboxRatingResult(url.split('?')[0], product.rating);
   }
 
   private xboxRatingResult(
@@ -337,7 +379,7 @@ export class StoreRatingsClient {
   private async resolvePsConceptIdFromPortal(
     name: string,
   ): Promise<string | null> {
-    const slugs = psTitleBaseNames(name).flatMap((base) =>
+    const slugs = storeTitleBaseNames(name).flatMap((base) =>
       this.psnPortalSlugs(base),
     );
     for (const slug of [...new Set(slugs)].slice(0, PS_MAX_PORTAL_SLUGS)) {
@@ -396,7 +438,7 @@ export class StoreRatingsClient {
         rawFallback = batch.raw;
       }
       // A subtitle hit may be a spin-off, so keep looking for a closer title.
-      if (matched.some((hit) => hit.rank < PS_RELATION_RANK.subtitle)) break;
+      if (matched.some((hit) => hit.rank < STORE_RELATION_RANK.subtitle)) break;
     }
     if (matched.length === 0) return rawFallback;
     return [...matched].sort((a, b) => a.rank - b.rank).map((hit) => hit.id);
@@ -408,10 +450,10 @@ export class StoreRatingsClient {
       const q = raw.replace(/\s+/g, ' ').trim();
       if (q.length >= 2 && !queries.includes(q)) queries.push(q);
     };
-    for (const base of psTitleBaseNames(name)) {
+    for (const base of storeTitleBaseNames(name)) {
       add(base);
       add(this.simplifyPsQuery(base));
-      add(psRomanNumeralsToDigits(this.simplifyPsQuery(base)));
+      add(romanNumeralsToDigits(this.simplifyPsQuery(base)));
     }
     const colonParts = name
       .split(':')
@@ -460,10 +502,10 @@ export class StoreRatingsClient {
         raw.push(link.id);
         // Only a cheap filter: the concept page makes the final decision.
         const relation = link.name
-          ? psTitleRelation(gameName, link.name)
+          ? storeTitleRelation(gameName, link.name)
           : 'subtitle';
         if (relation !== 'none') {
-          matched.push({ id: link.id, rank: PS_RELATION_RANK[relation] });
+          matched.push({ id: link.id, rank: STORE_RELATION_RANK[relation] });
         }
       }
       return { matched, raw };
@@ -624,30 +666,6 @@ export class StoreRatingsClient {
       )
       .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)))
       .replace(/&[a-zA-Z]+;/g, (entity) => named[entity] ?? entity);
-  }
-
-  // Accept when one normalized title is a prefix of the other (store titles
-  // carry edition/platform suffixes), with a minimum overlap to avoid noise.
-  private titleMatches(query: string, found: string): boolean {
-    const q = this.normalize(query);
-    const f = this.normalize(found);
-    if (!q || !f) return false;
-    const shorter = q.length < f.length ? q : f;
-    return shorter.length >= 4 && (f.startsWith(q) || q.startsWith(f));
-  }
-
-  private isExactTitleMatch(query: string, found: string): boolean {
-    const q = this.normalize(query);
-    const f = this.normalize(found);
-    return q.length > 0 && q === f;
-  }
-
-  private normalize(value: string): string {
-    return value
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '');
   }
 
   private async fetch(url: string): Promise<string | null> {

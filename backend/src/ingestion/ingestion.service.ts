@@ -984,15 +984,34 @@ export class IngestionService {
     }
 
     const urls = knownUrls ?? (await this.knownStoreUrlsFor(gameId));
-    const { ratings, playstationConceptUrl, playstationUrlRejected } =
-      await this.storeRatings.getRatings(
-        name,
-        urls,
-        await this.releaseDatesForStoreMatch(gameId),
-      );
+    const {
+      ratings,
+      playstationConceptUrl,
+      playstationUrlRejected,
+      xboxUrlRejected,
+    } = await this.storeRatings.getRatings(
+      name,
+      urls,
+      await this.releaseDatesForStoreMatch(gameId),
+    );
 
     if (playstationUrlRejected) {
-      await this.forgetWrongPlaystationConcept(gameId, name, urls);
+      await this.forgetWrongStoreProduct(
+        gameId,
+        name,
+        SourceType.PS_STORE,
+        SignalMetric.PS_RATINGS,
+        urls.playstationUrl,
+      );
+    }
+    if (xboxUrlRejected) {
+      await this.forgetWrongStoreProduct(
+        gameId,
+        name,
+        SourceType.XBOX_STORE,
+        SignalMetric.XBOX_RATINGS,
+        urls.xboxUrl,
+      );
     }
 
     for (const rating of ratings) {
@@ -5246,36 +5265,39 @@ export class IngestionService {
     return candidate;
   }
   private async releaseDatesForStoreMatch(gameId: string): Promise<Date[]> {
-    const [game, playstation] = await Promise.all([
+    const [game, consoles] = await Promise.all([
       this.games.findOne({
         where: { id: gameId },
         select: { id: true, releaseDate: true },
       }),
-      this.platformReleaseDates.findOne({
-        where: { gameId, platform: Platform.PLAYSTATION },
+      this.platformReleaseDates.find({
+        where: {
+          gameId,
+          platform: In([Platform.PLAYSTATION, Platform.XBOX]),
+        },
       }),
     ]);
-    return [game?.releaseDate, playstation?.releaseDate].filter(
+    return [game?.releaseDate, ...consoles.map((c) => c.releaseDate)].filter(
       (date): date is Date => !!date,
     );
   }
 
   /**
-   * The stored PS concept is another game (see `psConceptMatchesGame`), so its
-   * ratings and prices must stop feeding this game. Removing them also frees
-   * the next successful lookup to start a clean series.
+   * The stored store product is another game (see `storeProductMatchesGame`),
+   * so its ratings and prices must stop feeding this game. Removing them also
+   * frees the next successful lookup to start a clean series.
    */
-  private async forgetWrongPlaystationConcept(
+  private async forgetWrongStoreProduct(
     gameId: string,
     name: string,
-    urls: KnownStoreUrls,
+    source: SourceType,
+    metric: SignalMetric,
+    url: string | undefined,
   ): Promise<void> {
-    this.logger.warn(
-      `[stores] "${name}" — dropping wrong PS concept ${urls.playstationUrl}`,
-    );
-    await this.signals.delete({ gameId, metric: SignalMetric.PS_RATINGS });
-    await this.prices.delete({ gameId, source: SourceType.PS_STORE });
-    await this.gameSources.delete({ gameId, source: SourceType.PS_STORE });
+    this.logger.warn(`[stores] "${name}" — dropping wrong ${source} ${url}`);
+    await this.signals.delete({ gameId, metric });
+    await this.prices.delete({ gameId, source });
+    await this.gameSources.delete({ gameId, source });
   }
 
   private async knownStoreUrlsFor(gameId: string): Promise<KnownStoreUrls> {

@@ -29,6 +29,7 @@ export interface XboxCatalogPrice {
 export interface XboxCatalogProduct {
   productId: string;
   title: string | null;
+  releaseDate: Date | null;
   rating: XboxCatalogRating | null;
   price: XboxCatalogPrice | null;
 }
@@ -41,6 +42,7 @@ interface CatalogProductJson {
   ProductId?: string;
   LocalizedProperties?: Array<{ ProductTitle?: string }>;
   MarketProperties?: Array<{
+    OriginalReleaseDate?: string;
     UsageData?: Array<{
       AggregateTimeSpan?: string;
       AverageRating?: number;
@@ -114,9 +116,21 @@ export class XboxCatalogClient {
     return {
       productId,
       title: raw.LocalizedProperties?.[0]?.ProductTitle ?? null,
+      releaseDate: this.parseReleaseDate(raw),
       rating: this.parseRating(raw),
       price: this.parsePrice(raw, market),
     };
+  }
+
+  // Unreleased and Game Preview products carry placeholders such as 9998-12-30.
+  private parseReleaseDate(raw: CatalogProductJson): Date | null {
+    const value = raw.MarketProperties?.[0]?.OriginalReleaseDate;
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime()) || date.getUTCFullYear() > 2100) {
+      return null;
+    }
+    return date;
   }
 
   private parseRating(raw: CatalogProductJson): XboxCatalogRating | null {
@@ -165,9 +179,7 @@ export class XboxCatalogClient {
         const currency =
           typeof price?.CurrencyCode === 'string' && price.CurrencyCode
             ? price.CurrencyCode.toUpperCase()
-            : xboxCurrencyForCountry(
-                market.toLowerCase() as XboxStoreCountry,
-              );
+            : xboxCurrencyForCountry(market.toLowerCase() as XboxStoreCountry);
         candidates.push({
           skuType,
           rank: Number.isFinite(avail.DisplayRank) ? avail.DisplayRank! : 999,
@@ -180,7 +192,8 @@ export class XboxCatalogClient {
     if (candidates.length === 0) return null;
 
     candidates.sort((a, b) => {
-      const fullDelta = Number(b.skuType === 'Full') - Number(a.skuType === 'Full');
+      const fullDelta =
+        Number(b.skuType === 'Full') - Number(a.skuType === 'Full');
       if (fullDelta !== 0) return fullDelta;
       return a.rank - b.rank;
     });

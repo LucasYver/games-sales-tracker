@@ -1,13 +1,13 @@
 /**
- * Decides whether a PlayStation Store concept is the catalog game. A plain
+ * Decides whether a console store product is the catalog game. A plain
  * prefix check is not enough: "Wardogs" is a prefix of "WarDogs: Red's Return",
  * and "Attack on Titan" of "Attack on Titan 3", yet those are different games
  * whose ratings must never feed an estimate.
  *
- * Pure and dependency-free. See the skill `playstation-store-matching`.
+ * Pure and dependency-free. See the skill `console-store-matching`.
  */
 
-export type PsTitleRelation = 'exact' | 'edition' | 'subtitle' | 'none';
+export type StoreTitleRelation = 'exact' | 'edition' | 'subtitle' | 'none';
 
 const ROMAN_TO_DIGIT: Record<string, string> = {
   ii: '2',
@@ -27,7 +27,12 @@ const PLATFORM_WORDS = new Set([
   'playstation',
   'playstation4',
   'playstation5',
+  'xbox',
 ]);
+
+// Removed whole, because "One" and "X" alone can be part of a real title.
+const XBOX_PLATFORM_NAMES =
+  /\bxbox\s*(?:one|360|series(?:\s*x\s*\|?\s*s|\s*[xs])?)?|\bwindows(?:\s*1[01])?\b|\(pc\)/gi;
 
 // Words that name a packaging of the same game, never a different game. A
 // remaster counts: the store often sells only that listing, with the original's
@@ -66,6 +71,7 @@ const EDITION_WORDS = new Set([
   'pass',
   'play',
   'premium',
+  'preview',
   'remaster',
   'remastered',
   'season',
@@ -78,6 +84,15 @@ const EDITION_WORDS = new Set([
   'upgrade',
   'version',
   'year',
+]);
+
+// Never the game itself, however close the title and the date.
+const NOT_THE_GAME_WORDS = new Set([
+  'artbook',
+  'beta',
+  'demo',
+  'soundtrack',
+  'trial',
 ]);
 
 const EDITION_SUFFIXES = new Set([
@@ -93,8 +108,9 @@ const SUBTITLE_MAX_RELEASE_GAP_DAYS = 45;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export function psTitleTokens(title: string): string[] {
+export function storeTitleTokens(title: string): string[] {
   const tokens = title
+    .replace(XBOX_PLATFORM_NAMES, ' ')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
@@ -104,7 +120,8 @@ export function psTitleTokens(title: string): string[] {
     .filter((token) => token && !PLATFORM_WORDS.has(token))
     .map((token) => ROMAN_TO_DIGIT[token] ?? token);
   // "The Quarry for PS5": the platform word is gone, its "for" is left over.
-  if (tokens[tokens.length - 1] === 'for') tokens.pop();
+  // Same for "Xbox One & Xbox Series X|S" when written with "and".
+  while (['for', 'and'].includes(tokens[tokens.length - 1])) tokens.pop();
   return tokens;
 }
 
@@ -137,12 +154,12 @@ function isEditionRemainder(
   return storeHasRemainder ? freeWords.length <= 2 : remainder.length === 2;
 }
 
-export function psTitleRelation(
+export function storeTitleRelation(
   catalogTitle: string,
   storeTitle: string,
-): PsTitleRelation {
-  const catalog = psTitleTokens(catalogTitle);
-  const store = psTitleTokens(storeTitle);
+): StoreTitleRelation {
+  const catalog = storeTitleTokens(catalogTitle);
+  const store = storeTitleTokens(storeTitle);
   if (catalog.length === 0 || store.length === 0) return 'none';
 
   const catalogIsShorter = catalog.join('').length <= store.join('').length;
@@ -156,6 +173,15 @@ export function psTitleRelation(
   const remainder = remainderAfterPrefix(shorter, longer);
   if (!remainder) return 'none';
   if (remainder.length === 0) return 'exact';
+  if (remainder.some((token) => NOT_THE_GAME_WORDS.has(token))) return 'none';
+  // "Risk of Rain (2013)": a catalog title's year only tells remakes apart.
+  if (
+    !catalogIsShorter &&
+    remainder.length === 1 &&
+    /^(19|20)\d\d$/.test(remainder[0])
+  ) {
+    return 'subtitle';
+  }
   // "Tormented Souls" vs "Tormented Souls 2": a number opens a sequel, unless
   // it dates an edition ("SnowRunner - 5-Year Anniversary Edition").
   if (/^\d/.test(remainder[0]) && remainder[1] !== 'year') return 'none';
@@ -164,13 +190,13 @@ export function psTitleRelation(
     : 'subtitle';
 }
 
-export function psConceptMatchesGame(
+export function storeProductMatchesGame(
   catalogTitle: string,
   storeTitle: string,
   storeReleaseDate: Date | null,
   catalogReleaseDates: Array<Date | null | undefined>,
 ): boolean {
-  const relation = psTitleRelation(catalogTitle, storeTitle);
+  const relation = storeTitleRelation(catalogTitle, storeTitle);
   if (relation === 'exact' || relation === 'edition') return true;
   if (relation !== 'subtitle' || !storeReleaseDate) return false;
   return catalogReleaseDates.some(
@@ -182,7 +208,7 @@ export function psConceptMatchesGame(
 }
 
 /** Search queries for a catalog title, the plainest forms first. */
-export function psTitleBaseNames(name: string): string[] {
+export function storeTitleBaseNames(name: string): string[] {
   const withoutMarks = name.replace(/[™®©]/g, '').replace(/\s+/g, ' ').trim();
   const bases = [withoutMarks];
   const add = (value: string) => {
@@ -204,7 +230,7 @@ export function psTitleBaseNames(name: string): string[] {
 }
 
 /** "Alan Wake II" searches as "Alan Wake 2" too; the store uses either. */
-export function psRomanNumeralsToDigits(name: string): string {
+export function romanNumeralsToDigits(name: string): string {
   return name.replace(/\b(viii|vii|iii|ii|iv|vi|ix)\b/gi, (match) => {
     return ROMAN_TO_DIGIT[match.toLowerCase()] ?? match;
   });
