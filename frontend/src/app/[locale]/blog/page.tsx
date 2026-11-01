@@ -1,8 +1,9 @@
 import { getTranslations } from 'next-intl/server';
 import type { Metadata } from 'next';
 import Image from 'next/image';
+import { notFound } from 'next/navigation';
 import { Link } from '@/i18n/navigation';
-import { routing } from '@/i18n/routing';
+import { hasBlog, routing } from '@/i18n/routing';
 import { getBlogIndex } from '@/lib/api';
 import { SITE_URL } from '@/lib/site-url';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
@@ -20,6 +21,7 @@ export async function generateMetadata({
   searchParams: Promise<{ page?: string }>;
 }): Promise<Metadata> {
   const { locale } = await params;
+  if (!hasBlog(locale)) notFound();
   const { page: pageRaw } = await searchParams;
   const t = await getTranslations({ locale, namespace: 'blog' });
   const page = Math.max(1, Number(pageRaw) || 1);
@@ -53,6 +55,7 @@ export default async function BlogIndexPage({
   searchParams: Promise<{ page?: string }>;
 }) {
   const { locale } = await params;
+  if (!hasBlog(locale)) notFound();
   const { page: pageRaw } = await searchParams;
   const page = Math.max(1, Number(pageRaw) || 1);
   const t = await getTranslations({ locale, namespace: 'blog' });
@@ -147,5 +150,5 @@ export default async function BlogIndexPage({
 }
 
 export function generateStaticParams() {
-  return routing.locales.map((locale) => ({ locale }));
+  return routing.locales.filter(hasBlog).map((locale) => ({ locale }));
 }

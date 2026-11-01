@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { useTranslations } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
-import { routing } from '@/i18n/routing';
+import { localeLanguages, routing } from '@/i18n/routing';
 import { SITE_URL } from '@/lib/site-url';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
 
@@ -20,11 +20,7 @@ export async function generateMetadata({
     description: t('intro'),
     alternates: {
       canonical: path,
-      languages: {
-        en: '/en/privacy',
-        fr: '/fr/privacy',
-        'x-default': '/en/privacy',
-      },
+      languages: localeLanguages('/privacy'),
     },
     openGraph: {
       title: t('title'),

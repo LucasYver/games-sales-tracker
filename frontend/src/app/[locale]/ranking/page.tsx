@@ -5,7 +5,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import type { Metadata } from 'next';
 import { getRankedGames, listingUnits, type RankSort } from '@/lib/api';
-import { routing } from '@/i18n/routing';
+import { localeLanguages } from '@/i18n/routing';
 import { Link } from '@/i18n/navigation';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
 import { Pagination } from '@/components/Pagination';
@@ -35,11 +35,7 @@ export async function generateMetadata({
     description: t('metaDescription'),
     alternates: {
       canonical: `/${locale}/ranking`,
-      languages: {
-        en: '/en/ranking',
-        fr: '/fr/ranking',
-        'x-default': `/${routing.defaultLocale}/ranking`,
-      },
+      languages: localeLanguages('/ranking'),
     },
   };
 }

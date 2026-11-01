@@ -140,7 +140,9 @@ Do not put a long `revalidate` TTL on the index: an empty first visit
 otherwise sticks after Publish. `publishBlogPost` / `unpublishBlogPost` /
 discarding a refresh / editing a live article must `updateTag('blog')`
 and revalidate the locale blog + game pages. The sitemap lists one entry
-per language version, each with its hreflang alternates.
+per language version, each with its hreflang alternates. Articles exist in
+`en` and `fr` only (`hasBlog` in `frontend/src/i18n/routing.ts`), although the
+site also runs in `es` and `ru`.
 
 `/admin/blog/:id` is the review screen, not a writing plan: fact pack
 (with labels) at the top, then editable EN/FR title / meta / excerpt /

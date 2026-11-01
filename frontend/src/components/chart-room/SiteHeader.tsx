@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
+import { hasBlog } from '@/i18n/routing';
 import { SearchBar } from '@/components/SearchBar';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { ThemeToggle } from '@/components/chart-room/ThemeToggle';
@@ -13,6 +14,7 @@ export function SiteHeader({
 }) {
   const t = useTranslations('siteMeta');
   const tNav = useTranslations('nav');
+  const locale = useLocale();
 
   return (
     <header className="border-b border-border bg-card">
@@ -23,12 +25,14 @@ export function SiteHeader({
         >
           {t('siteName')}
         </Link>
-        <Link
-          href="/blog"
-          className="font-mono text-sm text-muted-foreground hover:text-foreground"
-        >
-          {tNav('blog')}
-        </Link>
+        {hasBlog(locale) && (
+          <Link
+            href="/blog"
+            className="font-mono text-sm text-muted-foreground hover:text-foreground"
+          >
+            {tNav('blog')}
+          </Link>
+        )}
         <div className="order-3 w-full sm:order-none sm:ml-auto sm:w-auto sm:max-w-xs sm:flex-1">
           <Suspense fallback={<div className="h-9" />}>
             <SearchBar />

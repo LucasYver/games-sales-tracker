@@ -6,12 +6,13 @@ export interface SitemapGame {
 }
 
 /**
- * Games per sitemap file. Each game yields one URL per locale with hreflang
- * alternates (~0.5 KB each), so 2,000 games stay near 2 MB — well under the
- * 4.5 MB a Vercel function may return when ISR regenerates the file. The
- * former single 7.8 MB sitemap stopped refreshing after its build.
+ * Games per sitemap file. Each game yields one URL per locale, each listing
+ * every locale as an hreflang alternate (~0.7 KB per URL at 4 locales), so
+ * 1,000 games stay near 3 MB — well under the 4.5 MB a Vercel function may
+ * return when ISR regenerates the file. The former single 7.8 MB sitemap
+ * stopped refreshing after its build.
  */
-export const GAMES_PER_SITEMAP = 2000;
+export const GAMES_PER_SITEMAP = 1000;
 
 export async function fetchSitemapGames(): Promise<SitemapGame[]> {
   try {

@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import { useTranslations } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import type { Metadata } from 'next';
-import { routing } from '@/i18n/routing';
+import { localeLanguages } from '@/i18n/routing';
 import { SITE_URL } from '@/lib/site-url';
 import {
   getGenres,
@@ -47,17 +47,7 @@ export async function generateMetadata({
   const title = paginated ? t('titlePage', { page }) : t('title');
   const description = t('description');
   const canonical = paginated ? `/${locale}?page=${page}` : `/${locale}`;
-  const languages = paginated
-    ? {
-        en: `/en?page=${page}`,
-        fr: `/fr?page=${page}`,
-        'x-default': `/${routing.defaultLocale}?page=${page}`,
-      }
-    : {
-        en: '/en',
-        fr: '/fr',
-        'x-default': `/${routing.defaultLocale}`,
-      };
+  const languages = localeLanguages(paginated ? `?page=${page}` : '');
 
   return {
     title,

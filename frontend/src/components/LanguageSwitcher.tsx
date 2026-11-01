@@ -2,9 +2,23 @@
 
 import { useLocale, useTranslations } from 'next-intl';
 import { usePathname, useRouter } from '@/i18n/navigation';
+import { hasBlog, routing } from '@/i18n/routing';
 import { useTransition } from 'react';
 import { Languages } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+const LANGUAGE_NAMES: Record<(typeof routing.locales)[number], string> = {
+  en: 'English',
+  fr: 'Français',
+  es: 'Español',
+  ru: 'Русский',
+};
 
 export function LanguageSwitcher({
   localePaths,
@@ -17,24 +31,32 @@ export function LanguageSwitcher({
   const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
 
-  const toggle = () => {
-    const next = locale === 'en' ? 'fr' : 'en';
+  const change = (next: string) => {
+    // Articles exist in some languages only: leave the blog for the others.
+    const fallback =
+      pathname.startsWith('/blog') && !hasBlog(next) ? '/' : pathname;
     startTransition(() => {
-      router.replace(localePaths?.[next] ?? pathname, { locale: next });
+      router.replace(localePaths?.[next] ?? fallback, { locale: next });
     });
   };
 
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      onClick={toggle}
-      disabled={isPending}
-      aria-label={t('langSwitch')}
-    >
-      <Languages aria-hidden="true" className="hidden size-4 sm:block" />
-      {t('langSwitch')}
-    </Button>
+    <Select value={locale} onValueChange={change} disabled={isPending}>
+      <SelectTrigger
+        size="sm"
+        aria-label={t('langSwitch')}
+        className="border-0 bg-transparent shadow-none dark:bg-transparent"
+      >
+        <Languages aria-hidden="true" className="hidden size-4 sm:block" />
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {routing.locales.map((l) => (
+          <SelectItem key={l} value={l} lang={l}>
+            {LANGUAGE_NAMES[l]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

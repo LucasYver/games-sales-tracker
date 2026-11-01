@@ -9,7 +9,7 @@ import {
   type GameDetail,
   type Platform,
 } from '@/lib/api';
-import { routing } from '@/i18n/routing';
+import { localeLanguages } from '@/i18n/routing';
 import { ADSENSE_CLIENT, ADSENSE_GAME_SLOT } from '@/lib/ads';
 import { SITE_URL } from '@/lib/site-url';
 import { Link } from '@/i18n/navigation';
@@ -97,11 +97,7 @@ export async function generateMetadata({
     description,
     alternates: {
       canonical: url,
-      languages: {
-        en: `/en/game/${game.slug}`,
-        fr: `/fr/game/${game.slug}`,
-        'x-default': `/${routing.defaultLocale}/game/${game.slug}`,
-      },
+      languages: localeLanguages(`/game/${game.slug}`),
     },
     openGraph: {
       title,
@@ -145,7 +141,7 @@ function gamePageHref(
 }
 
 function defaultPriceCountry(locale: string): string {
-  return locale === 'fr' ? 'fr' : 'us';
+  return locale === 'en' ? 'us' : locale;
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -353,7 +349,7 @@ function SalesHeadline({ game }: { game: GameDetail }) {
 function OfficialSalesRecap({ game }: { game: GameDetail }) {
   const t = useTranslations('gamePage');
   const locale = useLocale();
-  const slug = game.blog?.slugByLocale?.[locale as 'en' | 'fr'];
+  const slug = game.blog?.slugByLocale?.[locale];
   if (!slug) return null;
   return (
     <aside className="border-b border-border px-4 py-3">

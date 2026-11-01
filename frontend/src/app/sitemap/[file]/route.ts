@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next';
-import { routing } from '@/i18n/routing';
+import { hasBlog, routing } from '@/i18n/routing';
 import { SITE_URL } from '@/lib/site-url';
 import { getBlogSitemap } from '@/lib/api';
 import {
@@ -37,11 +37,14 @@ function latest(values: (string | null | undefined)[]): Date | undefined {
 }
 
 /** hreflang alternates for a path that exists under every locale. */
-function localeAlternates(path: string) {
+function localeAlternates(
+  path: string,
+  locales: readonly string[] = routing.locales,
+) {
   return {
     languages: {
       ...Object.fromEntries(
-        routing.locales.map((l) => [l, `${SITE_URL}/${l}${path}`]),
+        locales.map((l) => [l, `${SITE_URL}/${l}${path}`]),
       ),
       'x-default': `${SITE_URL}/${routing.defaultLocale}${path}`,
     },
@@ -77,13 +80,14 @@ async function pagesSitemap(
   }
 
   const blogModified = latest(posts.map((p) => p.updatedAt ?? p.publishedAt));
-  for (const locale of routing.locales) {
+  const blogLocales = routing.locales.filter(hasBlog);
+  for (const locale of blogLocales) {
     entries.push({
       url: `${SITE_URL}/${locale}/blog`,
       lastModified: blogModified,
       changeFrequency: 'weekly',
       priority: 0.8,
-      alternates: localeAlternates('/blog'),
+      alternates: localeAlternates('/blog', blogLocales),
     });
   }
 

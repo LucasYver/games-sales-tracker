@@ -177,7 +177,7 @@ export interface GameDetail {
   regionalPrices: RegionalPrice[];
   rank: RankInfo | null;
   storeRatings: StoreRatings;
-  blog: { slugByLocale: { en?: string; fr?: string } } | null;
+  blog: { slugByLocale: Partial<Record<string, string>> } | null;
 }
 
 /**

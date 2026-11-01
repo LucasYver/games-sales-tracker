@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { DM_Sans, IBM_Plex_Mono } from 'next/font/google';
+import { DM_Sans, IBM_Plex_Mono, IBM_Plex_Sans } from 'next/font/google';
 import { NextIntlClientProvider, hasLocale } from 'next-intl';
 import { getMessages, getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
@@ -23,6 +23,21 @@ const mono = IBM_Plex_Mono({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
   display: 'swap',
+});
+
+// DM Sans has no Cyrillic. These load on /ru only, hence no preload elsewhere.
+const sansCyrillic = IBM_Plex_Sans({
+  variable: '--font-sans',
+  subsets: ['cyrillic', 'latin'],
+  display: 'swap',
+  preload: false,
+});
+const monoCyrillic = IBM_Plex_Mono({
+  variable: '--font-mono',
+  subsets: ['cyrillic', 'latin'],
+  weight: ['400', '500', '600', '700'],
+  display: 'swap',
+  preload: false,
 });
 
 export async function generateMetadata({
@@ -71,11 +86,15 @@ export default async function LocaleLayout({
   if (!hasLocale(routing.locales, locale)) notFound();
 
   const messages = await getMessages();
+  const fonts =
+    locale === 'ru'
+      ? `${sansCyrillic.variable} ${monoCyrillic.variable}`
+      : `${sans.variable} ${mono.variable}`;
 
   return (
     <html
       lang={locale}
-      className={`${sans.variable} ${mono.variable} chart-scope dark h-full antialiased`}
+      className={`${fonts} chart-scope dark h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="flex min-h-full flex-col">
