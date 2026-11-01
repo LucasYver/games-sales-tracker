@@ -3,6 +3,7 @@ import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
 import { SearchBar } from '@/components/SearchBar';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import { ThemeToggle } from '@/components/chart-room/ThemeToggle';
 
 /** Persistent bar: wordmark, search, language. Same on every public page. */
 export function SiteHeader({
@@ -15,7 +16,7 @@ export function SiteHeader({
 
   return (
     <header className="border-b border-border bg-card">
-      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-2 gap-y-2 px-4 py-3 sm:gap-x-4">
         <Link
           href="/"
           className="font-mono text-base font-bold tracking-tight text-foreground"
@@ -33,7 +34,10 @@ export function SiteHeader({
             <SearchBar />
           </Suspense>
         </div>
-        <LanguageSwitcher localePaths={localePaths} />
+        <div className="ml-auto flex items-center sm:ml-0">
+          <LanguageSwitcher localePaths={localePaths} />
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );

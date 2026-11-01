@@ -9,6 +9,7 @@ import { routing } from '@/i18n/routing';
 import { ADSENSE_CLIENT } from '@/lib/ads';
 import { SITE_URL } from '@/lib/site-url';
 import { SiteFooter } from '@/components/SiteFooter';
+import { ThemeScript } from '@/components/chart-room/ThemeToggle';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import '../globals.css';
 
@@ -78,6 +79,7 @@ export default async function LocaleLayout({
       suppressHydrationWarning
     >
       <body className="flex min-h-full flex-col">
+        <ThemeScript />
         <NextIntlClientProvider messages={messages}>
           <TooltipProvider>{children}</TooltipProvider>
           <SiteFooter />

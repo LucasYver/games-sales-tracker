@@ -24,7 +24,9 @@
     "langSwitch": "English",
     "privacy": "Confidentialité",
     "ranking": "Classement",
-    "methodology": "Notre méthode"
+    "methodology": "Notre méthode",
+    "themeDark": "Passer en thème sombre",
+    "themeLight": "Passer en thème clair"
   },
   "siteMeta": {
     "description": "Combien d'exemplaires ce jeu a-t-il vendus ? Chiffres de ventes jeu vidéo sur PC, PlayStation, Xbox et Switch, mis à jour chaque jour.",

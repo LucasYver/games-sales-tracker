@@ -59,7 +59,7 @@
 body {
   /* Theme-aware: was a hardcoded #fafafa that broke dark mode (this unlayered
      rule beats the @layer base `bg-background`). var(--background) follows the
-     active palette — near-white on the public site, dark in admin dark mode. */
+     active palette, on the public site and in admin, light or dark. */
   background: var(--background);
 }
 
@@ -139,12 +139,54 @@ body {
   --sidebar-ring: oklch(0.556 0 0);
 }
 
-/* Public-site palette — "Chart Room". A dark, data-first surface in the spirit
-   of SteamDB: near-black blue ground, hairline borders, one gold accent for
-   links and active state. Confidence/provenance colours are deliberately a
-   separate set (green / blue / grey / red) so semantics never read as accent.
+/* Public-site palette — "Chart Room", light variant. Same structure as the dark
+   palette below; the gold is darkened to antique gold because #d9a441 is only
+   2.25:1 on white, too low for links. Every text colour here reaches 4.5:1 on
+   a card, except --text-faint (4.4:1), the role that is 3.15:1 in dark.
    Scoped to `.chart-scope` (set on the public <html>) — admin keeps its own. */
 .chart-scope {
+  --background: #f4f6f9;
+  --foreground: #1c2533;
+  --card: #ffffff;
+  --card-foreground: #1c2533;
+  --popover: #ffffff;
+  --popover-foreground: #1c2533;
+  --primary: #8a6410;
+  --primary-foreground: #ffffff;
+  --secondary: #e8ecf1;
+  --secondary-foreground: #1c2533;
+  --muted: #eef1f5;
+  --muted-foreground: #566273;
+  --accent: #f6eedb;
+  --accent-foreground: #7a5808;
+  --destructive: #b23f39;
+  --border: #d7dde5;
+  --input: #d7dde5;
+  --ring: #8a6410;
+  --radius: 0.25rem;
+  /* Darkest first, so the first series stands out as it does in dark. */
+  --chart-1: #2b3544;
+  --chart-2: #566273;
+  --chart-3: #7a8694;
+  --chart-4: #a0aab6;
+  --chart-5: #c3cad3;
+
+  --surface-alt: #f1f4f7;
+  --surface-hi: #e8ecf1;
+  --border-soft: #e6eaf0;
+  --text-faint: #6f7a88;
+
+  --source-official: #1f7a52;
+  --source-media: #2f68b8;
+  --source-estimate: #5f6b7a;
+  --source-leak: #b23f39;
+}
+
+/* Public-site palette — "Chart Room", dark variant. A data-first surface in the
+   spirit of SteamDB: near-black blue ground, hairline borders, one gold accent
+   for links and active state. Confidence/provenance colours are deliberately a
+   separate set (green / blue / grey / red) so semantics never read as accent. */
+.chart-scope.dark {
   --background: #0e1420;
   --foreground: #cfd8e3;
   --card: #141b28;
@@ -163,7 +205,11 @@ body {
   --border: #26303f;
   --input: #26303f;
   --ring: #d9a441;
-  --radius: 0.25rem;
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
 
   /* Row striping + the faintest divider, one step darker than --border. */
   --surface-alt: #111722;

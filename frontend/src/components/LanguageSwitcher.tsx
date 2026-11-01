@@ -33,7 +33,7 @@ export function LanguageSwitcher({
       disabled={isPending}
       aria-label={t('langSwitch')}
     >
-      <Languages aria-hidden="true" className="size-4" />
+      <Languages aria-hidden="true" className="hidden size-4 sm:block" />
       {t('langSwitch')}
     </Button>
   );

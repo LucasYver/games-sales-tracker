@@ -24,7 +24,9 @@
     "langSwitch": "Français",
     "privacy": "Privacy",
     "ranking": "Ranking",
-    "methodology": "How we estimate"
+    "methodology": "How we estimate",
+    "themeDark": "Switch to dark theme",
+    "themeLight": "Switch to light theme"
   },
   "siteMeta": {
     "description": "How many copies did that game sell? Video game sales figures for PC, PlayStation, Xbox and Switch, updated daily.",
