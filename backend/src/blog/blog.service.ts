@@ -28,7 +28,12 @@ import {
   repeatedFigureIssues,
 } from './blog-number-check';
 import { BlogWriterService } from './blog-writer.service';
-import { hasSalesTableMarker, stableBlogSlug } from './blog.types';
+import { notifyIndexNow } from '../common/indexnow';
+import {
+  hasSalesTableMarker,
+  publicAppUrl,
+  stableBlogSlug,
+} from './blog.types';
 import type {
   BlogFactPack,
   BlogFreshness,
@@ -370,6 +375,11 @@ export class BlogService {
     post.reviewedBy = reviewedBy ?? post.reviewedBy;
     post.rejectReason = null;
     await this.posts.save(post);
+    await notifyIndexNow(
+      post.translations.map(
+        (t) => `${publicAppUrl()}/${t.locale}/blog/${t.slug}`,
+      ),
+    );
     return this.getAdmin(id);
   }
 

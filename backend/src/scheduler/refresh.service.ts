@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { MoreThan, Repository } from 'typeorm';
+import { gamePageUrls, notifyIndexNow } from '../common/indexnow';
 import { Game, GameRank } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
 import { IngestionStateService } from '../ingestion/ingestion-state.service';
@@ -411,6 +412,25 @@ export class RefreshService {
       );
     } catch (error) {
       this.logger.warn(`IGDB discovery failed: ${error}`);
+    }
+    await this.announceNewGames();
+  }
+
+  /**
+   * Sends game pages created since the previous nightly run to IndexNow,
+   * whichever path created them (discovery, admin, Steam ingest). The hour on
+   * top of the daily window absorbs a run that started late.
+   */
+  private async announceNewGames() {
+    try {
+      const since = new Date(Date.now() - 25 * 60 * 60 * 1000);
+      const games = await this.games.find({
+        where: { createdAt: MoreThan(since) },
+        select: { slug: true },
+      });
+      await notifyIndexNow(games.flatMap((g) => gamePageUrls(g.slug)));
+    } catch (error) {
+      this.logger.warn(`IndexNow announcement failed: ${error}`);
     }
   }
 }
