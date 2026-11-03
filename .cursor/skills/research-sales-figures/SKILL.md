@@ -37,7 +37,13 @@ session knows where to resume.
 | `t3-10k-20k-b` | 10,000 to 20,000, most reviewed first | 50 | 2 | 2 | Done, 108 searches; rate limits again, 14 games got 1 search; Magicraft skipped (mobile may be included) |
 | `t3-10k-20k-c` | 10,000 to 20,000, most reviewed first | 50 | 5 | 5 | Done, 180 searches, no rate limit; The Culling (2016) skipped; SAO Fatal Bullet and The Culling marked done |
 | `t3-10k-20k-d` | 10,000 to 20,000, most reviewed first | 30 | 2 | 2 | Done, 96 searches, reduced to 30 games to stay under the 5-hour limit |
-| `t3-10k-20k-e` | 10,000 to 50,000, most reviewed first | 0 | 0 | 0 | **Next: run `prepare` with `--min-reviews 10000 --max-reviews 50000`. About 240 games left in this tier** |
+| `t3-10k-20k-e` | 10,000 to 50,000, most reviewed first | 50 | 8 | 7 | Done, 92 searches; rate limits again, 19 games got 1 search and most console searches were skipped; Absolver skipped (unattributed) |
+| `t3-10k-20k-f` | 10,000 to 50,000, retries first | 50 | 3 | 1 | Done, 96 searches, no rate limit: agents given only the prompt's path did shallow passes (20 games at 1 search); Nova Drift and Road Redemption skipped |
+| `t3-10k-20k-g` | 10,000 to 50,000, retries first | 50 | 3 | 2 | Done, 177 searches, 38 games got their full budget once the full prompt was pasted in with the "run the full budget" line; Absolver skipped a third time |
+| `t3-10k-20k-h` | 10,000 to 50,000, retries first | 50 | 4 | 4 | Done, 154 searches, every game got its full budget, no rate limit |
+| `t3-10k-20k-i` | 10,000 to 50,000, retries first | 50 | 5 | 5 | Done, 165 searches, no rate limit; Everspace 2 M skipped (series or first game, ambiguous) |
+| `t3-10k-20k-j` | 10,000 to 50,000, retries first | 20 | 2 | 2 | Done, 58 searches, reduced to 20 games to stay under the 5-hour limit |
+| `t3-10k-20k-k` | 10,000 to 50,000, retries first | 0 | 0 | 0 | **Next: run `prepare` with `--min-reviews 10000 --max-reviews 50000`. 39 games left, then 535 at 5,000 to 10,000** |
 
 After that: the rest of 10,000 to 20,000 reviews, then below 10,000.
 
@@ -56,8 +62,9 @@ From `ml/`, with `<tranche>` as the next name in the table.
    .venv/bin/python research_figures.py prepare <tranche> --min-reviews 20000 --max-reviews 50000
    ```
 
-   It picks games never searched, or searched fewer times than needed (4 on
-   console, 2 on PC only), most reviewed first, in 5 batches of 10.
+   It picks games searched fewer times than needed (4 on console, 2 on PC only)
+   first, so games cut off by a rate limit come back in the next wave, then games
+   never searched, most reviewed first, in 5 batches of 10.
 3. **Launch one agent per batch**, in the background, `general-purpose` with
    `model: sonnet`. The prompt is `agent-prompt.md`, with `{FOLDER}` set to the
    absolute path of `ml/reports/research/<tranche>` and `{N}` to the batch number.
@@ -143,6 +150,13 @@ All of these happened on real figures:
   searches mostly surface Alinea relays or nothing. Polish publishers' ESPI filings
   (PlayWay, Movie Games) are the exception: they give exact Xbox and PS5 units.
 - **Four waves fit in one 5-hour window** on Pro (3% to 85%), not five.
+- **Paste the full prompt into each agent.** Agents told only to read
+  `agent-prompt.md` did shallow passes (`t3-10k-20k-f`: 20 games at 1 search, no
+  rate limit). With the full text and the "run the full budget" line, most games
+  got all their searches (`-g` to `-j`).
+- **Rate limits came from bursts**: 5 agents each sending all their searches at once.
+  At most 2 searches per message, with a retry instead of a skip, removed them from
+  `-g` onward.
 - **Games out of scope** (really released before 2017, such as Battlefield 3) are marked done by setting `needed` to 0 in `searched_games.csv`, otherwise `prepare` picks them again.
 - **Games with one console family** (Heavy Rain, AI Limit: no Xbox version) can only
   reach 3 searches, so `prepare` keeps picking them again. Agents also sometimes

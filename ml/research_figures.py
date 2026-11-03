@@ -124,7 +124,9 @@ def prepare(args) -> None:
     log = read_log()
     def still_to_do(game_id: str) -> bool:
         return game_id not in log or int(log[game_id]["searches"]) < int(log[game_id]["needed"])
-    todo = games[games.id.map(still_to_do)].sort_values("rev", ascending=False)
+    # Les jeux déjà cherchés sans aller au bout (coupés par une limite de recherche) passent d'abord.
+    todo = games[games.id.map(still_to_do)].assign(retry=lambda d: d.id.isin(log))
+    todo = todo.sort_values(["retry", "rev"], ascending=False)
     picked = todo.head(args.limit).copy()
     picked["console"] = picked.platforms.str.contains("PLAYSTATION|XBOX")
     picked["known"] = picked.id.map(lambda i: known.get(i, []))
