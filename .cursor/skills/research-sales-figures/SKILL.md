@@ -32,9 +32,14 @@ session knows where to resume.
 | `t2-20k-50k-c` | 20,000 to 50,000 | 50 | 6 | 5 | Done, 167 searches, no cutoff; UBoat skipped (blocked host) |
 | `t2-20k-50k-d` | 20,000 to 50,000 | 50 | 10 | 12 | Done, 157 searches, no cutoff; Squad 44 skipped (figures were for Squad) |
 | `t2-20k-50k-e` | 20,000 to 50,000 | 50 | 10 | 12 | Done, 161 searches, no cutoff; Hardspace and one Townscaper figure skipped |
-| `t2-20k-50k-f` | 20,000 to 50,000 | 0 | 0 | 0 | **Next: run `prepare`. 19 left: 15 never searched, 4 searched too few times** |
+| `t2-20k-50k-f` | 18,955 to 50,000 (last 19 of the tier + 31 of the next) | 50 | 7 | 9 | Done, 130 searches; rate limits (`too_many_requests`) on some, those games come back; SAO Fatal Bullet and Battlefield 3 (2011) skipped |
+| `t3-10k-20k-a` | 10,000 to 20,000, most reviewed first | 50 | 3 | 3 | Done, 116 searches; 15 games got only 1 search (agents skipped the platform searches); CrossCode and 911 Operator skipped |
+| `t3-10k-20k-b` | 10,000 to 20,000, most reviewed first | 50 | 2 | 2 | Done, 108 searches; rate limits again, 14 games got 1 search; Magicraft skipped (mobile may be included) |
+| `t3-10k-20k-c` | 10,000 to 20,000, most reviewed first | 50 | 5 | 5 | Done, 180 searches, no rate limit; The Culling (2016) skipped; SAO Fatal Bullet and The Culling marked done |
+| `t3-10k-20k-d` | 10,000 to 20,000, most reviewed first | 30 | 2 | 2 | Done, 96 searches, reduced to 30 games to stay under the 5-hour limit |
+| `t3-10k-20k-e` | 10,000 to 50,000, most reviewed first | 0 | 0 | 0 | **Next: run `prepare` with `--min-reviews 10000 --max-reviews 50000`. About 240 games left in this tier** |
 
-After that tier: 10,000 to 20,000 reviews (366 games), then the rest.
+After that: the rest of 10,000 to 20,000 reviews, then below 10,000.
 
 ## Resume
 
@@ -138,6 +143,7 @@ All of these happened on real figures:
   searches mostly surface Alinea relays or nothing. Polish publishers' ESPI filings
   (PlayWay, Movie Games) are the exception: they give exact Xbox and PS5 units.
 - **Four waves fit in one 5-hour window** on Pro (3% to 85%), not five.
+- **Games out of scope** (really released before 2017, such as Battlefield 3) are marked done by setting `needed` to 0 in `searched_games.csv`, otherwise `prepare` picks them again.
 - **Games with one console family** (Heavy Rain, AI Limit: no Xbox version) can only
   reach 3 searches, so `prepare` keeps picking them again. Agents also sometimes
   search PlayStation and Xbox in one query, which counts as one search.
