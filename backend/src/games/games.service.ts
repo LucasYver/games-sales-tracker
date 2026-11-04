@@ -791,9 +791,122 @@ export class GamesService {
     const outOfScope = estimateOutOfScope(game.releaseDate);
     const noEstimate = game.isFree || outOfScope;
 
-    const latestEstimates = noEstimate
-      ? { byPlatform: new Map<Platform, SalesEstimate>(), ml: null }
-      : await this.latestEstimates(game.id);
+    // Everything below hangs off game.id alone, so it goes out in one wave
+    // instead of a dozen sequential round trips. Only the price rows wait on
+    // the store list, and that chain runs alongside the rest.
+    const series = (metric: SignalMetric, realOnly = false) =>
+      this.signals.find({
+        where: {
+          gameId: game.id,
+          metric,
+          ...(realOnly ? { synthetic: false } : {}),
+        },
+        order: { capturedAt: 'ASC' },
+        select: { capturedAt: true, value: true },
+      });
+
+    const loadPrices = async () => {
+      if (game.isFree) {
+        return {
+          availablePriceStores: [] as PublicPriceStore[],
+          priceStore: this.resolvePriceStore(store, []),
+          priceRows: [] as PriceSnapshot[],
+          regionalPrices: [] as PublicRegionalPrice[],
+        };
+      }
+      const availablePriceStores = await this.availablePriceStores(game.id);
+      const priceStore = this.resolvePriceStore(store, availablePriceStores);
+      const priceSource = sourceForPriceStore(priceStore);
+      const [priceRows, regionalPrices] = await Promise.all([
+        this.prices.find({
+          where: {
+            gameId: game.id,
+            country: priceCountry,
+            source: priceSource,
+          },
+          order: { capturedAt: 'ASC' },
+          select: {
+            capturedAt: true,
+            currency: true,
+            initial: true,
+            final: true,
+            discountPercent: true,
+          },
+        }),
+        this.latestRegionalPrices(game.id, priceSource),
+      ]);
+      return { availablePriceStores, priceStore, priceRows, regionalPrices };
+    };
+
+    const [
+      latestEstimates,
+      reviewHistory,
+      followersHistory,
+      twitchViewersHistory,
+      psRatingsHistory,
+      xboxRatingsHistory,
+      switchRatingsHistory,
+      ccuHistory,
+      // Concurrent players: the daily series above plus the all-time record,
+      // stored as its own metric (a new row only when the record is beaten,
+      // so it is read by value, not by date).
+      peakCcuRow,
+      { availablePriceStores, priceStore, priceRows, regionalPrices },
+      rankRow,
+      storeRatings,
+      reviewLanguagesRow,
+      publishedBlog,
+      estimateSnapshotRows,
+    ] = await Promise.all([
+      noEstimate
+        ? Promise.resolve<LatestEstimates>({
+            byPlatform: new Map<Platform, SalesEstimate>(),
+            ml: null,
+          })
+        : this.latestEstimates(game.id),
+      series(SignalMetric.STEAM_REVIEWS),
+      series(SignalMetric.STEAM_FOLLOWERS),
+      series(SignalMetric.TWITCH_VIEWERS),
+      series(SignalMetric.PS_RATINGS, true),
+      series(SignalMetric.XBOX_RATINGS, true),
+      series(SignalMetric.SWITCH_RATINGS, true),
+      series(SignalMetric.STEAM_CONCURRENT, true),
+      this.signals.findOne({
+        where: { gameId: game.id, metric: SignalMetric.STEAM_PEAK_CCU },
+        order: { value: 'DESC' },
+        select: { capturedAt: true, value: true },
+      }),
+      loadPrices(),
+      this.ranks.findOne({ where: { gameId: game.id } }),
+      this.buildStoreRatings(game.id),
+      // Not selected by default (catalog-wide reads skip it).
+      this.games.findOne({
+        where: { id: game.id },
+        select: { id: true, reviewLanguages: true },
+      }),
+      this.blogPosts.findOne({
+        // Live includes a published article whose refresh is in review.
+        where: {
+          gameId: game.id,
+          publishedAt: Not(IsNull()),
+          status: Not('REJECTED'),
+        },
+        relations: { translations: true },
+      }),
+      noEstimate
+        ? Promise.resolve([])
+        : this.estimateSnapshots.find({
+            where: { gameId: game.id },
+            order: { computedAt: 'ASC' },
+            select: {
+              computedAt: true,
+              estimatedTodayLow: true,
+              estimatedTodayHigh: true,
+              estimatedTodayUnits: true,
+            },
+            take: 500,
+          }),
+    ]);
 
     const { breakdown, total, reconciliation, estimatedToday } = game.isFree
       ? {
@@ -808,81 +921,6 @@ export class GamesService {
           game.releaseDate,
         );
 
-    const reviewHistory = await this.signals.find({
-      where: { gameId: game.id, metric: SignalMetric.STEAM_REVIEWS },
-      order: { capturedAt: 'ASC' },
-      select: { capturedAt: true, value: true },
-    });
-
-    const [followersHistory, twitchViewersHistory] = await Promise.all(
-      [SignalMetric.STEAM_FOLLOWERS, SignalMetric.TWITCH_VIEWERS].map(
-        (metric) =>
-          this.signals.find({
-            where: { gameId: game.id, metric },
-            order: { capturedAt: 'ASC' },
-            select: { capturedAt: true, value: true },
-          }),
-      ),
-    );
-
-    const [psRatingsHistory, xboxRatingsHistory, switchRatingsHistory] =
-      await Promise.all(
-        [
-          SignalMetric.PS_RATINGS,
-          SignalMetric.XBOX_RATINGS,
-          SignalMetric.SWITCH_RATINGS,
-        ].map((metric) =>
-          this.signals.find({
-            where: { gameId: game.id, metric, synthetic: false },
-            order: { capturedAt: 'ASC' },
-            select: { capturedAt: true, value: true },
-          }),
-        ),
-      );
-
-    // Concurrent players: the daily series plus the all-time record, which is
-    // stored as its own metric (a new row only when the record is beaten, so
-    // it is read by value, not by date).
-    const [ccuHistory, peakCcuRow] = await Promise.all([
-      this.signals.find({
-        where: {
-          gameId: game.id,
-          metric: SignalMetric.STEAM_CONCURRENT,
-          synthetic: false,
-        },
-        order: { capturedAt: 'ASC' },
-        select: { capturedAt: true, value: true },
-      }),
-      this.signals.findOne({
-        where: { gameId: game.id, metric: SignalMetric.STEAM_PEAK_CCU },
-        order: { value: 'DESC' },
-        select: { capturedAt: true, value: true },
-      }),
-    ]);
-
-    const availablePriceStores = game.isFree
-      ? []
-      : await this.availablePriceStores(game.id);
-    const priceStore = this.resolvePriceStore(store, availablePriceStores);
-    const priceSource = sourceForPriceStore(priceStore);
-
-    const priceRows = game.isFree
-      ? []
-      : await this.prices.find({
-          where: {
-            gameId: game.id,
-            country: priceCountry,
-            source: priceSource,
-          },
-          order: { capturedAt: 'ASC' },
-          select: {
-            capturedAt: true,
-            currency: true,
-            initial: true,
-            final: true,
-            discountPercent: true,
-          },
-        });
     const priceHistory: PublicPricePoint[] = priceRows.map((p) => ({
       capturedAt: p.capturedAt,
       currency: p.currency,
@@ -896,11 +934,6 @@ export class GamesService {
       null,
     );
 
-    const regionalPrices: PublicRegionalPrice[] = game.isFree
-      ? []
-      : await this.latestRegionalPrices(game.id, priceSource);
-
-    const rankRow = await this.ranks.findOne({ where: { gameId: game.id } });
     const rank: PublicRank | null = rankRow
       ? {
           weeksCharted: rankRow.weeksCharted,
@@ -912,22 +945,8 @@ export class GamesService {
         }
       : null;
 
-    const storeRatings = await this.buildStoreRatings(game.id);
-    const { reviewLanguages } =
-      (await this.games.findOne({
-        where: { id: game.id },
-        select: { id: true, reviewLanguages: true },
-      })) ?? {};
+    const reviewLanguages = reviewLanguagesRow?.reviewLanguages;
 
-    const publishedBlog = await this.blogPosts.findOne({
-      // Live includes a published article whose refresh is in review.
-      where: {
-        gameId: game.id,
-        publishedAt: Not(IsNull()),
-        status: Not('REJECTED'),
-      },
-      relations: { translations: true },
-    });
     const blog = publishedBlog
       ? {
           slugByLocale: Object.fromEntries(
@@ -936,19 +955,6 @@ export class GamesService {
         }
       : null;
 
-    const estimateSnapshotRows = noEstimate
-      ? []
-      : await this.estimateSnapshots.find({
-          where: { gameId: game.id },
-          order: { computedAt: 'ASC' },
-          select: {
-            computedAt: true,
-            estimatedTodayLow: true,
-            estimatedTodayHigh: true,
-            estimatedTodayUnits: true,
-          },
-          take: 500,
-        });
     const estimateSnapshots: PublicEstimateSnapshot[] =
       estimateSnapshotRows.map((s) => ({
         computedAt: s.computedAt,

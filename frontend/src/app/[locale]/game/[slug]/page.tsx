@@ -36,12 +36,19 @@ function compactUnits(units: number, locale: string) {
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string; locale: string }>;
+  searchParams: Promise<{ cc?: string; store?: string }>;
 }): Promise<Metadata> {
-  const { slug, locale } = await params;
+  const [{ slug, locale }, { cc, store }] = await Promise.all([
+    params,
+    searchParams,
+  ]);
+  // Same arguments as the page, so both share one fetch instead of calling
+  // the API twice per render.
   const [game, t, tPlatform, format] = await Promise.all([
-    getGame(slug),
+    getGame(slug, cc?.trim() || defaultPriceCountry(locale), store),
     getTranslations({ locale, namespace: 'gamePageMeta' }),
     getTranslations({ locale, namespace: 'platform' }),
     getFormatter({ locale }),
