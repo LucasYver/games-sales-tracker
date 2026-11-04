@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 
 from backtest import BacktestResult, to_us
+from snapshot import as_worldwide
 from baseline import Estimator
 from baseline.constants import LAUNCH_PEAK_CCU_WINDOW_MONTHS
 from baseline.estimator import SignalStore, _month_start_us
@@ -218,7 +219,7 @@ class FeatureBuilder:
         self.prices = snap.prices.set_index("gameId").priceCents if len(snap.prices) else pd.Series(dtype=float)
         # Chiffres monde réels publiés, par jeu : (date en µs, ventes), pour le
         # palmarès de la série et du studio.
-        ms = snap.milestones
+        ms = as_worldwide(snap.milestones, self.games)
         ms = ms[~ms.rejected & ~ms.isEngagement & ~ms.isEstimate & (ms.platform == "GLOBAL") & ms.reportedAt.notna()
                 & (ms.units > 0)]
         self.figures = {gid: (d.reportedAt.map(_time_us).to_numpy(), d.units.to_numpy())

@@ -1,7 +1,7 @@
 """Les poids appris du matcher améliorent-ils le modèle ML ?
 
 Recalcule toutes les informations venues des voisins avec chaque jeu de poids,
-puis réentraîne le modèle en prod (v1.4) avec le protocole du banc. Les chiffres
+puis réentraîne le modèle en prod (v1.5) avec le protocole du banc. Les chiffres
 suspects restent ceux des poids du site, pour juger tout le monde pareil.
 
 Découverte locale : rien n'est écrit en base, ni le gel du modèle, ni les
@@ -106,7 +106,7 @@ def main() -> None:
 
     head = "| poids | chiffres | erreur typique | part ≤ ×2 | biais | meilleur que le site |\n|:--|--:|--:|--:|--:|--:|"
     lines = [f"# Poids appris du matcher dans le modèle ML (snapshot {snap.path.name})\n"]
-    for title, model in [("Modèle ML en prod (v1.4)", ML_MODEL), ("Formule sans ML", BASELINE)]:
+    for title, model in [("Modèle ML en prod (v1.5)", ML_MODEL), ("Formule sans ML", BASELINE)]:
         ref = rows_of(cv[SITE], model)
         ref_t = rows_of(tm[SITE], model)
         lines += [

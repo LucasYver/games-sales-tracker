@@ -828,7 +828,7 @@ with tab_game:
     if bench_ready:
         names = st.multiselect(
             "Modèles appris à comparer au site", [PROD_MODEL] + LEARNED_MODELS, default=[PROD_MODEL, PROD_BASE],
-            help="Par défaut, le modèle en ligne et le modèle qu'il suit. « En prod » = la v1.4 (voisins + "
+            help="Par défaut, le modèle en ligne et le modèle qu'il suit. « En prod » = la v1.5 (voisins + "
                  f"série + studio), rien avant {ML_MIN_DAYS} jours après la sortie PC. Le site ne l'affiche que pour les "
                  "jeux qu'il estime déjà à 300 000 ventes et plus.")
         st.caption(
@@ -1117,6 +1117,101 @@ def render_checks(b) -> None:
             "free-to-play comptés comme des ventes.")
 
 
+@st.cache_data(show_spinner=False)
+def load_label_bench(snapshot: str, mtime: float) -> dict | None:
+    import pickle
+    from bench_labels import SAVED
+    r = pickle.loads(SAVED.read_bytes()) if SAVED.exists() else None
+    return r if r and r.get("snapshot") == snapshot else None
+
+
+def render_label_bench(snapshot: str) -> None:
+    from bench_labels import BASE, FUITE, JUDGED, MONDE, SAVED
+    st.subheader("La fuite Steam peut-elle servir à l'entraînement ?")
+    st.markdown(
+        "Un chiffre PC ou PlayStation d'un jeu qui n'existe que sur cette plateforme est aussi son total : depuis le "
+        "04/11, il compte comme chiffre monde partout dans le labo (entraînement, jugement, palmarès de la série et "
+        "du studio) et dans le modèle en prod. Reste la **fuite Steam** de juillet 2018 : des joueurs, pas des "
+        "ventes, mais proches des ventes sur les rares jeux qui ont les deux chiffres. On entraîne le modèle en prod "
+        "avec ou sans elle (jeux PC seuls), jugé sur **exactement les mêmes chiffres** :\n\n"
+        "- **A. Actuel** : les chiffres monde (mono-plateforme compris).\n"
+        "- **B. + fuite Steam** : A + les joueurs de la fuite des jeux PC seuls.\n"
+        "- **C. + fuite Steam marquée** : B, et le modèle sait quels chiffres viennent de la fuite ; il prédit "
+        "toujours des ventes.")
+    r = load_label_bench(snapshot, SAVED.stat().st_mtime if SAVED.exists() else 0.0)
+    if r is None or "splits" not in r:
+        st.info("Pas encore mesuré sur ce snapshot. Lancez `python bench_labels.py` depuis `ml/` (environ "
+                "une minute, après `bench.py`), puis rechargez la page.")
+        return
+    n_splits = r["splits"]
+    config = {
+        "variante": st.column_config.TextColumn("variante"),
+        "facteur": st.column_config.NumberColumn(
+            "erreur typique", format="×%.3f",
+            help="L'estimation est d'habitude à ce facteur près du vrai chiffre (médiane). Plus bas = mieux. En "
+                 f"validation croisée : moyenne sur {n_splits} découpages des jeux en groupes."),
+        "part_x2": st.column_config.ProgressColumn("à ×2 près", format="%.0f %%", min_value=0, max_value=100),
+        "biais": st.column_config.NumberColumn(
+            "tendance", format="×%.3f", help="Sous 1 : le modèle vise trop bas ; au-dessus : trop haut."),
+        "decoupages_gagnes": st.column_config.TextColumn(
+            "découpages gagnés",
+            help=f"Sur {n_splits} façons de répartir les jeux en groupes, combien de fois la variante fait mieux "
+                 "que A. Un seul découpage peut tromper : l'erreur typique varie de ±0,02 d'un découpage à l'autre."),
+        "mieux_que_A": st.column_config.TextColumn(
+            "bat A",
+            help="Premier découpage : part des tirages au hasard de jeux où la variante fait mieux que A. "
+                 "Au-dessus de 95 % : gain solide ; autour de 50 % : pile ou face."),
+    }
+
+    def table(df: pd.DataFrame) -> None:
+        shown = df.drop(columns=["chiffres", "jeux"]).assign(
+            part_x2=df.part_x2 * 100, mieux_que_A=df.mieux_que_A.map(lambda v: "—" if pd.isna(v) else pct(v)))
+        if "decoupages_gagnes" in shown:
+            shown["decoupages_gagnes"] = shown.decoupages_gagnes.map(
+                lambda v: "—" if pd.isna(v) else f"{v:.0f} sur {n_splits}")
+        st.dataframe(shown, hide_index=True, width="stretch", column_config=config)
+
+    for title, part in (("Chaque jeu deviné sans l'avoir vu", r["cv"]),
+                        ("Test dans le temps : apprendre avant 2025, prédire 2025 et après", r["temporal"])):
+        st.markdown(f"**{title}**")
+        for k, df in part.items():
+            st.caption(f"{JUDGED[k]} : {thousands(df.chiffres.iloc[0])} chiffres de {thousands(df.jeux.iloc[0])} jeux")
+            table(df)
+    cv = r["cv"][MONDE].set_index("variante")
+    wins = cv.drop(index=BASE).decoupages_gagnes
+    leak = r["cv"].get(FUITE)
+    leak_text = ""
+    if leak is not None and leak.set_index("variante").loc[BASE, "biais"] > 1.5:
+        lk = leak.set_index("variante")
+        leak_text = (f" Sur les joueurs de la fuite, A (qui ne les a jamais vus) vise ×{fr(lk.loc[BASE, 'biais'], 1)} "
+                     "trop haut : le modèle n'a appris que sur des jeux qui publient leurs ventes, presque tous au-dessus "
+                     "de 300 000, et surestime les petits jeux. Mais le site n'utilise le modèle qu'à partir de 300 000 "
+                     "ventes estimées et 1 000 reviews : la fuite apprend au modèle une zone où il ne sert pas.")
+    how_to_read(
+        "le juge principal est la validation croisée sur les chiffres monde publiés. "
+        + ("**Aucune variante ne bat A de façon régulière**" if (wins < n_splits * 0.75).all()
+           else "**Une variante bat A de façon régulière**")
+        + f" (découpages gagnés : {', '.join(f'{n[:2]} {v:.0f} sur {n_splits}' for n, v in wins.items())})."
+        + leak_text)
+    st.markdown("**Selon la taille réelle du jeu** (chiffres monde, chaque jeu deviné sans l'avoir vu)")
+    size = r["by_size"]
+    st.dataframe(size, hide_index=True, width="stretch", column_config={
+        c: st.column_config.NumberColumn(c, format="×%.3f") for c in size.columns if c != "variante"})
+    st.caption("Entre parenthèses : le nombre de chiffres jugés dans chaque taille.")
+    with st.expander(f"Les {thousands(len(r['extras']))} chiffres de la fuite ajoutés à l'entraînement"):
+        st.dataframe(pd.DataFrame(list(r["counts"].items()), columns=["étape", "nombre"]),
+                     hide_index=True, width="stretch")
+        st.dataframe(r["extras"].sort_values("units", ascending=False), hide_index=True, width="stretch",
+                     column_config={
+                         "gameName": "jeu", "units": st.column_config.NumberColumn("joueurs", format="localized"),
+                         "reportedAt": st.column_config.DateColumn("date", format="DD/MM/YYYY"),
+                         "suspect": "suspect", "suspectReason": "raison",
+                         "estimation_A": st.column_config.NumberColumn(
+                             "estimation de A", format="localized",
+                             help="Le modèle actuel, sans avoir vu ce jeu.")})
+        st.caption("Seuls les jeux sortis depuis 2017 comptent, et il faut des signaux Steam à la date de la fuite.")
+
+
 def render_models(b) -> None:
     n_games = b.table.gameId.nunique()
     has_clean = getattr(b, "cv_scores_clean", None) is not None
@@ -1246,6 +1341,8 @@ def render_models(b) -> None:
             "chaque case donne la part des tirages au hasard de jeux où le modèle de la ligne a une erreur "
             "typique plus basse que celui de la colonne. Au-dessus de 90 % : il est vraiment meilleur. Entre 10 "
             "et 90 % : on ne peut pas les départager avec nos données.")
+
+    render_label_bench(b.snapshot)
 
     st.subheader("Test final du 28/10 (déjà utilisé)")
     final = load_final(b.snapshot)

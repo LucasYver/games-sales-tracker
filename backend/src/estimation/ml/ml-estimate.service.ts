@@ -1,7 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Game, Platform, SignalMetric, SignalSnapshot } from '../../entities';
+import {
+  Game,
+  Platform,
+  SalesSource,
+  SignalMetric,
+  SignalSnapshot,
+} from '../../entities';
 import { platformReleaseDate } from '../../games/platform-release-date';
 import { SalesProfileResolverService } from '../../reference-profiles/sales-profile-resolver.service';
 import { ensembleModel, MlPrediction } from './ml-ensemble';
@@ -82,12 +88,19 @@ const peakCcu = (where: string): string => `(
 
 // Best real worldwide figure published by $2 for another, earlier-released
 // game of the same group ($10 = this game's release; unknown → any game).
+// A platform figure of a game sold on that platform only is its worldwide
+// figure too, except the Steam leak (players, not sales). Mirrors
+// `as_worldwide` in ml/snapshot.py.
 const trackRecord = (sameGroup: string): string => `(
   SELECT MAX(m.units) FROM milestone m
     JOIN game o ON o.id = m."gameId"
    WHERE ${sameGroup} AND o.id <> $1 AND o."deletedAt" IS NULL
      AND ($10::timestamptz IS NULL OR o."releaseDate" < $10::timestamptz)
-     AND m.platform = '${Platform.GLOBAL}' AND m."rejectedAt" IS NULL
+     AND (m.platform = '${Platform.GLOBAL}'
+          OR (m.source <> '${SalesSource.STEAM_LEAK}'
+              AND cardinality(o.platforms) = 1
+              AND m.platform::text = o.platforms[1]::text))
+     AND m."rejectedAt" IS NULL
      AND m."isEngagement" = false AND m."isEstimate" = false
      AND m.units > 0 AND m."reportedAt" <= $2)`;
 

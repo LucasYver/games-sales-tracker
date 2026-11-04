@@ -176,11 +176,11 @@ def feature_families() -> dict[str, list[str]]:
     }
 
 
-# Règle en prod (backend `MlEstimateService`), appliquée au modèle v1.4.
+# Règle en prod (backend `MlEstimateService`), appliquée au modèle v1.5.
 PROD_MODEL = "En prod : dès J+3"
 # Le modèle en prod : mêmes informations depuis la v1.1, réentraîné à chaque gel
-# (v1.4 = gel du 04/11, matcher aux tags pondérés et aux poids appris « tirage 180 »).
-ML_MODEL = "v1.4 : voisins + série + studio"
+# (v1.5 = gel du 04/11 au soir : + chiffres plateforme des jeux mono-plateforme, comptés comme monde).
+ML_MODEL = "v1.5 : voisins + série + studio"
 
 
 def model_specs(tag_cols: list[str]) -> list[ModelSpec]:
@@ -222,7 +222,7 @@ def model_specs(tag_cols: list[str]) -> list[ModelSpec]:
                              ModelSpec(f"{ML_MODEL} (forêt)", "", "forest", TREE_FEATURES + TRACK_RECORD_FEATURES),
                              ModelSpec(f"{ML_MODEL} (linéaire)", "", "ridge",
                                        signals + TRACK_RECORD_FEATURES + INTERACTION_FEATURES)]),
-        ModelSpec(PROD_MODEL, "La règle en ligne : la v1.4, rien avant 3 jours après la sortie PC (le site garde son "
+        ModelSpec(PROD_MODEL, "La règle en ligne : la v1.5, rien avant 3 jours après la sortie PC (le site garde son "
                               "chiffre). L'estimation peut baisser quand de nouvelles données la corrigent.",
                   "from_day", members=[v11], min_days=ML_MIN_DAYS),
     ]

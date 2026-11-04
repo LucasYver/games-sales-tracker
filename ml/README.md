@@ -85,6 +85,7 @@ Pour expérimenter en Python :
 | `learn_matcher_tags.py` | Cherche les poids du matcher avec les tags pondérés, comparés aux anciens poids et à l'ancien gameplay (6 premiers tags) → `reports/matcher_weights_tags.md`. |
 | `bench_matcher_weights.py` | Mesure ces poids dans le modèle en prod et dans la formule sans ML → `reports/bench_matcher_weights.md`. |
 | `similarity_matrix.py` | Calcule chaque critère du matcher pour toutes les paires de jeux, pour la matrice des voisins. |
+| `bench_labels.py` | Entraîne le modèle en prod avec ou sans les joueurs de la fuite Steam (marqués ou non), sur 8 découpages en plis, jugé sur les mêmes chiffres → `reports/bench_labels.md`, affiché dans « Comparer les modèles ». |
 | `research_figures.py` | Recherche à la main des chiffres de ventes manquants : prépare les lots, revérifie les citations, écrit en base (skill `research-sales-figures`). |
 | `bench_v2.py` | Essai des variantes v2 (sans informations « du moment », signaux de lancement, « jamais en baisse ») → `reports/bench_v2.md`. |
 | `prospective_test.py` | Test neutre : juge les modèles figés sur les chiffres arrivés dans la base après le gel, à partir d'un snapshot rangé dans `data/neutral/<date>/`. |
@@ -683,6 +684,41 @@ des poids (sans voir 2025+) ne retient plus le tirage 180 et ne bat pas les anci
 poids sur 2025+. Choix du propriétaire : partir de ces poids appris plutôt que des
 poids posés à la main. Atteint chaque jeu à son prochain recalcul par le cron.
 
+## v1.5 : jeux mono-plateforme comptés comme monde (04/11, soir)
+
+Un chiffre PC, PlayStation ou Xbox d'un jeu qui n'existe que sur cette plateforme
+est aussi son total : `snapshot.as_worldwide` le passe en `GLOBAL` partout dans
+le labo (entraînement, jugement, palmarès de la série et du studio), sauf la
+fuite Steam (des joueurs). Le backend applique la même règle au palmarès
+(`ml-estimate.service.ts`) : même résultat que le Python sur 142 comparaisons
+sur 142 (120 jeux dont la série ou le studio a un jeu mono-plateforme).
+
+`models/2026-11-04T19/` : 1 526 chiffres de 477 jeux (v1.4 : 1 450 de 461),
+×1,40 en validation croisée, ×1,50 dans le temps, fourchette ÷/× 2,04. Mesuré
+sur 8 découpages en plis : neutre sur les chiffres monde (×1,399 avec ou sans),
+un peu meilleur sur les jeux mono-plateforme (×1,544 → ×1,515, 6 découpages sur
+8). Un seul découpage avait d'abord fait croire à une perte : l'erreur typique
+varie de ±0,02 d'un découpage à l'autre.
+
+## La fuite Steam à l'entraînement (04/11)
+
+`bench_labels.py` : la v1.5 avec ou sans les joueurs de la fuite des jeux PC
+seuls (116 jeux sortis depuis 2017 avec des signaux en juillet 2018).
+
+| Jugé sur | Sans la fuite | Avec | Avec, marquée |
+|---|---|---|---|
+| Chiffres monde, validation croisée (8 découpages) | ×1,400 | ×1,404 (1 sur 8) | ×1,409 (0 sur 8) |
+| Chiffres monde, 2025+ | ×1,502 | ×1,500 | ×1,500 |
+| Joueurs de la fuite (pour information) | ×3,80, vise ×3,3 trop haut | ×1,40 | ×2,14 |
+
+La fuite est proche des ventes (×1,10 en médiane sur les 6 jeux qui ont un
+chiffre PC publié à moins de 6 mois), mais elle n'aide pas : ses jeux sont
+petits (médiane 54 000 joueurs, contre 2 M pour les chiffres monde), et le site
+n'utilise le modèle qu'à partir de 300 000 ventes estimées et 1 000 reviews.
+Seuls 14 de ces 116 jeux entrent dans cette zone. Sans elle, le modèle surestime
+les petits jeux d'environ ×3 à ×4 : c'est la piste 2 ci-dessous, si on veut un
+jour l'utiliser sous 300 000.
+
 ## Prochaines étapes
 
 Par ordre d'intérêt :
@@ -696,7 +732,7 @@ Par ordre d'intérêt :
    aujourd'hui moins bien que la formule du site. Si ça marche, revoir le
    seuil d'affichage (300 000 ventes, 1 000 reviews).
 3. **Réentraîner chaque mois, avec le test neutre.** Nouveau snapshot,
-   `prospective_test.py` sur les gels v1, v1.1, v1.2, v1.3 et v1.4 (notre juge le plus
+   `prospective_test.py` sur les gels v1, v1.1, v1.2, v1.3, v1.4 et v1.5 (notre juge le plus
    honnête), banc, gel, parité backend, déploiement. À regrouper dans un
    seul script.
 4. **Part PC des voisins.** Les jeux de la fuite n'ont pas de répartition
