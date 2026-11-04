@@ -101,11 +101,6 @@ export default function MethodologyPage() {
           <p>{t('figuresBody2')}</p>
         </Section>
 
-        <Section title={t('testTitle')}>
-          <p>{t('testBody1')}</p>
-          <p>{t('testBody2')}</p>
-        </Section>
-
         <Section title={t('readTitle')}>
           <p>{t('readBody')}</p>
         </Section>
