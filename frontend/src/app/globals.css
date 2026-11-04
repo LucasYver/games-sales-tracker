@@ -283,6 +283,24 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+  /* Tailwind v4 dropped the pointer cursor on buttons. Bring it back for
+     every clickable control, Radix parts included, so nothing interactive
+     reads as plain text. Disabled controls keep the default arrow. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  [role='tab']:not([aria-disabled='true']),
+  [role='option']:not([aria-disabled='true']):not([data-disabled]),
+  [role='menuitem']:not([aria-disabled='true']):not([data-disabled]),
+  [role='checkbox']:not([aria-disabled='true']),
+  [role='switch']:not([aria-disabled='true']),
+  [role='combobox'][data-slot],
+  select:not(:disabled),
+  summary,
+  label:has(> input[type='checkbox'], > input[type='radio']),
+  input[type='checkbox']:not(:disabled),
+  input[type='radio']:not(:disabled) {
+    cursor: pointer;
+  }
   html {
     @apply font-sans;
     /* Light native UI (scrollbars, form controls, overscroll canvas) by
@@ -291,5 +309,38 @@ body {
   }
   html.dark {
     color-scheme: dark;
+  }
+}
+
+/* Loading placeholder. --muted is one shade off the page ground in dark mode,
+   so bones use --surface-hi with a --border highlight sweeping across. */
+@keyframes skeleton-shimmer {
+  /* Highlight enters off the left edge and leaves off the right. */
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+@layer components {
+  .skeleton-bone {
+    border-radius: 2px;
+    background-color: var(--surface-hi);
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in oklab, var(--border) 85%, transparent) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton-bone {
+      animation: none;
+      background-image: none;
+    }
   }
 }

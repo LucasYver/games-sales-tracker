@@ -1,12 +1,16 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, useTransition } from 'react';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { useFormatter, useTranslations } from 'next-intl';
 import { Search, X } from 'lucide-react';
 import { API_URL, listingUnits, type PopularGame } from '@/lib/api';
 import { useRouter } from '@/i18n/navigation';
+import {
+  GamePageSkeleton,
+  type GamePreview,
+} from '@/components/GamePageSkeleton';
 
 const MIN_QUERY = 2;
 const DEBOUNCE_MS = 180;
@@ -34,6 +38,14 @@ export function SearchBar() {
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState(-1);
   const panelInputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  // A game page renders on the server and has no loading.tsx (see
+  // GamePageSkeleton), so the old page would sit there untouched until the
+  // new one lands. While that navigation is pending, a skeleton covers
+  // everything below the site header.
+  const [navigating, startNavigation] = useTransition();
+  const [skeletonTop, setSkeletonTop] = useState(0);
+  const [preview, setPreview] = useState<GamePreview>();
 
   const query = value.trim();
 
@@ -89,7 +101,14 @@ export function SearchBar() {
 
   const goToGame = (game: PopularGame) => {
     close();
-    router.push(`/game/${game.slug}`);
+    const header = triggerRef.current?.closest('header');
+    setSkeletonTop(Math.max(0, header?.getBoundingClientRect().bottom ?? 0));
+    setPreview({
+      name: game.name,
+      coverUrl: game.coverUrl,
+      platforms: game.platforms,
+    });
+    startNavigation(() => router.push(`/game/${game.slug}`));
   };
 
   const submit = (event: React.FormEvent) => {
@@ -124,7 +143,7 @@ export function SearchBar() {
     <>
       {/* Header trigger: a real input, so the first keystroke lands in the
           query instead of being swallowed by opening the panel. */}
-      <div className="relative w-full">
+      <div ref={triggerRef} className="relative w-full">
         <Search
           aria-hidden="true"
           className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
@@ -142,6 +161,15 @@ export function SearchBar() {
           className={fieldClass}
         />
       </div>
+
+      {navigating && (
+        <div
+          className="fixed inset-x-0 bottom-0 z-40 overflow-hidden bg-background"
+          style={{ top: skeletonTop }}
+        >
+          <GamePageSkeleton preview={preview} />
+        </div>
+      )}
 
       {open && (
         <div
