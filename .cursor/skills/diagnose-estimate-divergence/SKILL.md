@@ -182,7 +182,7 @@ to the model. Compare `headline` / `estimatedToday`.
 ```
 - [ ] PC release date correct? (wrong age skews the launch window and the projection)
 - [ ] Launch-month STEAM_CONCURRENT present? (monthly leak points count; a 14-day window does not)
-- [ ] Matcher neighbours actually similar? (gameplay tags, franchise, live-service)
+- [ ] Matcher neighbours commercially comparable? The weights favour sales behaviour over gameplay, so a game that plays differently is not a fault by itself.
 - [ ] peakCcuRatio realistic for this concurrency? (a generic ~30× ratio inflates week-1)
 - [ ] reviewsToUnits band realistic versus this genre's known copies-per-review?
 - [ ] Platform shares realistic? (wrong shares cascade through both splits)

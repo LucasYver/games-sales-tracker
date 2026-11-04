@@ -52,7 +52,7 @@ K = M.DEFAULT_NEIGHBOURS
 def feature_scores(row: M.Features, target: M.Features) -> list[float]:
     """Les 13 scores de `matcher.similarity`, dans l'ordre de SIMILARITY_WEIGHTS."""
     s = {
-        "gameplayType": M.gameplay_type_similarity(row.steam_tags, row.genres, target.steam_tags, target.genres),
+        "gameplayType": M.tag_cosine(row.tag_vector, target.tag_vector),
         "rank": M.homegrown_rank_similarity(row.rank, target.rank),
         "publisherMatch": M.publisher_match(row.publisher_id, row.publisher, target.publisher_id, target.publisher),
         "developerMatch": M.identity_match(M._norm_name(row.developer), M._norm_name(target.developer)),

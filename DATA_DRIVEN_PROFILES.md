@@ -37,31 +37,39 @@ Implementation: `backend/src/reference-profiles/matcher.service.ts`.
 - `reviewsToUnits` neighbours beyond 2× the neighbourhood median are
   dropped before the log-space mean.
 - Play-mode is a hard filter. Price is not a feature.
-- Gameplay type is Jaccard on Steam community tags when both games have
-  them, otherwise store genres.
+- Gameplay type is the cosine of two weighted-tag vectors: every Steam tag
+  and store genre, weighted by rarity across the corpus and by position in
+  Steam's list. A store genre counts half.
 
 Weights (sum = 1):
 
 | Feature | Weight |
 | ------- | ------ |
-| `gameplayType` | `0.351` |
-| `rank` | `0.1116` |
-| `playtime` | `0.10` |
-| `publisherMatch` | `0.081` |
-| `developerMatch` | `0.081` |
-| `platformsOverlap` | `0.0486` |
-| `dlcTier` | `0.0486` |
-| `releaseEra` | `0.0405` |
-| `scaleBucket` | `0.0324` |
-| `franchise` | `0.0324` |
-| `liveService` | `0.0243` |
-| `devTrackRecord` | `0.0243` |
-| `annualIteration` | `0.0243` |
+| `rank` | `0.2148` |
+| `playtime` | `0.1803` |
+| `gameplayType` | `0.1651` |
+| `platformsOverlap` | `0.132` |
+| `developerMatch` | `0.099` |
+| `releaseEra` | `0.0612` |
+| `publisherMatch` | `0.0538` |
+| `annualIteration` | `0.0244` |
+| `dlcTier` | `0.0217` |
+| `franchise` | `0.0171` |
+| `liveService` | `0.0153` |
+| `devTrackRecord` | `0.0153` |
+| `scaleBucket` | `0` |
+
+These weights serve sales estimation, not "games that play alike": a list of
+look-alike games would use the tag cosine alone.
 
 `rank` is the home-grown review-velocity rank. `playtime` is median
 reviewer playtime and is neutral when either side lacks it. Change a
-weight only in `SIMILARITY_WEIGHTS`, keep the sum at 1, and re-run the
-holdout.
+weight in `SIMILARITY_WEIGHTS` and in `ml/baseline/matcher.py`, keep the sum
+at 1, re-run `ml/learn_matcher_tags.py` and `ml/bench_matcher_weights.py`, then
+retrain the model, whose features come from this matcher. The leak holdout
+below was not re-run for these weights. Measured in
+`ml/reports/bench_matcher_weights.md` (2026-11-04): ML model x1.405 vs x1.430
+with the previous weights in cross-validation, no clear gain on 2025+ games.
 
 DLC tiers: NONE / FEW (1–4) / SOME (5–14) / MANY (15+). Contiguous tiers
 score 0.6. `developerTrackRecord` is computed in memory and is leak-safe

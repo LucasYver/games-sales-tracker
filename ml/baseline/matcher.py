@@ -28,6 +28,22 @@ REVIEWS_TO_UNITS_OUTLIER_FACTOR = 2
 # Même ordre qu'en TS : l'ordre de sommation influe (à la marge) sur les
 # arrondis flottants, donc sur le départage des ex aequo.
 SIMILARITY_WEIGHTS = {
+    "gameplayType": 0.1651,
+    "rank": 0.2148,
+    "publisherMatch": 0.0538,
+    "developerMatch": 0.099,
+    "releaseEra": 0.0612,
+    "scaleBucket": 0.0,
+    "platformsOverlap": 0.132,
+    "dlcTier": 0.0217,
+    "franchise": 0.0171,
+    "liveService": 0.0153,
+    "devTrackRecord": 0.0153,
+    "annualIteration": 0.0244,
+    "playtime": 0.1803,
+}
+# Les poids d'avant les tags pondérés, gardés pour que le labo puisse comparer.
+PREVIOUS_SIMILARITY_WEIGHTS = {
     "gameplayType": 0.351,
     "rank": 0.1116,
     "publisherMatch": 0.081,
@@ -42,6 +58,8 @@ SIMILARITY_WEIGHTS = {
     "annualIteration": 0.0243,
     "playtime": 0.1,
 }
+TAG_POSITION_DECAY = 0.15
+STORE_GENRE_WEIGHT = 0.5
 
 RANK_PEAK_LOG_SCALE = 2.0
 RANK_SUSTAIN_LOG_SCALE = 1.5
@@ -199,6 +217,31 @@ def gameplay_type_similarity(row_tags, row_genres, target_tags, target_genres) -
     if row_genres and target_genres:
         return set_jaccard(row_genres, target_genres)
     return 0.5
+
+
+def build_tag_rarity(feats: list["Features"]) -> tuple[int, dict[str, int]]:
+    games_with_tag: dict[str, int] = {}
+    for f in feats:
+        for t in set(f.steam_tags) | set(f.genres):
+            games_with_tag[t] = games_with_tag.get(t, 0) + 1
+    return len(feats), games_with_tag
+
+
+def tag_vector(steam_tags: list[str], genres: list[str], rarity: tuple[int, dict[str, int]]) -> dict[str, float]:
+    """Tags et genres pondérés par rareté et par rang Steam, ramenés à une longueur de 1."""
+    count, games_with_tag = rarity
+    rarity_of = lambda t: math.log(1 + count / games_with_tag.get(t, 1))  # noqa: E731
+    vector = {t: rarity_of(t) / (1 + TAG_POSITION_DECAY * pos) for pos, t in enumerate(steam_tags)}
+    for g in genres:
+        weight = rarity_of(g) * STORE_GENRE_WEIGHT
+        if weight > vector.get(g, 0.0):
+            vector[g] = weight
+    length = math.sqrt(sum(w * w for w in vector.values()))
+    return {t: w / length for t, w in vector.items()} if length > 0 else vector
+
+
+def tag_cosine(a: dict[str, float], b: dict[str, float]) -> float:
+    return sum(w * b.get(t, 0.0) for t, w in a.items())
 
 
 def platform_jaccard(a: frozenset, b: frozenset) -> float:
@@ -380,6 +423,7 @@ class Features:
     track_record: str = "UNKNOWN"
     rank: tuple[float, float] | None = None
     playtime: float | None = None
+    tag_vector: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass
@@ -406,9 +450,9 @@ class MatchResult:
     anchors: list[tuple[str, float, float]] = field(default_factory=list)  # (gameId, sim, weight)
 
 
-def similarity(row: Features, target: Features) -> float:
-    scores = {
-        "gameplayType": gameplay_type_similarity(row.steam_tags, row.genres, target.steam_tags, target.genres),
+def _axis_scores(row: Features, target: Features, gameplay: float) -> dict[str, float]:
+    return {
+        "gameplayType": gameplay,
         "rank": homegrown_rank_similarity(row.rank, target.rank),
         "publisherMatch": publisher_match(row.publisher_id, row.publisher, target.publisher_id, target.publisher),
         "developerMatch": identity_match(_norm_name(row.developer), _norm_name(target.developer)),
@@ -422,10 +466,21 @@ def similarity(row: Features, target: Features) -> float:
         "annualIteration": 1.0 if row.is_annual_iteration == target.is_annual_iteration else 0.0,
         "playtime": playtime_similarity(row.playtime, target.playtime),
     }
+
+
+def similarity(row: Features, target: Features) -> float:
+    scores = _axis_scores(row, target, tag_cosine(row.tag_vector, target.tag_vector))
     total = 0.0
     for key, weight in SIMILARITY_WEIGHTS.items():
         total += weight * scores[key]
     return total
+
+
+def previous_similarity(row: Features, target: Features) -> float:
+    """Le score d'avant les tags pondérés, pour comparaison au banc."""
+    gameplay = gameplay_type_similarity(row.steam_tags, row.genres, target.steam_tags, target.genres)
+    scores = _axis_scores(row, target, gameplay)
+    return sum(weight * scores[key] for key, weight in PREVIOUS_SIMILARITY_WEIGHTS.items())
 
 
 class Matcher:
@@ -481,13 +536,17 @@ class Matcher:
                 platform_shares=shares,
             ))
 
+        self.tag_rarity = build_tag_rarity([a.features for a in self.corpus])
+        for a in self.corpus:
+            a.features.tag_vector = tag_vector(a.features.steam_tags, a.features.genres, self.tag_rarity)
+
     def target_features(self, game_id: str) -> Features:
         """`featurise` + enrichissements faits dans `findNeighbours`."""
         g = self.games.loc[game_id]
         release_us = _time_us(g.releaseDate)
         dlc_count = _none(g.dlcCount)
         platforms = _none(g.platforms)
-        return Features(
+        features = Features(
             platforms=frozenset(p for p in (platforms if platforms is not None else []) if p in PLATFORMS),
             genres=normalise_genres(parse_text_array(g.genres, trim=False)),
             steam_tags=normalise_genres(parse_text_array(g.steamTags, trim=False)),
@@ -506,6 +565,8 @@ class Matcher:
             rank=self.rank_index.get(game_id),
             playtime=self.playtime_index.get(game_id),
         )
+        features.tag_vector = tag_vector(features.steam_tags, features.genres, self.tag_rarity)
+        return features
 
     def find_neighbours(self, game_id: str, holdout_game_id: str | None = None,
                         k: int = DEFAULT_NEIGHBOURS) -> MatchResult:

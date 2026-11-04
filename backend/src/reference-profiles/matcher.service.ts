@@ -49,67 +49,40 @@ function neighbourWeight(similarity: number, qualityScore: number): number {
  * `similarity` stays in [0, 1]. Play-mode is a hard filter and does not
  * appear here.
  *
- * Priority order (product decision, not just the diagnostic):
- *  1. `gameplayType` — the dominant axis. It separates a grand-strategy/4X
- *     game from a puzzle platformer, which platform/scale alone never could
- *     (a PC-only target scores 1.0 platform-overlap against *every* PC-only
- *     anchor, so platform was inflating unrelated titles). It is driven by
- *     Steam **community tags** when both games carry them — the finest
- *     gameplay signal available ("Grand Strategy", "4X", "Roguelike") — and
- *     falls back to the coarse store `genres` otherwise.
- *  2. `publisherMatch` + `developerMatch` — exact identity. Another game
- *     by the same studio or the same publisher is a strong prior for
- *     behaviour (a second Paradox grand-strategy title tells us far more
- *     than a random same-scale PC game). Kept deliberately below
- *     `gameplayType` so a same-publisher title in a *different* genre
- *     (e.g. Paradox's Magicka 2, a twin-stick shooter, vs a grand-strategy
- *     target) cannot ride the publisher axis into the neighbourhood.
- *  3. `releaseEra` — promoted, because the observed `reviewsToUnits` ratio
- *     is dominated by the game's review-rate maturity/era. Even after the
- *     ETL normalises each anchor's ratio to the current review-rate era,
- *     a young title's reviews are far less mature than an old title's, so
- *     borrowing behaviour from a same-era neighbour is much safer than from
- *     a decade-older one.
- *  4. `scaleBucket` + `platformsOverlap` + `dlcTier` — kept but deliberately
- *     lower; they refine within a gameplay/publisher neighbourhood rather
- *     than drive the match. `dlcTier` (DLC count bucket) is a lifecycle-shape
- *     proxy: heavily-DLC'd games (Paradox grand strategy, The Sims, sim
- *     franchises) keep selling for years, so their curve has a much longer
- *     tail than a one-and-done title.
+ * These weights serve sales estimation, not "games that play alike": a game
+ * with the same commercial profile predicts sales better than a game with the
+ * same gameplay. A list of look-alike games would use `tagCosine` alone.
  *
- * `franchise`, `liveService`, `devTrackRecord`, `annualIteration` and
- * `playtime` stay low. The first four are muted on the leak population (PC
- * paid pre-2018 hits), kept active so they're ready once the corpus holds the
- * game types they distinguish. `playtime` (median reviewer playtime, see
- * `playtimeSimilarity`) is a game-length/engagement fingerprint (a 2h
- * narrative game vs a 100h grand-strategy title behave very differently) with
- * only partial coverage (~1/3 of anchors), so it is neutral for most matches.
+ * Draw 180 of `ml/learn_matcher_tags.py`, learned against published worldwide
+ * sales on the 2026-11-01 snapshot. On the 2026-11-04 rerun (94% of anchors
+ * tagged) the learned sets no longer clearly beat the previous hand-set
+ * weights: the ML model gains in cross-validation (x1.430 to x1.405) but not
+ * on 2025+ games when the pick is honest. The owner kept them as the better
+ * basis. Several quite different weight sets score about the same, so read
+ * the broad direction rather than each digit.
+ * After touching any weight, re-run that script and
+ * `ml/bench_matcher_weights.py`, retrain the model (its features come from
+ * this matcher), and keep the sum at 1.0. Mirror it in `ml/baseline/matcher.py`.
  *
- * Calibrated on the leak holdout (`scripts/validate-matcher-holdout.ts`).
- * `playtime` at 0.10 was the balanced optimum: vs no playtime, median
- * |log-error| improved on reviewsToUnits (0.364→0.360) and m1 (0.185→0.182)
- * with y2 flat, and mean |log-error| / MAPE improved on all three; above 0.10
- * only y2 keeps gaining (same pattern as `rank`). Introducing it scaled the
- * other twelve axes by 0.9 so the table still sums to 1.0. Re-run the holdout
- * after touching any weight and keep the sum at 1.0.
+ * `scaleBucket` stays at 0: no caller passes a `scaleHint`, so it was constant.
  *
  * Price is intentionally absent: no reliable per-game release price (price
  * capture started 2026, long after most launches).
  */
 const SIMILARITY_WEIGHTS = {
-  gameplayType: 0.351,
-  rank: 0.1116,
-  publisherMatch: 0.081,
-  developerMatch: 0.081,
-  releaseEra: 0.0405,
-  scaleBucket: 0.0324,
-  platformsOverlap: 0.0486,
-  dlcTier: 0.0486,
-  franchise: 0.0324,
-  liveService: 0.0243,
-  devTrackRecord: 0.0243,
-  annualIteration: 0.0243,
-  playtime: 0.1,
+  gameplayType: 0.1651,
+  rank: 0.2148,
+  publisherMatch: 0.0538,
+  developerMatch: 0.099,
+  releaseEra: 0.0612,
+  scaleBucket: 0,
+  platformsOverlap: 0.132,
+  dlcTier: 0.0217,
+  franchise: 0.0171,
+  liveService: 0.0153,
+  devTrackRecord: 0.0153,
+  annualIteration: 0.0244,
+  playtime: 0.1803,
 } as const;
 
 // Inner scales for the rank axis (see `homegrownRankSimilarity`). The peak axis
@@ -131,11 +104,18 @@ const PLAYTIME_LOG_SCALE = 1.5;
 /**
  * Genres/tags that describe production scale or a catch-all label rather
  * than a gameplay type; they appear across wildly different games and would
- * make the gameplay-type Jaccard reward unrelated titles. `scaleBucket`
- * already captures what "Indie" implies. Stripped before the comparison
- * (applies to both store genres and Steam community tags).
+ * make the gameplay comparison reward unrelated titles. Stripped before the
+ * comparison (applies to both store genres and Steam community tags).
  */
 const GENRE_STOPLIST = new Set(['indie']);
+
+/**
+ * Weighted-tag vector (see `tagVector`). Steam orders tags by votes, so a tag
+ * loses weight as it goes down the list. A store genre counts for less than a
+ * community tag because it is much coarser.
+ */
+const TAG_POSITION_DECAY = 0.15;
+const STORE_GENRE_WEIGHT = 0.5;
 
 /**
  * Units thresholds for the developer track-record tier. A studio that
@@ -271,6 +251,8 @@ interface AnchorRow {
   platforms: Platform[];
   genres: string[];
   steamTags: string[];
+  // Weighted-tag vector; filled in findNeighbours once the rarity index is built.
+  tagVector: TagVector;
   playMode: PlayMode;
   publisherId: string | null;
   publisher: string | null;
@@ -347,8 +329,15 @@ export class MatcherService {
     const trackRecordIndex = await this.buildTrackRecordIndex();
     const rankIndex = await this.buildRankIndex();
     const playtimeIndex = await this.buildPlaytimeIndex();
-    const corpus = await this.loadCorpus(opts.holdoutGameId);
+    // Tag rarity comes from the whole corpus: a tag is not a sales figure, so
+    // holding the target out of it would protect nothing.
+    const allAnchors = await this.loadCorpus();
+    const tagRarity = buildTagRarity(allAnchors);
+    const corpus = allAnchors.filter(
+      (row) => row.gameId !== opts.holdoutGameId,
+    );
     for (const row of corpus) {
+      row.tagVector = tagVector(row.steamTags, row.genres, tagRarity);
       row.trackRecord = trackRecordIndex.tierFor(
         row.developer,
         row.releaseDate,
@@ -358,6 +347,11 @@ export class MatcherService {
       row.playtime = playtimeIndex.get(row.gameId) ?? null;
     }
     const targetFeatures = this.featurise(target);
+    targetFeatures.tagVector = tagVector(
+      targetFeatures.steamTags,
+      targetFeatures.genres,
+      tagRarity,
+    );
     targetFeatures.trackRecord = trackRecordIndex.tierFor(
       target.developer,
       target.releaseDate,
@@ -478,12 +472,7 @@ export class MatcherService {
     target: TargetInternal,
   ): Record<keyof typeof SIMILARITY_WEIGHTS, number> {
     return {
-      gameplayType: gameplayTypeSimilarity(
-        row.steamTags,
-        row.genres,
-        target.steamTags,
-        target.genres,
-      ),
+      gameplayType: tagCosine(row.tagVector, target.tagVector),
       rank: homegrownRankSimilarity(row.rank, target.rank),
       publisherMatch: publisherMatch(
         row.publisherId,
@@ -689,9 +678,7 @@ export class MatcherService {
    * and matching is repeated per estimation, so re-querying per call
    * would dwarf the join cost.
    */
-  private async loadCorpus(
-    holdoutGameId: string | undefined,
-  ): Promise<AnchorRow[]> {
+  private async loadCorpus(): Promise<AnchorRow[]> {
     const raw = await this.anchors.manager.query<
       Array<{
         gameId: string;
@@ -755,9 +742,7 @@ export class MatcherService {
          FROM reference_profile r
          INNER JOIN game g ON g.id = r."gameId"
         WHERE g."deletedAt" IS NULL
-          AND g."excludedFromReference" = false
-          ${holdoutGameId ? 'AND r."gameId" <> $1' : ''}`,
-      holdoutGameId ? [holdoutGameId] : [],
+          AND g."excludedFromReference" = false`,
     );
 
     return raw.map((r) => {
@@ -783,6 +768,8 @@ export class MatcherService {
         platforms,
         genres,
         steamTags,
+        // Filled in by findNeighbours once the rarity index is built.
+        tagVector: new Map(),
         playMode: playModeFromCategories(categories),
         publisherId: r.publisherId,
         publisher: r.publisher,
@@ -825,6 +812,8 @@ export class MatcherService {
       platformSet,
       genres: normaliseGenres(target.genres ?? []),
       steamTags: normaliseGenres(target.steamTags ?? []),
+      // Overwritten in findNeighbours once the rarity index is built.
+      tagVector: new Map(),
       playMode: playModeFromCategories(target.categories),
       publisherId: target.publisherId,
       publisher: target.publisher,
@@ -952,6 +941,8 @@ interface TargetInternal {
   platformSet: Platform[];
   genres: string[];
   steamTags: string[];
+  // Weighted-tag vector; set in findNeighbours.
+  tagVector: TagVector;
   playMode: PlayMode;
   publisherId: string | null;
   publisher: string | null;
@@ -1198,7 +1189,7 @@ function developerMatch(a: string | null, b: string | null): number {
 
 /**
  * Lowercase, trim, dedupe and drop non-discriminating umbrella labels
- * (see `GENRE_STOPLIST`) so the Jaccard reflects gameplay type only. Used
+ * (see `GENRE_STOPLIST`) so the comparison reflects gameplay type only. Used
  * for both store `genres` and Steam community tags.
  */
 function normaliseGenres(raw: string[]): string[] {
@@ -1211,51 +1202,61 @@ function normaliseGenres(raw: string[]): string[] {
   return [...out];
 }
 
-/**
- * How many leading Steam tags define the gameplay identity. Steam orders tags
- * by community votes, so the first handful ARE the game's identity; the long
- * tail is noise that diverges even between near-identical entries (e.g. Europa
- * Universalis IV vs V share the same top tags but differ across dozens of
- * tail tags — full-set Jaccard would wrongly score them far apart). Capping the
- * comparison to the top tags keeps sequels/siblings close.
- */
-const GAMEPLAY_TAG_TOP_N = 6;
+type TagVector = Map<string, number>;
 
-/**
- * Gameplay-type axis. Steam community tags are the finest available signal
- * (they tell a grand-strategy/4X title apart from a tower-defense
- * "Strategy" game, which the coarse store genre cannot), so we Jaccard over
- * the TOP tag sets whenever BOTH games carry tags. Otherwise we fall back to
- * the store genres, and finally to neutral (0.5) when neither side has a
- * usable label — matching the `franchiseSimilarity` convention. The
- * fallback keeps the axis discriminating before the tag backfill has run.
- */
-function gameplayTypeSimilarity(
-  rowTags: string[],
-  rowGenres: string[],
-  targetTags: string[],
-  targetGenres: string[],
-): number {
-  if (rowTags.length > 0 && targetTags.length > 0) {
-    return setJaccard(
-      rowTags.slice(0, GAMEPLAY_TAG_TOP_N),
-      targetTags.slice(0, GAMEPLAY_TAG_TOP_N),
-    );
-  }
-  if (rowGenres.length > 0 && targetGenres.length > 0) {
-    return setJaccard(rowGenres, targetGenres);
-  }
-  return 0.5;
+interface TagRarity {
+  gameCount: number;
+  gamesWithTag: Map<string, number>;
 }
 
-/** Jaccard over two string sets; neutral (0.5) when either is empty. */
-function setJaccard(a: string[], b: string[]): number {
-  if (a.length === 0 || b.length === 0) return 0.5;
-  const setA = new Set(a);
-  let intersect = 0;
-  for (const v of new Set(b)) if (setA.has(v)) intersect += 1;
-  const union = new Set([...a, ...b]).size;
-  return union > 0 ? intersect / union : 0.5;
+/** How many anchors carry each tag or genre, for {@link tagVector}. */
+export function buildTagRarity(
+  corpus: Array<{ steamTags: string[]; genres: string[] }>,
+): TagRarity {
+  const gamesWithTag = new Map<string, number>();
+  for (const row of corpus) {
+    for (const tag of new Set([...row.steamTags, ...row.genres])) {
+      gamesWithTag.set(tag, (gamesWithTag.get(tag) ?? 0) + 1);
+    }
+  }
+  return { gameCount: corpus.length, gamesWithTag };
+}
+
+/**
+ * Gameplay fingerprint of a game: every Steam tag and store genre, weighted by
+ * rarity ("Grand Strategy" says more than "Action") and by position in Steam's
+ * vote-ordered list, then scaled to length 1. A tag no anchor carries counts as
+ * carried by one game. A game with no label gets an empty vector, so it scores
+ * 0 against everything on this axis.
+ */
+export function tagVector(
+  steamTags: string[],
+  genres: string[],
+  rarity: TagRarity,
+): TagVector {
+  const rarityOf = (tag: string): number =>
+    Math.log(1 + rarity.gameCount / (rarity.gamesWithTag.get(tag) ?? 1));
+  const vector: TagVector = new Map();
+  steamTags.forEach((tag, position) => {
+    vector.set(tag, rarityOf(tag) / (1 + TAG_POSITION_DECAY * position));
+  });
+  for (const genre of genres) {
+    const weight = rarityOf(genre) * STORE_GENRE_WEIGHT;
+    if (weight > (vector.get(genre) ?? 0)) vector.set(genre, weight);
+  }
+  let squared = 0;
+  for (const weight of vector.values()) squared += weight * weight;
+  const length = Math.sqrt(squared);
+  if (length === 0) return vector;
+  for (const [tag, weight] of vector) vector.set(tag, weight / length);
+  return vector;
+}
+
+/** Gameplay-type axis: cosine of two {@link tagVector} results. */
+export function tagCosine(a: TagVector, b: TagVector): number {
+  let sum = 0;
+  for (const [tag, weight] of a) sum += weight * (b.get(tag) ?? 0);
+  return sum;
 }
 
 /**

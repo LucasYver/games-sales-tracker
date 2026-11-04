@@ -51,7 +51,7 @@ no known date stays in scope.
 - **Game page:** `outOfScopeTitle` and `outOfScopeNote` in `frontend/messages/`.
 - **Lab:** `released_in_scope` in `ml/snapshot.py` limits the backtest, the benches,
   the catalog checks, the review lists and the neutral test.
-- **Production model:** since v1.3 (`ml/models/2026-11-01T1054`), it is trained on
+- **Production model:** since v1.3 (`ml/models/2026-11-01T1054`, now v1.4 in `ml/models/2026-11-04`), it is trained on
   these games only.
 
 ## What stays

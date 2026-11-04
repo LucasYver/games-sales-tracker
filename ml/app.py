@@ -828,7 +828,7 @@ with tab_game:
     if bench_ready:
         names = st.multiselect(
             "Modèles appris à comparer au site", [PROD_MODEL] + LEARNED_MODELS, default=[PROD_MODEL, PROD_BASE],
-            help="Par défaut, le modèle en ligne et le modèle qu'il suit. « En prod » = la v1.3 (voisins + "
+            help="Par défaut, le modèle en ligne et le modèle qu'il suit. « En prod » = la v1.4 (voisins + "
                  f"série + studio), rien avant {ML_MIN_DAYS} jours après la sortie PC. Le site ne l'affiche que pour les "
                  "jeux qu'il estime déjà à 300 000 ventes et plus.")
         st.caption(

@@ -68,8 +68,8 @@ neighbourhood falls through to the matcher's global mean inside
 `MatcherService`, not to a genre bucket.
 
 Similarity weights, play-mode hard filter, and anchor construction:
-`DATA_DRIVEN_PROFILES.md` and `matcher.service.ts`. Weights are hand-set
-in code and are **not** a database column.
+`DATA_DRIVEN_PROFILES.md` and `matcher.service.ts`. Weights are learned in
+`ml/`, set in code, and are **not** a database column.
 
 ## 2. Boxleiter
 
@@ -210,8 +210,9 @@ even if the code emits the tag.
 - **Worldwide ML estimate** (`MlEstimateService`, method `ml-ensemble`,
   platform GLOBAL): the model chosen in `ml/` (random forest + ridge, mean
   in log space), frozen by `ml/freeze.py` into
-  `estimation/ml/ensemble-model.json` (v1.3: the v1.1 inputs, trained on the
-  cleaned figures of games released since 2017). Its inputs mirror
+  `estimation/ml/ensemble-model.json` (v1.4: the v1.1 inputs, trained on the
+  cleaned figures of games released since 2017, with neighbour features from
+  the weighted-tag matcher). Its inputs mirror
   `ml/features.py`: signals at the date, game fields, the matcher profile
   with the game itself held out (as in training), and the series / developer
   track record — the best real worldwide figure published by the date for

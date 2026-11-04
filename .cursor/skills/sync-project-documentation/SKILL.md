@@ -44,8 +44,8 @@ the `sync-skills-and-rules` skill.
   (`calibratedMultiplier`, `pureEstimated`, `GenreProfile`,
   `genreProfileId`).
 - **A matcher weight.** Update the weight table in `DATA_DRIVEN_PROFILES.md`
-  from `SIMILARITY_WEIGHTS`. Do not invent a new holdout number. Point at
-  `scripts/.validate-matcher-holdout.json` or say it was not re-run.
+  from `SIMILARITY_WEIGHTS`. Do not invent a new number. Point at
+  `ml/reports/bench_matcher_weights.md` or say it was not re-run.
 - **A new entity or public route.** One row in `ARCHITECTURE.md`. The
   controller file remains the endpoint list.
 - **A discovery threshold.** Code only, unless the tier rules in

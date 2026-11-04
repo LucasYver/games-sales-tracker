@@ -82,6 +82,9 @@ Pour expérimenter en Python :
 | `exclusions.py` | Jeux exclus à la main de l'ENTRAÎNEMENT (`excluded_games.csv`, avec la raison de chacun), à gérer depuis « Qualité des données ». Mesure l'effet avec et sans, jugé sur les mêmes chiffres. Ni la base ni le site ne changent tant qu'un nouveau modèle n'est pas figé et installé. |
 | `suspects.py` | Liste de travail des chiffres de ventes à vérifier dans la base (priorités 1 à 3, raisons, estimations des modèles, liens source et admin) → `reports/milestones_a_verifier.csv`. Aussi produite par `bench.py` et affichée dans « Qualité des données ». Donne aussi, par jeu, ceux dont l'erreur typique atteint ×2, avec leurs chiffres et leurs sources → `reports/jeux_les_plus_loin.csv`. |
 | `checks.py` | Contrôles du banc au-delà de l'erreur moyenne : erreur selon l'âge du jeu, courbe qui baisse, catalogue entier, chiffres « de lancement » suspects. Affichés dans l'onglet des modèles de l'UI. |
+| `learn_matcher_tags.py` | Cherche les poids du matcher avec les tags pondérés, comparés aux anciens poids et à l'ancien gameplay (6 premiers tags) → `reports/matcher_weights_tags.md`. |
+| `bench_matcher_weights.py` | Mesure ces poids dans le modèle en prod et dans la formule sans ML → `reports/bench_matcher_weights.md`. |
+| `similarity_matrix.py` | Calcule chaque critère du matcher pour toutes les paires de jeux, pour la matrice des voisins. |
 | `research_figures.py` | Recherche à la main des chiffres de ventes manquants : prépare les lots, revérifie les citations, écrit en base (skill `research-sales-figures`). |
 | `bench_v2.py` | Essai des variantes v2 (sans informations « du moment », signaux de lancement, « jamais en baisse ») → `reports/bench_v2.md`. |
 | `prospective_test.py` | Test neutre : juge les modèles figés sur les chiffres arrivés dans la base après le gel, à partir d'un snapshot rangé dans `data/neutral/<date>/`. |
@@ -661,6 +664,25 @@ Sur 300 jeux éligibles tirés au hasard, la v1.3 donne en médiane ×1,17 par r
 à la v1.2 (de ×0,98 à ×1,38 pour 80 % des jeux ; 4 % bougent de plus de ×1,5). Elle
 atteint chaque jeu à son prochain recalcul par le cron.
 
+## v1.4 figée et mise en prod (04/11)
+
+`models/2026-11-04/` : les mêmes informations que la v1.3, mais les voisins
+viennent du nouveau matcher (gameplay en tags pondérés, poids « tirage 180 » de
+`learn_matcher_tags.py`). 1 450 chiffres de 461 jeux, fourchette ÷/× 2,07.
+
+| Mesure | Résultat |
+|---|---|
+| Validation croisée (1 469 chiffres, 468 jeux) | ×1,41, 79 % à ×2, couverture 80 % |
+| Dans le temps (684 chiffres, 187 jeux) | ×1,49, couverture 80 % |
+| Même modèle, anciens poids (`bench_matcher_weights.py`) | ×1,430 en validation croisée, ×1,512 sur 2025+ |
+| Même modèle, tirage 180 | ×1,405 en validation croisée, ×1,497 sur 2025+ |
+| Parité matcher TS / Python (150 jeux) | 141 mêmes voisins, 146 même ratio à 0,1 % ; les autres sont des ex aequo au rang 15 |
+
+Le gain n'est pas prouvé : relancé avec 94 % des ancres taguées, le choix honnête
+des poids (sans voir 2025+) ne retient plus le tirage 180 et ne bat pas les anciens
+poids sur 2025+. Choix du propriétaire : partir de ces poids appris plutôt que des
+poids posés à la main. Atteint chaque jeu à son prochain recalcul par le cron.
+
 ## Prochaines étapes
 
 Par ordre d'intérêt :
@@ -674,7 +696,7 @@ Par ordre d'intérêt :
    aujourd'hui moins bien que la formule du site. Si ça marche, revoir le
    seuil d'affichage (300 000 ventes, 1 000 reviews).
 3. **Réentraîner chaque mois, avec le test neutre.** Nouveau snapshot,
-   `prospective_test.py` sur les gels v1, v1.1, v1.2 et v1.3 (notre juge le plus
+   `prospective_test.py` sur les gels v1, v1.1, v1.2, v1.3 et v1.4 (notre juge le plus
    honnête), banc, gel, parité backend, déploiement. À regrouper dans un
    seul script.
 4. **Part PC des voisins.** Les jeux de la fuite n'ont pas de répartition
