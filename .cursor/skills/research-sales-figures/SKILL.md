@@ -43,7 +43,11 @@ session knows where to resume.
 | `t3-10k-20k-h` | 10,000 to 50,000, retries first | 50 | 4 | 4 | Done, 154 searches, every game got its full budget, no rate limit |
 | `t3-10k-20k-i` | 10,000 to 50,000, retries first | 50 | 5 | 5 | Done, 165 searches, no rate limit; Everspace 2 M skipped (series or first game, ambiguous) |
 | `t3-10k-20k-j` | 10,000 to 50,000, retries first | 20 | 2 | 2 | Done, 58 searches, reduced to 20 games to stay under the 5-hour limit |
-| `t3-10k-20k-k` | 10,000 to 50,000, retries first | 0 | 0 | 0 | **Next: run `prepare` with `--min-reviews 10000 --max-reviews 50000`. 39 games left, then 535 at 5,000 to 10,000** |
+| `t4-5k-50k-a` | 5,000 to 50,000 (last 39 above 10,000 first) | 50 | 6 | 5 | Done, 157 searches, no rate limit; West of Loathing skipped (unattributed) |
+| `t4-5k-50k-b` | 5,000 to 50,000, retries first | 50 | 5 | 4 | Done, 156 searches, no rate limit; Berry Bury Berry already in base |
+| `t4-5k-50k-c` | 5,000 to 50,000, retries first | 50 | 1 | 0 | Done, 147 searches, no rate limit; the only figure (INDIKA) was already in base |
+| `t4-5k-50k-d` | 5,000 to 50,000, retries first | 30 | 0 | 0 | Done, 98 searches, no rate limit; nothing citable, reduced to 30 games to stop at 80% |
+| `t4-5k-50k-e` | 5,000 to 50,000, retries first | 0 | 0 | 0 | **Next: run `prepare` with `--min-reviews 5000 --max-reviews 50000`. About 395 games left** |
 
 After that: the rest of 10,000 to 20,000 reviews, then below 10,000.
 
@@ -143,7 +147,8 @@ All of these happened on real figures:
   games, not 105. The 50-game wave `t2-20k-50k-b` used 166 searches and was not cut off.
 - **Yield** falls as games get smaller: 40% of the first 20, 20% at 50,000+ reviews,
   18% of those really searched at 29,000 to 50,000, then 8%, 10%, 18% and 18% (4, 5,
-  9 and 9 of 50) at 20,000 to 50,000. At that size, most finds are developer quotes relayed by
+  9 and 9 of 50) at 20,000 to 50,000. Below 10,000 reviews it falls to almost nothing:
+  0 new figures in the 80 games of `t4-5k-50k-c` and `-d`. At that size, most finds are developer quotes relayed by
   the GameDiscoverCo newsletter or Game Developer, not estimates.
 - **Platform figures are rare**: 4 console figures in 230 games, then 2 PlayStation
   figures in `t2-20k-50k-b`, where 39 of 50 games got all their searches. Console
