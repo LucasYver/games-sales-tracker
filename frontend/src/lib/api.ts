@@ -4,7 +4,10 @@ export const API_URL =
 // Figures are recomputed once a day, so serving a few minutes old is free
 // accuracy-wise and saves a round trip per view. Search stays shortest: it is
 // the one place a visitor notices a missing brand-new game.
-const LISTING_TTL = 900;
+// The listing is the same for every visitor and moves slowly: reviews land
+// every 4 h and estimates once a day. 3 h keeps it at most one review
+// refresh behind while sparing the backend most listing calls.
+const LISTING_TTL = 3 * 3600;
 const GAME_TTL = 900;
 const GENRES_TTL = 3600;
 const SEARCH_TTL = 300;

@@ -12,6 +12,10 @@ import { Game } from './game.entity';
 
 @Entity('signal_snapshot')
 @Index(['gameId', 'metric', 'capturedAt'])
+// Review count per game for the public listing (MAX(value) as an index probe).
+@Index('IDX_signal_snapshot_steam_reviews', ['gameId', 'value'], {
+  where: `"metric" = 'STEAM_REVIEWS'`,
+})
 export class SignalSnapshot {
   @PrimaryGeneratedColumn('uuid')
   id: string;
