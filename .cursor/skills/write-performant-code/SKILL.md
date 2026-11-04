@@ -29,11 +29,16 @@ Measured on 2026-11-04:
   sequential `await` on the database pays that once. From a laptop it is
   30 ms or more, so sequential queries look much worse locally.
 - `signal_snapshot` holds about 3.9M rows and 1.5 GB. Any query that scans it
-  in a request path costs about 0.7 s and real Neon compute. Its only index
-  is `("gameId", metric, "capturedAt")`.
+  in a request path costs about 0.7 s and real Neon compute. Its indexes are
+  `("gameId", metric, "capturedAt")` and the partial
+  `IDX_signal_snapshot_steam_reviews` on `("gameId", value)` for
+  `STEAM_REVIEWS` rows (24 MB). The listing reads each game's review count
+  through the latter as a correlated `MAX(value)` subquery (50 ms for the
+  whole catalog instead of 680 ms).
 - Public pages cache backend calls through `fetch(..., { next: { revalidate } })`
-  in `frontend/src/lib/api.ts`: 15 min for games and listings, 1 h for
-  genres. A cache miss pays the full backend time.
+  in `frontend/src/lib/api.ts`: 3 h for listings (same for every visitor,
+  reviews land every 4 h), 15 min for game pages, 1 h for genres, 5 min for
+  search. A cache miss pays the full backend time.
 - `next dev` compiles on demand and caches nothing. Never judge speed from
   dev mode alone; time the API with `curl -w "%{time_total}"`.
 
@@ -51,6 +56,11 @@ Measured on 2026-11-04:
 - Never put a query inside a loop over games. Batch with `In(ids)` or one SQL
   statement.
 - Select only the columns the response uses.
+- Every paginated `ORDER BY` ends with a unique key (`g.id`). Without it, rows
+  tied on the sort value come back in any order, and a game can show on two
+  pages or on none.
+- Keep a metric filter as a SQL literal (`metric = 'STEAM_REVIEWS'`) when a
+  partial index depends on it, so Postgres can match the index predicate.
 - Do not scan `signal_snapshot` or another snapshot table in a request path.
   Read per game through the `("gameId", metric, "capturedAt")` index, or
   propose a narrow index with its size (see below).
@@ -88,12 +98,15 @@ For a refactor that should only be faster:
    game, a small one, a free game, an upcoming one, an unknown slug, and each
    query parameter variant (`store`, `country`, filters, pages).
 2. After the change, restart the backend and compare byte for byte
-   (`cmp`). Any difference must be explained or fixed.
+   (`cmp`). Any difference must be explained or fixed. Ties with no order
+   are a common cause; fix them with a tie-breaker rather than ignoring them.
 3. Time before and after with several `curl` runs and report the medians.
 
 Run read-only checks against Neon with `default_transaction_read_only=on`,
 as the `backend-readonly` launch config does. Never write to the database to
-test a speedup.
+test a speedup. That backend cannot start while a migration is pending: ship
+a new index in its own push, let the deploy apply it, confirm it with
+`EXPLAIN (ANALYZE, BUFFERS)`, then ship the query that uses it.
 
 ## Reporting
 

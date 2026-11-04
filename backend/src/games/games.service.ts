@@ -491,11 +491,17 @@ export class GamesService {
       minReviews,
     } = options;
 
+    // Steam review count per game, read as one index-only probe on
+    // IDX_signal_snapshot_steam_reviews. Joining signal_snapshot instead
+    // scanned all ~3.9M rows on every call. The metric stays a literal so
+    // Postgres can match the partial index predicate.
+    const reviewsSql = `COALESCE((
+      SELECT MAX(rs.value) FROM signal_snapshot rs
+      WHERE rs."gameId" = g.id AND rs.metric = 'STEAM_REVIEWS'
+    ), 0)`;
+
     const qb = this.games
       .createQueryBuilder('g')
-      .leftJoin('g.signals', 's', 's.metric = :metric', {
-        metric: SignalMetric.STEAM_REVIEWS,
-      })
       .select('g.id', 'id')
       .addSelect('g.name', 'name')
       .addSelect('g.slug', 'slug')
@@ -504,7 +510,7 @@ export class GamesService {
       .addSelect('g.platforms', 'platforms')
       .addSelect('g.genres', 'genres')
       .addSelect('g.isFree', 'isFree')
-      .addSelect('COALESCE(MAX(s.value), 0)', 'reviews')
+      .addSelect(reviewsSql, 'reviews')
       .groupBy('g.id');
 
     const countQb = this.games.createQueryBuilder('g');
@@ -560,7 +566,7 @@ export class GamesService {
     // `minReviews` filters on an aggregate, so it must go through HAVING on
     // the grouped query and be counted via a wrapping subquery.
     if (minReviews != null && minReviews > 0) {
-      qb.having('COALESCE(MAX(s.value), 0) >= :minReviews', { minReviews });
+      qb.having(`${reviewsSql} >= :minReviews`, { minReviews });
     }
 
     if (sort === 'sales') {
@@ -646,11 +652,16 @@ export class GamesService {
       qb.addOrderBy('reviews', 'DESC');
     } else if (sort === 'recent') {
       qb.orderBy('g.releaseDate', 'DESC', 'NULLS LAST');
+      qb.addOrderBy('reviews', 'DESC');
     } else if (sort === 'oldest') {
       qb.orderBy('g.releaseDate', 'ASC', 'NULLS LAST');
+      qb.addOrderBy('reviews', 'DESC');
     } else {
       qb.orderBy('reviews', 'DESC');
     }
+    // Ties (same release day, same score) had no order, so a game could show
+    // on two pages or on none. The id makes every page stable.
+    qb.addOrderBy('g.id', 'ASC');
 
     // When a HAVING filter is in play we can't rely on getCount() (which
     // ignores GROUP BY/HAVING); count rows of the grouped projection instead.
