@@ -187,6 +187,9 @@
     "switchLabel": "Switch",
     "tabOverview": "Vue d'ensemble",
     "tabPrice": "Prix",
+    "relatedLabel": "Jeux liés",
+    "relatedFranchise": "Même franchise",
+    "relatedStudio": "Du même studio",
     "tabsLabel": "Sections de la fiche",
     "techTitle": "Fiche technique",
     "twitchViewersSeries": "Spectateurs Twitch",
@@ -227,6 +230,8 @@
   "blog": {
     "breadcrumbBlog": "Blog",
     "breadcrumbHome": "Accueil",
+    "allArticles": "Tous les articles",
+    "moreArticles": "Autres articles",
     "ctaGame": "Voir les données live de {name}",
     "empty": "Pas encore d'article. Les dossiers sur les ventes officielles arriveront ici.",
     "faqTitle": "Questions",
@@ -317,6 +322,9 @@
     "notEstimatedOld": "<strong>Les jeux sortis avant 2017</strong> : les données de cette époque ne nous permettent pas d'atteindre le niveau de fiabilité que nous visons.",
     "notEstimatedFree": "<strong>Les free-to-play</strong> : sans achat, il n'y a pas d'exemplaires à compter.",
     "notEstimatedPlatforms": "<strong>Nintendo Switch et mobile</strong> : sans signal fiable, nous ne donnons pas de ligne dédiée.",
+    "examplesTitle": "La méthode sur de vrais jeux",
+    "examplesBody": "Chaque fiche montre le chiffre retenu, sa répartition par plateforme et les signaux suivis :",
+    "examplesBlog": "Lire nos articles sur les ventes officielles",
     "notEstimatedBody": "Nous préférons afficher « non estimé » plutôt qu'un chiffre auquel nous ne croyons pas."
   }
 }

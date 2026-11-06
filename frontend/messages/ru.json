@@ -187,6 +187,9 @@
     "switchLabel": "Switch",
     "tabOverview": "Обзор",
     "tabPrice": "Цена",
+    "relatedLabel": "Связанные игры",
+    "relatedFranchise": "Та же франшиза",
+    "relatedStudio": "От той же студии",
     "tabsLabel": "Разделы игры",
     "techTitle": "Об игре",
     "twitchViewersSeries": "Зрители на Twitch",
@@ -227,6 +230,8 @@
   "blog": {
     "breadcrumbBlog": "Блог",
     "breadcrumbHome": "Главная",
+    "allArticles": "Все статьи",
+    "moreArticles": "Другие статьи",
     "ctaGame": "Актуальные данные о продажах {name}",
     "empty": "Статей пока нет. Скоро здесь появятся обзоры официальных продаж.",
     "faqTitle": "Вопросы",
@@ -317,6 +322,9 @@
     "notEstimatedOld": "<strong>Игры, вышедшие до 2017 года</strong>: данные той эпохи не позволяют достичь нужного нам уровня надёжности.",
     "notEstimatedFree": "<strong>Бесплатные игры</strong>: нет покупки — нет копий, которые можно посчитать.",
     "notEstimatedPlatforms": "<strong>Nintendo Switch и мобильные платформы</strong>: без надёжного сигнала мы не выделяем для них отдельную строку.",
+    "examplesTitle": "Посмотрите на реальных играх",
+    "examplesBody": "На странице каждой игры: итоговая цифра, разбивка по платформам и сигналы, которые мы отслеживаем:",
+    "examplesBlog": "Читать наши статьи об официальных продажах",
     "notEstimatedBody": "Мы лучше покажем «без оценки», чем цифру, в которую сами не верим."
   }
 }

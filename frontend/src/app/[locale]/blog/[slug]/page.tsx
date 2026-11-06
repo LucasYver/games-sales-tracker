@@ -5,7 +5,7 @@ import Image from 'next/image';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Link } from '@/i18n/navigation';
-import { SALES_TABLE_MARKER, getBlogPost } from '@/lib/api';
+import { SALES_TABLE_MARKER, getBlogIndex, getBlogPost } from '@/lib/api';
 import { displayCover } from '@/lib/cover';
 import { SITE_URL } from '@/lib/site-url';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
@@ -67,12 +67,21 @@ export default async function BlogArticlePage({
   params: Promise<{ locale: string; slug: string }>;
 }) {
   const { locale, slug } = await params;
-  const [post, t, format] = await Promise.all([
+  const [post, index, t, format] = await Promise.all([
     getBlogPost(locale, slug),
+    getBlogIndex(locale, 50),
     getTranslations({ locale, namespace: 'blog' }),
     getFormatter({ locale }),
   ]);
   if (!post) notFound();
+
+  // The next articles in publication order, wrapping around, so that every
+  // article receives links and not only the newest ones.
+  const position = index.items.findIndex((item) => item.slug === post.slug);
+  const moreArticles = [
+    ...index.items.slice(position + 1),
+    ...index.items.slice(0, Math.max(position, 0)),
+  ].slice(0, 3);
 
   const longDate = (iso: string) =>
     format.dateTime(new Date(iso), {
@@ -312,6 +321,35 @@ export default async function BlogArticlePage({
               {t('ctaGame', { name: post.game.name })}
             </Link>
           </p>
+        )}
+
+        {moreArticles.length > 0 && (
+          <section className="mt-10">
+            <h2 className="mb-3 font-mono text-[0.8rem] font-bold tracking-wider uppercase">
+              {t('moreArticles')}
+            </h2>
+            <ul>
+              {moreArticles.map((item) => (
+                <li
+                  key={item.slug}
+                  className="border-b border-border-soft py-2.5"
+                >
+                  <Link
+                    href={`/blog/${item.slug}`}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {item.title}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            <Link
+              href="/blog"
+              className="mt-3 inline-block text-sm text-muted-foreground hover:text-primary"
+            >
+              {t('allArticles')}
+            </Link>
+          </section>
         )}
       </article>
     </main>

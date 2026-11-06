@@ -1,6 +1,15 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, LessThanOrEqual, Not, Or, Repository } from 'typeorm';
+import {
+  type FindOptionsWhere,
+  In,
+  IsNull,
+  LessThanOrEqual,
+  Not,
+  Or,
+  Raw,
+  Repository,
+} from 'typeorm';
 import {
   AchievementSnapshot,
   BlogPost,
@@ -51,6 +60,8 @@ import { normalizeSteamPriceCountry } from '../ingestion/steam-store-countries';
 const TRENDING_WINDOW_DAYS = 365;
 const TRENDING_MIN_REVIEWS = 1000;
 const TRENDING_GAIN_DAYS = 14;
+// Per list on a game page: enough to link around, short enough to stay read.
+const RELATED_GAMES_LIMIT = 6;
 
 export interface PopularGame {
   id: string;
@@ -735,6 +746,75 @@ export class GamesService {
       `,
     );
     return rows.map((r) => ({ name: r.name, count: Number(r.count) }));
+  }
+
+  /**
+   * Other games of the same franchise and the same developer, for the links
+   * on a game page. Newest first, so a list only changes when the catalog does.
+   * A game shown under its franchise is not repeated under its studio.
+   */
+  async listRelated(slug: string) {
+    const game = await this.games.findOne({
+      where: { slug },
+      select: { id: true, developer: true, franchiseSlug: true },
+    });
+    if (!game) throw new NotFoundException(`Game "${slug}" not found`);
+
+    const load = (where: FindOptionsWhere<Game>, take: number) =>
+      this.games.find({
+        where: { ...where, id: Not(game.id) },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          releaseDate: true,
+          coverUrl: true,
+          platforms: true,
+          genres: true,
+          isFree: true,
+        },
+        order: { releaseDate: { direction: 'DESC', nulls: 'LAST' }, id: 'ASC' },
+        take,
+      });
+
+    const [franchise, sameDeveloper] = await Promise.all([
+      game.franchiseSlug
+        ? load({ franchiseSlug: game.franchiseSlug }, RELATED_GAMES_LIMIT)
+        : [],
+      game.developer
+        ? load(
+            {
+              developer: Raw((alias) => `LOWER(${alias}) = LOWER(:developer)`, {
+                developer: game.developer,
+              }),
+            },
+            // Enough to still fill the list once franchise games are removed.
+            RELATED_GAMES_LIMIT * 2,
+          )
+        : [],
+    ]);
+
+    const inFranchise = new Set(franchise.map((g) => g.id));
+    const studio = sameDeveloper
+      .filter((g) => !inFranchise.has(g.id))
+      .slice(0, RELATED_GAMES_LIMIT);
+
+    const estimates = await this.latestReconciledEstimates(
+      [...franchise, ...studio].map((g) => g.id),
+    );
+    const toItem = (g: Game) => ({
+      id: g.id,
+      name: g.name,
+      slug: g.slug,
+      releaseDate: g.releaseDate,
+      coverUrl: g.coverUrl,
+      platforms: g.platforms ?? [],
+      genres: g.genres ?? [],
+      isFree: g.isFree,
+      estimatedUnits: estimates.get(g.id)?.units ?? null,
+    });
+
+    return { franchise: franchise.map(toItem), studio: studio.map(toItem) };
   }
 
   /**

@@ -86,6 +86,11 @@ export class GamesController {
     return this.games.listSitemap();
   }
 
+  @Get(':slug/related')
+  related(@Param('slug') slug: string) {
+    return this.games.listRelated(slug);
+  }
+
   @Get(':slug')
   getBySlug(
     @Param('slug') slug: string,

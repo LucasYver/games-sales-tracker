@@ -11,6 +11,8 @@ const LISTING_TTL = 3 * 3600;
 const GAME_TTL = 900;
 const GENRES_TTL = 3600;
 const SEARCH_TTL = 300;
+// A studio's list barely moves: one backend call per game per day at most.
+const RELATED_TTL = 24 * 3600;
 
 export type Platform =
   'PC' | 'PLAYSTATION' | 'XBOX' | 'SWITCH' | 'MOBILE' | 'GLOBAL' | 'OTHER';
@@ -196,7 +198,9 @@ function roundedUnits(units: number | null): number | null {
 }
 
 /** Listing and search rows. */
-export function listingUnits(game: PopularGame): number | null {
+export function listingUnits(
+  game: Pick<PopularGame, 'estimatedUnits'>,
+): number | null {
   return roundedUnits(game.estimatedUnits);
 }
 
@@ -306,6 +310,36 @@ export async function getGenres(): Promise<GenreOption[]> {
   });
   if (!res.ok) return [];
   return res.json();
+}
+
+/** Cache tag of a public game page's API fetch (every country / store). */
+export function gameCacheTag(slug: string): string {
+  return `game:${slug}`;
+}
+
+export interface RelatedGame extends GameListItem {
+  genres: string[];
+  isFree: boolean;
+  estimatedUnits: number | null;
+}
+
+export interface RelatedGames {
+  franchise: RelatedGame[];
+  studio: RelatedGame[];
+}
+
+/** Links on a game page: a failure hides the section, never the page. */
+export async function getRelatedGames(slug: string): Promise<RelatedGames> {
+  const empty: RelatedGames = { franchise: [], studio: [] };
+  try {
+    const res = await fetch(
+      `${API_URL}/games/${encodeURIComponent(slug)}/related`,
+      { next: { revalidate: RELATED_TTL, tags: [gameCacheTag(slug)] } },
+    );
+    return res.ok ? ((await res.json()) as RelatedGames) : empty;
+  } catch {
+    return empty;
+  }
 }
 
 export async function getGame(

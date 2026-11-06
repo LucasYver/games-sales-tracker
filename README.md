@@ -182,6 +182,7 @@ Documentation : `ARCHITECTURE.md` (carte), `ESTIMATION.md` (formules),
 | ------- | -------- | ----------- |
 | GET | `/api/games/search?q=` | Recherche dans le catalogue local |
 | GET | `/api/games/:slug` | Détail jeu + dernière estimation + historique |
+| GET | `/api/games/:slug/related` | Jeux de la même franchise et du même studio |
 | GET | `/api/games/popular` | Jeux populaires (page d’accueil) |
 | GET | `/api/games/ranked` | Classement review-velocity |
 | POST | `/api/ingestion/steam` | Ingérer un app Steam (`{ "appId": 1145360 }`) |

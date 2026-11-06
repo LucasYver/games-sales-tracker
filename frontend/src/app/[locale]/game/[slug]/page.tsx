@@ -5,9 +5,13 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import {
   getGame,
+  getRelatedGames,
   headlineUnits,
+  listingUnits,
   type GameDetail,
   type Platform,
+  type RelatedGame,
+  type RelatedGames,
 } from '@/lib/api';
 import { localeLanguages } from '@/i18n/routing';
 import { ADSENSE_CLIENT, ADSENSE_GAME_SLOT } from '@/lib/ads';
@@ -875,12 +879,83 @@ function TabNav({
   );
 }
 
+function RelatedList({
+  title,
+  games,
+}: {
+  title: string;
+  games: RelatedGame[];
+}) {
+  const tCommon = useTranslations('common');
+  const locale = useLocale();
+
+  return (
+    <div className="min-w-0 border-b border-border px-4 py-5">
+      <SectionTitle>{title}</SectionTitle>
+      <ul>
+        {games.map((game) => {
+          const sold = listingUnits(game);
+          const meta = [game.genres[0], game.releaseDate?.slice(0, 4)]
+            .filter(Boolean)
+            .join(' · ');
+
+          return (
+            <li
+              key={game.id}
+              className="flex items-center gap-2.5 border-b border-border-soft p-2 odd:bg-surface-alt hover:bg-accent"
+            >
+              <div className="relative size-8 shrink-0 overflow-hidden rounded-[2px] bg-muted">
+                {game.coverUrl && (
+                  <Image
+                    src={game.coverUrl}
+                    alt=""
+                    fill
+                    sizes="32px"
+                    className="object-cover"
+                  />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <Link
+                  href={`/game/${game.slug}`}
+                  className="font-semibold text-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                >
+                  {game.name}
+                </Link>
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  {meta}
+                </div>
+              </div>
+              <div className="shrink-0 font-mono font-semibold tabular-nums">
+                {game.isFree ? (
+                  <span className="text-source-official">
+                    {tCommon('freeToPlay')}
+                  </span>
+                ) : sold ? (
+                  compactUnits(sold, locale)
+                ) : (
+                  <span className="text-text-faint">—</span>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function GamePageContent({
   game,
   tab,
+  related,
+  requestedCountry,
 }: {
   game: GameDetail;
   tab: TabKey;
+  related: RelatedGames;
+  /** `cc` from the URL only: the default country stays out of the tab links. */
+  requestedCountry?: string;
 }) {
   const t = useTranslations('gamePage');
   const tPlatform = useTranslations('platform');
@@ -962,22 +1037,49 @@ function GamePageContent({
   const twitchChart =
     game.twitchViewersHistory.length > 1 ? game.twitchViewersHistory : null;
 
+  const gameUrl = `${SITE_URL}/${locale}/game/${game.slug}`;
   const jsonLd = {
     '@context': 'https://schema.org',
-    '@type': 'VideoGame',
-    name: game.name,
-    url: `${SITE_URL}/${locale}/game/${game.slug}`,
-    image: game.coverUrl ?? undefined,
-    description: game.summary ?? undefined,
-    datePublished: game.releaseDate ?? undefined,
-    gamePlatform: game.platforms.map((p) => tPlatform(p)),
-    author: game.developer
-      ? { '@type': 'Organization', name: game.developer }
-      : undefined,
-    publisher: game.publisher
-      ? { '@type': 'Organization', name: game.publisher }
-      : undefined,
+    '@graph': [
+      {
+        '@type': 'VideoGame',
+        name: game.name,
+        url: gameUrl,
+        image: game.coverUrl ?? undefined,
+        description: game.summary ?? undefined,
+        datePublished: game.releaseDate ?? undefined,
+        gamePlatform: game.platforms.map((p) => tPlatform(p)),
+        author: game.developer
+          ? { '@type': 'Organization', name: game.developer }
+          : undefined,
+        publisher: game.publisher
+          ? { '@type': 'Organization', name: game.publisher }
+          : undefined,
+      },
+      {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          {
+            '@type': 'ListItem',
+            position: 1,
+            name: t('back'),
+            item: `${SITE_URL}/${locale}`,
+          },
+          {
+            '@type': 'ListItem',
+            position: 2,
+            name: game.name,
+            item: gameUrl,
+          },
+        ],
+      },
+    ],
   };
+
+  const relatedLists = [
+    { title: t('relatedFranchise'), games: related.franchise },
+    { title: t('relatedStudio'), games: related.studio },
+  ].filter((list) => list.games.length > 0);
 
   return (
     <main className="flex min-h-screen flex-col">
@@ -1003,7 +1105,7 @@ function GamePageContent({
           slug={game.slug}
           active={activeTab}
           showPrice={!game.isFree}
-          cc={game.priceCountry}
+          cc={requestedCountry}
           store={game.priceStore}
         />
 
@@ -1047,6 +1149,23 @@ function GamePageContent({
           <TechSheet game={game} />
         </div>
 
+        {relatedLists.length > 0 && (
+          <section
+            aria-label={t('relatedLabel')}
+            className={`grid border-t border-border ${
+              relatedLists.length > 1 ? 'md:grid-cols-2' : ''
+            }`}
+          >
+            {relatedLists.map((list) => (
+              <RelatedList
+                key={list.title}
+                title={list.title}
+                games={list.games}
+              />
+            ))}
+          </section>
+        )}
+
         {ADSENSE_CLIENT && ADSENSE_GAME_SLOT && (
           <AdSlot
             key={game.slug}
@@ -1084,11 +1203,19 @@ export default async function GamePage({
     searchParams,
   ]);
   const country = cc?.trim() || defaultPriceCountry(locale);
-  const game = await getGame(slug, country, store);
+  const [game, related] = await Promise.all([
+    getGame(slug, country, store),
+    getRelatedGames(slug),
+  ]);
 
   if (!game) notFound();
 
   return (
-    <GamePageContent game={game} tab={tab === 'price' ? 'price' : 'overview'} />
+    <GamePageContent
+      game={game}
+      tab={tab === 'price' ? 'price' : 'overview'}
+      related={related}
+      requestedCountry={cc?.trim() || undefined}
+    />
   );
 }

@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
-import { localeLanguages, routing } from '@/i18n/routing';
+import { Link } from '@/i18n/navigation';
+import { hasBlog, localeLanguages, routing } from '@/i18n/routing';
 import { SITE_URL } from '@/lib/site-url';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
 
@@ -62,8 +63,16 @@ const NOT_ESTIMATED = [
   'notEstimatedPlatforms',
 ] as const;
 
+const EXAMPLE_GAMES = [
+  { name: 'Hades II', slug: 'hades-ii' },
+  { name: 'ELDEN RING', slug: 'elden-ring' },
+  { name: 'Black Myth: Wukong', slug: 'black-myth-wukong' },
+  { name: 'Cyberpunk 2077', slug: 'cyberpunk-2077' },
+];
+
 export default function MethodologyPage() {
   const t = useTranslations('methodology');
+  const locale = useLocale();
   const strong = (chunks: React.ReactNode) => (
     <strong className="font-semibold text-foreground">{chunks}</strong>
   );
@@ -112,6 +121,29 @@ export default function MethodologyPage() {
             ))}
           </ul>
           <p>{t('notEstimatedBody')}</p>
+        </Section>
+
+        <Section title={t('examplesTitle')}>
+          <p>{t('examplesBody')}</p>
+          <ul className="list-disc space-y-1 pl-5">
+            {EXAMPLE_GAMES.map((game) => (
+              <li key={game.slug}>
+                <Link
+                  href={`/game/${game.slug}`}
+                  className="text-primary hover:underline"
+                >
+                  {game.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
+          {hasBlog(locale) && (
+            <p>
+              <Link href="/blog" className="text-primary hover:underline">
+                {t('examplesBlog')}
+              </Link>
+            </p>
+          )}
         </Section>
       </article>
     </main>
