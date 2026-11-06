@@ -36,6 +36,12 @@ import {
   type SteamReviewsHealth,
 } from '../ingestion/ingestion.service';
 import { slugify } from '../common/slug';
+import { deriveFranchise, deriveLiveService } from '../games/game-features';
+import {
+  MANUAL_GAME_FIELDS,
+  type ManualGameField,
+} from '../games/manual-fields';
+import { PublishersService } from '../publishers/publishers.service';
 import { EXTENDED_HARVEST_PERCENTILE } from '../scheduler/harvest-eligibility';
 import { harvestDueSql } from '../scheduler/refresh-interval';
 import { GamesService } from '../games/games.service';
@@ -154,6 +160,35 @@ export interface UpdateGameInput {
   name?: string;
   releaseDate?: string | null;
   igdbId?: number | null;
+  summary?: string | null;
+  coverUrl?: string | null;
+  developer?: string | null;
+  publisher?: string | null;
+  platforms?: Platform[];
+  genres?: string[];
+  categories?: string[];
+  steamTags?: string[];
+  isFree?: boolean;
+  liveService?: boolean;
+  unlock?: ManualGameField[];
+}
+
+// Trimmed text, or null when the admin cleared it.
+function cleanText(value: string | null): string | null {
+  const trimmed = value?.trim() ?? '';
+  return trimmed === '' ? null : trimmed;
+}
+
+// Trimmed, non-empty, de-duplicated list (order kept).
+function cleanList(values: string[]): string[] {
+  return Array.from(
+    new Set(values.map((v) => v.trim()).filter((v) => v !== '')),
+  );
+}
+
+function sameList(a: readonly string[] | null, b: readonly string[]): boolean {
+  const left = a ?? [];
+  return left.length === b.length && left.every((v, i) => v === b[i]);
 }
 
 export interface UpdateMilestoneInput {
@@ -371,6 +406,7 @@ export interface AdminGameSummary2 {
   iterationNumber: number | null;
   liveService: boolean;
   excludedFromReference: boolean;
+  manualFields: string[];
   igdbId: number | null;
   lastRefreshedAt: Date | null;
   createdAt: Date;
@@ -460,6 +496,7 @@ export class AdminService {
     private readonly gamesService: GamesService,
     private readonly referenceProfiles: ReferenceProfileService,
     private readonly ingestion: IngestionService,
+    private readonly publishers: PublishersService,
   ) {}
 
   /**
@@ -1158,6 +1195,7 @@ export class AdminService {
       iterationNumber: game.iterationNumber,
       liveService: game.liveService,
       excludedFromReference: game.excludedFromReference,
+      manualFields: game.manualFields ?? [],
       igdbId: game.igdbId,
       lastRefreshedAt: game.lastRefreshedAt,
       createdAt: game.createdAt,
@@ -1348,9 +1386,25 @@ export class AdminService {
     return { id, excludedFromReference: excluded };
   }
 
-  async updateGame(id: string, input: UpdateGameInput): Promise<Game> {
+  /**
+   * Apply an admin correction to a game's metadata. Every column the admin
+   * changes is added to `manualFields`, so the Steam / IGDB upserts keep the
+   * value; `unlock` hands columns back to the crons.
+   */
+  async updateGame(
+    id: string,
+    input: UpdateGameInput,
+  ): Promise<{ id: string; slug: string; previousSlug: string }> {
     const game = await this.games.findOne({ where: { id } });
     if (!game) throw new NotFoundException(`Game ${id} not found`);
+    const previousSlug = game.slug;
+    const locked = new Set(game.manualFields ?? []);
+    for (const field of input.unlock ?? []) locked.delete(field);
+    const changed = new Set<ManualGameField>();
+    const touched = (field: ManualGameField) => {
+      locked.add(field);
+      changed.add(field);
+    };
 
     if (input.name !== undefined) {
       const trimmed = input.name.trim();
@@ -1358,18 +1412,29 @@ export class AdminService {
       if (trimmed !== game.name) {
         game.name = trimmed;
         game.slug = await this.buildUniqueSlug(trimmed, id);
+        // Same derived features the ingestion recomputes from the name.
+        const franchise = deriveFranchise(trimmed);
+        game.franchiseSlug = franchise.franchiseSlug;
+        game.isAnnualIteration = franchise.isAnnualIteration;
+        game.iterationNumber = franchise.iterationNumber;
+        touched('name');
       }
     }
 
     if (input.releaseDate !== undefined) {
-      if (input.releaseDate === null || input.releaseDate === '') {
-        game.releaseDate = null;
-      } else {
-        const parsed = new Date(input.releaseDate);
-        if (Number.isNaN(parsed.getTime())) {
-          throw new BadRequestException('releaseDate must be a valid date');
+      let next: Date | null = null;
+      if (input.releaseDate !== null && input.releaseDate !== '') {
+        next = new Date(input.releaseDate);
+        const year = next.getUTCFullYear();
+        if (Number.isNaN(next.getTime()) || year < 1970 || year > 2100) {
+          throw new BadRequestException(
+            'releaseDate must be a valid date between 1970 and 2100',
+          );
         }
-        game.releaseDate = parsed;
+      }
+      if ((next?.getTime() ?? null) !== (game.releaseDate?.getTime() ?? null)) {
+        game.releaseDate = next;
+        touched('releaseDate');
       }
     }
 
@@ -1394,7 +1459,70 @@ export class AdminService {
       }
     }
 
-    return this.games.save(game);
+    for (const field of ['summary', 'coverUrl', 'developer'] as const) {
+      const value = input[field];
+      if (value === undefined) continue;
+      const next = cleanText(value);
+      if (next !== game[field]) {
+        game[field] = next;
+        touched(field);
+      }
+    }
+
+    let publisherChanged = false;
+    if (input.publisher !== undefined) {
+      const next = cleanText(input.publisher);
+      if (next !== game.publisher) {
+        game.publisher = next;
+        // The curated link followed the old name; re-resolve it below.
+        game.publisherId = null;
+        publisherChanged = true;
+        touched('publisher');
+      }
+    }
+
+    if (input.platforms !== undefined) {
+      const next = Array.from(new Set(input.platforms));
+      if (next.length === 0) {
+        throw new BadRequestException('platforms needs at least one platform');
+      }
+      if (!sameList(game.platforms, next)) {
+        game.platforms = next;
+        touched('platforms');
+      }
+    }
+
+    for (const field of ['genres', 'categories', 'steamTags'] as const) {
+      const value = input[field];
+      if (value === undefined) continue;
+      const next = cleanList(value);
+      if (!sameList(game[field], next)) {
+        game[field] = next.length > 0 ? next : null;
+        touched(field);
+      }
+    }
+
+    for (const field of ['isFree', 'liveService'] as const) {
+      const value = input[field];
+      if (value === undefined || value === game[field]) continue;
+      game[field] = value;
+      touched(field);
+    }
+
+    // Live-service is derived from name + categories unless locked.
+    if (
+      !locked.has('liveService') &&
+      (changed.has('name') || changed.has('categories'))
+    ) {
+      game.liveService = deriveLiveService(game.name, game.categories);
+    }
+
+    game.manualFields = MANUAL_GAME_FIELDS.filter((f) => locked.has(f));
+    const saved = await this.games.save(game);
+    if (publisherChanged) {
+      await this.publishers.resolveAndLink(saved.id, saved.publisher);
+    }
+    return { id: saved.id, slug: saved.slug, previousSlug };
   }
 
   private async buildUniqueSlug(

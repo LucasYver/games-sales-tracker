@@ -9,9 +9,10 @@ import {
   type AdminBlogDetail,
   type GenerateBlogFormatInput,
   type AdminGenreIgdbSyncResult,
+  type ManualGameField,
   type SalesSource,
 } from '@/lib/admin';
-import { API_URL } from '@/lib/api';
+import { API_URL, gameCacheTag, type Platform } from '@/lib/api';
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
@@ -98,18 +99,36 @@ export interface UpdateGamePayload {
   name?: string;
   releaseDate?: string | null;
   igdbId?: number | null;
+  summary?: string | null;
+  coverUrl?: string | null;
+  developer?: string | null;
+  publisher?: string | null;
+  platforms?: Platform[];
+  genres?: string[];
+  categories?: string[];
+  steamTags?: string[];
+  isFree?: boolean;
+  liveService?: boolean;
+  /** Hand these columns back to the crons. */
+  unlock?: ManualGameField[];
 }
 
 export async function updateGame(
   id: string,
   payload: UpdateGamePayload,
 ): Promise<void> {
-  await adminFetch(`/games/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  });
+  const result = await adminFetch<{ slug: string; previousSlug: string }>(
+    `/games/${id}`,
+    { method: 'PATCH', body: JSON.stringify(payload) },
+  );
   revalidatePath(`/admin/games/${id}`);
   revalidatePath('/admin/games');
+  // Public game page: its API fetch is cached 15 min under this tag. A
+  // rename changes the slug, so the old page is expired too.
+  updateTag(gameCacheTag(result.slug));
+  if (result.previousSlug !== result.slug) {
+    updateTag(gameCacheTag(result.previousSlug));
+  }
 }
 
 export async function refreshGame(

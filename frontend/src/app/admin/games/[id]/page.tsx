@@ -375,6 +375,17 @@ function OverviewTab({ s }: { s: AdminGamePageSummary }) {
               name: s.name,
               releaseDate: s.releaseDate,
               igdbId: s.igdbId,
+              summary: s.summary,
+              coverUrl: s.coverUrl,
+              developer: s.developer,
+              publisher: s.publisher,
+              platforms: s.platforms,
+              genres: s.genres,
+              categories: s.categories,
+              steamTags: s.steamTags,
+              isFree: s.isFree,
+              liveService: s.liveService,
+              manualFields: s.manualFields ?? [],
             }}
           />
         </CardContent>

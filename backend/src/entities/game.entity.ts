@@ -137,6 +137,11 @@ export class Game {
   @Column({ type: 'boolean', default: false })
   excludedFromReference: boolean;
 
+  // Metadata columns an admin corrected by hand (see `games/manual-fields.ts`).
+  // The Steam and IGDB upserts keep their values instead of overwriting them.
+  @Column({ type: 'text', array: true, default: '{}' })
+  manualFields: string[];
+
   @CreateDateColumn()
   createdAt: Date;
 

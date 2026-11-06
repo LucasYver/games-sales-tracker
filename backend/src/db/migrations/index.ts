@@ -66,6 +66,7 @@ import { AddBlogPostRefresh1788830000000 } from './1788830000000-AddBlogPostRefr
 import { AddMlEnsembleEstimate1788840000000 } from './1788840000000-AddMlEnsembleEstimate';
 import { AddGameReviewLanguages1788850000000 } from './1788850000000-AddGameReviewLanguages';
 import { AddSteamReviewsIndex1788860000000 } from './1788860000000-AddSteamReviewsIndex';
+import { AddGameManualFields1788870000000 } from './1788870000000-AddGameManualFields';
 import { AddBlogPostTopicKey1788880000000 } from './1788880000000-AddBlogPostTopicKey';
 
 /**
@@ -144,5 +145,6 @@ export const migrations: MixedList<Function | string> = [
   AddMlEnsembleEstimate1788840000000,
   AddGameReviewLanguages1788850000000,
   AddSteamReviewsIndex1788860000000,
+  AddGameManualFields1788870000000,
   AddBlogPostTopicKey1788880000000,
 ];

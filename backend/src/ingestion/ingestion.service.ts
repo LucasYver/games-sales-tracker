@@ -32,6 +32,7 @@ import {
 import { EstimationService } from '../estimation/estimation.service';
 import { GamesService } from '../games/games.service';
 import { deriveFranchise, deriveLiveService } from '../games/game-features';
+import { keepManualFields } from '../games/manual-fields';
 import { slugify } from '../common/slug';
 import { STEAM_STORE_COUNTRIES } from './steam-store-countries';
 import { XBOX_STORE_COUNTRIES } from './xbox-store-countries';
@@ -795,7 +796,10 @@ export class IngestionService {
     // Steam genres are sparse; enrich the taxonomy with the IGDB genres
     // when the game carries none yet (classification/display metadata —
     // genres no longer feed the estimation model).
-    if (!game.genres || game.genres.length === 0) {
+    if (
+      (!game.genres || game.genres.length === 0) &&
+      !game.manualFields.includes('genres')
+    ) {
       const igdb = await this.igdb.findBySteamAppId(appId);
       if (igdb && igdb.genres.length > 0) {
         game.genres = Array.from(
@@ -4874,14 +4878,16 @@ export class IngestionService {
       }
 
       if (existing) {
-        existing.name = g.name;
-        existing.summary = g.summary;
-        existing.releaseDate = g.releaseDate;
-        existing.coverUrl = g.coverUrl;
-        if (g.platforms.length > 0) existing.platforms = g.platforms;
-        if (g.developer) existing.developer = g.developer;
-        if (g.publisher) existing.publisher = g.publisher;
-        if (g.genres.length > 0) existing.genres = g.genres;
+        keepManualFields(existing, () => {
+          existing.name = g.name;
+          existing.summary = g.summary;
+          existing.releaseDate = g.releaseDate;
+          existing.coverUrl = g.coverUrl;
+          if (g.platforms.length > 0) existing.platforms = g.platforms;
+          if (g.developer) existing.developer = g.developer;
+          if (g.publisher) existing.publisher = g.publisher;
+          if (g.genres.length > 0) existing.genres = g.genres;
+        });
         const saved = await this.games.save(existing);
         await this.publishers.resolveAndLink(saved.id, saved.publisher);
         await this.syncPlatformReleaseDates(saved.id, g.platformReleaseDates);
@@ -5106,33 +5112,35 @@ export class IngestionService {
         existingGame.deletedAt = null;
       }
       const game = existingGame;
-      game.releaseDate = details.releaseDate ?? game.releaseDate;
-      game.coverUrl = details.headerImage ?? igdb?.coverUrl ?? game.coverUrl;
-      game.summary = details.shortDescription ?? game.summary;
-      game.isFree = details.isFree;
-      if (details.developers.length > 0) {
-        game.developer = details.developers[0];
-      } else if (igdb?.developer) {
-        game.developer = igdb.developer;
-      }
-      if (details.publishers.length > 0) {
-        game.publisher = details.publishers[0];
-      } else if (igdb?.publisher) {
-        game.publisher = igdb.publisher;
-      }
-      if (details.genres.length > 0) game.genres = details.genres;
-      else if (igdb?.genres.length) game.genres = igdb.genres;
-      if (details.categories.length > 0) game.categories = details.categories;
-      if (steamTags) game.steamTags = steamTags;
-      if (details.dlc.length > 0) game.dlc = details.dlc;
-      if (igdb) {
-        if (game.igdbId == null) game.igdbId = igdb.igdbId;
-        if (igdb.platforms.length > 0) game.platforms = igdb.platforms;
-      }
-      if (catalogTier === CatalogTier.CORE) {
-        game.catalogTier = CatalogTier.CORE;
-      }
-      this.applyDerivedFeatures(game);
+      keepManualFields(game, () => {
+        game.releaseDate = details.releaseDate ?? game.releaseDate;
+        game.coverUrl = details.headerImage ?? igdb?.coverUrl ?? game.coverUrl;
+        game.summary = details.shortDescription ?? game.summary;
+        game.isFree = details.isFree;
+        if (details.developers.length > 0) {
+          game.developer = details.developers[0];
+        } else if (igdb?.developer) {
+          game.developer = igdb.developer;
+        }
+        if (details.publishers.length > 0) {
+          game.publisher = details.publishers[0];
+        } else if (igdb?.publisher) {
+          game.publisher = igdb.publisher;
+        }
+        if (details.genres.length > 0) game.genres = details.genres;
+        else if (igdb?.genres.length) game.genres = igdb.genres;
+        if (details.categories.length > 0) game.categories = details.categories;
+        if (steamTags) game.steamTags = steamTags;
+        if (details.dlc.length > 0) game.dlc = details.dlc;
+        if (igdb) {
+          if (game.igdbId == null) game.igdbId = igdb.igdbId;
+          if (igdb.platforms.length > 0) game.platforms = igdb.platforms;
+        }
+        if (catalogTier === CatalogTier.CORE) {
+          game.catalogTier = CatalogTier.CORE;
+        }
+        this.applyDerivedFeatures(game);
+      });
       const saved = await this.games.save(game);
       await this.publishers.resolveAndLink(saved.id, saved.publisher);
       await this.syncPlatformReleaseDates(saved.id, igdb?.platformReleaseDates);
@@ -5167,34 +5175,36 @@ export class IngestionService {
             url: `https://store.steampowered.com/app/${appId}`,
           }),
         );
-        existingByIgdb.releaseDate =
-          details.releaseDate ?? existingByIgdb.releaseDate;
-        existingByIgdb.coverUrl =
-          details.headerImage ?? existingByIgdb.coverUrl;
-        existingByIgdb.summary =
-          details.shortDescription ?? existingByIgdb.summary;
-        existingByIgdb.isFree = details.isFree;
-        if (details.developers.length > 0 && !existingByIgdb.developer) {
-          existingByIgdb.developer = details.developers[0];
-        }
-        if (details.publishers.length > 0 && !existingByIgdb.publisher) {
-          existingByIgdb.publisher = details.publishers[0];
-        }
-        if (
-          details.genres.length > 0 &&
-          (!existingByIgdb.genres || existingByIgdb.genres.length === 0)
-        ) {
-          existingByIgdb.genres = details.genres;
-        }
-        if (details.categories.length > 0) {
-          existingByIgdb.categories = details.categories;
-        }
-        if (steamTags) existingByIgdb.steamTags = steamTags;
-        if (details.dlc.length > 0) existingByIgdb.dlc = details.dlc;
-        if (catalogTier === CatalogTier.CORE) {
-          existingByIgdb.catalogTier = CatalogTier.CORE;
-        }
-        this.applyDerivedFeatures(existingByIgdb);
+        keepManualFields(existingByIgdb, () => {
+          existingByIgdb.releaseDate =
+            details.releaseDate ?? existingByIgdb.releaseDate;
+          existingByIgdb.coverUrl =
+            details.headerImage ?? existingByIgdb.coverUrl;
+          existingByIgdb.summary =
+            details.shortDescription ?? existingByIgdb.summary;
+          existingByIgdb.isFree = details.isFree;
+          if (details.developers.length > 0 && !existingByIgdb.developer) {
+            existingByIgdb.developer = details.developers[0];
+          }
+          if (details.publishers.length > 0 && !existingByIgdb.publisher) {
+            existingByIgdb.publisher = details.publishers[0];
+          }
+          if (
+            details.genres.length > 0 &&
+            (!existingByIgdb.genres || existingByIgdb.genres.length === 0)
+          ) {
+            existingByIgdb.genres = details.genres;
+          }
+          if (details.categories.length > 0) {
+            existingByIgdb.categories = details.categories;
+          }
+          if (steamTags) existingByIgdb.steamTags = steamTags;
+          if (details.dlc.length > 0) existingByIgdb.dlc = details.dlc;
+          if (catalogTier === CatalogTier.CORE) {
+            existingByIgdb.catalogTier = CatalogTier.CORE;
+          }
+          this.applyDerivedFeatures(existingByIgdb);
+        });
         const saved = await this.games.save(existingByIgdb);
         await this.publishers.resolveAndLink(saved.id, saved.publisher);
         await this.syncPlatformReleaseDates(

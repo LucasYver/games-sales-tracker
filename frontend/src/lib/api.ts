@@ -386,7 +386,8 @@ export async function getGame(
   const qs = search.toString();
   const res = await fetch(
     `${API_URL}/games/${encodeURIComponent(slug)}${qs ? `?${qs}` : ''}`,
-    { next: { revalidate: GAME_TTL } },
+    // The tag lets an admin metadata edit expire this page at once.
+    { next: { revalidate: GAME_TTL, tags: [gameCacheTag(slug)] } },
   );
   if (!res.ok) return null;
   const game = (await res.json()) as GameDetail;
@@ -474,7 +475,6 @@ export interface BlogFigures {
   /** News items only: the article the figure comes from. */
   source: { url: string; label: string } | null;
 }
-
 
 export interface PublicBlogPost {
   slug: string;

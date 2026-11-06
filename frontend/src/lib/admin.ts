@@ -228,6 +228,21 @@ export interface LatestSignal {
 
 // Pinned header + Overview payload (GET /admin/games/:id/summary). Lightweight:
 // no heavy time-series (those load from the Charts tab).
+/** Mirrors MANUAL_GAME_FIELDS in backend/src/games/manual-fields.ts. */
+export type ManualGameField =
+  | 'name'
+  | 'summary'
+  | 'releaseDate'
+  | 'coverUrl'
+  | 'developer'
+  | 'publisher'
+  | 'platforms'
+  | 'genres'
+  | 'categories'
+  | 'steamTags'
+  | 'isFree'
+  | 'liveService';
+
 export interface AdminGamePageSummary {
   id: string;
   name: string;
@@ -253,6 +268,8 @@ export interface AdminGamePageSummary {
   iterationNumber: number | null;
   liveService: boolean;
   excludedFromReference: boolean;
+  /** Metadata columns corrected by hand; the crons keep their values. */
+  manualFields: ManualGameField[];
   igdbId: number | null;
   lastRefreshedAt: string | null;
   createdAt: string;
@@ -655,7 +672,6 @@ export interface AdminBlogSummary {
   id: string;
   kind: AdminBlogKind;
   status: BlogPostStatus;
-
   /** On the public blog (a DRAFT can be live while its refresh is reviewed). */
   isLive: boolean;
   /** A new version of a live article, waiting for review. */
