@@ -20,6 +20,7 @@
     "MEDIUM": "Средняя достоверность"
   },
   "nav": {
+    "years": "Годы",
     "blog": "Блог",
     "langSwitch": "Язык",
     "privacy": "Конфиденциальность",
@@ -121,6 +122,7 @@
     "chartsSource": "Источник: {store}",
     "platformChartEmpty": "Для {platform} истории пока нет.",
     "crossPlatformTitle": "Все платформы",
+    "franchise": "Франшиза",
     "developer": "Разработчик",
     "followersLabel": "Подписчики",
     "followersSeries": "Подписчики в Steam",
@@ -187,6 +189,8 @@
     "switchLabel": "Switch",
     "tabOverview": "Обзор",
     "tabPrice": "Цена",
+    "relatedAllStudio": "Все игры {name}",
+    "relatedAllFranchise": "Все игры {name}",
     "relatedLabel": "Связанные игры",
     "relatedFranchise": "Та же франшиза",
     "relatedStudio": "От той же студии",
@@ -203,6 +207,25 @@
     "refreshing": "Обновление…",
     "successEmpty": "Обновление завершено — новых данных нет.",
     "successWithArticles": "Добавлено новых данных: {count}."
+  },
+  "hubs": {
+    "home": "Главная",
+    "studioTitle": "Продажи игр {name}",
+    "studioDescription": "Оценочные и заявленные продажи игр {name} ({count}), по каждой игре.",
+    "franchiseTitle": "Продажи франшизы {name}",
+    "franchiseDescription": "Оценочные и заявленные продажи игр франшизы {name} ({count}), по каждой игре.",
+    "gamesTracked": "Отслеживаемых игр: {count}.",
+    "bestLine": "Самая продаваемая игра: {game}, {units} копий.",
+    "totalSales": "Всего продаж",
+    "totalNote": "по играм с данными: {count}",
+    "bestSeller": "Лидер продаж",
+    "latestRelease": "Последний релиз",
+    "allGames": "Все игры",
+    "yearTitle": "Самые продаваемые игры {year} года",
+    "yearTitlePage": "Самые продаваемые игры {year} года, страница {page}",
+    "yearDescription": "Самые продаваемые игры, вышедшие в {year} году: оценочные и заявленные продажи на всех платформах.",
+    "yearIntro": "Отслеживаемых игр, вышедших в {year} году: {count}. Они упорядочены по оценочным или заявленным продажам на всех платформах. На странице каждой игры объясняется её цифра.",
+    "otherYears": "Другие годы"
   },
   "pagination": {
     "nav": "Страницы",

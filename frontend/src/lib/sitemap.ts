@@ -27,6 +27,21 @@ export async function fetchSitemapGames(): Promise<SitemapGame[]> {
   }
 }
 
+export async function fetchSitemapHubs(): Promise<{
+  studios: string[];
+  franchises: string[];
+}> {
+  try {
+    const res = await fetch(`${API_URL}/games/hubs`, {
+      next: { revalidate: 3600 },
+    });
+    if (res.ok) return await res.json();
+  } catch {
+    // The sitemap keeps its other entries.
+  }
+  return { studios: [], franchises: [] };
+}
+
 /** Sitemap ids: 0 holds the home, blog and posts; 1..n hold the games. */
 export function sitemapIds(gameCount: number): number[] {
   const gameSitemaps = Math.ceil(gameCount / GAMES_PER_SITEMAP);

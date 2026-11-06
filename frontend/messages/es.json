@@ -20,6 +20,7 @@
     "MEDIUM": "Confianza media"
   },
   "nav": {
+    "years": "Años",
     "blog": "Blog",
     "langSwitch": "Idioma",
     "privacy": "Privacidad",
@@ -121,6 +122,7 @@
     "chartsSource": "Fuente: {store}",
     "platformChartEmpty": "Aún no hay historial para {platform}.",
     "crossPlatformTitle": "Todas las plataformas",
+    "franchise": "Franquicia",
     "developer": "Desarrollador",
     "followersLabel": "Seguidores",
     "followersSeries": "Seguidores en Steam",
@@ -187,6 +189,8 @@
     "switchLabel": "Switch",
     "tabOverview": "Resumen",
     "tabPrice": "Precio",
+    "relatedAllStudio": "Todos los juegos de {name}",
+    "relatedAllFranchise": "Todos los juegos de {name}",
     "relatedLabel": "Juegos relacionados",
     "relatedFranchise": "Misma franquicia",
     "relatedStudio": "Del mismo estudio",
@@ -203,6 +207,25 @@
     "refreshing": "Actualizando…",
     "successEmpty": "Actualización completada: ninguna cifra nueva.",
     "successWithArticles": "{count} cifra(s) nueva(s) añadida(s)."
+  },
+  "hubs": {
+    "home": "Inicio",
+    "studioTitle": "Ventas de los juegos de {name}",
+    "studioDescription": "Ventas estimadas o declaradas de {count, plural, one {# juego} other {# juegos}} de {name}, juego a juego.",
+    "franchiseTitle": "Ventas de la franquicia {name}",
+    "franchiseDescription": "Ventas estimadas o declaradas de {count, plural, one {# juego} other {# juegos}} de la franquicia {name}, juego a juego.",
+    "gamesTracked": "{count, plural, one {# juego seguido} other {# juegos seguidos}}.",
+    "bestLine": "El más vendido es {game}, con {units} de copias.",
+    "totalSales": "Ventas acumuladas",
+    "totalNote": "en {count, plural, one {# juego con cifra} other {# juegos con cifra}}",
+    "bestSeller": "Más vendido",
+    "latestRelease": "Último lanzamiento",
+    "allGames": "Todos los juegos",
+    "yearTitle": "Juegos más vendidos lanzados en {year}",
+    "yearTitlePage": "Juegos más vendidos lanzados en {year}, página {page}",
+    "yearDescription": "Los juegos lanzados en {year} que más se han vendido: ventas estimadas o declaradas, todas las plataformas.",
+    "yearIntro": "{count, plural, one {# juego lanzado} other {# juegos lanzados}} en {year}, por ventas estimadas o declaradas en todas las plataformas. La página de cada juego explica su cifra.",
+    "otherYears": "Otros años"
   },
   "pagination": {
     "nav": "Paginación",

@@ -323,14 +323,47 @@ export interface RelatedGame extends GameListItem {
   estimatedUnits: number | null;
 }
 
+export interface HubLink {
+  slug: string;
+  name: string;
+}
+
 export interface RelatedGames {
   franchise: RelatedGame[];
   studio: RelatedGame[];
+  /** Null when the franchise or studio is too small to have a hub page. */
+  franchiseHub: HubLink | null;
+  studioHub: HubLink | null;
+}
+
+export interface GameHub extends HubLink {
+  /** Best seller first. */
+  games: PopularGame[];
+}
+
+async function getHub(path: string): Promise<GameHub | null> {
+  const res = await fetch(`${API_URL}/games/${path}`, {
+    next: { revalidate: RELATED_TTL },
+  });
+  return res.ok ? ((await res.json()) as GameHub) : null;
+}
+
+export function getStudioHub(slug: string): Promise<GameHub | null> {
+  return getHub(`studios/${encodeURIComponent(slug)}`);
+}
+
+export function getFranchiseHub(slug: string): Promise<GameHub | null> {
+  return getHub(`franchises/${encodeURIComponent(slug)}`);
 }
 
 /** Links on a game page: a failure hides the section, never the page. */
 export async function getRelatedGames(slug: string): Promise<RelatedGames> {
-  const empty: RelatedGames = { franchise: [], studio: [] };
+  const empty: RelatedGames = {
+    franchise: [],
+    studio: [],
+    franchiseHub: null,
+    studioHub: null,
+  };
   try {
     const res = await fetch(
       `${API_URL}/games/${encodeURIComponent(slug)}/related`,

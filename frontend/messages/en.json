@@ -20,6 +20,7 @@
     "MEDIUM": "Medium confidence"
   },
   "nav": {
+    "years": "Years",
     "blog": "Blog",
     "langSwitch": "Language",
     "privacy": "Privacy",
@@ -121,6 +122,7 @@
     "chartsSource": "Source: {store}",
     "platformChartEmpty": "No history for {platform} yet.",
     "crossPlatformTitle": "All platforms",
+    "franchise": "Franchise",
     "developer": "Developer",
     "followersLabel": "Followers",
     "followersSeries": "Steam followers",
@@ -187,6 +189,8 @@
     "switchLabel": "Switch",
     "tabOverview": "Overview",
     "tabPrice": "Price",
+    "relatedAllStudio": "All {name} games",
+    "relatedAllFranchise": "All {name} games",
     "relatedLabel": "Related games",
     "relatedFranchise": "Same franchise",
     "relatedStudio": "From the same studio",
@@ -203,6 +207,25 @@
     "refreshing": "Refreshing…",
     "successEmpty": "Refresh complete — no new figure.",
     "successWithArticles": "{count} new figure(s) added."
+  },
+  "hubs": {
+    "home": "Home",
+    "studioTitle": "Sales of {name} games",
+    "studioDescription": "Estimated and reported sales of {count, plural, one {# game} other {# games}} by {name}, game by game.",
+    "franchiseTitle": "{name} franchise sales",
+    "franchiseDescription": "Estimated and reported sales of {count, plural, one {# game} other {# games}} in the {name} franchise, game by game.",
+    "gamesTracked": "{count, plural, one {# game} other {# games}} tracked.",
+    "bestLine": "The best seller is {game}, with {units} copies.",
+    "totalSales": "Total sales",
+    "totalNote": "across {count, plural, one {# game} other {# games}} with a figure",
+    "bestSeller": "Best seller",
+    "latestRelease": "Latest release",
+    "allGames": "All games",
+    "yearTitle": "Best-selling games released in {year}",
+    "yearTitlePage": "Best-selling games released in {year}, page {page}",
+    "yearDescription": "The best-selling games released in {year}: estimated and reported sales across all platforms.",
+    "yearIntro": "{count, plural, one {# game} other {# games}} released in {year} and tracked, ranked by estimated or reported sales across all platforms. Each game page explains its figure.",
+    "otherYears": "Other years"
   },
   "pagination": {
     "nav": "Pagination",

@@ -53,6 +53,13 @@ import {
 import { ESTIMATE_MIN_RELEASE, estimateOutOfScope } from './estimate-scope';
 import { platformReleaseDate } from './platform-release-date';
 import { normalizeSteamPriceCountry } from '../ingestion/steam-store-countries';
+import {
+  FRANCHISE_HUB_MIN_GAMES,
+  STUDIO_HUB_MIN_GAMES,
+  franchiseName,
+  studioSlug,
+  studioSlugSql,
+} from './hubs';
 
 // The `trending` listing sort: games released in the window, with enough Steam
 // reviews and console ratings to mean something, and a gain measured over the
@@ -777,7 +784,7 @@ export class GamesService {
         take,
       });
 
-    const [franchise, sameDeveloper] = await Promise.all([
+    const [franchise, sameDeveloper] = await Promise.all<Game[]>([
       game.franchiseSlug
         ? load({ franchiseSlug: game.franchiseSlug }, RELATED_GAMES_LIMIT)
         : [],
@@ -814,7 +821,146 @@ export class GamesService {
       estimatedUnits: estimates.get(g.id)?.units ?? null,
     });
 
-    return { franchise: franchise.map(toItem), studio: studio.map(toItem) };
+    // Each list leaves out the game itself. The lists are capped well above the
+    // hub thresholds, so their length is enough to tell whether a hub exists.
+    const slugOfStudio = game.developer ? studioSlug(game.developer) : '';
+    return {
+      franchise: franchise.map(toItem),
+      studio: studio.map(toItem),
+      franchiseHub:
+        game.franchiseSlug && franchise.length + 1 >= FRANCHISE_HUB_MIN_GAMES
+          ? {
+              slug: game.franchiseSlug,
+              name: franchiseName(game.franchiseSlug),
+            }
+          : null,
+      studioHub:
+        slugOfStudio && sameDeveloper.length + 1 >= STUDIO_HUB_MIN_GAMES
+          ? { slug: slugOfStudio, name: game.developer as string }
+          : null,
+    };
+  }
+
+  /** Every game of a studio, for its public hub page. */
+  async getStudioHub(slug: string) {
+    const games = await this.hubGames(
+      `${studioSlugSql('g.developer')} = :slug`,
+      slug,
+    );
+    if (!slug || games.length < STUDIO_HUB_MIN_GAMES) {
+      throw new NotFoundException(`Studio "${slug}" not found`);
+    }
+    // Spellings can differ by case across games: show the most common one.
+    const spellings = new Map<string, number>();
+    for (const game of games) {
+      const name = game.developer as string;
+      spellings.set(name, (spellings.get(name) ?? 0) + 1);
+    }
+    const [name] = [...spellings.entries()].sort(
+      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+    )[0];
+    return this.toHub(slug, name, games);
+  }
+
+  /** Every game of a franchise, for its public hub page. */
+  async getFranchiseHub(slug: string) {
+    const games = await this.hubGames('g.franchiseSlug = :slug', slug);
+    if (games.length < FRANCHISE_HUB_MIN_GAMES) {
+      throw new NotFoundException(`Franchise "${slug}" not found`);
+    }
+    return this.toHub(slug, franchiseName(slug), games);
+  }
+
+  /** Slugs of the hubs that exist, for the sitemap. */
+  async listHubs(): Promise<{ studios: string[]; franchises: string[] }> {
+    const [studios, franchises] = await Promise.all([
+      this.games.query<{ slug: string }[]>(
+        `SELECT ${studioSlugSql('developer')} AS slug
+         FROM game
+         WHERE "deletedAt" IS NULL AND developer IS NOT NULL
+         GROUP BY 1
+         HAVING COUNT(*) >= $1 AND ${studioSlugSql('developer')} <> ''
+         ORDER BY 1`,
+        [STUDIO_HUB_MIN_GAMES],
+      ),
+      this.games.query<{ slug: string }[]>(
+        `SELECT "franchiseSlug" AS slug
+         FROM game
+         WHERE "deletedAt" IS NULL AND "franchiseSlug" IS NOT NULL
+         GROUP BY 1
+         HAVING COUNT(*) >= $1
+         ORDER BY 1`,
+        [FRANCHISE_HUB_MIN_GAMES],
+      ),
+    ]);
+    return {
+      studios: studios.map((row) => row.slug),
+      franchises: franchises.map((row) => row.slug),
+    };
+  }
+
+  private hubGames(where: string, slug: string): Promise<Game[]> {
+    return this.games
+      .createQueryBuilder('g')
+      .select([
+        'g.id',
+        'g.name',
+        'g.slug',
+        'g.releaseDate',
+        'g.coverUrl',
+        'g.platforms',
+        'g.genres',
+        'g.isFree',
+        'g.developer',
+      ])
+      .where(where, { slug })
+      .getMany();
+  }
+
+  /** Same row shape as the listing, best seller first. */
+  private async toHub(slug: string, name: string, games: Game[]) {
+    const ids = games.map((game) => game.id);
+    const [estimates, reviewRows] = await Promise.all([
+      this.latestReconciledEstimates(ids),
+      // The metric stays a literal so Postgres can use the partial index.
+      this.games.query<{ gameId: string; reviews: string }[]>(
+        `SELECT "gameId", MAX(value) AS reviews
+         FROM signal_snapshot
+         WHERE "gameId" = ANY($1::uuid[]) AND metric = 'STEAM_REVIEWS'
+         GROUP BY "gameId"`,
+        [ids],
+      ),
+    ]);
+    const reviews = new Map(
+      reviewRows.map((r) => [r.gameId, Number(r.reviews)]),
+    );
+
+    const items = games
+      .map((game) => {
+        const headline = estimates.get(game.id) ?? null;
+        return {
+          id: game.id,
+          name: game.name,
+          slug: game.slug,
+          releaseDate: game.releaseDate,
+          coverUrl: game.coverUrl,
+          platforms: game.platforms ?? [],
+          genres: game.genres ?? [],
+          isFree: game.isFree,
+          reviews: reviews.get(game.id) ?? 0,
+          estimatedLow: headline?.low ?? null,
+          estimatedHigh: headline?.high ?? null,
+          estimatedUnits: game.isFree ? null : (headline?.units ?? null),
+        };
+      })
+      .sort(
+        (a, b) =>
+          (b.estimatedUnits ?? -1) - (a.estimatedUnits ?? -1) ||
+          (b.releaseDate?.getTime() ?? 0) - (a.releaseDate?.getTime() ?? 0) ||
+          a.id.localeCompare(b.id),
+      );
+
+    return { slug, name, games: items };
   }
 
   /**

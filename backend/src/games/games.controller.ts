@@ -86,6 +86,21 @@ export class GamesController {
     return this.games.listSitemap();
   }
 
+  @Get('hubs')
+  hubs() {
+    return this.games.listHubs();
+  }
+
+  @Get('studios/:slug')
+  studio(@Param('slug') slug: string) {
+    return this.games.getStudioHub(slug);
+  }
+
+  @Get('franchises/:slug')
+  franchise(@Param('slug') slug: string) {
+    return this.games.getFranchiseHub(slug);
+  }
+
   @Get(':slug/related')
   related(@Param('slug') slug: string) {
     return this.games.listRelated(slug);

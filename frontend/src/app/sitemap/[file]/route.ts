@@ -1,10 +1,12 @@
 import type { MetadataRoute } from 'next';
 import { hasBlog, routing } from '@/i18n/routing';
+import { hubYears } from '@/lib/hub-years';
 import { SITE_URL } from '@/lib/site-url';
 import { getBlogSitemap } from '@/lib/api';
 import {
   GAMES_PER_SITEMAP,
   fetchSitemapGames,
+  fetchSitemapHubs,
   sitemapIds,
   type SitemapGame,
 } from '@/lib/sitemap';
@@ -54,7 +56,10 @@ function localeAlternates(
 async function pagesSitemap(
   games: SitemapGame[],
 ): Promise<MetadataRoute.Sitemap> {
-  const posts = await getBlogSitemap();
+  const [posts, hubs] = await Promise.all([
+    getBlogSitemap(),
+    fetchSitemapHubs(),
+  ]);
   const entries: MetadataRoute.Sitemap = [];
 
   // Home pages — one per locale (page 1 only; no filter/search URLs). The
@@ -77,6 +82,23 @@ async function pagesSitemap(
       priority: 0.6,
       alternates: localeAlternates('/methodology'),
     });
+  }
+
+  // Hubs change with the games they list, so no lastmod of their own.
+  const hubPaths = [
+    ...hubYears().map((year) => `/year/${year}`),
+    ...hubs.franchises.map((slug) => `/franchise/${slug}`),
+    ...hubs.studios.map((slug) => `/studio/${slug}`),
+  ];
+  for (const path of hubPaths) {
+    for (const locale of routing.locales) {
+      entries.push({
+        url: `${SITE_URL}/${locale}${path}`,
+        changeFrequency: 'weekly',
+        priority: 0.6,
+        alternates: localeAlternates(path),
+      });
+    }
   }
 
   const blogModified = latest(posts.map((p) => p.updatedAt ?? p.publishedAt));

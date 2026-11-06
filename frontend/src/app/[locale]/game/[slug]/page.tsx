@@ -14,6 +14,7 @@ import {
   type RelatedGames,
 } from '@/lib/api';
 import { localeLanguages } from '@/i18n/routing';
+import { hubYearOf } from '@/lib/hub-years';
 import { ADSENSE_CLIENT, ADSENSE_GAME_SLOT } from '@/lib/ads';
 import { SITE_URL } from '@/lib/site-url';
 import { Link } from '@/i18n/navigation';
@@ -163,7 +164,13 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-function GameHeader({ game }: { game: GameDetail }) {
+function GameHeader({
+  game,
+  studioHub,
+}: {
+  game: GameDetail;
+  studioHub: RelatedGames['studioHub'];
+}) {
   const t = useTranslations('gamePage');
   const tPlatform = useTranslations('platform');
   const format = useFormatter();
@@ -197,20 +204,25 @@ function GameHeader({ game }: { game: GameDetail }) {
           )}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {[
-            game.developer,
-            game.releaseDate
-              ? t('releasedOn', {
-                  date: format.dateTime(new Date(game.releaseDate), {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                  }),
-                })
-              : null,
-          ]
-            .filter(Boolean)
-            .join(' · ')}
+          {studioHub ? (
+            <Link
+              href={`/studio/${studioHub.slug}`}
+              className="text-primary hover:underline"
+            >
+              {game.developer}
+            </Link>
+          ) : (
+            game.developer
+          )}
+          {game.developer && game.releaseDate && ' · '}
+          {game.releaseDate &&
+            t('releasedOn', {
+              date: format.dateTime(new Date(game.releaseDate), {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              }),
+            })}
         </p>
         <div className="mt-2 flex flex-wrap gap-1">
           {game.platforms.map((p) => (
@@ -723,24 +735,60 @@ function ReviewLanguages({ counts }: { counts: Record<string, number> }) {
   );
 }
 
-function TechSheet({ game }: { game: GameDetail }) {
+function TechSheet({
+  game,
+  related,
+}: {
+  game: GameDetail;
+  related: RelatedGames;
+}) {
   const t = useTranslations('gamePage');
   const tPlatform = useTranslations('platform');
   const format = useFormatter();
   const { steam, playstation, xbox } = game.storeRatings;
 
-  const rows: [string, string][] = [];
-  if (game.developer) rows.push([t('developer'), game.developer]);
-  if (game.publisher) rows.push([t('publisher'), game.publisher]);
-  if (game.releaseDate)
+  const hubLink = (href: string, label: React.ReactNode) => (
+    <Link href={href} className="text-primary hover:underline">
+      {label}
+    </Link>
+  );
+  const studioHref = related.studioHub && `/studio/${related.studioHub.slug}`;
+  const releaseYear = hubYearOf(game.releaseDate);
+
+  const rows: [string, React.ReactNode][] = [];
+  if (game.developer)
+    rows.push([
+      t('developer'),
+      studioHref ? hubLink(studioHref, game.developer) : game.developer,
+    ]);
+  if (game.publisher)
+    rows.push([
+      t('publisher'),
+      // Publishers have no page: only a self-published game can link here.
+      studioHref &&
+      game.publisher.toLowerCase() === game.developer?.toLowerCase()
+        ? hubLink(studioHref, game.publisher)
+        : game.publisher,
+    ]);
+  if (related.franchiseHub)
+    rows.push([
+      t('franchise'),
+      hubLink(
+        `/franchise/${related.franchiseHub.slug}`,
+        related.franchiseHub.name,
+      ),
+    ]);
+  if (game.releaseDate) {
+    const released = format.dateTime(new Date(game.releaseDate), {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
     rows.push([
       t('release'),
-      format.dateTime(new Date(game.releaseDate), {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }),
+      releaseYear ? hubLink(`/year/${releaseYear}`, released) : released,
     ]);
+  }
   if (game.platforms.length > 0)
     rows.push([
       t('platformColumn'),
@@ -899,16 +947,29 @@ function TabNav({
 function RelatedList({
   title,
   games,
+  more,
 }: {
   title: string;
   games: RelatedGame[];
+  /** Link to the hub page, when the franchise or studio has one. */
+  more: { href: string; label: string } | null;
 }) {
   const tCommon = useTranslations('common');
   const locale = useLocale();
 
   return (
     <div className="min-w-0 border-b border-border px-4 py-5">
-      <SectionTitle>{title}</SectionTitle>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <SectionTitle>{title}</SectionTitle>
+        {more && (
+          <Link
+            href={more.href}
+            className="mb-3 text-[0.8rem] text-primary hover:underline"
+          >
+            {more.label}
+          </Link>
+        )}
+      </div>
       <ul>
         {games.map((game) => {
           const sold = listingUnits(game);
@@ -1096,8 +1157,22 @@ function GamePageContent({
   };
 
   const relatedLists = [
-    { title: t('relatedFranchise'), games: related.franchise },
-    { title: t('relatedStudio'), games: related.studio },
+    {
+      title: t('relatedFranchise'),
+      games: related.franchise,
+      more: related.franchiseHub && {
+        href: `/franchise/${related.franchiseHub.slug}`,
+        label: t('relatedAllFranchise', { name: related.franchiseHub.name }),
+      },
+    },
+    {
+      title: t('relatedStudio'),
+      games: related.studio,
+      more: related.studioHub && {
+        href: `/studio/${related.studioHub.slug}`,
+        label: t('relatedAllStudio', { name: related.studioHub.name }),
+      },
+    },
   ].filter((list) => list.games.length > 0);
 
   return (
@@ -1117,7 +1192,7 @@ function GamePageContent({
           {game.name}
         </nav>
 
-        <GameHeader game={game} />
+        <GameHeader game={game} studioHub={related.studioHub} />
         <SalesHeadline game={game} />
         <OfficialSalesRecap game={game} />
         <TabNav
@@ -1165,7 +1240,7 @@ function GamePageContent({
             )}
           </div>
 
-          <TechSheet game={game} />
+          <TechSheet game={game} related={related} />
         </div>
 
         {relatedLists.length > 0 && (
@@ -1180,6 +1255,7 @@ function GamePageContent({
                 key={list.title}
                 title={list.title}
                 games={list.games}
+                more={list.more}
               />
             ))}
           </section>

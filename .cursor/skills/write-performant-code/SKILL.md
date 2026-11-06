@@ -38,7 +38,7 @@ Measured on 2026-11-04:
 - Public pages cache backend calls through `fetch(..., { next: { revalidate } })`
   in `frontend/src/lib/api.ts`: 3 h for listings (same for every visitor,
   reviews land every 4 h), 15 min for game pages, 1 h for genres, 5 min for
-  search. A cache miss pays the full backend time.
+  search, 24 h for related games and studio and franchise pages. A cache miss pays the full backend time.
 - `next dev` compiles on demand and caches nothing. Never judge speed from
   dev mode alone; time the API with `curl -w "%{time_total}"`.
 
