@@ -232,6 +232,22 @@ function GameHeader({ game }: { game: GameDetail }) {
   );
 }
 
+/**
+ * Steam only sees the players of a game started from Steam. Call of Duty and
+ * a few others are played in a publisher launcher: the Steam app collects
+ * thousands of reviews while Steam reports 0-2 concurrent players. A CCU that
+ * low next to that many reviews is the launcher, not the audience, so it is
+ * not shown.
+ */
+const LAUNCHER_MIN_REVIEWS = 1000;
+const LAUNCHER_MAX_PEAK_CCU = 50;
+
+function steamCcuIsMeaningful(game: GameDetail): boolean {
+  const reviews = game.reviewHistory.at(-1)?.value ?? 0;
+  const peak = game.peakCcu?.value ?? 0;
+  return !(reviews >= LAUNCHER_MIN_REVIEWS && peak < LAUNCHER_MAX_PEAK_CCU);
+}
+
 /** The answer the visitor came for, before anything else on the page. */
 function SalesHeadline({ game }: { game: GameDetail }) {
   const t = useTranslations('gamePage');
@@ -253,7 +269,8 @@ function SalesHeadline({ game }: { game: GameDetail }) {
         month: 'short',
       })
     : null;
-  const recentCcu = game.ccuHistory.at(-1) ?? null;
+  const showCcu = steamCcuIsMeaningful(game);
+  const recentCcu = showCcu ? (game.ccuHistory.at(-1) ?? null) : null;
   const recentCcuDate = recentCcu
     ? format.dateTime(new Date(recentCcu.capturedAt), {
         year: 'numeric',
@@ -262,7 +279,7 @@ function SalesHeadline({ game }: { game: GameDetail }) {
       })
     : null;
   const showPrice = !game.isFree && game.currentPrice != null;
-  const hasCcuHeadline = recentCcu != null || game.peakCcu != null;
+  const hasCcuHeadline = recentCcu != null || (showCcu && game.peakCcu != null);
 
   return (
     <section className="border-b border-border px-4 py-5">
@@ -334,7 +351,7 @@ function SalesHeadline({ game }: { game: GameDetail }) {
             </p>
           </div>
         )}
-        {game.peakCcu && peakDate && (
+        {showCcu && game.peakCcu && peakDate && (
           <div>
             <p className="font-mono text-[0.68rem] font-semibold tracking-widest text-muted-foreground uppercase">
               {t('peakCcuLabel')}
@@ -974,7 +991,9 @@ function GamePageContent({
       label: tPlatform('PC'),
       store: 'Steam',
       charts: [
-        { key: 'ccu', label: t('ccuLabel'), points: game.ccuHistory },
+        ...(steamCcuIsMeaningful(game)
+          ? [{ key: 'ccu', label: t('ccuLabel'), points: game.ccuHistory }]
+          : []),
         {
           key: 'reviews',
           label: t('reviewsTitle'),
