@@ -67,7 +67,8 @@ newly inserted stub.
 
 ## After a code fix
 
-One game: the existing admin refresh or the matching backfill script.
+One game: the existing admin refresh. No backfill script: the crons catch up
+(skill `let-crons-catch-up`).
 Do not rebuild estimate history unless the signal itself feeds
 `estimatedToday` (`STEAM_REVIEWS`, `STEAM_CONCURRENT`, `PS_RATINGS`,
 `XBOX_RATINGS`, and `STEAM_FOLLOWERS`, which only the worldwide ML estimate
