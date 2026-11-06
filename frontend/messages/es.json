@@ -238,6 +238,7 @@
     "figures": {
       "colCopies": "Copias vendidas",
       "colDate": "Fecha",
+      "colGame": "Juego",
       "colPlatform": "Plataforma",
       "colSource": "Fuente",
       "estimate": "estimación",
@@ -254,6 +255,7 @@
       "popularityTitle": "La popularidad en cifras",
       "press": "prensa",
       "pressReports": "Información de prensa",
+      "rankingCaption": "Última cifra mundial conocida de cada juego",
       "signals": {
         "PS_RATINGS": {
           "label": "valoraciones en PlayStation Store",
@@ -267,17 +269,27 @@
           "label": "reseñas en Steam",
           "sub": "{date}"
         },
+        "TWITCH_VIEWERS": {
+          "label": "espectadores a la vez",
+          "sub": "récord en Twitch · {date}"
+        },
         "XBOX_RATINGS": {
           "label": "valoraciones en Xbox Store",
           "sub": "{date}"
         }
       },
+      "sourceLine": "Fuente:",
       "worldwideCaption": "En todo el mundo, todas las plataformas"
     },
     "figuresAsOf": "Última cifra registrada: {date}",
     "indexDescription": "Cifras oficiales de ventas de videojuegos: declaraciones de editores, Wikipedia y notas de analistas, juego a juego.",
     "indexIntro": "Declaraciones de editores, Wikipedia y las notas de analistas que tenemos archivadas: la historia oficial de ventas de cada juego, con fecha y fuente.",
     "indexTitle": "Ventas oficiales, con fuentes",
+    "kinds": {
+      "SALES_NEWS": "Noticia",
+      "LAUNCH_REPORT": "Lanzamiento",
+      "SALES_RANKING": "Clasificación"
+    },
     "metaIndexTitle": "Ventas oficiales de juegos — Blog",
     "publishedOn": "Publicado el {date}",
     "tldrTitle": "En resumen",

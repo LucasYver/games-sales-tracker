@@ -14,9 +14,40 @@ score), `blog-fact-pack.service.ts` (writer facts + freshness diff),
 `blog.service.ts` (lifecycle), `blog-writer.service.ts` + `blog-prompts.ts`
 (OpenAI), `blog-number-check.ts` (deterministic number check).
 
-v1 articles use sourced milestones and public signals only. Never put
-model estimates (`estimatedToday` / Boxleiter) or `sourceUrl` / verbatim
-quotes on a public page. Never mention AI on `/blog`. Never auto-publish.
+Articles use sourced milestones and public signals only. Never put model
+estimates (`estimatedToday` / Boxleiter) or verbatim quotes on a public page.
+Never mention AI on `/blog`. Never auto-publish. `sourceUrl` stays off public
+pages, with one exception the owner chose: a news item links the article it
+relays (`BlogFactPack.news`, rendered by the page, never written by the model).
+
+## Formats
+
+`blog_post.kind`. Each has its structure in `STRUCTURE_BY_KIND`
+(`blog-prompts.ts`), its lead in `answerHint`, its slug in `blogSlug`. All go
+through `BlogService.writeDraft`, so every truth, repetition and review rule
+below applies to all of them.
+
+| Kind | About | Unique by | Comes from | Refreshed |
+| --- | --- | --- | --- | --- |
+| `GAME_SALES_FACTS` | "How many copies has it sold?" | `gameId` | Sunday cron | yes |
+| `SALES_RANKING` | Best sellers of a publisher or franchise; `gameId` null | `topicKey` | Sunday cron | yes |
+| `SALES_NEWS` | One new worldwide figure | `topicKey` | daily cron | no |
+| `LAUNCH_REPORT` | Popularity data a week after release | `topicKey` | daily cron | no |
+
+Candidate rules and thresholds are the constants and SQL in
+`blog-candidate.service.ts`; the admin tab "News, launches, rankings" lists them.
+
+- News: consolidation has the last word. `buildNewsPack` refuses a figure
+  `consolidateFacts` drops, before any paid call. `publish` refuses a news item
+  whose milestone has been rejected, unless forced. Nearly all recent figures
+  come from press extraction, so the review is the real check.
+- Rankings: one figure per game (`pickAnswerFact`, worldwide only), highest
+  first. Publishers are the curated `Publisher` rows, not the raw
+  `game.publisher` string, which splits "Capcom" and "CAPCOM Co., Ltd.". A
+  franchise has only a slug: its name is read off a game title. `compareFacts`
+  skips consolidation for rankings, because their facts mix games.
+- Launch reports: Steam-based, so games not on Steam are not covered. They also
+  carry the Twitch peak. The TL;DR may hold popularity signals, unlike others.
 
 ## Truth rules (the point of the blog)
 
@@ -92,9 +123,10 @@ the layout switch:
 
 ## Generation
 
-`BlogService.generateForGame` (admin Generate/Regenerate, Sunday cron):
+`BlogService.generateForGame`, `generateFormat` and `regenerate` (admin buttons,
+crons):
 
-1. Freeze a fact pack (`BlogFactPackService.buildForGame`) — sourced
+1. Freeze a fact pack (`BlogFactPackService.buildForGame` and siblings) — sourced
    milestones + public signals, labelled. `sourceUrl` stays admin-only and
    is stripped before the writer.
 2. `BlogWriterService.writeLocale` runs EN and FR in parallel. Writer
@@ -120,7 +152,7 @@ the layout switch:
   → snapshot restored, status back to `PUBLISHED`, and
   `staleAckFingerprint` remembers the figures so the same change is not
   proposed again.
-- **Freshness** (`BlogService.freshness`): compares the live fact pack's
+- **Freshness** (`BlogService.freshness`, sales articles and rankings only): compares the live fact pack's
   sales/engagement facts with today's eligible milestones. Any new,
   edited or rejected milestone → `stale`, unless the fingerprint was
   acknowledged. Admin shows “outdated figures”.
@@ -152,13 +184,18 @@ TL;DR / body (FAQ stays editable for older articles).
 ## Who uses the score
 
 - Admin tab `/admin/blog?status=CANDIDATES` → `list(40)`.
-- Sunday cron `GET /api/cron/blog-draft` → if any `DRAFT` exists, send
-  the digest; if `OPENAI_API_KEY` is unset, skip. Otherwise refresh the
-  oldest stale live article (`firstStaleLivePost`) if there is one, else
-  `pickBest()` then `generateForGame`.
+- Sunday cron `GET /api/cron/blog-draft` → if a sales article or ranking
+  `DRAFT` exists, send the digest; if `OPENAI_API_KEY` is unset, skip. Otherwise
+  refresh the oldest stale live article or ranking (`firstStaleLivePost`) if
+  there is one, else write a new one: sales articles and rankings take turns
+  (`writeNextEvergreen`), so this job stays at one draft a week.
+- Daily cron `GET /api/cron/blog-news` → at most one news item and one launch
+  report (`runDailyDraftJob`), each mailed for review at once. Skips while
+  `MAX_PENDING_TIMELY_DRAFTS` wait. `BLOG_DAILY_DRAFTS=off` turns it off. Timely
+  drafts do not hold back the Sunday job.
 
-One article per game: any `blog_post` row (draft, published, or rejected)
-removes the game from the pool.
+One sales article per game: any `GAME_SALES_FACTS` row (draft, published, or
+rejected) removes the game from the pool. News items and launch reports do not.
 
 ## Eligibility (gate, not points)
 

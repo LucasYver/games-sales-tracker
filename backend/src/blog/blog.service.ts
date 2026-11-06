@@ -6,10 +6,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Not, QueryFailedError, Repository } from 'typeorm';
+import { In, IsNull, Not, QueryFailedError, Repository } from 'typeorm';
 import {
   BlogLocale,
   BlogPost,
+  BlogPostKind,
   BlogPostStatus,
   BlogPostTranslation,
 } from '../entities';
@@ -30,16 +31,38 @@ import {
 import { BlogWriterService } from './blog-writer.service';
 import { notifyIndexNow } from '../common/indexnow';
 import {
+  blogSlug,
   hasSalesTableMarker,
+  packKind,
+  packSubjectName,
   publicAppUrl,
-  stableBlogSlug,
 } from './blog.types';
 import type {
   BlogFactPack,
   BlogFreshness,
   BlogLiveSnapshot,
+  BlogRankingSubject,
   BlogReviewIssue,
 } from './blog.types';
+
+/** Articles that stay relevant and get refreshed when their figures change. */
+const EVERGREEN_KINDS: BlogPostKind[] = ['GAME_SALES_FACTS', 'SALES_RANKING'];
+/** Timely posts from the daily cron. */
+const TIMELY_KINDS: BlogPostKind[] = ['SALES_NEWS', 'LAUNCH_REPORT'];
+/**
+ * Stop writing timely drafts while this many wait for review: a news item
+ * nobody reads is money spent for nothing.
+ */
+const MAX_PENDING_TIMELY_DRAFTS = 5;
+
+export type GenerateBlogFormatInput =
+  | { kind: 'SALES_NEWS'; milestoneId: string }
+  | { kind: 'LAUNCH_REPORT'; gameId: string }
+  | {
+      kind: 'SALES_RANKING';
+      subjectType: BlogRankingSubject['type'];
+      subjectKey: string;
+    };
 
 type PublicContent = BlogLiveSnapshot['translations'][string];
 
@@ -68,6 +91,15 @@ export class BlogService {
 
   listCandidates(limit?: number) {
     return this.candidates.list(limit);
+  }
+
+  async listFormatCandidates() {
+    const [news, launches, rankings] = await Promise.all([
+      this.candidates.newsCandidates(),
+      this.candidates.launchCandidates(),
+      this.candidates.rankingCandidates(),
+    ]);
+    return { news, launches, rankings };
   }
 
   async list(status: BlogPostStatus, limit = 30, offset = 0) {
@@ -102,12 +134,10 @@ export class BlogService {
    * milestone, an edited one, or one rejected since the article was written.
    */
   async freshness(post: BlogPost): Promise<BlogFreshness | null> {
-    if (!isLive(post) || !post.gameId) return null;
+    if (!isLive(post)) return null;
     const pack = post.factPack as unknown as BlogFactPack;
-    const current = await this.factPacks.currentMilestoneFacts(
-      post.gameId,
-      post.game ?? {},
-    );
+    const current = await this.currentFacts(post);
+    if (!current) return null;
     const diff = compareFacts(pack.facts ?? [], current);
     const changed = diff.added.length + diff.removed.length > 0;
     const acknowledged =
@@ -139,6 +169,8 @@ export class BlogService {
           title: content.title,
           excerpt: content.excerpt,
           publishedAt: t.post.publishedAt,
+          kind: t.post.kind,
+          coverUrl: postCoverUrl(t.post),
           game: t.post.game
             ? {
                 name: t.post.game.name,
@@ -166,6 +198,8 @@ export class BlogService {
     return {
       slug: translation.slug,
       locale: translation.locale,
+      kind: post.kind,
+      coverUrl: postCoverUrl(post),
       title: content.title,
       metaDescription: content.metaDescription,
       excerpt: content.excerpt,
@@ -217,22 +251,91 @@ export class BlogService {
    * the current version (`liveSnapshot`) until the new draft is published.
    */
   async generateForGame(gameId: string) {
-    const existing = await this.posts.findOne({
-      where: { gameId },
-      relations: { translations: true },
-    });
-
     const pack = await this.factPacks.buildForGame(gameId);
     if (this.factPacks.salesFacts(pack).length < 1) {
       throw new BadRequestException(
         'This game has no sourced sales figures to write about.',
       );
     }
+    const existing = await this.posts.findOne({
+      where: { gameId, kind: 'GAME_SALES_FACTS' },
+      relations: { translations: true },
+    });
+    return this.writeDraft(pack, existing);
+  }
 
+  /** Writes a news item, launch report or ranking. Same review flow. */
+  async generateFormat(input: GenerateBlogFormatInput) {
+    const pack = await this.buildFormatPack(input);
+    const existing = await this.posts.findOne({
+      where: { topicKey: pack.topicKey },
+      relations: { translations: true },
+    });
+    return this.writeDraft(pack, existing);
+  }
+
+  /** Rewrites a post from today's data, whatever its format. */
+  async regenerate(id: string) {
+    const post = await this.requirePost(id);
+    const pack = post.factPack as unknown as BlogFactPack;
+    switch (post.kind) {
+      case 'SALES_NEWS':
+        if (!pack.news) break;
+        return this.generateFormat({
+          kind: 'SALES_NEWS',
+          milestoneId: pack.news.milestoneId,
+        });
+      case 'LAUNCH_REPORT':
+        if (!post.gameId) break;
+        return this.generateFormat({
+          kind: 'LAUNCH_REPORT',
+          gameId: post.gameId,
+        });
+      case 'SALES_RANKING':
+        if (!pack.ranking) break;
+        return this.generateFormat({
+          kind: 'SALES_RANKING',
+          subjectType: pack.ranking.subject.type,
+          subjectKey: pack.ranking.subject.key,
+        });
+      default:
+        if (!post.gameId) break;
+        return this.generateForGame(post.gameId);
+    }
+    throw new BadRequestException(
+      'This post no longer has what it needs to be regenerated.',
+    );
+  }
+
+  private async buildFormatPack(
+    input: GenerateBlogFormatInput,
+  ): Promise<BlogFactPack> {
+    switch (input.kind) {
+      case 'SALES_NEWS':
+        return this.factPacks.buildNewsPack(input.milestoneId);
+      case 'SALES_RANKING':
+        return this.factPacks.buildRankingPack(
+          input.subjectType,
+          input.subjectKey,
+        );
+      case 'LAUNCH_REPORT': {
+        const pack = await this.factPacks.buildLaunchPack(input.gameId);
+        if (!pack.facts.some((f) => f.kind === 'signal')) {
+          throw new BadRequestException(
+            'This game has no popularity data to report yet.',
+          );
+        }
+        return pack;
+      }
+    }
+  }
+
+  private async writeDraft(pack: BlogFactPack, existing: BlogPost | null) {
     const [en, fr] = await Promise.all([
       this.writer.writeLocale('en', pack),
       this.writer.writeLocale('fr', pack),
     ]);
+    const gameId = pack.game?.id ?? null;
 
     try {
       const postId = await this.posts.manager.transaction(async (em) => {
@@ -242,7 +345,8 @@ export class BlogService {
           existing ??
           posts.create({
             gameId,
-            kind: 'GAME_SALES_FACTS',
+            kind: packKind(pack),
+            topicKey: pack.topicKey ?? null,
             status: 'DRAFT',
             factPack: pack as unknown as Record<string, unknown>,
           });
@@ -277,7 +381,7 @@ export class BlogService {
       return this.getAdmin(postId);
     } catch (error) {
       this.logger.error(
-        `Failed to persist blog draft for ${gameId}`,
+        `Failed to persist blog draft for ${packSubjectName(pack)}`,
         error instanceof Error ? error.stack : String(error),
       );
       if (error instanceof QueryFailedError) {
@@ -317,7 +421,7 @@ export class BlogService {
     row.unverifiedNumbers = findUnverifiedNumbers(
       row,
       pack.facts ?? [],
-      pack.game ? packNames(pack) : [],
+      packNames(pack),
     );
     row.reviewIssues = [
       ...repeatedFigureIssues(row.bodyMarkdown, pack.facts ?? []),
@@ -363,6 +467,19 @@ export class BlogService {
     if ((unverified > 0 || errors > 0) && !force) {
       throw new ConflictException(
         `${unverified} unverified number(s) and ${errors} fact-check error(s) remain. Fix them, or confirm to publish anyway.`,
+      );
+    }
+
+    // A news item stands on one figure: it must not go out once that is gone.
+    const newsPack = post.factPack as unknown as BlogFactPack;
+    if (
+      post.kind === 'SALES_NEWS' &&
+      newsPack.news &&
+      !force &&
+      !(await this.factPacks.newsFigureOnFile(newsPack.news.milestoneId))
+    ) {
+      throw new ConflictException(
+        'The figure this news item relays has been rejected. Reject this draft, or confirm to publish anyway.',
       );
     }
 
@@ -428,7 +545,7 @@ export class BlogService {
   /** Oldest live article whose sourced figures changed since it was written. */
   async firstStaleLivePost(): Promise<BlogPost | null> {
     const rows = await this.posts.find({
-      where: { status: 'PUBLISHED', gameId: Not(IsNull()) },
+      where: { status: 'PUBLISHED', kind: In(EVERGREEN_KINDS) },
       relations: { game: true },
       order: { contentUpdatedAt: 'ASC' },
     });
@@ -446,7 +563,8 @@ export class BlogService {
     drafts: ReturnType<BlogService['toAdminSummary']>[];
   }> {
     const drafts = await this.pendingDrafts();
-    if (drafts.length > 0) {
+    // Timely drafts have their own daily job and do not hold this one back.
+    if (drafts.some((draft) => EVERGREEN_KINDS.includes(draft.kind))) {
       return { action: 'digest', drafts };
     }
     if (!this.writer.enabled) {
@@ -458,26 +576,111 @@ export class BlogService {
     }
     // A live article with outdated figures comes before a new one.
     const stale = await this.firstStaleLivePost();
-    if (stale?.gameId) {
-      const post = await this.generateForGame(stale.gameId);
+    if (stale) {
+      const post = await this.regenerate(stale.id);
       return {
         action: 'refreshed',
         postId: post.id,
-        gameName: stale.game?.name ?? post.gameName ?? undefined,
+        gameName: post.gameName ?? undefined,
         drafts: [post],
       };
     }
-    const pick = await this.candidates.pickBest();
-    if (!pick) {
+    const post = await this.writeNextEvergreen();
+    if (!post) {
       return { action: 'skipped', reason: 'no eligible candidate', drafts: [] };
     }
-    const post = await this.generateForGame(pick.gameId);
     return {
       action: 'generated',
       postId: post.id,
-      gameName: pick.name,
+      gameName: post.gameName ?? undefined,
       drafts: [post],
     };
+  }
+
+  /**
+   * Still one evergreen draft a week: game articles and rankings take turns,
+   * so rankings do not add to this job's AI spend.
+   */
+  private async writeNextEvergreen() {
+    const last = await this.posts.findOne({
+      where: { kind: In(EVERGREEN_KINDS) },
+      order: { createdAt: 'DESC' },
+      select: { id: true, kind: true },
+    });
+    const writeGame = async () => {
+      const pick = await this.candidates.pickBest();
+      return pick ? this.generateForGame(pick.gameId) : null;
+    };
+    const writeRanking = async () => {
+      const [pick] = await this.candidates.rankingCandidates(1);
+      return pick
+        ? this.generateFormat({
+            kind: 'SALES_RANKING',
+            subjectType: pick.subjectType,
+            subjectKey: pick.subjectKey,
+          })
+        : null;
+    };
+    return last?.kind === 'GAME_SALES_FACTS'
+      ? ((await writeRanking()) ?? (await writeGame()))
+      : ((await writeGame()) ?? (await writeRanking()));
+  }
+
+  /**
+   * Daily: at most one news item and one launch report, while few drafts wait
+   * for review. Never publishes. Turn off with BLOG_DAILY_DRAFTS=off.
+   */
+  async runDailyDraftJob(): Promise<{
+    skipped?: string;
+    written: Awaited<ReturnType<BlogService['generateFormat']>>[];
+  }> {
+    if (process.env.BLOG_DAILY_DRAFTS === 'off') {
+      return { skipped: 'BLOG_DAILY_DRAFTS is off', written: [] };
+    }
+    if (!this.writer.enabled) {
+      return { skipped: 'OPENAI_API_KEY is not set', written: [] };
+    }
+    const pending = await this.posts.count({
+      where: { status: 'DRAFT', kind: In(TIMELY_KINDS) },
+    });
+    if (pending >= MAX_PENDING_TIMELY_DRAFTS) {
+      return { skipped: `${pending} timely drafts waiting`, written: [] };
+    }
+
+    const [news, launches] = await Promise.all([
+      this.candidates.newsCandidates(),
+      this.candidates.launchCandidates(1),
+    ]);
+    const written: Awaited<ReturnType<BlogService['generateFormat']>>[] = [];
+    for (const candidate of news) {
+      try {
+        written.push(
+          await this.generateFormat({
+            kind: 'SALES_NEWS',
+            milestoneId: candidate.milestoneId,
+          }),
+        );
+        break;
+      } catch (error) {
+        // A figure that turns out to be a relay costs nothing: try the next.
+        if (error instanceof BadRequestException) continue;
+        this.logger.warn(`Sales news draft failed: ${error}`);
+        break;
+      }
+    }
+    if (launches[0] && pending + written.length < MAX_PENDING_TIMELY_DRAFTS) {
+      try {
+        written.push(
+          await this.generateFormat({
+            kind: 'LAUNCH_REPORT',
+            gameId: launches[0].gameId,
+          }),
+        );
+      } catch (error) {
+        this.logger.warn(`Launch report draft failed: ${error}`);
+      }
+    }
+    return { written };
   }
 
   /** Rejecting a refresh puts the live version back and remembers the change. */
@@ -486,9 +689,7 @@ export class BlogService {
     snapshot: BlogLiveSnapshot,
     reviewedBy?: string,
   ) {
-    const current = post.gameId
-      ? await this.factPacks.currentMilestoneFacts(post.gameId, post.game ?? {})
-      : [];
+    const current = (await this.currentFacts(post)) ?? [];
     await this.posts.manager.transaction(async (em) => {
       const translations = em.getRepository(BlogPostTranslation);
       for (const row of post.translations) {
@@ -515,6 +716,18 @@ export class BlogService {
     });
   }
 
+  /** Today's figures for an evergreen post; null for point-in-time posts. */
+  private async currentFacts(post: BlogPost) {
+    const pack = post.factPack as unknown as BlogFactPack;
+    if (post.kind === 'SALES_RANKING' && pack.ranking) {
+      return this.factPacks.currentRankingFacts(pack.ranking.subject);
+    }
+    if (post.kind === 'GAME_SALES_FACTS' && post.gameId) {
+      return this.factPacks.currentMilestoneFacts(post.gameId, post.game ?? {});
+    }
+    return null;
+  }
+
   private async requirePost(id: string): Promise<BlogPost> {
     const post = await this.posts.findOne({
       where: { id },
@@ -533,11 +746,8 @@ export class BlogService {
     return this.translations.create({
       postId,
       locale,
-      slug: clip(
-        result.article.slug || stableBlogSlug(pack.game.slug, locale),
-        180,
-      ),
-      title: clip(result.article.title || pack.game.name, 200),
+      slug: clip(result.article.slug || blogSlug(pack, locale), 180),
+      title: clip(result.article.title || packSubjectName(pack), 200),
       metaDescription: clip(result.article.metaDescription, 320),
       excerpt: result.article.excerpt ?? '',
       tldr: asStringArray(result.article.tldr),
@@ -565,13 +775,15 @@ export class BlogService {
     );
     return {
       id: post.id,
+      kind: post.kind,
       status: post.status,
       isLive: isLive(post),
       isRefresh: isLive(post) && post.status === 'DRAFT',
       gameId: post.gameId,
-      gameName: post.game?.name ?? null,
+      // Rankings have no game: this is what the post is about, for lists and mail.
+      gameName: post.game?.name ?? rankingOf(post)?.subject.name ?? null,
       gameSlug: post.game?.slug ?? null,
-      coverUrl: post.game?.coverUrl ?? null,
+      coverUrl: postCoverUrl(post),
       generatedAt: post.generatedAt,
       publishedAt: post.publishedAt,
       contentUpdatedAt: post.contentUpdatedAt,
@@ -626,6 +838,14 @@ function publicContent(
   if (post.status === 'PUBLISHED') return translation;
   const snapshot = post.liveSnapshot as unknown as BlogLiveSnapshot | null;
   return snapshot?.translations?.[translation.locale] ?? null;
+}
+
+function rankingOf(post: BlogPost): BlogFactPack['ranking'] {
+  return (post.factPack as unknown as BlogFactPack | null)?.ranking;
+}
+
+function postCoverUrl(post: BlogPost): string | null {
+  return post.game?.coverUrl ?? rankingOf(post)?.coverUrl ?? null;
 }
 
 function livePack(post: BlogPost): BlogFactPack | null {

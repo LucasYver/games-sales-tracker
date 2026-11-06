@@ -225,6 +225,14 @@ export function isComputedIssue(issue: BlogReviewIssue): boolean {
 }
 
 /** Names whose digits are not claims ("Cyberpunk 2077", "2K"). */
-export function packNames(pack: Pick<BlogFactPack, 'game'>): string[] {
-  return [pack.game.name, pack.game.publisher ?? '', pack.game.developer ?? ''];
+export function packNames(
+  pack: Pick<BlogFactPack, 'game' | 'ranking'>,
+): string[] {
+  return [
+    pack.game?.name ?? '',
+    pack.game?.publisher ?? '',
+    pack.game?.developer ?? '',
+    pack.ranking?.subject.name ?? '',
+    ...(pack.ranking?.gameNames ?? []),
+  ];
 }

@@ -1,4 +1,5 @@
 import { useFormatter, useTranslations } from 'next-intl';
+import { Link } from '@/i18n/navigation';
 import type { BlogFigures } from '@/lib/api';
 
 // Sales table and popularity cards for blog articles. The numbers come from
@@ -10,6 +11,7 @@ const SIGNAL_ORDER = [
   'STEAM_REVIEWS',
   'PS_RATINGS',
   'XBOX_RATINGS',
+  'TWITCH_VIEWERS',
 ] as const;
 
 const SM_COLS: Record<number, string> = {
@@ -17,6 +19,7 @@ const SM_COLS: Record<number, string> = {
   2: 'sm:grid-cols-2',
   3: 'sm:grid-cols-3',
   4: 'sm:grid-cols-4',
+  5: 'sm:grid-cols-5',
 };
 
 type Format = ReturnType<typeof useFormatter>;
@@ -107,6 +110,94 @@ export function PopularityCards({
         })}
       </div>
     </section>
+  );
+}
+
+/** News items only: the page, not the writer, links the article relayed. */
+export function FigureSource({
+  source,
+}: {
+  source: NonNullable<BlogFigures['source']>;
+}) {
+  const t = useTranslations('blog.figures');
+  return (
+    <p className="my-4 text-sm text-muted-foreground">
+      {t('sourceLine')}{' '}
+      <a
+        href={source.url}
+        target="_blank"
+        rel="noopener noreferrer nofollow"
+        className="text-primary hover:underline"
+      >
+        {source.label}
+      </a>
+    </p>
+  );
+}
+
+export function RankingTable({ rows }: { rows: BlogFigures['ranking'] }) {
+  const t = useTranslations('blog.figures');
+  const format = useFormatter();
+  if (rows.length === 0) return null;
+
+  const source = (row: BlogFigures['ranking'][number]) => {
+    const name = row.sourceName ?? t('pressReports');
+    if (row.sourceKind === 'estimate') return `${name} (${t('estimate')})`;
+    if (row.sourceKind === 'publisher-press') return `${name} (${t('press')})`;
+    return name;
+  };
+
+  const th =
+    'border-b border-border px-2 py-1.5 font-mono text-[0.68rem] font-normal tracking-wide text-text-faint uppercase';
+  const td = 'border-b border-border px-2 py-2 align-top';
+
+  return (
+    <div className="mb-6 overflow-x-auto">
+      <table className="w-full border-collapse text-left text-sm">
+        <caption className="mb-2 text-left text-xs text-muted-foreground">
+          {t('rankingCaption')}
+        </caption>
+        <thead>
+          <tr>
+            <th className={th}>#</th>
+            <th className={th}>{t('colGame')}</th>
+            <th className={th}>{t('colCopies')}</th>
+            <th className={th}>{t('colSource')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr
+              key={row.gameSlug}
+              className={
+                row.sourceKind === 'estimate' ? 'text-muted-foreground' : ''
+              }
+            >
+              <td className={`${td} font-mono tabular-nums`}>{row.position}</td>
+              <td className={td}>
+                <Link
+                  href={`/game/${row.gameSlug}`}
+                  className="text-primary hover:underline"
+                >
+                  {row.gameName}
+                </Link>
+              </td>
+              <td
+                className={`${td} font-mono font-semibold whitespace-nowrap tabular-nums`}
+              >
+                {copies(format, row.value)}
+              </td>
+              <td className={td}>
+                {source(row)}
+                <span className="block font-mono text-[0.68rem] text-text-faint">
+                  {fullDate(format, row.date)}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

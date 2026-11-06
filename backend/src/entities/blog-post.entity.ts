@@ -12,15 +12,26 @@ import {
 import { Game } from './game.entity';
 import { BlogPostTranslation } from './blog-post-translation.entity';
 
-export type BlogPostKind = 'GAME_SALES_FACTS';
+export type BlogPostKind =
+  // The evergreen "how many copies has it sold?" article, one per game.
+  | 'GAME_SALES_FACTS'
+  // A short news item about one sales figure that just came in.
+  | 'SALES_NEWS'
+  // Popularity data one week after release, one per game.
+  | 'LAUNCH_REPORT'
+  // Best-selling games of one publisher or franchise; no gameId.
+  | 'SALES_RANKING';
 export type BlogPostStatus = 'DRAFT' | 'PUBLISHED' | 'REJECTED';
 
 @Entity('blog_post')
+@Index('UQ_blog_post_game_facts', ['gameId'], {
+  unique: true,
+  where: `"kind" = 'GAME_SALES_FACTS' AND "gameId" IS NOT NULL`,
+})
 export class BlogPost {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Index({ unique: true })
   @Column({ type: 'uuid', nullable: true })
   gameId: string | null;
 
@@ -30,6 +41,16 @@ export class BlogPost {
 
   @Column({ type: 'varchar', length: 32, default: 'GAME_SALES_FACTS' })
   kind: BlogPostKind;
+
+  // What a non-evergreen post is about ("sales-news:<milestoneId>",
+  // "launch:<gameId>", "ranking:publisher:<id>"), so it is written only once.
+  // Null on sales-facts articles, which are unique per game instead.
+  @Index('UQ_blog_post_topicKey', {
+    unique: true,
+    where: `"topicKey" IS NOT NULL`,
+  })
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  topicKey: string | null;
 
   @Index()
   @Column({ type: 'varchar', length: 16, default: 'DRAFT' })

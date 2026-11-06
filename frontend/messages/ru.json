@@ -238,6 +238,7 @@
     "figures": {
       "colCopies": "Продано копий",
       "colDate": "Дата",
+      "colGame": "Игра",
       "colPlatform": "Платформа",
       "colSource": "Источник",
       "estimate": "оценка",
@@ -254,6 +255,7 @@
       "popularityTitle": "Популярность в цифрах",
       "press": "пресса",
       "pressReports": "Сообщения прессы",
+      "rankingCaption": "Последняя известная мировая цифра по каждой игре",
       "signals": {
         "PS_RATINGS": {
           "label": "оценок в PlayStation Store",
@@ -267,17 +269,27 @@
           "label": "отзывов в Steam",
           "sub": "{date}"
         },
+        "TWITCH_VIEWERS": {
+          "label": "зрителей одновременно",
+          "sub": "рекорд Twitch · {date}"
+        },
         "XBOX_RATINGS": {
           "label": "оценок в Xbox Store",
           "sub": "{date}"
         }
       },
+      "sourceLine": "Источник:",
       "worldwideCaption": "Во всём мире, все платформы"
     },
     "figuresAsOf": "Последние данные: {date}",
     "indexDescription": "Официальные данные о продажах видеоигр: заявления издателей, Википедия и заметки аналитиков по каждой игре.",
     "indexIntro": "Заявления издателей, Википедия и заметки аналитиков из нашего архива — официальная история продаж каждой игры, с датами и источниками.",
     "indexTitle": "Официальные продажи с источниками",
+    "kinds": {
+      "SALES_NEWS": "Новости",
+      "LAUNCH_REPORT": "Запуск",
+      "SALES_RANKING": "Рейтинг"
+    },
     "metaIndexTitle": "Официальные продажи игр — блог",
     "publishedOn": "Опубликовано {date}",
     "tldrTitle": "Вкратце",

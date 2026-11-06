@@ -118,11 +118,11 @@ export default async function BlogIndexPage({
                   href={`/blog/${item.slug}`}
                   className="group flex gap-4 hover:no-underline"
                 >
-                  {item.game?.coverUrl && (
+                  {item.coverUrl && (
                     <div className="relative size-16 shrink-0 overflow-hidden rounded-[3px] bg-muted">
                       <Image
-                        src={item.game.coverUrl}
-                        alt={item.game.name}
+                        src={item.coverUrl}
+                        alt={item.game?.name ?? item.title}
                         fill
                         sizes="64px"
                         className="object-cover"
@@ -130,6 +130,11 @@ export default async function BlogIndexPage({
                     </div>
                   )}
                   <div className="min-w-0">
+                    {item.kind !== 'GAME_SALES_FACTS' && (
+                      <p className="mb-1 font-mono text-[0.68rem] tracking-wide text-text-faint uppercase">
+                        {t(`kinds.${item.kind}`)}
+                      </p>
+                    )}
                     <h2 className="text-lg font-semibold tracking-tight group-hover:text-primary">
                       {item.title}
                     </h2>

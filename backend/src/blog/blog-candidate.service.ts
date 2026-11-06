@@ -1,9 +1,32 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import type { BlogCandidateScore } from './blog.types';
+import { RANKING_MIN_GAMES } from './blog-fact-pack.service';
+import type {
+  BlogCandidateScore,
+  BlogLaunchCandidate,
+  BlogNewsCandidate,
+  BlogRankingCandidate,
+} from './blog.types';
 
 const MS_DAY = 86_400_000;
+
+// News items: worldwide figures of at least this size, collected this recently
+// and announced shortly before, that beat what was on file by a real margin.
+const NEWS_MIN_UNITS = 1_000_000;
+const NEWS_CAPTURE_WINDOW_DAYS = 7;
+const NEWS_MAX_AGE_AT_CAPTURE_DAYS = 14;
+const NEWS_MIN_RECORD_RATIO = 1.03;
+const NEWS_GAME_COOLDOWN_DAYS = 14;
+
+// Launch reports: written a week after release, for games people played.
+const LAUNCH_MIN_DAYS = 7;
+const LAUNCH_MAX_DAYS = 14;
+const LAUNCH_MIN_STEAM_PEAK = 5_000;
+
+const ELIGIBLE_GAME_SQL = `g."isFree" = false
+  AND g."deletedAt" IS NULL
+  AND g."catalogTier" = 'CORE'`;
 
 // Same test as `isAlineaMilestone` (blog-alinea.ts): keep the two in step.
 const ALINEA_SQL = `(
@@ -40,6 +63,146 @@ export class BlogCandidateService {
   async pickBest(): Promise<BlogCandidateScore | null> {
     const [top] = await this.scorePool();
     return top ?? null;
+  }
+
+  /**
+   * New worldwide figures worth a news item, biggest first, at most one per
+   * game. Consolidation still has the last word (`buildNewsPack`).
+   */
+  async newsCandidates(limit = 20): Promise<BlogNewsCandidate[]> {
+    const rows = await this.db.query<BlogNewsCandidate[]>(
+      `
+      SELECT DISTINCT ON (m."gameId")
+        m.id AS "milestoneId",
+        m."gameId",
+        g.name,
+        g.slug,
+        m.units,
+        m.source,
+        m."reportedAt",
+        m."capturedAt"
+      FROM milestone m
+      INNER JOIN game g ON g.id = m."gameId"
+      WHERE ${ELIGIBLE_GAME_SQL}
+        AND m."rejectedAt" IS NULL
+        AND m."isEngagement" = false
+        AND m.platform = 'GLOBAL'
+        AND m.source::text NOT IN ('STEAM_LEAK', 'PLAYSTATION_LEAK')
+        AND (m."isEstimate" = false OR ${ALINEA_SQL})
+        AND m."sourceUrl" IS NOT NULL
+        AND m.units >= $1
+        AND m."capturedAt" >= now() - make_interval(days => $2)
+        AND m."reportedAt" >= m."capturedAt" - make_interval(days => $3)
+        AND m.units > $4::float8 * COALESCE((
+          SELECT MAX(p.units) FROM milestone p
+          WHERE p."gameId" = m."gameId"
+            AND p."rejectedAt" IS NULL
+            AND p."isEngagement" = false
+            AND p.platform = 'GLOBAL'
+            AND p.source::text NOT IN ('STEAM_LEAK', 'PLAYSTATION_LEAK')
+            AND p."capturedAt" < m."capturedAt"
+        ), 0)
+        AND NOT EXISTS (
+          SELECT 1 FROM blog_post b
+          WHERE b."topicKey" = 'sales-news:' || m.id::text
+             OR (b."gameId" = m."gameId"
+                 AND b.kind = 'SALES_NEWS'
+                 AND b."createdAt" >= now() - make_interval(days => $5))
+        )
+      ORDER BY m."gameId", m.units DESC
+      `,
+      [
+        NEWS_MIN_UNITS,
+        NEWS_CAPTURE_WINDOW_DAYS,
+        NEWS_MAX_AGE_AT_CAPTURE_DAYS,
+        NEWS_MIN_RECORD_RATIO,
+        NEWS_GAME_COOLDOWN_DAYS,
+      ],
+    );
+    return rows
+      .map((row) => ({ ...row, units: Number(row.units) }))
+      .sort((a, b) => b.units - a.units)
+      .slice(0, limit);
+  }
+
+  /** Games one to two weeks after release, biggest Steam peak first. */
+  async launchCandidates(limit = 20): Promise<BlogLaunchCandidate[]> {
+    const rows = await this.db.query<BlogLaunchCandidate[]>(
+      `
+      SELECT
+        g.id AS "gameId",
+        g.name,
+        g.slug,
+        g."releaseDate",
+        peak.value AS "steamPeak"
+      FROM game g
+      CROSS JOIN LATERAL (
+        SELECT MAX(s.value) AS value
+        FROM signal_snapshot s
+        WHERE s."gameId" = g.id
+          AND s.metric = 'STEAM_PEAK_CCU'
+          AND s.synthetic = false
+      ) peak
+      WHERE ${ELIGIBLE_GAME_SQL}
+        AND g."releaseDate" <= now() - make_interval(days => $1)
+        AND g."releaseDate" >= now() - make_interval(days => $2)
+        AND peak.value >= $3
+        AND NOT EXISTS (
+          SELECT 1 FROM blog_post b
+          WHERE b."gameId" = g.id AND b.kind = 'LAUNCH_REPORT'
+        )
+      ORDER BY peak.value DESC
+      LIMIT $4
+      `,
+      [LAUNCH_MIN_DAYS, LAUNCH_MAX_DAYS, LAUNCH_MIN_STEAM_PEAK, limit],
+    );
+    return rows.map((row) => ({ ...row, steamPeak: Number(row.steamPeak) }));
+  }
+
+  /** Publishers and franchises with enough worldwide figures, largest first. */
+  async rankingCandidates(limit = 40): Promise<BlogRankingCandidate[]> {
+    const rows = await this.db.query<BlogRankingCandidate[]>(
+      `
+      WITH covered AS (
+        SELECT g.id, g."publisherId", g."franchiseSlug"
+        FROM game g
+        WHERE ${ELIGIBLE_GAME_SQL}
+          AND EXISTS (
+            SELECT 1 FROM milestone m
+            WHERE m."gameId" = g.id
+              AND m."rejectedAt" IS NULL
+              AND m."isEngagement" = false
+              AND m.platform = 'GLOBAL'
+              AND m.source::text NOT IN ('STEAM_LEAK', 'PLAYSTATION_LEAK')
+              AND (m."isEstimate" = false OR ${ALINEA_SQL})
+          )
+      ),
+      subjects AS (
+        SELECT 'publisher' AS "subjectType", p.id::text AS "subjectKey",
+               p.name, COUNT(*)::int AS "gameCount"
+        FROM covered c
+        INNER JOIN publisher p ON p.id = c."publisherId"
+        GROUP BY p.id, p.name
+        UNION ALL
+        SELECT 'franchise', c."franchiseSlug", c."franchiseSlug",
+               COUNT(*)::int
+        FROM covered c
+        WHERE c."franchiseSlug" IS NOT NULL
+        GROUP BY c."franchiseSlug"
+      )
+      SELECT s.*
+      FROM subjects s
+      WHERE s."gameCount" >= $1
+        AND NOT EXISTS (
+          SELECT 1 FROM blog_post b
+          WHERE b."topicKey" = 'ranking:' || s."subjectType" || ':' || s."subjectKey"
+        )
+      ORDER BY s."gameCount" DESC, s.name
+      LIMIT $2
+      `,
+      [RANKING_MIN_GAMES, limit],
+    );
+    return rows;
   }
 
   private async scorePool(): Promise<BlogCandidateScore[]> {
@@ -95,7 +258,8 @@ export class BlogCandidateService {
         AND g."deletedAt" IS NULL
         AND g."catalogTier" = 'CORE'
         AND NOT EXISTS (
-          SELECT 1 FROM blog_post b WHERE b."gameId" = g.id
+          SELECT 1 FROM blog_post b
+          WHERE b."gameId" = g.id AND b.kind = 'GAME_SALES_FACTS'
         )
       GROUP BY
         g.id, g.name, g.slug, g."coverUrl", g."releaseDate",

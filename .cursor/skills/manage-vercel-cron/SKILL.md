@@ -61,7 +61,7 @@ Adding a value to `INGESTION_PIPELINES` in
   `recentVelocityPercentile <= 0.1`) plus `isDueForRefresh`.
 
 Whole-catalog jobs that do not loop games (`game-rank`, discovery's
-own IGDB pass, `blog-draft`) are not rows in `INGESTION_CRONS`. Do not
+own IGDB pass, `blog-draft`, `blog-news`) are not rows in `INGESTION_CRONS`. Do not
 add them there unless the dashboard query in `AdminService.stats` can
 count their cycle the same way as the others. `blog-draft` writes at most
 one draft per week (an update of an outdated live article first) and never

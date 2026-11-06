@@ -400,6 +400,27 @@ export class RefreshService {
   }
 
   /**
+   * Daily, after the morning milestone harvest: a news item about a figure
+   * that just came in and a launch report, each mailed for review as soon as
+   * it is written, since they lose their value in days. Never publishes.
+   */
+  async generateDailyBlogDrafts() {
+    try {
+      const { skipped, written } = await this.blog.runDailyDraftJob();
+      if (skipped) {
+        this.logger.log(`Daily blog drafts skipped: ${skipped}.`);
+      }
+      for (const post of written) {
+        await this.mail.sendBlogDraftReady(post);
+        await this.blog.markReviewEmailSent(post.id);
+        this.logger.log(`Blog ${post.kind} draft for ${post.gameName}.`);
+      }
+    } catch (error) {
+      this.logger.warn(`Daily blog drafts failed: ${error}`);
+    }
+  }
+
+  /**
    * Nightly catalog discovery via IGDB (popularity-ranked + fresh releases,
    * admitted by IGDB rating or live Steam reviews). Runs at 2 AM, ahead of the
    * 3 AM per-app refresh.

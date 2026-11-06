@@ -977,8 +977,10 @@ export class GamesService {
       }),
       this.blogPosts.findOne({
         // Live includes a published article whose refresh is in review.
+        // The game page links its evergreen article, not news or launch posts.
         where: {
           gameId: game.id,
+          kind: 'GAME_SALES_FACTS',
           publishedAt: Not(IsNull()),
           status: Not('REJECTED'),
         },

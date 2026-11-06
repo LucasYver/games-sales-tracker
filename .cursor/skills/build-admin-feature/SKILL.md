@@ -75,7 +75,8 @@ A new page starts with `await requireAdminSession()` and is registered in
 ## Do not
 
 - Fetch `/admin/...` from a client component with a session prop.
-- Render milestone `sourceUrl` or verbatim quotes on a public route.
+- Render milestone `sourceUrl` or verbatim quotes on a public route (one
+  exception, a blog news item's source link: see `manage-blog`).
 - Add a French string to a public component as part of the admin work.
 - Add a public registration form.
 - Write tests (`no-tests` skill).

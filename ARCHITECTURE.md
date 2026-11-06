@@ -75,7 +75,7 @@ on `DATABASE_URL_DIRECT`, then `DATABASE_URL`.
 | `ReferenceProfile` | `reference_profile` | Observed vector for one matcher anchor. |
 | `AdminUser` | `admin_user` | Allowlisted back-office account (email + scrypt hash). No public signup. |
 | `ProviderCooldown` | `provider_cooldown` | Cross-invocation skip window for an external provider (Perplexity out of credit). |
-| `BlogPost` | `blog_post` | AI-assisted official-sales article. `DRAFT` until an admin publishes. One row per game. Live while `publishedAt` is set; an update in review keeps the public version in `liveSnapshot`. |
+| `BlogPost` | `blog_post` | AI-assisted article (`kind`: sales article, news item, launch report, ranking). `DRAFT` until an admin publishes. One sales article per game; the other kinds are unique by `topicKey`. Live while `publishedAt` is set; an update in review keeps the public version in `liveSnapshot`. |
 | `BlogPostTranslation` | `blog_post_translation` | Native FR/EN body, slug, SEO fields, editor issues. |
 
 `SalesRecord` was renamed to `Milestone`. `GenreProfile` and the per-game
@@ -136,9 +136,10 @@ copy the cron expressions into this file.
 Rough groups: hourly CCU and Twitch, several-times-daily reviews / store
 ratings / milestone harvest / prices / followers, nightly IGDB discovery,
 weekly estimate rebuild and rank, slower playtime and achievement passes.
-Sunday `blog-draft` writes at most one draft — an update of a live article
-whose sourced figures changed first, else a new article — or mails a digest
-if a draft is already waiting. It never publishes.
+Sunday `blog-draft` writes at most one draft — an update of a live article or
+ranking whose sourced figures changed first, else a new one — or mails a digest
+if one is already waiting. Daily `blog-news` writes at most one news item and
+one launch report. Neither publishes.
 
 ### Admin
 

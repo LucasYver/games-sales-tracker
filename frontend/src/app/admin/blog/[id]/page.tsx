@@ -12,9 +12,16 @@ import {
 } from '@/components/ui/card';
 import { BlogReviewActions } from '../../_components/BlogReviewActions';
 import { BlogTranslationEditor } from '../../_components/BlogTranslationEditor';
-import { GenerateBlogDraftButton } from '../../_components/GenerateBlogDraftButton';
+import { RegenerateBlogPostButton } from '../../_components/GenerateBlogDraftButton';
 
 export const dynamic = 'force-dynamic';
+
+const KIND_LABEL: Record<AdminBlogDetail['kind'], string> = {
+  GAME_SALES_FACTS: 'sales article',
+  SALES_NEWS: 'news',
+  LAUNCH_REPORT: 'launch report',
+  SALES_RANKING: 'ranking',
+};
 
 export default async function AdminBlogReviewPage({
   params,
@@ -42,6 +49,9 @@ export default async function AdminBlogReviewPage({
               {post.gameName ?? 'Blog draft'}
             </h1>
             <Badge>{post.status}</Badge>
+            {post.kind !== 'GAME_SALES_FACTS' && (
+              <Badge variant="outline">{KIND_LABEL[post.kind]}</Badge>
+            )}
             {post.isLive && <Badge variant="outline">live</Badge>}
           </div>
           <p className="text-muted-foreground mt-1 font-mono text-xs">
@@ -50,12 +60,7 @@ export default async function AdminBlogReviewPage({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {post.gameId && (
-            <GenerateBlogDraftButton
-              gameId={post.gameId}
-              label="Regenerate"
-            />
-          )}
+          <RegenerateBlogPostButton id={post.id} />
           <BlogReviewActions
             id={post.id}
             status={post.status}
@@ -96,6 +101,14 @@ export default async function AdminBlogReviewPage({
         </div>
       )}
 
+      {post.kind === 'SALES_NEWS' && (
+        <p className="rounded border px-3 py-2 text-sm">
+          News item: check the figure against its source link in the facts
+          below. Almost all of them come from press extraction, and the source
+          link is shown on the public article.
+        </p>
+      )}
+
       {post.rejectReason && (
         <p className="text-destructive text-sm">Rejected: {post.rejectReason}</p>
       )}
@@ -124,6 +137,7 @@ export default async function AdminBlogReviewPage({
                 {f.date ? ` · ${f.date}` : ''}
                 {f.isEngagement ? ' · engagement' : ''}
                 {f.isAlinea ? ' · Alinea' : ''}
+                {f.gameName ? ` · ${f.gameName}` : ''}
               </span>
               {f.label && (
                 <span className="text-muted-foreground basis-full text-xs">

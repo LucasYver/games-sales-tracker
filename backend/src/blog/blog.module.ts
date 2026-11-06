@@ -6,6 +6,7 @@ import {
   Game,
   GameRank,
   Milestone,
+  Publisher,
   SignalSnapshot,
 } from '../entities';
 import { BlogCandidateService } from './blog-candidate.service';
@@ -22,6 +23,7 @@ import { BlogService } from './blog.service';
       Game,
       GameRank,
       Milestone,
+      Publisher,
       SignalSnapshot,
     ]),
   ],

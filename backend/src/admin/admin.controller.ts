@@ -33,7 +33,9 @@ import { UpdateTrustedSourceDto } from './dto/update-trusted-source.dto';
 import { UpdateBlogTranslationDto } from './dto/update-blog-translation.dto';
 import { RejectBlogDto } from './dto/reject-blog.dto';
 import { PublishBlogDto } from './dto/publish-blog.dto';
+import { GenerateBlogFormatDto } from './dto/generate-blog-format.dto';
 import { BlogService } from '../blog/blog.service';
+import type { GenerateBlogFormatInput } from '../blog/blog.service';
 import { AdminMailService } from './admin-mail.service';
 import type { BlogPostStatus } from '../entities';
 
@@ -361,6 +363,11 @@ export class AdminController {
     return this.blog.listCandidates(Number(limit) || undefined);
   }
 
+  @Get('blog/format-candidates')
+  blogFormatCandidates() {
+    return this.blog.listFormatCandidates();
+  }
+
   @Get('blog')
   listBlog(
     @Query('status') status?: string,
@@ -387,6 +394,27 @@ export class AdminController {
   @HttpCode(200)
   async generateBlogDraft(@Param('id', ParseUUIDPipe) id: string) {
     const post = await this.blog.generateForGame(id);
+    await this.mail.sendBlogDraftReady(post);
+    await this.blog.markReviewEmailSent(post.id);
+    return post;
+  }
+
+  @Post('blog/generate')
+  @HttpCode(200)
+  async generateBlogFormat(@Body() body: GenerateBlogFormatDto) {
+    // The DTO requires the field that matches `kind`.
+    const post = await this.blog.generateFormat(
+      body as GenerateBlogFormatInput,
+    );
+    await this.mail.sendBlogDraftReady(post);
+    await this.blog.markReviewEmailSent(post.id);
+    return post;
+  }
+
+  @Post('blog/:id/regenerate')
+  @HttpCode(200)
+  async regenerateBlog(@Param('id', ParseUUIDPipe) id: string) {
+    const post = await this.blog.regenerate(id);
     await this.mail.sendBlogDraftReady(post);
     await this.blog.markReviewEmailSent(post.id);
     return post;

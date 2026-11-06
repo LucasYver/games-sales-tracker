@@ -7,6 +7,7 @@ import {
   ADMIN_COOKIE,
   adminFetch,
   type AdminBlogDetail,
+  type GenerateBlogFormatInput,
   type AdminGenreIgdbSyncResult,
   type SalesSource,
 } from '@/lib/admin';
@@ -346,6 +347,27 @@ export async function generateBlogDraft(
   revalidatePath('/admin/blog');
   revalidatePath(`/admin/blog/${result.id}`);
   revalidatePath(`/admin/games/${gameId}`);
+  return result;
+}
+
+export async function generateBlogFormat(
+  input: GenerateBlogFormatInput,
+): Promise<AdminBlogDetail> {
+  const result = await adminFetch<AdminBlogDetail>('/blog/generate', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  revalidatePath('/admin/blog');
+  revalidatePath(`/admin/blog/${result.id}`);
+  return result;
+}
+
+export async function regenerateBlogPost(id: string): Promise<AdminBlogDetail> {
+  const result = await adminFetch<AdminBlogDetail>(`/blog/${id}/regenerate`, {
+    method: 'POST',
+  });
+  revalidatePath('/admin/blog');
+  revalidatePath(`/admin/blog/${result.id}`);
   return result;
 }
 

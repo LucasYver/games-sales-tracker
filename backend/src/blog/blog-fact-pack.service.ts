@@ -1,10 +1,16 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { In, IsNull, Repository } from 'typeorm';
+import {
+  CatalogTier,
   Game,
   Milestone,
   Platform,
+  Publisher,
   SalesSource,
   SignalMetric,
   SignalSnapshot,
@@ -14,8 +20,14 @@ import {
   isBlogEligibleMilestone,
   sourceDisplayName,
 } from './blog-alinea';
-import type { BlogFact, BlogFactPack, BlogFreshness } from './blog.types';
-import { publicAppUrl } from './blog.types';
+import type {
+  BlogFact,
+  BlogFactPack,
+  BlogFreshness,
+  BlogRankingSubject,
+} from './blog.types';
+import { packKind, publicAppUrl, slugify } from './blog.types';
+import type { BlogPostKind } from '../entities';
 
 const PLATFORM_NAME: Record<string, string> = {
   PC: 'PC',
@@ -301,12 +313,17 @@ export function recordFacts(facts: BlogFact[] | FactFields[]): FactFields[] {
 }
 
 function factKey(f: FactFields): string {
-  return [f.kind, f.platform, f.source, f.value, f.date ?? ''].join('|');
+  const key = [f.kind, f.platform, f.source, f.value, f.date ?? ''];
+  // Rankings mix games. Single-game keys stay as they were, because stored
+  // `staleAckFingerprint` values are built from them.
+  if (f.gameSlug) key.push(f.gameSlug);
+  return key.join('|');
 }
 
 function describe(f: FactFields): string {
   const scope = f.platform === 'GLOBAL' ? '' : ` (${f.platform})`;
-  return `${f.value.toLocaleString('en-US')} ${f.unit}${scope} — ${f.sourceName}${f.date ? `, ${f.date}` : ''}`;
+  const game = f.gameName ? `${f.gameName}: ` : '';
+  return `${game}${f.value.toLocaleString('en-US')} ${f.unit}${scope} — ${f.sourceName}${f.date ? `, ${f.date}` : ''}`;
 }
 
 /** Stable id of a set of sourced figures, used to acknowledge a known change. */
@@ -320,8 +337,13 @@ export function compareFacts(
   current: FactFields[],
 ): Omit<BlogFreshness, 'stale'> {
   // Older packs were frozen before consolidation: compare like with like.
+  // A ranking holds one fact per game, already consolidated game by game.
+  const isRanking = frozen.some((f) => f.gameSlug);
   const before = new Map(
-    recordFacts(consolidateFacts(frozen)).map((f) => [factKey(f), f]),
+    recordFacts(isRanking ? frozen : consolidateFacts(frozen)).map((f) => [
+      factKey(f),
+      f,
+    ]),
   );
   const now = new Map(recordFacts(current).map((f) => [factKey(f), f]));
   const byDateDesc = (a: FactFields, b: FactFields) =>
@@ -354,6 +376,7 @@ export type PublicSourceKind =
  */
 export function publicFigures(pack: BlogFactPack | null | undefined) {
   const facts = pack?.facts ?? [];
+  const isRanking = pack != null && packKind(pack) === 'SALES_RANKING';
   const kindOf = (f: BlogFact): PublicSourceKind => {
     if (f.isAlinea) return 'estimate';
     if (f.source === 'OFFICIAL' || f.source === 'ANNOUNCEMENT') {
@@ -362,9 +385,11 @@ export function publicFigures(pack: BlogFactPack | null | undefined) {
     if (f.source === 'WIKIPEDIA') return 'wikipedia';
     return factRank(f) <= 1 ? 'publisher-press' : 'press';
   };
+  const sourceNameOf = (f: BlogFact) =>
+    f.sourceName === 'press reports' ? null : f.sourceName;
   return {
     sales: facts
-      .filter((f) => f.kind === 'sales')
+      .filter((f) => !isRanking && f.kind === 'sales')
       .sort(
         (a, b) =>
           (a.date ?? '').localeCompare(b.date ?? '') || a.value - b.value,
@@ -374,11 +399,28 @@ export function publicFigures(pack: BlogFactPack | null | undefined) {
         value: f.value,
         platform: f.platform,
         sourceKind: kindOf(f),
-        sourceName: f.sourceName === 'press reports' ? null : f.sourceName,
+        sourceName: sourceNameOf(f),
       })),
     signals: facts
       .filter((f) => f.kind === 'signal')
       .map((f) => ({ metric: f.source, value: f.value, date: f.date })),
+    // Facts are already in rank order.
+    ranking: isRanking
+      ? facts.map((f, i) => ({
+          position: i + 1,
+          gameName: f.gameName ?? '',
+          gameSlug: f.gameSlug ?? '',
+          value: f.value,
+          date: f.date,
+          sourceKind: kindOf(f),
+          sourceName: sourceNameOf(f),
+        }))
+      : [],
+    // The one exception to "no URLs": a news item links the article it relays.
+    source:
+      pack != null && packKind(pack) === 'SALES_NEWS' && pack.news
+        ? { url: pack.news.sourceUrl, label: pack.news.sourceLabel }
+        : null,
   };
 }
 
@@ -393,13 +435,83 @@ export function figuresAsOf(
   return dates.at(-1) ?? null;
 }
 
-const SIGNALS: {
+function newestFact<T extends FactFields>(facts: T[]): T | undefined {
+  return [...facts].sort(
+    (a, b) => (b.date ?? '').localeCompare(a.date ?? '') || b.value - a.value,
+  )[0];
+}
+
+/**
+ * The fact that best answers "how many copies has it sold?": the publisher's
+ * own worldwide number, then Wikipedia, then other press, and only then a
+ * platform figure or an estimate.
+ */
+export function pickAnswerFact<T extends FactFields>(
+  sales: T[],
+): T | undefined {
+  const sourced = sales.filter((f) => !f.isAlinea);
+  const global = sourced.filter((f) => f.platform === 'GLOBAL');
+  return (
+    newestFact(global.filter((f) => factRank(f) <= 1)) ??
+    newestFact(global.filter((f) => factRank(f) <= 2)) ??
+    newestFact(global) ??
+    newestFact(sourced) ??
+    newestFact(sales)
+  );
+}
+
+/** Below this, a ranking is not worth an article. Also in the candidate SQL. */
+export const RANKING_MIN_GAMES = 5;
+const RANKING_MAX_GAMES = 25;
+
+/**
+ * Franchises only have a slug: read the display name off a game's title, as
+ * the shortest start of the title that slugifies to it ("NBA 2K25" -> "NBA 2K").
+ */
+function franchiseDisplayName(slug: string, gameNames: string[]): string {
+  for (const name of gameNames) {
+    for (let end = slug.length; end <= name.length; end++) {
+      if (slugify(name.slice(0, end)) === slug) {
+        return name.slice(0, end).trim();
+      }
+    }
+  }
+  return slug
+    .split('-')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function sourceLabel(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')
+      return null;
+    return parsed.hostname.replace(/^www\./, '');
+  } catch {
+    return null;
+  }
+}
+
+type SignalSpec = {
   metric: SignalMetric;
   unit: string;
   platform: Platform;
   sourceName: string;
   label: string;
-}[] = [
+};
+
+/** Twitch history is short, so only launch reports show it. */
+const TWITCH_SIGNAL: SignalSpec = {
+  metric: SignalMetric.TWITCH_VIEWERS,
+  unit: 'viewers',
+  platform: Platform.PC,
+  sourceName: 'Twitch',
+  label:
+    'highest number of people watching the game at the same time on Twitch on record (date = when that peak was recorded); a popularity signal, NOT sales and NOT players',
+};
+
+const SIGNALS: SignalSpec[] = [
   {
     metric: SignalMetric.STEAM_REVIEWS,
     unit: 'reviews',
@@ -443,9 +555,198 @@ export class BlogFactPackService {
     private readonly milestones: Repository<Milestone>,
     @InjectRepository(SignalSnapshot)
     private readonly signals: Repository<SignalSnapshot>,
+    @InjectRepository(Publisher)
+    private readonly publishers: Repository<Publisher>,
   ) {}
 
-  async buildForGame(gameId: string): Promise<BlogFactPack> {
+  buildForGame(gameId: string): Promise<BlogFactPack> {
+    return this.buildGamePack(gameId, 'GAME_SALES_FACTS', SIGNALS);
+  }
+
+  /** Launch report: the usual facts, plus the Twitch peak. */
+  buildLaunchPack(gameId: string): Promise<BlogFactPack> {
+    return this.buildGamePack(
+      gameId,
+      'LAUNCH_REPORT',
+      [...SIGNALS, TWITCH_SIGNAL],
+      `launch:${gameId}`,
+    );
+  }
+
+  /**
+   * News item about one milestone. Refuses a figure consolidation drops (a
+   * press relay of a more trusted number), so no paid call is spent on it.
+   */
+  async buildNewsPack(milestoneId: string): Promise<BlogFactPack> {
+    const row = await this.milestones.findOne({
+      where: { id: milestoneId, ...Milestone.notRejected() },
+    });
+    if (!row) throw new NotFoundException(`Milestone ${milestoneId} not found`);
+    const url = row.sourceUrl ? sourceLabel(row.sourceUrl) : null;
+    if (!row.sourceUrl || !url) {
+      throw new BadRequestException(
+        'This figure has no source link to credit.',
+      );
+    }
+    const pack = await this.buildGamePack(
+      row.gameId,
+      'SALES_NEWS',
+      SIGNALS,
+      `sales-news:${row.id}`,
+    );
+    const date = row.reportedAt?.toISOString().slice(0, 10) ?? null;
+    const lead = pack.facts.find(
+      (f) =>
+        f.kind === 'sales' &&
+        f.platform === String(row.platform) &&
+        f.value === row.units &&
+        f.date === date,
+    );
+    if (!lead) {
+      throw new BadRequestException(
+        'This figure repeats one already on file, so it is not news.',
+      );
+    }
+    pack.news = {
+      milestoneId: row.id,
+      factId: lead.id,
+      sourceUrl: row.sourceUrl,
+      sourceLabel: url,
+    };
+    return pack;
+  }
+
+  /** Whether the figure a news item relays is still on file (not rejected). */
+  async newsFigureOnFile(milestoneId: string): Promise<boolean> {
+    return this.milestones.exists({
+      where: { id: milestoneId, ...Milestone.notRejected() },
+    });
+  }
+
+  async buildRankingPack(
+    type: BlogRankingSubject['type'],
+    key: string,
+  ): Promise<BlogFactPack> {
+    const { subject, facts, coverUrl } = await this.rankingFacts(type, key);
+    if (facts.length < RANKING_MIN_GAMES) {
+      throw new BadRequestException(
+        `${subject.name} has ${facts.length} games with a worldwide figure; a ranking needs ${RANKING_MIN_GAMES}.`,
+      );
+    }
+    const base = publicAppUrl();
+    return {
+      kind: 'SALES_RANKING',
+      topicKey: `ranking:${type}:${key}`,
+      game: null,
+      facts: facts.map((fact, i) => ({ id: `F${i + 1}`, ...fact })),
+      gameUrlByLocale: {
+        en: `${base}/en/ranking`,
+        fr: `${base}/fr/ranking`,
+      },
+      ranking: {
+        subject,
+        coverUrl,
+        gameNames: facts.map((f) => f.gameName ?? ''),
+      },
+    };
+  }
+
+  /** Today's figures for a ranking, to spot a live one that went out of date. */
+  async currentRankingFacts(
+    subject: BlogRankingSubject,
+  ): Promise<FactFields[]> {
+    return (await this.rankingFacts(subject.type, subject.key)).facts;
+  }
+
+  /** One worldwide figure per game of the subject, highest first. */
+  private async rankingFacts(
+    type: BlogRankingSubject['type'],
+    key: string,
+  ): Promise<{
+    subject: BlogRankingSubject;
+    facts: FactFields[];
+    coverUrl: string | null;
+  }> {
+    const publisher =
+      type === 'publisher'
+        ? await this.publishers.findOne({ where: { id: key } })
+        : null;
+    if (type === 'publisher' && !publisher) {
+      throw new NotFoundException(`Publisher ${key} not found`);
+    }
+    const games = await this.games.find({
+      where: {
+        ...(type === 'publisher'
+          ? { publisherId: key }
+          : { franchiseSlug: key }),
+        catalogTier: CatalogTier.CORE,
+        isFree: false,
+        deletedAt: IsNull(),
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        coverUrl: true,
+        publisher: true,
+        developer: true,
+      },
+    });
+    const rows = games.length
+      ? await this.milestones.find({
+          where: {
+            gameId: In(games.map((g) => g.id)),
+            platform: Platform.GLOBAL,
+            isEngagement: false,
+            ...Milestone.notRejected(),
+          },
+          order: { reportedAt: 'DESC' },
+        })
+      : [];
+    const rowsByGame = new Map<string, Milestone[]>();
+    for (const row of rows) {
+      rowsByGame.set(row.gameId, [...(rowsByGame.get(row.gameId) ?? []), row]);
+    }
+    const entries = games.flatMap((game) => {
+      const lead = pickAnswerFact(
+        milestoneFacts(rowsByGame.get(game.id) ?? [], game).filter(
+          (f) => f.kind === 'sales',
+        ),
+      );
+      return lead ? [{ game, lead }] : [];
+    });
+    entries.sort(
+      (a, b) =>
+        b.lead.value - a.lead.value || a.game.name.localeCompare(b.game.name),
+    );
+    const top = entries.slice(0, RANKING_MAX_GAMES);
+    return {
+      subject: {
+        type,
+        key,
+        name:
+          publisher?.name ??
+          franchiseDisplayName(
+            key,
+            games.map((g) => g.name),
+          ),
+      },
+      coverUrl: top.find((e) => e.game.coverUrl)?.game.coverUrl ?? null,
+      facts: top.map(({ game, lead }) => ({
+        ...lead,
+        gameName: game.name,
+        gameSlug: game.slug,
+        label: `${game.name}: ${lead.label ?? 'total copies sold so far'}`,
+      })),
+    };
+  }
+
+  private async buildGamePack(
+    gameId: string,
+    kind: BlogPostKind,
+    signals: SignalSpec[],
+    topicKey?: string,
+  ): Promise<BlogFactPack> {
     const game = await this.games.findOne({ where: { id: gameId } });
     if (!game) throw new NotFoundException(`Game ${gameId} not found`);
 
@@ -472,11 +773,12 @@ export class BlogFactPackService {
       push(fact);
     }
 
-    for (const signal of SIGNALS) {
+    for (const signal of signals) {
       const snap = await this.signals.findOne({
         where: { gameId, metric: signal.metric, synthetic: false },
         order:
-          signal.metric === SignalMetric.STEAM_PEAK_CCU
+          signal.metric === SignalMetric.STEAM_PEAK_CCU ||
+          signal.metric === SignalMetric.TWITCH_VIEWERS
             ? { value: 'DESC' }
             : { capturedAt: 'DESC' },
       });
@@ -497,6 +799,8 @@ export class BlogFactPackService {
 
     const base = publicAppUrl();
     return {
+      kind,
+      ...(topicKey ? { topicKey } : {}),
       game: {
         id: game.id,
         name: game.name,

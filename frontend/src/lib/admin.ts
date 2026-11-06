@@ -645,9 +645,17 @@ export interface AdminBlogFreshness {
   removed: string[];
 }
 
+export type AdminBlogKind =
+  | 'GAME_SALES_FACTS'
+  | 'SALES_NEWS'
+  | 'LAUNCH_REPORT'
+  | 'SALES_RANKING';
+
 export interface AdminBlogSummary {
   id: string;
+  kind: AdminBlogKind;
   status: BlogPostStatus;
+
   /** On the public blog (a DRAFT can be live while its refresh is reviewed). */
   isLive: boolean;
   /** A new version of a live article, waiting for review. */
@@ -704,12 +712,46 @@ export interface AdminBlogDetail extends AdminBlogSummary {
       isAlinea: boolean;
       label?: string;
       sourceUrl?: string | null;
+      gameName?: string;
     }[];
   };
   reviewedBy: string | null;
   reviewEmailSentAt: string | null;
   translations: AdminBlogTranslation[];
 }
+
+export interface AdminBlogFormatCandidates {
+  news: {
+    milestoneId: string;
+    gameId: string;
+    name: string;
+    units: number;
+    source: string;
+    reportedAt: string;
+    capturedAt: string;
+  }[];
+  launches: {
+    gameId: string;
+    name: string;
+    releaseDate: string;
+    steamPeak: number;
+  }[];
+  rankings: {
+    subjectType: 'publisher' | 'franchise';
+    subjectKey: string;
+    name: string;
+    gameCount: number;
+  }[];
+}
+
+export type GenerateBlogFormatInput =
+  | { kind: 'SALES_NEWS'; milestoneId: string }
+  | { kind: 'LAUNCH_REPORT'; gameId: string }
+  | {
+      kind: 'SALES_RANKING';
+      subjectType: 'publisher' | 'franchise';
+      subjectKey: string;
+    };
 
 export interface AdminBlogCandidate {
   gameId: string;

@@ -108,4 +108,10 @@ export class CronController {
   blogDraft() {
     return this.refresh.generateWeeklyBlogDraft();
   }
+
+  @Get('blog-news')
+  @HttpCode(200)
+  blogNews() {
+    return this.refresh.generateDailyBlogDrafts();
+  }
 }

@@ -238,6 +238,7 @@
     "figures": {
       "colCopies": "Copies sold",
       "colDate": "Date",
+      "colGame": "Game",
       "colPlatform": "Platform",
       "colSource": "Source",
       "estimate": "estimate",
@@ -254,6 +255,7 @@
       "popularityTitle": "Popularity in numbers",
       "press": "press",
       "pressReports": "Press reports",
+      "rankingCaption": "Latest worldwide figure on record for each game",
       "signals": {
         "PS_RATINGS": {
           "label": "PlayStation Store ratings",
@@ -267,17 +269,27 @@
           "label": "Steam reviews",
           "sub": "{date}"
         },
+        "TWITCH_VIEWERS": {
+          "label": "people watching at once",
+          "sub": "Twitch record · {date}"
+        },
         "XBOX_RATINGS": {
           "label": "Xbox Store ratings",
           "sub": "{date}"
         }
       },
+      "sourceLine": "Source:",
       "worldwideCaption": "Worldwide, all platforms"
     },
     "figuresAsOf": "Latest figure on record: {date}",
     "indexDescription": "Official video-game sales figures: publisher statements, Wikipedia, and analyst notes, game by game.",
     "indexIntro": "Publisher statements, Wikipedia, and the analyst notes we keep on file — the official sales story for each game, dated and attributed.",
     "indexTitle": "Official sales, on the record",
+    "kinds": {
+      "SALES_NEWS": "News",
+      "LAUNCH_REPORT": "Launch",
+      "SALES_RANKING": "Ranking"
+    },
     "metaIndexTitle": "Official game sales — Blog",
     "publishedOn": "Published {date}",
     "tldrTitle": "In short",

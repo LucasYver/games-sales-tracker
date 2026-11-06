@@ -25,7 +25,7 @@ import type {
   BlogReviewIssue,
   BlogWriterArticle,
 } from './blog.types';
-import { SALES_TABLE_MARKER, stableBlogSlug } from './blog.types';
+import { SALES_TABLE_MARKER, blogSlug, packKind } from './blog.types';
 
 @Injectable()
 export class BlogWriterService {
@@ -67,7 +67,7 @@ export class BlogWriterService {
 
     const today = new Date().toISOString().slice(0, 10);
     const names = packNames(pack);
-    const system = writerSystemPrompt(locale);
+    const system = writerSystemPrompt(locale, packKind(pack));
 
     let article = this.normalize(
       await this.callJson<BlogWriterArticle>({
@@ -129,7 +129,7 @@ export class BlogWriterService {
       (text ?? '').replaceAll('{GAME_URL}', '').trim();
     return {
       ...written,
-      slug: stableBlogSlug(pack.game.slug, locale),
+      slug: blogSlug(pack, locale),
       title: strip(written.title).slice(0, 200),
       metaDescription: strip(written.metaDescription).slice(0, 320),
       excerpt: strip(written.excerpt),
@@ -155,7 +155,7 @@ export class BlogWriterService {
       const edited = await this.callJson<{ issues: BlogReviewIssue[] }>({
         model: this.editorModel,
         effort: 'low',
-        system: editorSystemPrompt(),
+        system: editorSystemPrompt(packKind(pack)),
         user: editorUserPrompt(locale, pack, today, publicDraft(article)),
         schemaName: 'blog_editor',
         schema: EDITOR_SCHEMA,
@@ -196,6 +196,9 @@ export class BlogWriterService {
       },
     });
 
+    this.logger.log(
+      `${params.schemaName} ${params.model}: ${response.usage?.input_tokens ?? '?'} in, ${response.usage?.output_tokens ?? '?'} out`,
+    );
     const text = response.output_text;
     if (!text) {
       throw new Error(

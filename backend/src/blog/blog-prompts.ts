@@ -1,11 +1,11 @@
-import type { BlogLocale } from '../entities';
-import { factRank } from './blog-fact-pack.service';
+import type { BlogLocale, BlogPostKind } from '../entities';
+import { pickAnswerFact } from './blog-fact-pack.service';
 import type { BlogFact, BlogFactPack } from './blog.types';
-import { SALES_TABLE_MARKER } from './blog.types';
+import { SALES_TABLE_MARKER, packKind } from './blog.types';
 
 export const BLOG_SITE_NAME = 'Game Sales Tracker';
 
-const SHARED_RULES = `You are a senior games-industry journalist writing for ${BLOG_SITE_NAME}, a data site about video-game sales.
+const COMMON_RULES = `You are a senior games-industry journalist writing for ${BLOG_SITE_NAME}, a data site about video-game sales.
 Write like the best data-driven industry writers (Christopher Dring, Mat Piscatella, Stephen Totilo): short, exact,
 every number dated and attributed, nothing said twice.
 
@@ -56,9 +56,9 @@ WRITING QUALITY
   A figure from the publisher known through the press → "Capcom said ..., according to press reports" /
   « Capcom a annoncé ..., selon la presse ».
 - Before returning, reread every sentence: does it make sense? Does it tell the reader something about the game?
-  Is any figure written twice? Fix it or delete it.
+  Is any figure written twice? Fix it or delete it.`;
 
-STRUCTURE
+const SALES_FACTS_STRUCTURE = `STRUCTURE
 - title (<= 60 chars), exactly the search query:
   EN "{Game}: how many copies has it sold?" / FR "{Game} : combien d'exemplaires vendus ?"
 - metaDescription (140-160 chars): the ANSWER figure, its source and month/year, in one plain sentence.
@@ -103,9 +103,91 @@ Brightfold gave a first total a month after launch and a second one in May 2025,
 The PlayStation figure is an Alinea Analytics estimate, not a number from Brightfold.
 
 Brightfold has not shared an official split by platform. Live data is on the [Lantern Road page]({GAME_URL})."
-(Note: no table or card number in the body, and nothing from the TL;DR repeated.)
+(Note: no table or card number in the body, and nothing from the TL;DR repeated.)`;
 
-OUTPUT: return JSON matching the schema. In claims, list every sentence containing a number with its fact ids.`;
+const SALES_NEWS_STRUCTURE = `THIS ARTICLE IS A NEWS ITEM: one new sales figure was just reported. The ANSWER fact is that figure; it is the only news.
+
+STRUCTURE
+- title (<= 70 chars): the game, the ANSWER number, its source.
+  EN "{Game} has sold {figure} copies, says {source}" / FR "{Game} : {figure} d'exemplaires vendus, selon {source}".
+  sourceName "press reports": EN "{Game} has sold {figure} copies, press reports say" / FR "..., selon la presse".
+  An analyst estimate: EN "{source} estimates {Game} sales at {figure}" / FR "{source} estime les ventes de {Game} à {figure}".
+- metaDescription (140-160 chars): the ANSWER figure, its source and month/year, in one plain sentence.
+- excerpt (shown on the blog index, not on the article): one sentence with the ANSWER figure, source and date.
+- tldr: 2 bullets, each one short sentence with source and month/year. First = the ANSWER. Second = the PREVIOUS fact if
+  there is one, otherwise the game's release.
+
+THE PAGE SHOWS THE NUMBERS. The site renders, from FACTS, a table of every "table" fact, cards with every "cards" fact,
+and a link to the source of the ANSWER. So the body NEVER writes a "table" or "cards" number and never writes a source URL.
+
+- bodyMarkdown, in this order:
+  1. Opening paragraph, no heading, 2 sentences: who reported the new figure and in which month, and what kind of figure
+     it is (from the publisher, from the press, an estimate). Then the game in context, from GAME. No figures.
+  2. An H2 (EN "{Game} sales so far" / FR "Les ventes de {Game} jusqu'ici"), then the line ${SALES_TABLE_MARKER} alone on
+     its own line, then 1-2 sentences WITHOUT any number on who published the earlier figures and how often.
+  3. Closing paragraph, no heading, one sentence linking to live data as a markdown link whose href is exactly {GAME_URL}.
+- Length: 80-180 words of text. A news item is short. Never pad.
+- Body markdown: H2, paragraphs and the ${SALES_TABLE_MARKER} line. No tables, no H1, no H3, no raw HTML, no images.`;
+
+const LAUNCH_REPORT_STRUCTURE = `THIS ARTICLE REPORTS A GAME'S LAUNCH from public popularity data, about a week after release. It is not about sales
+unless a sales fact exists. If there is none, say so once and move on: never suggest how well the game sold.
+
+STRUCTURE
+- title (<= 60 chars), exactly: EN "{Game} launch in numbers" / FR "Le lancement de {Game} en chiffres"
+- metaDescription (140-160 chars): the ANSWER figure and its month/year, in one plain sentence saying what it measures.
+- excerpt (shown on the blog index, not on the article): one sentence with the ANSWER figure and what it measures.
+- tldr: 2 or 3 bullets, each a DIFFERENT fact, one short sentence each saying what it measures, with source and
+  month/year. First bullet = the ANSWER. Popularity signals are allowed here, unlike in the body.
+
+THE PAGE SHOWS THE NUMBERS. The site renders, from FACTS, cards with every "cards" fact (Steam peak players, Steam reviews,
+store ratings, Twitch viewers) under the TL;DR and a table of any "table" fact. So the body NEVER writes those numbers.
+
+- bodyMarkdown, in this order:
+  1. Opening paragraph, no heading, 2 sentences: who made the game, its release date and platforms, from GAME. No figures.
+  2. An H2 (EN "What the launch data covers" / FR "Ce que couvrent les données du lancement"), then the line
+     ${SALES_TABLE_MARKER} alone on its own line, then 1-3 sentences WITHOUT any number: which of these measures are
+     available for this game and what each one counts, in plain words.
+  3. Closing paragraph, no heading, 1-2 sentences: whether a sales figure has been reported so far, then one sentence
+     linking to live data as a markdown link whose href is exactly {GAME_URL}.
+- Length: 80-200 words of text. Never pad.
+- Body markdown: H2, paragraphs and the ${SALES_TABLE_MARKER} line. No tables, no H1, no H3, no raw HTML, no images.`;
+
+const SALES_RANKING_STRUCTURE = `THIS ARTICLE RANKS the games of one SUBJECT (a publisher or a franchise) by their latest worldwide sales figure on record.
+Each fact belongs to a different game ("gameName"). FACTS are already in rank order, highest first.
+
+Comparing games: only say which game comes first or above another, following the order of FACTS. Never total the games,
+never say by how much one outsold another (rule 2 still applies).
+
+STRUCTURE
+- title (<= 60 chars), exactly: EN "Best-selling {Subject} games" / FR "Les jeux {Subject} les plus vendus".
+  When the SUBJECT name already ends in "Games", write "titles" instead of "games" in English, here and in the H2.
+- metaDescription (140-160 chars): the game in first place with its figure, source and month/year, in one plain sentence.
+- excerpt (shown on the blog index, not on the article): one sentence with the game in first place, its figure and source.
+- tldr: 2 or 3 bullets, the first facts in order, one short sentence each with the game, figure, source and month/year.
+
+THE PAGE SHOWS THE NUMBERS. The site renders, from FACTS, the ranking table with game, copies, date and source. So the body
+NEVER writes a "table" number.
+
+- bodyMarkdown, in this order:
+  1. Opening paragraph, no heading, 2 sentences: what the list covers (the games of the SUBJECT with a worldwide sales
+     figure on record) and which game leads it. No figures.
+  2. An H2 (EN "{Subject} games ranked by copies sold" / FR "Les jeux {Subject} classés par ventes"), then the line
+     ${SALES_TABLE_MARKER} alone on its own line, then 1-3 sentences WITHOUT any number: which figures come from the
+     publisher, the press or an estimate, and that they were reported at different dates, so a game with an older
+     figure may have sold more since.
+  3. Closing paragraph, no heading, one sentence: games without a public worldwide figure are not listed.
+- Length: 80-200 words of text. Never pad.
+- Body markdown: H2, paragraphs and the ${SALES_TABLE_MARKER} line. No tables, no H1, no H3, no raw HTML, no images, no links.`;
+
+const STRUCTURE_BY_KIND: Record<BlogPostKind, string> = {
+  GAME_SALES_FACTS: SALES_FACTS_STRUCTURE,
+  SALES_NEWS: SALES_NEWS_STRUCTURE,
+  LAUNCH_REPORT: LAUNCH_REPORT_STRUCTURE,
+  SALES_RANKING: SALES_RANKING_STRUCTURE,
+};
+
+const OUTPUT_RULE =
+  'OUTPUT: return JSON matching the schema. In claims, list every sentence containing a number with its fact ids.';
 
 const STYLE_EN = `STYLE (en)
 Plain, precise, British-neutral spelling. Numbers as "5.2 million" or "850,000". Dates as "March 2025".
@@ -117,8 +199,16 @@ Espace insécable avant : ; ? !. Nombres « 5,2 millions » ou « 850 000 ». Da
 Ton neutre, pas de vouvoiement, pas d'anglicismes inutiles. « Exemplaires vendus », jamais « copies ».
 Écris directement en français : ne traduis pas une phrase anglaise dans ta tête.`;
 
-export function writerSystemPrompt(locale: BlogLocale): string {
-  return `${SHARED_RULES}\n\n${locale === 'fr' ? STYLE_FR : STYLE_EN}`;
+export function writerSystemPrompt(
+  locale: BlogLocale,
+  kind: BlogPostKind = 'GAME_SALES_FACTS',
+): string {
+  return [
+    COMMON_RULES,
+    STRUCTURE_BY_KIND[kind],
+    OUTPUT_RULE,
+    locale === 'fr' ? STYLE_FR : STYLE_EN,
+  ].join('\n\n');
 }
 
 /** Where each fact goes in the body, so every figure has exactly one place. */
@@ -153,22 +243,73 @@ function newest(facts: BlogFact[]): BlogFact | undefined {
   )[0];
 }
 
+function factLine(prefix: string, fact: BlogFact): string {
+  return `${prefix}=${fact.id} (${fact.label ?? fact.kind})`;
+}
+
+/** The figure a news item relays, and the worldwide figure reported before it. */
+function newsHint(pack: BlogFactPack): string {
+  const answer = pack.facts.find((f) => f.id === pack.news?.factId);
+  if (!answer)
+    return 'ANSWER=none — there is no sales fact; do not state a sales figure.';
+  const previous = newest(
+    pack.facts.filter(
+      (f) =>
+        f.kind === 'sales' &&
+        f.platform === 'GLOBAL' &&
+        f.id !== answer.id &&
+        (f.date ?? '') < (answer.date ?? ''),
+    ),
+  );
+  return [
+    factLine('ANSWER', answer),
+    previous
+      ? factLine('PREVIOUS', previous)
+      : 'PREVIOUS=none — no earlier worldwide figure is on record.',
+  ].join('\n');
+}
+
+function launchHint(pack: BlogFactPack): string {
+  const answer =
+    pack.facts.find((f) => f.source === 'STEAM_PEAK_CCU') ??
+    pack.facts.find((f) => f.kind === 'signal');
+  const hasSales = pack.facts.some((f) => f.kind === 'sales');
+  return [
+    answer ? factLine('ANSWER', answer) : 'ANSWER=none',
+    hasSales
+      ? 'A sales fact exists: name who reported it, without its number in the body.'
+      : 'No sales figure is on record for this game.',
+  ].join('\n');
+}
+
+function rankingHint(pack: BlogFactPack): string {
+  const [first] = pack.facts;
+  return [
+    `SUBJECT=${JSON.stringify(pack.ranking?.subject.name ?? '')}`,
+    first ? factLine('ANSWER', first) : 'ANSWER=none',
+    `ORDER=${pack.facts.map((f) => f.id).join(' > ')}`,
+  ].join('\n');
+}
+
 /**
  * Which fact answers "how many copies has it sold?". Chosen in code so the
  * lead is never an estimate or a platform figure when something better exists.
  */
 export function answerHint(pack: BlogFactPack, today: string): string {
+  switch (packKind(pack)) {
+    case 'SALES_NEWS':
+      return newsHint(pack);
+    case 'LAUNCH_REPORT':
+      return launchHint(pack);
+    case 'SALES_RANKING':
+      return rankingHint(pack);
+    default:
+      break;
+  }
   const sales = pack.facts.filter((f) => f.kind === 'sales');
   const sourced = sales.filter((f) => !f.isAlinea);
   const global = sourced.filter((f) => f.platform === 'GLOBAL');
-  // The publisher's own number (stated, or credited to it in the press)
-  // leads; Wikipedia, then other press, only when there is none.
-  const answer =
-    newest(global.filter((f) => factRank(f) <= 1)) ??
-    newest(global.filter((f) => factRank(f) <= 2)) ??
-    newest(global) ??
-    newest(sourced) ??
-    newest(sales);
+  const answer = pickAnswerFact(sales);
   if (!answer) {
     return 'ANSWER=none — there is no sales fact; do not state a sales figure.';
   }
@@ -216,7 +357,9 @@ export function writerUserPrompt(
     `TODAY=${today}`,
     `SITE=${BLOG_SITE_NAME}`,
     `GAME_URL={GAME_URL}`,
-    `GAME=${JSON.stringify(pack.game)}`,
+    pack.game
+      ? `GAME=${JSON.stringify(pack.game)}`
+      : `SUBJECT=${JSON.stringify(pack.ranking?.subject ?? null)}`,
     `FACTS=${JSON.stringify(factsForModel(pack))}`,
     answerHint(pack, today),
     'Write the article now. Use only FACTS.',
@@ -243,12 +386,27 @@ export function reviseUserPrompt(
   ].join('\n');
 }
 
-export function editorSystemPrompt(): string {
+const EDITOR_RULES_BY_KIND: Record<BlogPostKind, string> = {
+  GAME_SALES_FACTS: '',
+  SALES_NEWS:
+    '\nThis is a news item: the title and first TL;DR bullet must state the ANSWER figure. Flag as error a link to any other site written in the text.',
+  LAUNCH_REPORT:
+    '\nThis is a launch report: popularity signals are allowed in the TL;DR but never in bodyMarkdown. Flag as error any hint at how well the game sold when no sales fact exists.',
+  SALES_RANKING:
+    '\nThis is a ranking: facts are in rank order, highest first. Saying which game comes first or above another is allowed when it follows that order. Flag as error an order that contradicts it, a total across games, or a figure given to the wrong game.',
+};
+
+export function editorSystemPrompt(
+  kind: BlogPostKind = 'GAME_SALES_FACTS',
+): string {
   return `You are a fact-checker and copy editor for ${BLOG_SITE_NAME}.
 You do NOT rewrite the article. You only list issues. Be strict on facts and on clarity.
 
-Each fact has a "label" saying exactly what it measures. Flag as severity=error:
-- any number, date, ranking or comparison not grounded in FACTS, including outside knowledge
+Each fact has a "label" saying exactly what it measures. "date" on a sales fact is when the figure was reported, so
+"X said in March 2025 that..." is correct. Who made a game, its release date and its platforms are grounded when they
+match GAME. The closing markdown link to the game's page on this site is required: never flag it as a source URL or as
+self-promotion. Flag as severity=error:
+- any number, date, ranking or comparison not grounded in FACTS or GAME, including outside knowledge
 - any arithmetic: sums, differences, percentages, ratios, growth, "doubled", rounding into a new claim
 - a figure attributed to the wrong source or the wrong date
 - a reported date presented as the date a threshold was reached
@@ -274,7 +432,7 @@ Flag as severity=warning:
 - French typography mistakes when locale is fr (missing no-break spaces, English calques, "copies")
 
 The excerpt field must quote the problematic text exactly as written in the draft.
-If the article is clean, return an empty issues array.`;
+If the article is clean, return an empty issues array.${EDITOR_RULES_BY_KIND[kind]}`;
 }
 
 export function editorUserPrompt(
@@ -286,6 +444,9 @@ export function editorUserPrompt(
   return [
     `LOCALE=${locale}`,
     `TODAY=${today}`,
+    pack.game
+      ? `GAME=${JSON.stringify(pack.game)}`
+      : `SUBJECT=${JSON.stringify(pack.ranking?.subject ?? null)}`,
     `FACTS=${JSON.stringify(factsForModel(pack))}`,
     answerHint(pack, today),
     `DRAFT=${JSON.stringify(draft)}`,

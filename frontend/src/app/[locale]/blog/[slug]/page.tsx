@@ -9,7 +9,12 @@ import { SALES_TABLE_MARKER, getBlogIndex, getBlogPost } from '@/lib/api';
 import { displayCover } from '@/lib/cover';
 import { SITE_URL } from '@/lib/site-url';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
-import { PopularityCards, SalesTable } from '@/components/blog/BlogFigures';
+import {
+  FigureSource,
+  PopularityCards,
+  RankingTable,
+  SalesTable,
+} from '@/components/blog/BlogFigures';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,15 +53,15 @@ export async function generateMetadata({
       url: `${SITE_URL}${path}`,
       publishedTime: post.publishedAt ?? undefined,
       modifiedTime: post.updatedAt ?? post.publishedAt ?? undefined,
-      images: post.game?.coverUrl
-        ? [{ url: post.game.coverUrl, alt: post.game.name }]
+      images: post.coverUrl
+        ? [{ url: post.coverUrl, alt: post.game?.name ?? post.title }]
         : [],
     },
     twitter: {
       card: 'summary_large_image',
       title: post.title,
       description: post.metaDescription,
-      images: post.game?.coverUrl ? [post.game.coverUrl] : [],
+      images: post.coverUrl ? [post.coverUrl] : [],
     },
   };
 }
@@ -109,13 +114,13 @@ export default async function BlogArticlePage({
     '@context': 'https://schema.org',
     '@graph': [
       {
-        '@type': 'Article',
+        '@type': post.kind === 'SALES_NEWS' ? 'NewsArticle' : 'Article',
         headline: post.title,
         description: post.metaDescription,
         datePublished: post.publishedAt,
         dateModified: post.updatedAt ?? post.publishedAt,
         inLanguage: locale,
-        image: post.game?.coverUrl ?? undefined,
+        image: post.coverUrl ?? undefined,
         about: post.game
           ? {
               '@type': 'VideoGame',
@@ -209,7 +214,7 @@ export default async function BlogArticlePage({
 
         <ArticleHeader
           title={post.title}
-          coverUrl={post.game?.coverUrl ?? null}
+          coverUrl={post.coverUrl}
           coverAlt={post.game?.name ?? post.title}
           publishedLabel={
             published ? t('publishedOn', { date: published }) : null
@@ -228,6 +233,8 @@ export default async function BlogArticlePage({
             ))}
           </ul>
         </aside>
+
+        {post.figures?.source && <FigureSource source={post.figures.source} />}
 
         {post.figures && <PopularityCards signals={post.figures.signals} />}
 
@@ -262,7 +269,10 @@ export default async function BlogArticlePage({
               p: ({ children }) =>
                 children === SALES_TABLE_MARKER ? (
                   post.figures ? (
-                    <SalesTable sales={post.figures.sales} />
+                    <>
+                      <RankingTable rows={post.figures.ranking} />
+                      <SalesTable sales={post.figures.sales} />
+                    </>
                   ) : null
                 ) : (
                   <p className="mb-4">{children}</p>

@@ -387,11 +387,19 @@ export async function getGame(
 
 const BLOG_TTL = 3600;
 
+export type BlogPostKind =
+  | 'GAME_SALES_FACTS'
+  | 'SALES_NEWS'
+  | 'LAUNCH_REPORT'
+  | 'SALES_RANKING';
+
 export interface PublicBlogListItem {
   slug: string;
   title: string;
   excerpt: string;
   publishedAt: string | null;
+  kind: BlogPostKind;
+  coverUrl: string | null;
   game: { name: string; slug: string; coverUrl: string | null } | null;
 }
 
@@ -420,11 +428,26 @@ export interface BlogFigures {
     sourceName: string | null;
   }[];
   signals: { metric: string; value: number; date: string | null }[];
+  /** Rankings only, in rank order. */
+  ranking: {
+    position: number;
+    gameName: string;
+    gameSlug: string;
+    value: number;
+    date: string | null;
+    sourceKind: BlogSourceKind;
+    sourceName: string | null;
+  }[];
+  /** News items only: the article the figure comes from. */
+  source: { url: string; label: string } | null;
 }
+
 
 export interface PublicBlogPost {
   slug: string;
   locale: 'en' | 'fr';
+  kind: BlogPostKind;
+  coverUrl: string | null;
   title: string;
   metaDescription: string;
   excerpt: string;
