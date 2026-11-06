@@ -1118,6 +1118,18 @@ function GamePageContent({
     game.twitchViewersHistory.length > 1 ? game.twitchViewersHistory : null;
 
   const gameUrl = `${SITE_URL}/${locale}/game/${game.slug}`;
+  // The studio when it has a page, else the franchise.
+  const parentCrumb = related.studioHub
+    ? {
+        href: `/studio/${related.studioHub.slug}`,
+        name: related.studioHub.name,
+      }
+    : related.franchiseHub
+      ? {
+          href: `/franchise/${related.franchiseHub.slug}`,
+          name: related.franchiseHub.name,
+        }
+      : null;
   const jsonLd = {
     '@context': 'https://schema.org',
     '@graph': [
@@ -1145,9 +1157,19 @@ function GamePageContent({
             name: t('back'),
             item: `${SITE_URL}/${locale}`,
           },
+          ...(parentCrumb
+            ? [
+                {
+                  '@type': 'ListItem',
+                  position: 2,
+                  name: parentCrumb.name,
+                  item: `${SITE_URL}/${locale}${parentCrumb.href}`,
+                },
+              ]
+            : []),
           {
             '@type': 'ListItem',
-            position: 2,
+            position: parentCrumb ? 3 : 2,
             name: game.name,
             item: gameUrl,
           },
@@ -1189,6 +1211,17 @@ function GamePageContent({
             {t('back')}
           </Link>
           <span className="mx-2">/</span>
+          {parentCrumb && (
+            <>
+              <Link
+                href={parentCrumb.href}
+                className="text-muted-foreground hover:text-primary"
+              >
+                {parentCrumb.name}
+              </Link>
+              <span className="mx-2">/</span>
+            </>
+          )}
           {game.name}
         </nav>
 

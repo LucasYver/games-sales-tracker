@@ -1,6 +1,11 @@
 import { useFormatter, useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
-import { listingUnits, type GameHub, type PopularGame } from '@/lib/api';
+import {
+  listingUnits,
+  type GameHub,
+  type HubIndexItem,
+  type PopularGame,
+} from '@/lib/api';
 import { SITE_URL } from '@/lib/site-url';
 import { GamesTable } from '@/components/chart-room/GamesTable';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
@@ -11,6 +16,7 @@ export function HubJsonLd({
   path,
   title,
   homeLabel,
+  parent,
   games,
   offset = 0,
 }: {
@@ -18,6 +24,8 @@ export function HubJsonLd({
   path: string;
   title: string;
   homeLabel: string;
+  /** Index page between the home page and this one. */
+  parent?: { path: string; label: string };
   games: PopularGame[];
   offset?: number;
 }) {
@@ -33,23 +41,37 @@ export function HubJsonLd({
             name: homeLabel,
             item: `${SITE_URL}/${locale}`,
           },
+          ...(parent
+            ? [
+                {
+                  '@type': 'ListItem',
+                  position: 2,
+                  name: parent.label,
+                  item: `${SITE_URL}/${locale}${parent.path}`,
+                },
+              ]
+            : []),
           {
             '@type': 'ListItem',
-            position: 2,
+            position: parent ? 3 : 2,
             name: title,
             item: `${SITE_URL}/${locale}${path}`,
           },
         ],
       },
-      {
-        '@type': 'ItemList',
-        itemListElement: games.map((game, index) => ({
-          '@type': 'ListItem',
-          position: offset + index + 1,
-          url: `${SITE_URL}/${locale}/game/${game.slug}`,
-          name: game.name,
-        })),
-      },
+      ...(games.length > 0
+        ? [
+            {
+              '@type': 'ItemList',
+              itemListElement: games.map((game, index) => ({
+                '@type': 'ListItem',
+                position: offset + index + 1,
+                url: `${SITE_URL}/${locale}/game/${game.slug}`,
+                name: game.name,
+              })),
+            },
+          ]
+        : []),
     ],
   };
   return (
@@ -60,7 +82,13 @@ export function HubJsonLd({
   );
 }
 
-export function HubBreadcrumb({ current }: { current: string }) {
+export function HubBreadcrumb({
+  current,
+  parent,
+}: {
+  current: string;
+  parent?: { path: string; label: string };
+}) {
   const t = useTranslations('hubs');
   return (
     <nav className="border-b border-border-soft px-4 py-2 font-mono text-[0.72rem] text-text-faint">
@@ -68,6 +96,17 @@ export function HubBreadcrumb({ current }: { current: string }) {
         {t('home')}
       </Link>
       <span className="mx-2">/</span>
+      {parent && (
+        <>
+          <Link
+            href={parent.path}
+            className="text-muted-foreground hover:text-primary"
+          >
+            {parent.label}
+          </Link>
+          <span className="mx-2">/</span>
+        </>
+      )}
       {current}
     </nav>
   );
@@ -111,13 +150,20 @@ export function GameHubPage({
   path,
   title,
   hub,
+  kind,
 }: {
   locale: string;
   path: string;
   title: string;
   hub: GameHub;
+  kind: 'studio' | 'franchise';
 }) {
   const t = useTranslations('hubs');
+  const tNav = useTranslations('nav');
+  const parent =
+    kind === 'studio'
+      ? { path: '/studios', label: tNav('studios') }
+      : { path: '/franchises', label: tNav('franchises') };
   const format = useFormatter();
   const compact = (units: number) =>
     format.number(units, { notation: 'compact', maximumFractionDigits: 1 });
@@ -146,12 +192,13 @@ export function GameHubPage({
         path={path}
         title={title}
         homeLabel={t('home')}
+        parent={parent}
         games={hub.games}
       />
       <SiteHeader />
 
       <div className="mx-auto w-full max-w-6xl">
-        <HubBreadcrumb current={hub.name} />
+        <HubBreadcrumb current={hub.name} parent={parent} />
 
         <header className="border-b border-border px-4 py-4">
           <h1 className="text-2xl leading-tight font-bold tracking-tight">
@@ -201,6 +248,68 @@ export function GameHubPage({
           </h2>
           <GamesTable games={hub.games} offset={0} />
         </section>
+      </div>
+    </main>
+  );
+}
+
+/** Index of the studios or franchises that have a page. */
+export function HubIndexPage({
+  locale,
+  path,
+  title,
+  intro,
+  basePath,
+  items,
+}: {
+  locale: string;
+  path: string;
+  title: string;
+  intro: string;
+  basePath: string;
+  items: HubIndexItem[];
+}) {
+  const t = useTranslations('hubs');
+  return (
+    <main className="flex min-h-screen flex-col">
+      <HubJsonLd
+        locale={locale}
+        path={path}
+        title={title}
+        homeLabel={t('home')}
+        games={[]}
+      />
+      <SiteHeader />
+
+      <div className="mx-auto w-full max-w-6xl">
+        <HubBreadcrumb current={title} />
+
+        <div className="px-4 py-5">
+          <h1 className="font-mono text-sm font-bold tracking-wider uppercase">
+            {title}
+          </h1>
+          <p className="mt-2 mb-5 max-w-[75ch] text-[0.82rem] leading-relaxed text-muted-foreground">
+            {intro}
+          </p>
+          <ul className="gap-x-6 sm:columns-2 lg:columns-3">
+            {items.map((item) => (
+              <li
+                key={item.slug}
+                className="flex break-inside-avoid justify-between gap-3 border-b border-border-soft py-2 text-sm"
+              >
+                <Link
+                  href={`${basePath}/${item.slug}`}
+                  className="min-w-0 font-semibold text-foreground hover:text-primary"
+                >
+                  {item.name}
+                </Link>
+                <span className="shrink-0 font-mono text-[0.75rem] text-muted-foreground tabular-nums">
+                  {item.games}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     </main>
   );

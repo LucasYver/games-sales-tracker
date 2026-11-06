@@ -20,6 +20,8 @@
     "MEDIUM": "Confianza media"
   },
   "nav": {
+    "studios": "Estudios",
+    "franchises": "Franquicias",
     "years": "Años",
     "blog": "Blog",
     "langSwitch": "Idioma",
@@ -221,6 +223,10 @@
     "bestSeller": "Más vendido",
     "latestRelease": "Último lanzamiento",
     "allGames": "Todos los juegos",
+    "studiosTitle": "Ventas de juegos por estudio",
+    "studiosIntro": "{count} estudios seguidos, cada uno con todos sus juegos y sus ventas estimadas o declaradas.",
+    "franchisesTitle": "Ventas de juegos por franquicia",
+    "franchisesIntro": "{count} franquicias seguidas, cada una con todos sus juegos y sus ventas estimadas o declaradas.",
     "yearTitle": "Juegos más vendidos lanzados en {year}",
     "yearTitlePage": "Juegos más vendidos lanzados en {year}, página {page}",
     "yearDescription": "Los juegos lanzados en {year} que más se han vendido: ventas estimadas o declaradas, todas las plataformas.",

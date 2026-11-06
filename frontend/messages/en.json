@@ -20,6 +20,8 @@
     "MEDIUM": "Medium confidence"
   },
   "nav": {
+    "studios": "Studios",
+    "franchises": "Franchises",
     "years": "Years",
     "blog": "Blog",
     "langSwitch": "Language",
@@ -221,6 +223,10 @@
     "bestSeller": "Best seller",
     "latestRelease": "Latest release",
     "allGames": "All games",
+    "studiosTitle": "Game sales by studio",
+    "studiosIntro": "{count} studios tracked, each with all its games and their estimated or reported sales.",
+    "franchisesTitle": "Game sales by franchise",
+    "franchisesIntro": "{count} franchises tracked, each with all its games and their estimated or reported sales.",
     "yearTitle": "Best-selling games released in {year}",
     "yearTitlePage": "Best-selling games released in {year}, page {page}",
     "yearDescription": "The best-selling games released in {year}: estimated and reported sales across all platforms.",

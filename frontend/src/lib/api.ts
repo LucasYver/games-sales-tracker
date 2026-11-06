@@ -348,6 +348,25 @@ async function getHub(path: string): Promise<GameHub | null> {
   return res.ok ? ((await res.json()) as GameHub) : null;
 }
 
+export interface HubIndexItem extends HubLink {
+  games: number;
+}
+
+async function getHubIndex(path: string): Promise<HubIndexItem[]> {
+  const res = await fetch(`${API_URL}/games/${path}`, {
+    next: { revalidate: RELATED_TTL },
+  });
+  return res.ok ? ((await res.json()) as HubIndexItem[]) : [];
+}
+
+export function getStudios(): Promise<HubIndexItem[]> {
+  return getHubIndex('studios');
+}
+
+export function getFranchises(): Promise<HubIndexItem[]> {
+  return getHubIndex('franchises');
+}
+
 export function getStudioHub(slug: string): Promise<GameHub | null> {
   return getHub(`studios/${encodeURIComponent(slug)}`);
 }

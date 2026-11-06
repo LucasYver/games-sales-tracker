@@ -871,6 +871,45 @@ export class GamesService {
     return this.toHub(slug, franchiseName(slug), games);
   }
 
+  /** Every studio with a hub page, for the public index. */
+  async listStudios() {
+    const rows = await this.games.query<
+      { slug: string; name: string; games: string }[]
+    >(
+      `SELECT slug, MODE() WITHIN GROUP (ORDER BY developer) AS name, COUNT(*) AS games
+       FROM (
+         SELECT developer, ${studioSlugSql('developer')} AS slug
+         FROM game
+         WHERE "deletedAt" IS NULL AND developer IS NOT NULL
+       ) studios
+       WHERE slug <> ''
+       GROUP BY slug
+       HAVING COUNT(*) >= $1
+       ORDER BY LOWER(MODE() WITHIN GROUP (ORDER BY developer)), slug`,
+      [STUDIO_HUB_MIN_GAMES],
+    );
+    return rows.map((row) => ({ ...row, games: Number(row.games) }));
+  }
+
+  /** Every franchise with a hub page, for the public index. */
+  async listFranchises() {
+    const rows = await this.games.query<{ slug: string; games: string }[]>(
+      `SELECT "franchiseSlug" AS slug, COUNT(*) AS games
+       FROM game
+       WHERE "deletedAt" IS NULL AND "franchiseSlug" IS NOT NULL
+       GROUP BY 1
+       HAVING COUNT(*) >= $1`,
+      [FRANCHISE_HUB_MIN_GAMES],
+    );
+    return rows
+      .map((row) => ({
+        slug: row.slug,
+        name: franchiseName(row.slug),
+        games: Number(row.games),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   /** Slugs of the hubs that exist, for the sitemap. */
   async listHubs(): Promise<{ studios: string[]; franchises: string[] }> {
     const [studios, franchises] = await Promise.all([

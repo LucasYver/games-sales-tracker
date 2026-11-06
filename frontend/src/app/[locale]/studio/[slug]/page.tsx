@@ -50,6 +50,7 @@ export default async function StudioPage({ params }: { params: Params }) {
       path={`/studio/${hub.slug}`}
       title={t('studioTitle', { name: hub.name })}
       hub={hub}
+      kind="studio"
     />
   );
 }

@@ -50,6 +50,7 @@ export default async function FranchisePage({ params }: { params: Params }) {
       path={`/franchise/${hub.slug}`}
       title={t('franchiseTitle', { name: hub.name })}
       hub={hub}
+      kind="franchise"
     />
   );
 }

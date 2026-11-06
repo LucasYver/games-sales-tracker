@@ -91,6 +91,16 @@ export class GamesController {
     return this.games.listHubs();
   }
 
+  @Get('studios')
+  studios() {
+    return this.games.listStudios();
+  }
+
+  @Get('franchises')
+  franchises() {
+    return this.games.listFranchises();
+  }
+
   @Get('studios/:slug')
   studio(@Param('slug') slug: string) {
     return this.games.getStudioHub(slug);
