@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Not, Repository, IsNull, In } from 'typeorm';
+import { Not, Repository, In } from 'typeorm';
 import {
   AchievementSnapshot,
   EstimateSnapshot,
@@ -234,29 +234,12 @@ export interface CreateMilestoneInput {
   confidenceScore?: number | null;
 }
 
+// Cron progress for the /admin/crons page. Catalog and estimate figures for
+// the dashboard come from AdminDashboardService.
 export interface AdminStats {
-  games: {
-    total: number;
-    withSales: number;
-    withEstimate: number;
-  };
-  milestones: {
-    total: number;
-    rejected: number;
-    bySource: Record<SalesSource, number>;
-    undated: number;
-  };
   signals: {
     steamReviewsTotal: number;
     lastCapturedAt: Date | null;
-  };
-  trustedSources: {
-    total: number;
-    active: number;
-    withFeed: number;
-  };
-  estimates: {
-    total: number;
   };
   ingestionPipelines: Array<{
     pipeline: IngestionPipeline;
@@ -580,47 +563,18 @@ export class AdminService {
 
   async stats(): Promise<AdminStats> {
     const [
-      gamesTotal,
       gamesWithSales,
-      gamesWithEstimate,
-      salesTotal,
-      salesRejected,
-      salesUndated,
-      bySourceRows,
       latestSteamSignal,
       steamReviewsTotal,
-      trustedTotal,
-      trustedActive,
-      trustedWithFeed,
-      estimatesTotal,
       paidGamesTotal,
       steamGamesTotal,
       consoleGamesTotal,
     ] = await Promise.all([
-      this.games.count(),
       this.games
         .createQueryBuilder('g')
         .innerJoin('g.milestones', 'm', Milestone.notRejectedSql('m'))
         .select('COUNT(DISTINCT g.id)', 'c')
         .getRawOne<{ c: string }>(),
-      this.games
-        .createQueryBuilder('g')
-        .innerJoin('g.estimates', 'e')
-        .select('COUNT(DISTINCT g.id)', 'c')
-        .getRawOne<{ c: string }>(),
-      this.milestones.count(),
-      this.milestones.count({
-        withDeleted: true,
-        where: Milestone.rejected(),
-      }),
-      this.milestones.count({
-        where: { reportedAt: IsNull() },
-      }),
-      Milestone.applyDefault(this.milestones.createQueryBuilder('m'), 'm')
-        .select('m.source', 'source')
-        .addSelect('COUNT(*)', 'c')
-        .groupBy('m.source')
-        .getRawMany<{ source: SalesSource; c: string }>(),
       this.signals
         .createQueryBuilder('s')
         .where('s.metric = :m', { m: SignalMetric.STEAM_REVIEWS })
@@ -628,13 +582,6 @@ export class AdminService {
         .limit(1)
         .getOne(),
       this.signals.count({ where: { metric: SignalMetric.STEAM_REVIEWS } }),
-      this.trustedSources.count(),
-      this.trustedSources.count({ where: { active: true } }),
-      this.trustedSources
-        .createQueryBuilder('ts')
-        .where('ts.feedUrl IS NOT NULL')
-        .getCount(),
-      this.estimates.count(),
       this.games.count({ where: { isFree: false } }),
       this.gameSources
         .createQueryBuilder('gs')
@@ -658,14 +605,6 @@ export class AdminService {
         .getCount(),
     ]);
 
-    const bySource = Object.values(SalesSource).reduce(
-      (acc, s) => {
-        acc[s] = 0;
-        return acc;
-      },
-      {} as Record<SalesSource, number>,
-    );
-    for (const row of bySourceRows) bySource[row.source] = Number(row.c);
     const now = new Date();
     const cronCycles = INGESTION_CRONS.map((cron) => ({
       ...cron,
@@ -776,27 +715,10 @@ export class AdminService {
     ]);
 
     return {
-      games: {
-        total: gamesTotal,
-        withSales: Number(gamesWithSales?.c ?? 0),
-        withEstimate: Number(gamesWithEstimate?.c ?? 0),
-      },
-      milestones: {
-        total: salesTotal,
-        rejected: salesRejected,
-        bySource,
-        undated: salesUndated,
-      },
       signals: {
         steamReviewsTotal,
         lastCapturedAt: latestSteamSignal?.capturedAt ?? null,
       },
-      trustedSources: {
-        total: trustedTotal,
-        active: trustedActive,
-        withFeed: trustedWithFeed,
-      },
-      estimates: { total: estimatesTotal },
       ingestionPipelines,
       milestoneHarvest,
       steamReviewsHealth,

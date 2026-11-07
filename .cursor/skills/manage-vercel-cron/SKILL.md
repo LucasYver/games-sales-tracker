@@ -4,7 +4,7 @@ description: >-
   Add or change a scheduled job in game-sales-tracker. Use when the user
   mentions a cron, Vercel schedule, polling cadence, CRON_SECRET, or a
   recurring ingestion/rebuild job. Wires vercel.json, CronController,
-  RefreshService, ingestion state, and the admin pipeline dashboard.
+  RefreshService, ingestion state, and the admin crons page.
 ---
 
 # Manage a Vercel cron
@@ -24,7 +24,7 @@ that prefix.
 - [ ] RefreshService method: catch per item, log counts, respect the budget
 - [ ] Per-game work: INGESTION_PIPELINES + IngestionStateService.track
 - [ ] Due selection is stalest-first for the cadence
-- [ ] Admin INGESTION_CRONS schedule matches vercel.json, when the dashboard shows this job
+- [ ] Admin INGESTION_CRONS schedule matches vercel.json, when /admin/crons shows this job
 - [ ] Missing credential skips the run; it does not fail every game
 ```
 
@@ -73,20 +73,20 @@ Adding a value to `INGESTION_PIPELINES` in
 
 Whole-catalog jobs that do not loop games (`game-rank`, discovery's
 own IGDB pass, `blog-draft`, `blog-news`) are not rows in `INGESTION_CRONS`. Do not
-add them there unless the dashboard query in `AdminService.stats` can
+add them there unless the crons-page query in `AdminService.stats` can
 count their cycle the same way as the others. `blog-draft` writes at most
 one draft per week (an update of an outdated live article first) and never
 publishes. How the game is picked: `manage-blog` skill
 (`BlogService.firstStaleLivePost`, then `BlogCandidateService.pickBest`).
 
 Milestone harvest is per-game but age-based, not cycle-based, so it is not
-in `INGESTION_CRONS` either. Its dashboard row comes from
+in `INGESTION_CRONS` either. Its crons-page row comes from
 `AdminService.milestoneHarvestProgress` (eligible, due now, expected per
 day). Its `cronPath` / `schedule` there must also match `vercel.json`.
 Change harvest tiers in `scheduler/refresh-interval.ts` only:
 `getRefreshIntervalDays` and its SQL mirror `harvestDueSql` live together.
 
-## Dashboard copy
+## Crons page row
 
 When the job is per-game and should appear on `/admin/crons`, add one object to
 `INGESTION_CRONS` in `admin.service.ts`. `cronPath` and `schedule` must

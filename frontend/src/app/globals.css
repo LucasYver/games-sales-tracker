@@ -250,6 +250,12 @@ body {
   --sidebar-border: #e5e8ec;
   --sidebar-accent: #edeffe;
   --sidebar-accent-foreground: #4f5bd5;
+  /* Milestone source groups on the dashboard. Order official, media, leak,
+     wikipedia passes the dataviz palette validator in both modes. */
+  --source-official: #1f7a52;
+  --source-media: #2f68b8;
+  --source-leak: #b7791f;
+  --source-wikipedia: #7c5cc4;
 }
 .admin-scope.dark {
   --background: #0d0f13;
@@ -274,6 +280,10 @@ body {
   --sidebar-border: #262b34;
   --sidebar-accent: #1c2040;
   --sidebar-accent-foreground: #e9ebef;
+  --source-official: #3f9d70;
+  --source-media: #5b8fd9;
+  --source-leak: #b8862c;
+  --source-wikipedia: #8f74d4;
 }
 
 @layer base {

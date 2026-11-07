@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { AdminService } from './admin.service';
+import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminAuthGuard } from './admin-auth.guard';
 import { CatalogTier, SalesSource } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
@@ -43,6 +44,7 @@ import type { BlogPostStatus } from '../entities';
 export class AdminController {
   constructor(
     private readonly admin: AdminService,
+    private readonly dashboard: AdminDashboardService,
     private readonly ingestion: IngestionService,
     private readonly publishers: PublishersService,
     private readonly developers: DevelopersService,
@@ -54,9 +56,20 @@ export class AdminController {
     private readonly mail: AdminMailService,
   ) {}
 
+  // Cron progress, read by the /admin/crons page.
   @Get('stats')
   stats() {
     return this.admin.stats();
+  }
+
+  @Get('dashboard')
+  dashboardOverview() {
+    return this.dashboard.overview();
+  }
+
+  @Get('dashboard/quality')
+  dashboardQuality() {
+    return this.dashboard.quality();
   }
 
   @Get('games')

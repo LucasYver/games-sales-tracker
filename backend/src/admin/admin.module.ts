@@ -18,6 +18,7 @@ import {
 import { AdminController } from './admin.controller';
 import { AdminAuthController } from './admin-auth.controller';
 import { AdminService } from './admin.service';
+import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminAuthGuard } from './admin-auth.guard';
 import { AdminMailService } from './admin-mail.service';
@@ -57,7 +58,13 @@ import { BlogModule } from '../blog/blog.module';
     BlogModule,
   ],
   controllers: [AdminController, AdminAuthController],
-  providers: [AdminService, AdminAuthService, AdminAuthGuard, AdminMailService],
+  providers: [
+    AdminService,
+    AdminDashboardService,
+    AdminAuthService,
+    AdminAuthGuard,
+    AdminMailService,
+  ],
   exports: [AdminAuthService, AdminMailService],
 })
 export class AdminModule {}

@@ -58,6 +58,7 @@ export async function adminFetch<T>(
 // ---- Shared admin DTOs (mirror the backend AdminService types) -------------
 
 import type {
+  Agreement,
   ConfidenceLevel,
   GameMode,
   GameType,
@@ -70,21 +71,9 @@ export type SalesSource = Exclude<SalesSourceLabel, 'ESTIMATE'>;
 
 export type CatalogTier = 'CORE' | 'EXTENDED';
 
+// Cron progress, read by /admin/crons.
 export interface AdminStats {
-  games: {
-    total: number;
-    withSales: number;
-    withEstimate: number;
-  };
-  milestones: {
-    total: number;
-    rejected: number;
-    bySource: Record<SalesSource, number>;
-    undated: number;
-  };
   signals: { steamReviewsTotal: number; lastCapturedAt: string | null };
-  trustedSources: { total: number; active: number; withFeed: number };
-  estimates: { total: number };
   ingestionPipelines: Array<{
     pipeline: string;
     cronPath: string;
@@ -120,6 +109,65 @@ export interface AdminStats {
     lastCapturedAt: string | null;
     problems: string[];
   };
+}
+
+export interface AdminDashboardOverview {
+  games: {
+    total: number;
+    core: number;
+    addedLast7d: number;
+    withSales: number;
+    withSalesAddedLast7d: number;
+    estimated: number;
+  };
+  milestones: {
+    total: number;
+    addedLast7d: number;
+    undated: number;
+    rejected: number;
+    bySource: Record<SalesSource, number>;
+  };
+  /** Oldest week first; `weekStart` is a Monday (UTC). */
+  weeklyMilestones: Array<{
+    weekStart: string;
+    bySource: Record<SalesSource, number>;
+  }>;
+  coreCoverageByYear: Array<{
+    label: string;
+    games: number;
+    withMilestone: number;
+  }>;
+  platformCoverage: Array<{
+    platform: Platform;
+    games: number;
+    withMilestone: number;
+  }>;
+}
+
+export interface AdminDashboardQuality {
+  comparisons: number;
+  /** Median of max(ratio, 1/ratio). */
+  medianFactor: number | null;
+  /** Median of estimate / declared: above 1 the model overestimates. */
+  medianRatio: number | null;
+  withinFactor1_5: number;
+  agreement: Record<Agreement, number>;
+  histogram: Array<{ label: string; count: number }>;
+  byGenre: Array<{
+    genre: string;
+    comparisons: number;
+    medianFactor: number;
+    medianRatio: number;
+  }>;
+  divergences: Array<{
+    gameId: string;
+    name: string;
+    platform: Platform;
+    declaredUnits: number;
+    estimatedUnits: number;
+    ratio: number;
+    agreement: Agreement;
+  }>;
 }
 
 export interface AdminGameSummary {
@@ -483,7 +531,6 @@ export type Year2Retention =
   | 'HIGH'
   | 'VERY_HIGH';
 
-
 // ─── Reference profiles / matcher (data-driven "Forme C") ───────────────────
 
 export interface AdminReferenceCurve {
@@ -503,10 +550,7 @@ export interface AdminReferencePlatformShares {
 }
 
 export type ReferencePlatformClass =
-  | 'PC_ONLY'
-  | 'CONSOLE_ONLY'
-  | 'PC_PLUS_CONSOLE'
-  | 'UNKNOWN';
+  'PC_ONLY' | 'CONSOLE_ONLY' | 'PC_PLUS_CONSOLE' | 'UNKNOWN';
 
 export interface AdminReferenceProfile {
   gameId: string;
@@ -678,9 +722,7 @@ export interface WeightedBreakdownEntry {
 export interface PlatformBreakdownResult {
   platform: Platform;
   entries: (
-    | BoxleiterBreakdownEntry
-    | FirstWeekBreakdownEntry
-    | SplitBreakdownEntry
+    BoxleiterBreakdownEntry | FirstWeekBreakdownEntry | SplitBreakdownEntry
   )[];
   weightedEntries: WeightedBreakdownEntry[];
   totalWeight: number;
@@ -702,10 +744,7 @@ export interface AdminBlogFreshness {
 }
 
 export type AdminBlogKind =
-  | 'GAME_SALES_FACTS'
-  | 'SALES_NEWS'
-  | 'LAUNCH_REPORT'
-  | 'SALES_RANKING';
+  'GAME_SALES_FACTS' | 'SALES_NEWS' | 'LAUNCH_REPORT' | 'SALES_RANKING';
 
 export interface AdminBlogSummary {
   id: string;
@@ -870,5 +909,4 @@ export interface AdminCronJob {
 }
 
 export type RunCronResult =
-  | { ok: true; name: string; startedAt: string }
-  | { ok: false; error: string };
+  { ok: true; name: string; startedAt: string } | { ok: false; error: string };

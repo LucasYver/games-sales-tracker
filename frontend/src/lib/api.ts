@@ -60,6 +60,7 @@ export type SalesSourceLabel =
   | 'ANNOUNCEMENT'
   | 'MEDIA'
   | 'STEAM_LEAK'
+  | 'PLAYSTATION_LEAK'
   | 'ESTIMATE';
 
 export interface TotalSales {
