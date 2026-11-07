@@ -18,6 +18,7 @@ import {
   RECENT_WINDOW_DAYS,
   UPCOMING_WINDOW_DAYS,
 } from './discovery.constants';
+import { XBOX_PRODUCT_ID_RE } from './xbox-catalog.client';
 
 export interface IgdbGame {
   igdbId: number;
@@ -71,6 +72,18 @@ export interface IgdbEdition {
   versionTitle: string | null;
   releaseDate: Date | null;
 }
+
+/** Console store products IGDB links to a game (see `fetchStoreIds`). */
+export interface IgdbStoreIds {
+  /** PlayStation Store concept ids (`store.playstation.com/en-us/concept/<id>`). */
+  playstation: string[];
+  /** Xbox Store product ids, upper case (`9NCJSXWZTP88`). */
+  xbox: string[];
+}
+
+// IGDB `external_game_sources` ids (checked live on 2026-11-07).
+const IGDB_SOURCE_MICROSOFT = 11;
+const IGDB_SOURCE_PLAYSTATION_US = 36;
 
 interface CachedToken {
   accessToken: string;
@@ -556,6 +569,87 @@ export class IgdbClient {
         ? JSON.stringify(error.response?.data ?? error.message)
         : String(error);
       this.logger.error(`IGDB editions query failed: ${detail}`);
+      return null;
+    }
+  }
+
+  /**
+   * The console store products IGDB links to up to 500 games, keyed by IGDB
+   * id: PlayStation Store concept ids and Xbox Store product ids. A game with
+   * neither is absent from the map. Returns null when a request fails, so the
+   * caller can tell a failure from "no store links".
+   *
+   * Only two `external_game_source` values carry an id our store clients
+   * read: 36 (PlayStation Store US, uid = concept id) and 11 (Microsoft,
+   * uid = 12-character Store product id). Source 11 also holds Xbox 360
+   * Marketplace GUIDs, and 31 only those: both are skipped by the id check.
+   */
+  async fetchStoreIds(
+    igdbIds: number[],
+  ): Promise<Map<number, IgdbStoreIds> | null> {
+    if (!this.isConfigured()) return null;
+    const ids = igdbIds.filter((id) => Number.isInteger(id)).slice(0, 500);
+    const stores = new Map<number, IgdbStoreIds>();
+    if (ids.length === 0) return stores;
+
+    const token = await this.getAccessToken();
+    const clientId = this.config.get<string>('IGDB_CLIENT_ID')!;
+    const pageSize = 500;
+    try {
+      for (let offset = 0; ; offset += pageSize) {
+        const { data } = await axios.post<unknown>(
+          'https://api.igdb.com/v4/external_games',
+          [
+            `where game = (${ids.join(',')})`,
+            `& external_game_source = (${IGDB_SOURCE_PLAYSTATION_US},${IGDB_SOURCE_MICROSOFT});`,
+            'fields game, external_game_source, uid;',
+            'sort id asc;',
+            `limit ${pageSize};`,
+            `offset ${offset};`,
+          ].join(' '),
+          {
+            headers: {
+              'Client-ID': clientId,
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'text/plain',
+            },
+            timeout: 30000,
+          },
+        );
+        const rows = data as Array<{
+          game?: number;
+          external_game_source?: number;
+          uid?: string;
+        }>;
+        for (const row of rows) {
+          const uid = row.uid?.trim();
+          if (typeof row.game !== 'number' || !uid) continue;
+          const entry = stores.get(row.game) ?? { playstation: [], xbox: [] };
+          if (
+            row.external_game_source === IGDB_SOURCE_PLAYSTATION_US &&
+            /^\d+$/.test(uid) &&
+            !entry.playstation.includes(uid)
+          ) {
+            entry.playstation.push(uid);
+          } else if (
+            row.external_game_source === IGDB_SOURCE_MICROSOFT &&
+            XBOX_PRODUCT_ID_RE.test(uid) &&
+            !entry.xbox.includes(uid.toUpperCase())
+          ) {
+            entry.xbox.push(uid.toUpperCase());
+          } else {
+            continue;
+          }
+          stores.set(row.game, entry);
+        }
+        if (rows.length < pageSize) break;
+      }
+      return stores;
+    } catch (error) {
+      const detail = axios.isAxiosError(error)
+        ? JSON.stringify(error.response?.data ?? error.message)
+        : String(error);
+      this.logger.error(`IGDB store links query failed: ${detail}`);
       return null;
     }
   }

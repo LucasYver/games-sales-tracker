@@ -24,6 +24,7 @@ every pass.
 | Finding and reading store products | `backend/src/ingestion/store-ratings.client.ts` |
 | Xbox catalog fields, release date included | `backend/src/ingestion/xbox-catalog.client.ts` |
 | Saving, and removing a wrong product | `scrapeStoreRatings`, `forgetWrongStoreProduct` in `ingestion.service.ts` |
+| Store ids IGDB links to a game | `IgdbClient.fetchStoreIds`, written nightly by `IgdbRefreshService.syncStoreIds` to `game.igdbPsConceptIds` / `igdbXboxProductIds` |
 
 ## How a product is accepted
 
@@ -68,6 +69,18 @@ Choices to keep:
 
 For games with no stored product, or whose stored one was rejected:
 
+- **IGDB first, both stores:** the products IGDB lists for the game in
+  `external_games` (source 36 = PlayStation Store US, uid = concept id;
+  source 11 = Microsoft, uid = 12-character product id; source 31 and the
+  Xbox 360 GUIDs under 11 are old Marketplace ids and are skipped). At most 3
+  PlayStation concepts are opened. Up to 5 Xbox products go in one catalog
+  call; the closest title wins, then the most ratings, because IGDB often lists
+  one product per edition or console generation. An `exact` or `edition` match
+  ends the lookup; a `subtitle` match is kept only if the portal and search
+  find nothing, because IGDB links "World War Z" to "World War Z: Aftermath"
+  alone while search finds the original. It still has to pass
+  `storeProductMatchesGame`, because IGDB data is crowd-edited.
+  The ids are only as fresh as the game's last nightly IGDB refresh.
 - **PlayStation:** portal pages `playstation.com/en-us/games/{slug}` (at most 4
   slugs), then Chihiro search (at most 6 queries).
 - **Xbox:** xbox.com search (at most 4 queries, top 5 products each), read through

@@ -42,6 +42,10 @@ ago (`IgdbRefreshService.refreshFromIgdb`, batches of 500 ids):
 - release dates, for games not launched yet or with no date only
   (`games/release-date-refresh.ts`): `releaseDate` and the per-platform rows.
   A released game and an admin-set date are never moved.
+- console store links from IGDB `external_games` (`syncStoreIds`, one
+  request per 500 games): PlayStation Store concept ids in `igdbPsConceptIds`
+  and Xbox Store product ids in `igdbXboxProductIds`, which the store lookup
+  tries before searching (skill `console-store-matching`).
 
 Free-to-play is rejected later, on Steam ingest (`isFree`), not by the
 IGDB rating bar.

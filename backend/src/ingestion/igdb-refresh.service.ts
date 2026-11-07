@@ -59,6 +59,7 @@ export class IgdbRefreshService {
     releaseDatesMoved: number;
     platformDatesChanged: number;
     editions: number;
+    storeLinks: number;
   }> {
     const result = {
       checked: 0,
@@ -66,6 +67,7 @@ export class IgdbRefreshService {
       releaseDatesMoved: 0,
       platformDatesChanged: 0,
       editions: 0,
+      storeLinks: 0,
     };
     if (!this.igdb.isConfigured()) return result;
 
@@ -187,11 +189,12 @@ export class IgdbRefreshService {
         fetched,
       );
       result.editions += await this.syncEditions(batch);
+      result.storeLinks += await this.syncStoreIds(batch);
       result.checked += batch.length;
     }
 
     this.logger.log(
-      `IGDB refresh: ${result.checked} game(s) checked, ${result.groupingChanged} regrouped, ${result.releaseDatesMoved} release date(s) moved, ${result.platformDatesChanged} platform date set(s) rewritten, ${result.editions} edition(s) listed.`,
+      `IGDB refresh: ${result.checked} game(s) checked, ${result.groupingChanged} regrouped, ${result.releaseDatesMoved} release date(s) moved, ${result.platformDatesChanged} platform date set(s) rewritten, ${result.editions} edition(s) listed, ${result.storeLinks} game(s) with a console store link.`,
     );
     return result;
   }
@@ -224,6 +227,34 @@ export class IgdbRefreshService {
       if (rows.length > 0) await manager.upsert(GameEdition, rows, ['igdbId']);
     });
     return rows.length;
+  }
+
+  /**
+   * Rewrites the console store products IGDB links to the batch's games (one
+   * request for the batch), read by the store lookup before it searches. A
+   * failed request keeps the stored ids. Returns the games with at least one.
+   */
+  private async syncStoreIds(batch: Game[]): Promise<number> {
+    const byGame = await this.igdb.fetchStoreIds(
+      batch.map((game) => game.igdbId as number),
+    );
+    if (!byGame) return 0;
+    const links = batch.map((game) => byGame.get(game.igdbId as number));
+    const asArray = (ids: string[] | undefined) =>
+      ids && ids.length > 0 ? `{${ids.join(',')}}` : null;
+    await this.games.query(
+      `UPDATE game AS g
+       SET "igdbPsConceptIds" = v.ps::text[],
+           "igdbXboxProductIds" = v.xbox::text[]
+       FROM unnest($1::uuid[], $2::text[], $3::text[]) AS v(id, ps, xbox)
+       WHERE g.id = v.id`,
+      [
+        batch.map((game) => game.id),
+        links.map((link) => asArray(link?.playstation)),
+        links.map((link) => asArray(link?.xbox)),
+      ],
+    );
+    return links.filter((link) => link).length;
   }
 
   /**

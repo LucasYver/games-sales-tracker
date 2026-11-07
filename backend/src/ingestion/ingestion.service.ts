@@ -3878,12 +3878,11 @@ export class IngestionService {
 
         try {
           await this.ingestionState.track(gameId, 'STORE_RATINGS', () =>
-            this.scrapeStoreRatings(
-              game.id,
-              game.name,
-              game.platforms,
-              knownUrlsByGameId.get(gameId),
-            ),
+            this.scrapeStoreRatings(game.id, game.name, game.platforms, {
+              ...knownUrlsByGameId.get(gameId),
+              igdbPsConceptIds: game.igdbPsConceptIds ?? undefined,
+              igdbXboxProductIds: game.igdbXboxProductIds ?? undefined,
+            }),
           );
         } catch (error) {
           this.logger.warn(
@@ -4783,13 +4782,22 @@ export class IngestionService {
   }
 
   private async knownStoreUrlsFor(gameId: string): Promise<KnownStoreUrls> {
-    const sources = await this.gameSources.find({
-      where: {
-        gameId,
-        source: In([SourceType.PS_STORE, SourceType.XBOX_STORE]),
-      },
-    });
-    const urls: KnownStoreUrls = {};
+    const [sources, game] = await Promise.all([
+      this.gameSources.find({
+        where: {
+          gameId,
+          source: In([SourceType.PS_STORE, SourceType.XBOX_STORE]),
+        },
+      }),
+      this.games.findOne({
+        where: { id: gameId },
+        select: { id: true, igdbPsConceptIds: true, igdbXboxProductIds: true },
+      }),
+    ]);
+    const urls: KnownStoreUrls = {
+      igdbPsConceptIds: game?.igdbPsConceptIds ?? undefined,
+      igdbXboxProductIds: game?.igdbXboxProductIds ?? undefined,
+    };
     for (const source of sources) {
       if (!source.url) continue;
       if (source.source === SourceType.PS_STORE)

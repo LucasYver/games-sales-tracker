@@ -37,13 +37,26 @@ export interface StoreLookupResult {
 export type GameReleaseDates = Array<Date | null | undefined>;
 
 type PsPageOutcome =
-  | { kind: 'match'; sourceUrl: string; rating: StoreRating | null }
+  | {
+      kind: 'match';
+      sourceUrl: string;
+      rating: StoreRating | null;
+      /** `STORE_RELATION_RANK` of the closer of the page's two names. */
+      rank: number;
+    }
   | { kind: 'mismatch' }
   | { kind: 'unavailable' };
 
 export interface KnownStoreUrls {
   playstationUrl?: string;
   xboxUrl?: string;
+  /**
+   * Store products IGDB links to the game (`Game.igdbPsConceptIds`,
+   * `Game.igdbXboxProductIds`). Tried before any search, and accepted only
+   * through `storeProductMatchesGame` like every other candidate.
+   */
+  igdbPsConceptIds?: string[];
+  igdbXboxProductIds?: string[];
 }
 
 const USER_AGENT =
@@ -65,6 +78,12 @@ const PS_MAX_CANDIDATES = 5;
 // Bounds the requests a game with no store page costs on each daily pass.
 const PS_MAX_SEARCH_QUERIES = 6;
 const PS_MAX_PORTAL_SLUGS = 4;
+
+// IGDB rarely links more than one or two products per store; a game with a
+// long list (one Xbox product per edition and console) is capped like a
+// search page.
+const PS_MAX_IGDB_CONCEPTS = 3;
+const XBOX_MAX_IGDB_PRODUCTS = XBOX_MAX_CANDIDATES;
 
 // Rendered in place of a game title when the store has no real page.
 const PS_GENERIC_TITLE = 'PlayStation';
@@ -97,8 +116,18 @@ export class StoreRatingsClient {
     releaseDates: GameReleaseDates = [],
   ): Promise<StoreLookupResult> {
     const [ps, xbox] = await Promise.all([
-      this.getPlaystation(name, known.playstationUrl, releaseDates),
-      this.getXbox(name, known.xboxUrl, releaseDates),
+      this.getPlaystation(
+        name,
+        known.playstationUrl,
+        known.igdbPsConceptIds ?? [],
+        releaseDates,
+      ),
+      this.getXbox(
+        name,
+        known.xboxUrl,
+        known.igdbXboxProductIds ?? [],
+        releaseDates,
+      ),
     ]);
     const ratings: StoreRating[] = [];
     if (ps.match?.rating) ratings.push(ps.match.rating);
@@ -114,12 +143,15 @@ export class StoreRatingsClient {
   private async getPlaystation(
     name: string,
     knownUrl: string | undefined,
+    igdbConceptIds: string[],
     releaseDates: GameReleaseDates,
   ): Promise<{
     match: { sourceUrl: string; rating: StoreRating | null } | null;
     urlRejected: boolean;
   }> {
     let urlRejected = false;
+    let igdbFallback: { sourceUrl: string; rating: StoreRating | null } | null =
+      null;
     try {
       if (knownUrl) {
         const cached = await this.playstationFromUrl(
@@ -129,6 +161,23 @@ export class StoreRatingsClient {
         );
         if (cached.kind === 'match') return { match: cached, urlRejected };
         urlRejected = cached.kind === 'mismatch';
+      }
+      // The concepts IGDB links to the game come first: a direct id finds
+      // listings the portal and search miss (annual titles, remakes sharing
+      // the original's name), and costs one page instead of a search.
+      // A `subtitle` match is kept as a fallback only, as on Xbox: IGDB may
+      // link a re-release under a longer name while the store also sells the
+      // original.
+      const knownConceptUrl = knownUrl?.split('?')[0];
+      for (const conceptId of igdbConceptIds.slice(0, PS_MAX_IGDB_CONCEPTS)) {
+        const url = this.psConceptUrl(conceptId);
+        if (url === knownConceptUrl) continue;
+        const fromIgdb = await this.playstationFromUrl(name, url, releaseDates);
+        if (fromIgdb.kind !== 'match') continue;
+        if (fromIgdb.rank < STORE_RELATION_RANK.subtitle) {
+          return { match: fromIgdb, urlRejected };
+        }
+        igdbFallback ??= fromIgdb;
       }
       // Resolve the parent concept rather than a single SKU. PSN exposes
       // a per-SKU `totalRatingsCount` on every product page (PS4 vs PS5,
@@ -167,10 +216,10 @@ export class StoreRatingsClient {
         );
         if (result.kind === 'match') return { match: result, urlRejected };
       }
-      return { match: null, urlRejected };
+      return { match: igdbFallback, urlRejected };
     } catch (error) {
       this.logger.warn(`PlayStation lookup failed for "${name}": ${error}`);
-      return { match: null, urlRejected };
+      return { match: igdbFallback, urlRejected };
     }
   }
 
@@ -190,26 +239,33 @@ export class StoreRatingsClient {
     if (!title || title === PS_GENERIC_TITLE) return { kind: 'unavailable' };
     const productName = this.extractPsProductName(page);
     const storeRelease = this.extractPsReleaseDate(page, url);
-    const matches = [title, productName].some(
-      (storeTitle) =>
-        storeTitle &&
+    const matching = [title, productName].filter(
+      (storeTitle): storeTitle is string =>
+        !!storeTitle &&
         storeProductMatchesGame(name, storeTitle, storeRelease, releaseDates),
     );
-    if (!matches) {
+    if (matching.length === 0) {
       // A mismatch deletes data, so it takes two independent names: a change
       // in the page's <title> format alone must not read as "another game".
       return productName ? { kind: 'mismatch' } : { kind: 'unavailable' };
     }
 
     const sourceUrl = url.split('?')[0];
+    const rank = Math.min(
+      ...matching.map(
+        (storeTitle) =>
+          STORE_RELATION_RANK[storeTitleRelation(name, storeTitle)],
+      ),
+    );
     const rating = this.extractPsStarRating(page);
     if (!rating || rating.ratingCount <= 0) {
-      return { kind: 'match', sourceUrl, rating: null };
+      return { kind: 'match', sourceUrl, rating: null, rank };
     }
 
     return {
       kind: 'match',
       sourceUrl,
+      rank,
       rating: {
         platform: Platform.PLAYSTATION,
         metric: SignalMetric.PS_RATINGS,
@@ -229,9 +285,11 @@ export class StoreRatingsClient {
   private async getXbox(
     name: string,
     knownUrl: string | undefined,
+    igdbProductIds: string[],
     releaseDates: GameReleaseDates,
   ): Promise<{ rating: StoreRating | null; urlRejected: boolean }> {
     let urlRejected = false;
+    let subtitleMatch: StoreRating | null = null;
     try {
       if (knownUrl) {
         const productId = this.xboxCatalog.xboxProductIdFromUrl(knownUrl);
@@ -256,29 +314,31 @@ export class StoreRatingsClient {
         }
       }
 
-      let subtitleMatch: StoreRating | null = null;
+      // The products IGDB links to the game, read in one catalog call. IGDB
+      // often lists one per edition or console generation, each with its own
+      // ratings: the closest title wins, then the most rated. Like a search
+      // hit, a `subtitle` match is only a fallback: IGDB links "World War Z"
+      // to "World War Z: Aftermath" alone, while search finds the original.
+      const fromIgdb = await this.bestXboxProduct(
+        name,
+        igdbProductIds.slice(0, XBOX_MAX_IGDB_PRODUCTS),
+        releaseDates,
+        'mostRated',
+      );
+      if (fromIgdb && fromIgdb.rank < STORE_RELATION_RANK.subtitle) {
+        return { rating: fromIgdb.rating, urlRejected };
+      }
+
+      subtitleMatch = fromIgdb?.rating ?? null;
       for (const query of this.xboxSearchQueries(name)) {
         const productIds = await this.searchXboxProductIds(query);
         if (productIds.length === 0) continue;
-        const candidates = productIds.slice(0, XBOX_MAX_CANDIDATES);
-        const catalog = await this.xboxCatalog.getProducts(candidates, 'US');
-
-        let best: { rank: number; rating: StoreRating } | null = null;
-        for (const productId of candidates) {
-          const product = catalog.get(productId.toUpperCase());
-          if (!product?.title || !product.rating) continue;
-          if (!this.xboxProductMatches(name, product, releaseDates)) continue;
-          const rank =
-            STORE_RELATION_RANK[storeTitleRelation(name, product.title)];
-          if (best && best.rank <= rank) continue;
-          best = {
-            rank,
-            rating: this.xboxRatingResult(
-              `https://www.xbox.com/en-US/games/store/x/${product.productId}`,
-              product.rating,
-            ),
-          };
-        }
+        const best = await this.bestXboxProduct(
+          name,
+          productIds.slice(0, XBOX_MAX_CANDIDATES),
+          releaseDates,
+          'firstListed',
+        );
         if (best && best.rank < STORE_RELATION_RANK.subtitle) {
           return { rating: best.rating, urlRejected };
         }
@@ -288,8 +348,46 @@ export class StoreRatingsClient {
       return { rating: subtitleMatch, urlRejected };
     } catch (error) {
       this.logger.warn(`Xbox lookup failed for "${name}": ${error}`);
-      return { rating: null, urlRejected };
+      return { rating: subtitleMatch, urlRejected };
     }
+  }
+
+  /**
+   * The rated product among `productIds` whose title is closest to the game
+   * (one catalog call), or null when none passes `storeProductMatchesGame`.
+   * Equal titles go to the first listed (search relevance) or to the most
+   * rated (a list with no order, such as IGDB's).
+   */
+  private async bestXboxProduct(
+    name: string,
+    productIds: string[],
+    releaseDates: GameReleaseDates,
+    tieBreak: 'firstListed' | 'mostRated',
+  ): Promise<{ rank: number; rating: StoreRating } | null> {
+    if (productIds.length === 0) return null;
+    const catalog = await this.xboxCatalog.getProducts(productIds, 'US');
+    let best: { rank: number; rating: StoreRating } | null = null;
+    for (const productId of productIds) {
+      const product = catalog.get(productId.toUpperCase());
+      if (!product?.title || !product.rating) continue;
+      if (!this.xboxProductMatches(name, product, releaseDates)) continue;
+      const rank = STORE_RELATION_RANK[storeTitleRelation(name, product.title)];
+      if (best) {
+        if (best.rank < rank) continue;
+        if (best.rank === rank) {
+          if (tieBreak === 'firstListed') continue;
+          if (best.rating.ratingCount >= product.rating.ratingCount) continue;
+        }
+      }
+      best = {
+        rank,
+        rating: this.xboxRatingResult(
+          `https://www.xbox.com/en-US/games/store/x/${product.productId}`,
+          product.rating,
+        ),
+      };
+    }
+    return best;
   }
 
   private xboxProductMatches(

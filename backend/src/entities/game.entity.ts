@@ -169,6 +169,17 @@ export class Game {
   @Column({ type: 'timestamptz', nullable: true })
   igdbCheckedAt: Date | null;
 
+  // The console store products IGDB links to this game (`external_games`):
+  // PlayStation Store concept ids and Xbox Store product ids. The store
+  // lookup tries them before searching, and each must still pass
+  // `storeProductMatchesGame` (`ingestion/store-title-match.ts`). Written by
+  // the nightly IGDB refresh; `null` before it reaches the game.
+  @Column({ type: 'text', array: true, nullable: true })
+  igdbPsConceptIds: string[] | null;
+
+  @Column({ type: 'text', array: true, nullable: true })
+  igdbXboxProductIds: string[] | null;
+
   // True for live-service titles (persistent online games with ongoing
   // content: MMOs, season-pass shooters, battle-royale). They retain
   // players — and accumulate reviews — for years, so both their
