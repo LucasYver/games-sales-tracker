@@ -347,5 +347,15 @@
     "examplesBody": "Each game page shows the figure, its split by platform and the signals we track:",
     "examplesBlog": "Read our articles on official sales",
     "notEstimatedBody": "We would rather show \"not estimated\" than a figure we don't believe in."
+  },
+  "og": {
+    "tagline": "How many copies did that game sell?",
+    "sub": "Sales estimates for PC, PlayStation, Xbox and Switch, updated daily.",
+    "copiesSold": "copies sold",
+    "estimate": "estimate · all platforms",
+    "free": "Free to play",
+    "notEstimated": "Not estimated",
+    "salesOf": "{name} sales",
+    "blog": "Blog"
   }
 }

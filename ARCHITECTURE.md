@@ -185,6 +185,12 @@ are 404s, left out of the header and the sitemap.
 | `/[locale]/methodology` | Public explanation of the estimates (all locales, no backend call), linked from the game headline and the footer |
 | `/admin/*` | Back-office |
 
+Share images (`opengraph-image.tsx`, shared code in `lib/og.tsx`): one default
+card per locale built at deploy time, plus on-demand cards for game pages
+(cover, name, headline figure) and blog articles (title, cover), cached a day
+on the CDN. Pages that set their own `openGraph.type` list the default card
+through `lib/og-meta.ts`, since they lose the inherited one.
+
 The public game page shows `headline` (the model range). `totalSales` is
 the reported milestone when one exists. Source URLs and verbatim quotes are
 not shown on the public page.

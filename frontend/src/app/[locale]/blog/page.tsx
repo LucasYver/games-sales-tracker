@@ -8,6 +8,7 @@ import { getBlogIndex } from '@/lib/api';
 import { SITE_URL } from '@/lib/site-url';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
 import { Pagination } from '@/components/Pagination';
+import { defaultOgImages } from '@/lib/og-meta';
 
 const PAGE_SIZE = 20;
 
@@ -43,6 +44,7 @@ export async function generateMetadata({
       type: 'website',
       locale,
       url: `${SITE_URL}${path}`,
+      images: defaultOgImages(locale),
     },
   };
 }

@@ -4,6 +4,11 @@ import createNextIntlPlugin from 'next-intl/plugin';
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
 const nextConfig: NextConfig = {
+  // Share images read their fonts with readFile (lib/og.tsx); make sure the
+  // files ship with those functions.
+  outputFileTracingIncludes: {
+    '/**/opengraph-image': ['./assets/og-fonts/**/*'],
+  },
   images: {
     // Covers are tiny thumbs; Vercel Image Optimization billed a crawl of
     // the whole catalog. Flip `unoptimized` off to resume resizing — the

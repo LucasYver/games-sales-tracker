@@ -53,15 +53,11 @@ export async function generateMetadata({
       url: `${SITE_URL}${path}`,
       publishedTime: post.publishedAt ?? undefined,
       modifiedTime: post.updatedAt ?? post.publishedAt ?? undefined,
-      images: post.coverUrl
-        ? [{ url: post.coverUrl, alt: post.game?.name ?? post.title }]
-        : [],
     },
     twitter: {
       card: 'summary_large_image',
       title: post.title,
       description: post.metaDescription,
-      images: post.coverUrl ? [post.coverUrl] : [],
     },
   };
 }

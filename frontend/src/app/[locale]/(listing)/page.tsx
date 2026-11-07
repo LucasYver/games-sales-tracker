@@ -16,6 +16,7 @@ import { GamesTable } from '@/components/chart-room/GamesTable';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
 import { FiltersSidebar } from '@/components/FiltersSidebar';
 import { Pagination } from '@/components/Pagination';
+import { defaultOgImages } from '@/lib/og-meta';
 
 const PAGE_SIZE = 50;
 
@@ -63,11 +64,13 @@ export async function generateMetadata({
       type: 'website',
       locale,
       url: canonical,
+      images: defaultOgImages(locale),
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
+      images: defaultOgImages(locale),
     },
   };
 }

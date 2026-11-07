@@ -347,5 +347,15 @@
     "examplesBody": "Chaque fiche montre le chiffre retenu, sa répartition par plateforme et les signaux suivis :",
     "examplesBlog": "Lire nos articles sur les ventes officielles",
     "notEstimatedBody": "Nous préférons afficher « non estimé » plutôt qu'un chiffre auquel nous ne croyons pas."
+  },
+  "og": {
+    "tagline": "Combien d’exemplaires ce jeu s’est-il vendu ?",
+    "sub": "Estimations de ventes sur PC, PlayStation, Xbox et Switch, mises à jour chaque jour.",
+    "copiesSold": "exemplaires vendus",
+    "estimate": "estimation · toutes plateformes",
+    "free": "Gratuit",
+    "notEstimated": "Non estimé",
+    "salesOf": "Ventes de {name}",
+    "blog": "Blog"
   }
 }

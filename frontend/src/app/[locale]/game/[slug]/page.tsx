@@ -117,13 +117,11 @@ export async function generateMetadata({
       type: 'article',
       locale,
       url,
-      images: game.coverUrl ? [{ url: game.coverUrl, alt: game.name }] : [],
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
-      images: game.coverUrl ? [game.coverUrl] : [],
     },
   };
 }

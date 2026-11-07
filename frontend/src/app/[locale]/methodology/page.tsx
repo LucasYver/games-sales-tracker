@@ -5,6 +5,7 @@ import { Link } from '@/i18n/navigation';
 import { hasBlog, localeLanguages, routing } from '@/i18n/routing';
 import { SITE_URL } from '@/lib/site-url';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
+import { defaultOgImages } from '@/lib/og-meta';
 
 export async function generateMetadata({
   params,
@@ -27,6 +28,7 @@ export async function generateMetadata({
       type: 'article',
       locale,
       url: `${SITE_URL}${path}`,
+      images: defaultOgImages(locale),
     },
   };
 }

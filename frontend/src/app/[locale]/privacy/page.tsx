@@ -4,6 +4,7 @@ import { getTranslations } from 'next-intl/server';
 import { localeLanguages, routing } from '@/i18n/routing';
 import { SITE_URL } from '@/lib/site-url';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
+import { defaultOgImages } from '@/lib/og-meta';
 
 const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim() || null;
 
@@ -28,6 +29,7 @@ export async function generateMetadata({
       type: 'website',
       locale,
       url: `${SITE_URL}${path}`,
+      images: defaultOgImages(locale),
     },
   };
 }
