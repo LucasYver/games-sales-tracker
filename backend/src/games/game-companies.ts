@@ -132,8 +132,3 @@ export function shownPublisher(game: {
 }): string | null {
   return game.publisher?.trim() || game.developer?.trim() || null;
 }
-
-/** `game.developer` in SQL, empty as NULL. `alias` is the table alias, if any. */
-export function developerSql(alias?: string): string {
-  return `NULLIF(trim(${alias ? `${alias}."developer"` : '"developer"'}), '')`;
-}

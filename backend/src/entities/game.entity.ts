@@ -16,6 +16,7 @@ import { SignalSnapshot } from './signal-snapshot.entity';
 import { SalesEstimate } from './sales-estimate.entity';
 import { Milestone } from './milestone.entity';
 import { Publisher } from './publisher.entity';
+import { Developer } from './developer.entity';
 import { GamePlatformReleaseDate } from './game-platform-release-date.entity';
 
 @Entity('game')
@@ -64,6 +65,22 @@ export class Game {
   // the nightly IGDB refresh through `games/game-companies.ts`.
   @Column({ type: 'varchar', nullable: true })
   developer: string | null;
+
+  // Linked to its `Developer` row (`developerId`), created the first time a
+  // game names that studio — see `DevelopersService`.
+  @Index('IDX_game_developerId')
+  @Column({ type: 'uuid', nullable: true })
+  developerId: string | null;
+
+  @ManyToOne(() => Developer, (d) => d.games, {
+    onDelete: 'SET NULL',
+    nullable: true,
+  })
+  @JoinColumn({
+    name: 'developerId',
+    foreignKeyConstraintName: 'FK_game_developer',
+  })
+  developerRecord: Developer | null;
 
   // Linked to its `Publisher` row (`publisherId`), created the first time a
   // game names that company — see `PublishersService`.

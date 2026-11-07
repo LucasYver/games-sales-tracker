@@ -24,6 +24,7 @@ import { AdminMailService } from './admin-mail.service';
 import { IngestionModule } from '../ingestion/ingestion.module';
 import { GamesModule } from '../games/games.module';
 import { PublishersModule } from '../publishers/publishers.module';
+import { DevelopersModule } from '../developers/developers.module';
 import { GenresModule } from '../genres/genres.module';
 import { EstimationModule } from '../estimation/estimation.module';
 import { ReferenceProfilesModule } from '../reference-profiles/reference-profiles.module';
@@ -49,18 +50,14 @@ import { BlogModule } from '../blog/blog.module';
     IngestionModule,
     GamesModule,
     PublishersModule,
+    DevelopersModule,
     GenresModule,
     EstimationModule,
     ReferenceProfilesModule,
     BlogModule,
   ],
   controllers: [AdminController, AdminAuthController],
-  providers: [
-    AdminService,
-    AdminAuthService,
-    AdminAuthGuard,
-    AdminMailService,
-  ],
+  providers: [AdminService, AdminAuthService, AdminAuthGuard, AdminMailService],
   exports: [AdminAuthService, AdminMailService],
 })
 export class AdminModule {}

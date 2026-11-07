@@ -293,6 +293,20 @@ export async function runPublisherBackfill(): Promise<{
   return result;
 }
 
+export async function runDeveloperBackfill(): Promise<{
+  linked: number;
+  alreadyLinked: number;
+  unmatched: number;
+}> {
+  const result = await adminFetch<{
+    linked: number;
+    alreadyLinked: number;
+    unmatched: number;
+  }>('/developers/backfill', { method: 'POST' });
+  revalidatePath('/admin/developers');
+  return result;
+}
+
 export async function syncGenresFromIgdb(): Promise<AdminGenreIgdbSyncResult> {
   const result = await adminFetch<AdminGenreIgdbSyncResult>(
     '/genres/sync-igdb',

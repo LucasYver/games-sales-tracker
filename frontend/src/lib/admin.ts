@@ -362,6 +362,24 @@ export interface AdminPublisherDetail extends AdminPublisherSummary {
   }>;
 }
 
+export interface AdminDeveloperSummary {
+  id: string;
+  name: string;
+  gameCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminDeveloperDetail extends AdminDeveloperSummary {
+  games: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    releaseDate: string | null;
+    coverUrl: string | null;
+  }>;
+}
+
 export interface AdminGameDetail extends AdminGameSummary {
   milestonesCount: number;
   estimatesCount: number;

@@ -9,6 +9,7 @@ import {
   nextReleaseDate,
   releaseDatesMayMove,
 } from '../games/release-date-refresh';
+import { DevelopersService } from '../developers/developers.service';
 import { PublishersService } from '../publishers/publishers.service';
 import { IgdbClient } from './igdb.client';
 
@@ -42,6 +43,7 @@ export class IgdbRefreshService {
     private readonly platformDates: Repository<GamePlatformReleaseDate>,
     private readonly igdb: IgdbClient,
     private readonly publishers: PublishersService,
+    private readonly developers: DevelopersService,
   ) {}
 
   async refreshFromIgdb(limit = GAMES_PER_RUN): Promise<{
@@ -70,6 +72,7 @@ export class IgdbRefreshService {
         steamDeveloper: true,
         steamPublisher: true,
         publisherId: true,
+        developerId: true,
         manualFields: true,
         seriesSlug: true,
         seriesName: true,
@@ -154,12 +157,19 @@ export class IgdbRefreshService {
         ],
       );
 
-      // A new publisher name gets its row and the game its link.
+      // A new company name gets its row and the game its link.
       await this.publishers.linkGames(
         rows.map((r, i) => ({
           id: r.id,
           publisher: r.publisher,
           publisherId: batch[i].publisherId,
+        })),
+      );
+      await this.developers.linkGames(
+        rows.map((r, i) => ({
+          id: r.id,
+          developer: r.developer,
+          developerId: batch[i].developerId,
         })),
       );
 

@@ -1,5 +1,6 @@
 export * from './enums';
 export * from './publisher.entity';
+export * from './developer.entity';
 export * from './genre.entity';
 export * from './game.entity';
 export * from './game-source.entity';

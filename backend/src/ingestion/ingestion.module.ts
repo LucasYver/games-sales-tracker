@@ -17,6 +17,7 @@ import { GamesModule } from '../games/games.module';
 import { LlmModule } from '../llm/llm.module';
 import { SourcesModule } from '../sources/sources.module';
 import { PublishersModule } from '../publishers/publishers.module';
+import { DevelopersModule } from '../developers/developers.module';
 import { IngestionController } from './ingestion.controller';
 import { IngestionService } from './ingestion.service';
 import { SteamClient } from './steam.client';
@@ -54,6 +55,7 @@ import { IgdbRefreshService } from './igdb-refresh.service';
     LlmModule,
     SourcesModule,
     PublishersModule,
+    DevelopersModule,
   ],
   controllers: [IngestionController],
   providers: [

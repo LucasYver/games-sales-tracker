@@ -42,6 +42,7 @@ import {
   type ManualGameField,
 } from '../games/manual-fields';
 import { PublishersService } from '../publishers/publishers.service';
+import { DevelopersService } from '../developers/developers.service';
 import { EXTENDED_HARVEST_PERCENTILE } from '../scheduler/harvest-eligibility';
 import { harvestDueSql } from '../scheduler/refresh-interval';
 import { GamesService } from '../games/games.service';
@@ -507,6 +508,7 @@ export class AdminService {
     private readonly referenceProfiles: ReferenceProfileService,
     private readonly ingestion: IngestionService,
     private readonly publishers: PublishersService,
+    private readonly developers: DevelopersService,
   ) {}
 
   /**
@@ -1555,6 +1557,7 @@ export class AdminService {
     if (publisherChanged) {
       await this.publishers.resolveAndLink(saved.id, saved.publisher);
     }
+    await this.developers.resolveAndLink(saved.id, saved.developer);
     return { id: saved.id, slug: saved.slug, previousSlug };
   }
 

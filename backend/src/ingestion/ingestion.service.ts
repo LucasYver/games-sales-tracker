@@ -52,6 +52,7 @@ import {
 import { TwitchClient } from './twitch.client';
 import { SourcesService } from '../sources/sources.service';
 import { PublishersService } from '../publishers/publishers.service';
+import { DevelopersService } from '../developers/developers.service';
 import { STEAM_CORE_MIN_REVIEWS } from './discovery.constants';
 import {
   classifyCatalogTier,
@@ -280,6 +281,7 @@ export class IngestionService {
     private readonly twitch: TwitchClient,
     private readonly sources: SourcesService,
     private readonly publishers: PublishersService,
+    private readonly developers: DevelopersService,
     private readonly ingestionState: IngestionStateService,
   ) {}
 
@@ -604,6 +606,7 @@ export class IngestionService {
     });
     const game = await this.games.save(entity);
     await this.publishers.resolveAndLink(game.id, game.publisher);
+    await this.developers.resolveAndLink(game.id, game.developer);
     await this.ensureIgdbSource(game.id, candidate.igdbId, candidate.slug);
     await this.syncPlatformReleaseDates(
       game.id,
@@ -4324,6 +4327,7 @@ export class IngestionService {
         });
         const saved = await this.games.save(existing);
         await this.publishers.resolveAndLink(saved.id, saved.publisher);
+        await this.developers.resolveAndLink(saved.id, saved.developer);
         await this.syncPlatformReleaseDates(saved.id, g.platformReleaseDates);
       } else {
         const entity = this.games.create({
@@ -4340,6 +4344,7 @@ export class IngestionService {
         });
         const saved = await this.games.save(entity);
         await this.publishers.resolveAndLink(saved.id, saved.publisher);
+        await this.developers.resolveAndLink(saved.id, saved.developer);
         await this.syncPlatformReleaseDates(saved.id, g.platformReleaseDates);
       }
 
@@ -4574,6 +4579,7 @@ export class IngestionService {
       });
       const saved = await this.games.save(game);
       await this.publishers.resolveAndLink(saved.id, saved.publisher);
+      await this.developers.resolveAndLink(saved.id, saved.developer);
       await this.syncPlatformReleaseDates(saved.id, igdb?.platformReleaseDates);
       return saved;
     }
@@ -4656,6 +4662,7 @@ export class IngestionService {
         });
         const saved = await this.games.save(existingByIgdb);
         await this.publishers.resolveAndLink(saved.id, saved.publisher);
+        await this.developers.resolveAndLink(saved.id, saved.developer);
         await this.syncPlatformReleaseDates(
           saved.id,
           igdb.platformReleaseDates,
@@ -4717,6 +4724,7 @@ export class IngestionService {
     );
 
     await this.publishers.resolveAndLink(game.id, game.publisher);
+    await this.developers.resolveAndLink(game.id, game.developer);
     await this.syncPlatformReleaseDates(game.id, igdb?.platformReleaseDates);
     return game;
   }

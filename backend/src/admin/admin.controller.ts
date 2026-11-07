@@ -19,6 +19,7 @@ import { AdminAuthGuard } from './admin-auth.guard';
 import { CatalogTier, SalesSource } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
 import { PublishersService } from '../publishers/publishers.service';
+import { DevelopersService } from '../developers/developers.service';
 import { GenresService } from '../genres/genres.service';
 import { EstimationService } from '../estimation/estimation.service';
 import { ReferenceProfilesAdminService } from '../reference-profiles/reference-profiles-admin.service';
@@ -44,6 +45,7 @@ export class AdminController {
     private readonly admin: AdminService,
     private readonly ingestion: IngestionService,
     private readonly publishers: PublishersService,
+    private readonly developers: DevelopersService,
     private readonly genres: GenresService,
     private readonly estimation: EstimationService,
     private readonly referenceProfiles: ReferenceProfilesAdminService,
@@ -290,6 +292,22 @@ export class AdminController {
   @HttpCode(200)
   backfillPublisherLinks() {
     return this.publishers.backfillGameLinks();
+  }
+
+  @Get('developers')
+  listDevelopers() {
+    return this.developers.list();
+  }
+
+  @Get('developers/:id')
+  getDeveloper(@Param('id', ParseUUIDPipe) id: string) {
+    return this.developers.getDetail(id);
+  }
+
+  @Post('developers/backfill')
+  @HttpCode(200)
+  backfillDeveloperLinks() {
+    return this.developers.backfillGameLinks();
   }
 
   @Get('ranks')

@@ -2,16 +2,17 @@ import type { Metadata } from 'next';
 import { DM_Sans, IBM_Plex_Mono } from 'next/font/google';
 import Link from 'next/link';
 import {
+  Boxes,
+  Building2,
+  Globe,
+  Hammer,
   LayoutDashboard,
   Library,
-  Receipt,
-  Globe,
-  Building2,
-  Tags,
-  Boxes,
-  Trophy,
-  Newspaper,
   LogOut,
+  Newspaper,
+  Receipt,
+  Tags,
+  Trophy,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -57,6 +58,12 @@ const NAV_ITEMS = [
     href: '/admin/publishers',
     label: 'Publishers',
     icon: Building2,
+    exact: false,
+  },
+  {
+    href: '/admin/developers',
+    label: 'Developers',
+    icon: Hammer,
     exact: false,
   },
   {
