@@ -36,5 +36,5 @@ Toute modification de `src/entities/` qui change le schéma passe par une migrat
 | Ingestion | `src/ingestion/` |
 | Estimation | `src/estimation/estimation.service.ts` |
 | Matcher | `src/reference-profiles/` |
-| Crons | `src/scheduler/cron.controller.ts` |
+| Crons | `src/scheduler/cron-jobs.ts` (job list), `src/scheduler/cron.controller.ts` |
 | Constantes du modèle | `src/games/sales-modeling.constants.ts` |

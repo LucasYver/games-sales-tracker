@@ -43,7 +43,7 @@ NestJS modules under `backend/src/`. Entry points worth knowing:
 | Ingestion API | `ingestion/ingestion.controller.ts` |
 | Admin API | `admin/admin.controller.ts` (`X-Admin-Session`) |
 | Public blog | `blog/blog.controller.ts` (published posts only) |
-| Vercel crons | `scheduler/cron.controller.ts` + `scheduler/refresh.service.ts` |
+| Vercel crons | `scheduler/cron-jobs.ts` (job list) + `scheduler/cron.controller.ts` + `scheduler/refresh.service.ts`; manual runs from `/admin/crons` via `scheduler/admin-cron.controller.ts` |
 | Estimation | `estimation/estimation.service.ts`; worldwide ML estimate in `estimation/ml/` |
 | Matcher | `reference-profiles/` |
 | Schema | `entities/` + `db/migrations/` (explicit registry in `db/migrations/index.ts`) |
@@ -171,8 +171,8 @@ an HttpOnly cookie (`X-Admin-Session`). Fail-closed when the secret is unset.
 Bootstrap the first user with `ADMIN_BOOTSTRAP_EMAIL` /
 `ADMIN_BOOTSTRAP_PASSWORD` or `npm run admin:create-user`. Account creation
 sends a Chart Room–styled welcome email via Resend when `RESEND_API_KEY` is
-set. Pages: dashboard, games, milestones, trusted sources, publishers, genres,
-reference profiles, ranks, blog. Draft-ready and leftover-draft digest
+set. Pages: dashboard, games, crons (progress + manual run), milestones, trusted
+sources, publishers, genres, reference profiles, ranks, blog. Draft-ready and leftover-draft digest
 mails reuse Resend, as does the daily alert sent while Steam reviews are not
 being collected (`steamReviewsHealth`, also a banner on the dashboard). The
 controller is the endpoint list; the UI covers

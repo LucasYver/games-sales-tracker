@@ -20,7 +20,7 @@ that prefix.
 
 ```
 - [ ] vercel.json `crons[]`: path + schedule
-- [ ] CronController GET, `@HttpCode(200)`, delegates to RefreshService
+- [ ] `CRON_JOBS` entry in `scheduler/cron-jobs.ts` (`<name>` → RefreshService method)
 - [ ] RefreshService method: catch per item, log counts, respect the budget
 - [ ] Per-game work: INGESTION_PIPELINES + IngestionStateService.track
 - [ ] Due selection is stalest-first for the cadence
@@ -28,8 +28,19 @@ that prefix.
 - [ ] Missing credential skips the run; it does not fail every game
 ```
 
+`CRON_JOBS` is the only list of jobs. `CronController` serves every entry
+at `GET /api/cron/:name`, and the `/admin/crons` page's "Manual run" button
+starts the same entry. Do not add a per-job controller method.
+
 `CronController` already has `VercelCronGuard`. Do not add another guard.
 `CRON_SECRET` unset or a wrong `Authorization: Bearer` returns 401. Fail-closed.
+
+`AdminCronController` (`POST /api/admin/crons/:name/run`, `AdminAuthGuard`)
+answers 202 at once and keeps the run alive with `waitUntil`
+(`@vercel/functions`), up to `maxDuration`. Its summary goes to the logs,
+not the response. The "already running" check is per instance, so a manual
+run can overlap a scheduled one. `track` stamps `lastAttemptAt` first, so the
+overlap only redoes a few games.
 
 ## Budget and resume
 
@@ -77,7 +88,7 @@ Change harvest tiers in `scheduler/refresh-interval.ts` only:
 
 ## Dashboard copy
 
-When the job is per-game and should appear on `/admin`, add one object to
+When the job is per-game and should appear on `/admin/crons`, add one object to
 `INGESTION_CRONS` in `admin.service.ts`. `cronPath` and `schedule` must
 equal the `vercel.json` entry. `cycle` must match
 `ingestion-cadence.ts` (`hour` | `day` | `week` | `month`). Copying a
@@ -85,6 +96,9 @@ schedule into `ARCHITECTURE.md` is wrong; that file points at
 `vercel.json`.
 
 ## Local trigger
+
+From `/admin/crons`: the "Manual run" column, or "Whole-catalog jobs" for
+the jobs that have no `INGESTION_CRONS` row. From a shell:
 
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" \

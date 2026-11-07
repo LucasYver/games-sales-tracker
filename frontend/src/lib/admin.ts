@@ -861,3 +861,14 @@ export interface AdminEstimateBreakdown {
     reportedAt: string | null;
   } | null;
 }
+
+/** One scheduled job, as listed by `GET /admin/crons`. */
+export interface AdminCronJob {
+  name: string;
+  cronPath: string;
+  running: boolean;
+}
+
+export type RunCronResult =
+  | { ok: true; name: string; startedAt: string }
+  | { ok: false; error: string };

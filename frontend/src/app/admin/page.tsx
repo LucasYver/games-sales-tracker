@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { adminFetch, type AdminStats } from '@/lib/admin';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -9,56 +10,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { compactNumber, formatTimestamp } from './_components/format';
 
 export const dynamic = 'force-dynamic';
-
-const PIPELINE_LABELS: Record<string, string> = {
-  DISCOVERY: 'Catalog discovery',
-  STEAM_REVIEWS: 'Steam reviews',
-  STEAM_REVIEWER_PLAYTIME: 'Steam reviewer playtime',
-  STORE_RATINGS: 'PS / Xbox store ratings',
-  ACHIEVEMENTS: 'Achievements',
-  REFERENCE_PROFILE: 'Matcher anchors',
-  ESTIMATE_REBUILD: 'Estimate rebuild',
-  STEAM_CCU: 'Steam CCU',
-  STEAM_PRICE: 'Steam prices',
-  XBOX_PRICE: 'Xbox prices',
-  PS_PRICE: 'PlayStation prices',
-  TWITCH_VIEWERS: 'Twitch viewers',
-  STEAM_POPULARITY: 'Steam followers',
-};
-
-function compactNumber(n: number): string {
-  return new Intl.NumberFormat('en-US', {
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).format(n);
-}
-
-function formatTimestamp(value: string | null): string {
-  if (!value) return '—';
-  return new Date(value).toLocaleString('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
-}
-
-function formatCycle(start: string, end: string): string {
-  const startedAt = new Date(start);
-  const endsAt = new Date(end);
-  const sameDay =
-    startedAt.toISOString().slice(0, 10) === endsAt.toISOString().slice(0, 10);
-  const format = (value: Date, includeDate: boolean) =>
-    value.toLocaleString('en-US', {
-      ...(includeDate ? { month: 'short', day: 'numeric' } : {}),
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'UTC',
-      hour12: false,
-    });
-
-  return `${format(startedAt, true)} → ${format(endsAt, !sameDay)} UTC`;
-}
 
 function StatCard({
   label,
@@ -93,86 +47,8 @@ function StatCard({
   );
 }
 
-// Milestone harvest has no fixed cycle: each game is due when its age-based
-// interval elapses, so "Remaining" is the number of games due right now.
-function MilestoneHarvestRow({
-  harvest,
-}: {
-  harvest: AdminStats['milestoneHarvest'];
-}) {
-  const status =
-    harvest.failedLast24h > 0
-      ? 'Issues'
-      : harvest.dueNow === 0
-        ? 'Complete'
-        : 'In progress';
-
-  return (
-    <TableRow>
-      <TableCell>
-        <p className="font-medium">Milestone harvest</p>
-        <code className="text-muted-foreground text-xs">
-          {harvest.cronPath}
-        </code>
-      </TableCell>
-      <TableCell>
-        <p className="whitespace-nowrap text-sm">Age-based (3d → 180d)</p>
-        <code className="text-muted-foreground whitespace-nowrap text-xs">
-          {harvest.schedule}
-        </code>
-      </TableCell>
-      <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
-        Rolling, last 24h
-      </TableCell>
-      <TableCell className="tabular-nums">
-        <p className="whitespace-nowrap">
-          {harvest.checkedLast24h.toLocaleString()} checked /{' '}
-          {harvest.eligible.toLocaleString()} eligible
-        </p>
-        <p className="text-muted-foreground whitespace-nowrap text-xs">
-          ~{harvest.expectedPerDay.toLocaleString()}/day expected
-        </p>
-      </TableCell>
-      <TableCell className="text-right tabular-nums">
-        <p>{harvest.dueNow.toLocaleString()}</p>
-        <p className="text-muted-foreground text-xs">due now</p>
-      </TableCell>
-      <TableCell className="text-right tabular-nums">
-        <span
-          className={harvest.failedLast24h > 0 ? 'text-destructive' : undefined}
-        >
-          {harvest.failedLast24h.toLocaleString()}
-        </span>
-      </TableCell>
-      <TableCell>
-        <Badge
-          variant={
-            status === 'Complete'
-              ? 'default'
-              : status === 'Issues'
-                ? 'destructive'
-                : 'secondary'
-          }
-        >
-          {status}
-        </Badge>
-      </TableCell>
-      <TableCell className="text-muted-foreground whitespace-nowrap text-right text-xs">
-        {formatTimestamp(harvest.lastSuccessAt)}
-      </TableCell>
-    </TableRow>
-  );
-}
-
 export default async function AdminDashboard() {
   const stats = await adminFetch<AdminStats>('/stats');
-
-  const lastCapturedAt = stats.signals.lastCapturedAt
-    ? new Date(stats.signals.lastCapturedAt).toLocaleString('en-US', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      })
-    : '—';
 
   const bySource = Object.entries(stats.milestones.bySource).sort(
     (a, b) => b[1] - a[1],
@@ -184,7 +60,12 @@ export default async function AdminDashboard() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground text-sm">
-            Health overview of the tracker.
+            Health overview of the tracker. Cron progress and manual runs are
+            on the{' '}
+            <Link href="/admin/crons" className="underline underline-offset-2">
+              Crons
+            </Link>{' '}
+            page.
           </p>
         </div>
       </header>
@@ -205,7 +86,11 @@ export default async function AdminDashboard() {
           <p className="text-muted-foreground mt-2 text-xs">
             Last value stored:{' '}
             {formatTimestamp(stats.steamReviewsHealth.lastCapturedAt)}. Sales
-            estimates are running on frozen values.
+            estimates are running on frozen values.{' '}
+            <Link href="/admin/crons" className="underline underline-offset-2">
+              Open the crons
+            </Link>
+            .
           </p>
         </section>
       )}
@@ -264,132 +149,6 @@ export default async function AdminDashboard() {
                 ))}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-              Cron progress
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-muted-foreground text-sm">
-              {compactNumber(stats.signals.steamReviewsTotal)} Steam review
-              snapshots stored. Last captured:{' '}
-              <span className="text-foreground font-medium">
-                {lastCapturedAt}
-              </span>
-              .
-            </p>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Cron</TableHead>
-                    <TableHead>Cadence</TableHead>
-                    <TableHead>Current cycle</TableHead>
-                    <TableHead>Progress</TableHead>
-                    <TableHead className="text-right">Remaining</TableHead>
-                    <TableHead className="text-right">Failed</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Last success</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {stats.ingestionPipelines.map((pipeline) => {
-                    const percent =
-                      pipeline.total > 0
-                        ? Math.round(
-                            (pipeline.cycleSucceeded / pipeline.total) * 100,
-                          )
-                        : 100;
-                    const remaining = Math.max(
-                      pipeline.total - pipeline.cycleSucceeded,
-                      0,
-                    );
-                    const status =
-                      pipeline.cycleFailed > 0
-                        ? 'Issues'
-                        : remaining === 0
-                          ? 'Complete'
-                          : pipeline.cycleAttempted > 0
-                            ? 'In progress'
-                            : 'Not started';
-
-                    return (
-                      <TableRow key={pipeline.pipeline}>
-                        <TableCell>
-                          <p className="font-medium">
-                            {PIPELINE_LABELS[pipeline.pipeline] ??
-                              pipeline.pipeline}
-                          </p>
-                          <code className="text-muted-foreground text-xs">
-                            {pipeline.cronPath}
-                          </code>
-                        </TableCell>
-                        <TableCell>
-                          <p className="whitespace-nowrap text-sm">
-                            {pipeline.cadence}
-                          </p>
-                          <code className="text-muted-foreground whitespace-nowrap text-xs">
-                            {pipeline.schedule}
-                          </code>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
-                          {formatCycle(
-                            pipeline.cycleStartedAt,
-                            pipeline.cycleEndsAt,
-                          )}
-                        </TableCell>
-                        <TableCell className="tabular-nums">
-                          <p className="whitespace-nowrap">
-                            {pipeline.cycleSucceeded.toLocaleString()} /{' '}
-                            {pipeline.total.toLocaleString()} ({percent}%)
-                          </p>
-                          <p className="text-muted-foreground whitespace-nowrap text-xs">
-                            {pipeline.cycleAttempted.toLocaleString()} attempted
-                          </p>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {remaining.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          <span
-                            className={
-                              pipeline.cycleFailed > 0
-                                ? 'text-destructive'
-                                : undefined
-                            }
-                          >
-                            {pipeline.cycleFailed.toLocaleString()}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              status === 'Complete'
-                                ? 'default'
-                                : status === 'Issues'
-                                  ? 'destructive'
-                                  : 'secondary'
-                            }
-                          >
-                            {status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground whitespace-nowrap text-right text-xs">
-                          {formatTimestamp(pipeline.lastSuccessAt)}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                  <MilestoneHarvestRow harvest={stats.milestoneHarvest} />
-                </TableBody>
-              </Table>
-            </div>
           </CardContent>
         </Card>
       </section>

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import {
   Boxes,
   Building2,
+  Clock,
   Globe,
   Hammer,
   LayoutDashboard,
@@ -42,6 +43,7 @@ export const metadata: Metadata = {
 const NAV_ITEMS = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { href: '/admin/games', label: 'Games', icon: Library, exact: false },
+  { href: '/admin/crons', label: 'Crons', icon: Clock, exact: false },
   {
     href: '/admin/milestones',
     label: 'Milestones',

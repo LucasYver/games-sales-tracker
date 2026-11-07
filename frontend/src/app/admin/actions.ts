@@ -1,7 +1,7 @@
 'use server';
 
 import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
+import { redirect, unstable_rethrow } from 'next/navigation';
 import { revalidatePath, updateTag } from 'next/cache';
 import {
   ADMIN_COOKIE,
@@ -10,6 +10,7 @@ import {
   type GenerateBlogFormatInput,
   type AdminGenreIgdbSyncResult,
   type ManualGameField,
+  type RunCronResult,
   type SalesSource,
 } from '@/lib/admin';
 import { API_URL, gameCacheTag, type Platform } from '@/lib/api';
@@ -60,6 +61,28 @@ export async function deleteGame(id: string): Promise<void> {
   await adminFetch(`/games/${id}`, { method: 'DELETE' });
   revalidatePath('/admin/games');
   revalidatePath('/admin');
+}
+
+/**
+ * Starts a scheduled job by hand. The backend answers 202 at once and runs
+ * the job in the background, so this returns before the job ends.
+ * Errors come back as a value: Next.js hides thrown messages in production.
+ */
+export async function runCron(name: string): Promise<RunCronResult> {
+  try {
+    const result = await adminFetch<{ name: string; startedAt: string }>(
+      `/crons/${encodeURIComponent(name)}/run`,
+      { method: 'POST' },
+    );
+    revalidatePath('/admin/crons');
+    return { ok: true, ...result };
+  } catch (err) {
+    unstable_rethrow(err);
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Could not start the cron',
+    };
+  }
 }
 
 export async function recomputeRanks(): Promise<void> {
