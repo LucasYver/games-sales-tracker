@@ -136,8 +136,9 @@ copy the cron expressions into this file.
 Rough groups: hourly CCU and Twitch, several-times-daily reviews / store
 ratings / milestone harvest / prices / followers, nightly IGDB discovery,
 weekly estimate rebuild and rank, slower playtime and achievement passes.
-The nightly discovery run also re-reads how IGDB groups part of the catalog,
-oldest check first. Public franchise pages group games by the IGDB series
+The nightly discovery run also re-reads IGDB for part of the catalog, oldest
+check first. It moves the release dates of games not launched yet (a delay,
+an early launch) or with no date; released games keep theirs. Public franchise pages group games by the IGDB series
 (`seriesSlug`), falling back to the title-derived `franchiseSlug`. Public
 studio pages and the game page show the IGDB developer and publisher
 (`igdbDeveloper` / `igdbPublisher`), unless an admin corrected the Steam

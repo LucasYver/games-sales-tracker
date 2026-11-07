@@ -8,7 +8,8 @@ import { Game } from './game.entity';
  * which stays the earliest date across all platforms (IGDB
  * `first_release_date`) and drives platform-agnostic logic (worldwide
  * freshness cap, refresh cadence, matcher identity, display fallback).
- * One row per (gameId, platform); rewritten wholesale on each ingestion sync.
+ * One row per (gameId, platform); rewritten wholesale on each ingestion sync
+ * and by the nightly IGDB refresh when IGDB's breakdown changes.
  */
 @Entity('game_platform_release_date')
 export class GamePlatformReleaseDate {

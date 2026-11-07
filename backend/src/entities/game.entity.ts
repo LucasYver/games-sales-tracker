@@ -145,8 +145,8 @@ export class Game {
   @Column({ type: 'varchar', nullable: true })
   igdbPublisher: string | null;
 
-  // Last time the nightly refresh read this game's series and companies from
-  // IGDB.
+  // Last time the nightly refresh read this game's series, companies and
+  // release dates from IGDB (`ingestion/igdb-refresh.service.ts`).
   @Column({ type: 'timestamptz', nullable: true })
   igdbCheckedAt: Date | null;
 

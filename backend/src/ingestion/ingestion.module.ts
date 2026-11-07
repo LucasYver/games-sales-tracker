@@ -33,7 +33,7 @@ import { ExophaseClient } from './exophase.client';
 import { GamesPopularityClient } from './games-popularity.client';
 import { TwitchClient } from './twitch.client';
 import { IngestionStateService } from './ingestion-state.service';
-import { IgdbGroupingService } from './igdb-grouping.service';
+import { IgdbRefreshService } from './igdb-refresh.service';
 
 @Module({
   imports: [
@@ -72,14 +72,14 @@ import { IgdbGroupingService } from './igdb-grouping.service';
     GamesPopularityClient,
     TwitchClient,
     IngestionStateService,
-    IgdbGroupingService,
+    IgdbRefreshService,
   ],
   exports: [
     IngestionService,
     IgdbClient,
     IngestionStateService,
     SteamClient,
-    IgdbGroupingService,
+    IgdbRefreshService,
   ],
 })
 export class IngestionModule {}

@@ -5,7 +5,7 @@ import { gamePageUrls, notifyIndexNow } from '../common/indexnow';
 import { Game, GameRank } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
 import { IngestionStateService } from '../ingestion/ingestion-state.service';
-import { IgdbGroupingService } from '../ingestion/igdb-grouping.service';
+import { IgdbRefreshService } from '../ingestion/igdb-refresh.service';
 import { RankService } from '../reference-profiles/rank.service';
 import { ReferenceProfileService } from '../reference-profiles/reference-profile.service';
 import { cycleWindow } from '../ingestion/ingestion-cadence';
@@ -29,7 +29,7 @@ export class RefreshService {
     private readonly referenceProfiles: ReferenceProfileService,
     private readonly blog: BlogService,
     private readonly mail: AdminMailService,
-    private readonly igdbGrouping: IgdbGroupingService,
+    private readonly igdbRefresh: IgdbRefreshService,
   ) {}
 
   // Wall-clock cap per invocation, with headroom under the 800s Vercel
@@ -425,8 +425,8 @@ export class RefreshService {
   /**
    * Nightly catalog discovery via IGDB (popularity-ranked + fresh releases,
    * admitted by IGDB rating or live Steam reviews). Runs at 2 AM, ahead of the
-   * 3 AM per-app refresh. Then re-reads the IGDB series and companies of the
-   * games checked longest ago, for the public franchise and studio pages.
+   * 3 AM per-app refresh. Then re-reads, for the games checked longest ago,
+   * their IGDB series, companies and release dates.
    */
   async discoverNewGames() {
     try {
@@ -438,9 +438,9 @@ export class RefreshService {
       this.logger.warn(`IGDB discovery failed: ${error}`);
     }
     try {
-      await this.igdbGrouping.refreshGrouping();
+      await this.igdbRefresh.refreshFromIgdb();
     } catch (error) {
-      this.logger.warn(`IGDB grouping refresh failed: ${error}`);
+      this.logger.warn(`IGDB refresh failed: ${error}`);
     }
     await this.announceNewGames();
   }

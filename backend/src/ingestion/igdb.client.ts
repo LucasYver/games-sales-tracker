@@ -40,9 +40,14 @@ export interface IgdbGame {
   platformReleaseDates: Map<Platform, Date>;
 }
 
-export interface IgdbGrouping {
+/** What the nightly IGDB refresh reads for a game already in the catalog. */
+export interface IgdbRefreshFields {
   series: IgdbSeriesFields;
   companies: IgdbInvolvedCompany[];
+  /** IGDB's first release date, across every platform it knows. */
+  firstReleaseDate: Date | null;
+  /** Earliest launch per platform bucket, same rule as `platformReleaseDates`. */
+  platformReleaseDates: Map<Platform, Date>;
 }
 
 interface CachedToken {
@@ -362,14 +367,14 @@ export class IgdbClient {
   }
 
   /**
-   * How IGDB groups up to 500 games (series and credited companies), in one
-   * request, keyed by IGDB id. A game IGDB does not return is absent from the
-   * map. Returns null when the request fails, so the caller can tell a
-   * failure from "nothing on IGDB".
+   * The fields the nightly refresh keeps current (series, credited companies,
+   * release dates) for up to 500 games in one request, keyed by IGDB id. A
+   * game IGDB does not return is absent from the map. Returns null when the
+   * request fails, so the caller can tell a failure from "nothing on IGDB".
    */
-  async fetchGrouping(
+  async fetchRefreshFields(
     igdbIds: number[],
-  ): Promise<Map<number, IgdbGrouping> | null> {
+  ): Promise<Map<number, IgdbRefreshFields> | null> {
     if (!this.isConfigured()) return null;
     const ids = igdbIds.filter((id) => Number.isInteger(id)).slice(0, 500);
     if (ids.length === 0) return new Map();
@@ -382,7 +387,9 @@ export class IgdbClient {
         'fields collections.name, franchise.name, franchises.name,',
         'involved_companies.company.name, involved_companies.developer,',
         'involved_companies.publisher, involved_companies.porting,',
-        'involved_companies.supporting;',
+        'involved_companies.supporting, first_release_date,',
+        'release_dates.date, release_dates.platform.name,',
+        'release_dates.status.name;',
       ].join(' '),
       `limit ${ids.length};`,
     ].join(' ');
@@ -408,15 +415,21 @@ export class IgdbClient {
         (list ?? [])
           .map((entry) => entry.name?.trim())
           .filter((name): name is string => Boolean(name));
-      const grouping = new Map<number, IgdbGrouping>();
+      const fields = new Map<number, IgdbRefreshFields>();
       for (const raw of data as Array<{
         id: number;
         collections?: Named[];
         franchise?: Named;
         franchises?: Named[];
         involved_companies?: Involved[];
+        first_release_date?: number;
+        release_dates?: {
+          date?: number;
+          platform?: Named;
+          status?: Named;
+        }[];
       }>) {
-        grouping.set(raw.id, {
+        fields.set(raw.id, {
           series: {
             collections: names(raw.collections),
             franchise: raw.franchise?.name?.trim() || null,
@@ -431,14 +444,18 @@ export class IgdbClient {
               porting: Boolean(c.porting),
               supporting: Boolean(c.supporting),
             })),
+          firstReleaseDate: raw.first_release_date
+            ? new Date(raw.first_release_date * 1000)
+            : null,
+          platformReleaseDates: this.mapReleaseDates(raw.release_dates),
         });
       }
-      return grouping;
+      return fields;
     } catch (error) {
       const detail = axios.isAxiosError(error)
         ? JSON.stringify(error.response?.data ?? error.message)
         : String(error);
-      this.logger.error(`IGDB grouping query failed: ${detail}`);
+      this.logger.error(`IGDB refresh query failed: ${detail}`);
       return null;
     }
   }

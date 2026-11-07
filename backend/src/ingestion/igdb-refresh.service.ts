@@ -1,0 +1,214 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
+import { Game, GamePlatformReleaseDate, Platform } from '../entities';
+import { pickCompanies } from '../games/game-companies';
+import { pickSeriesName, seriesSlug } from '../games/game-series';
+import {
+  igdbEarliestRelease,
+  nextReleaseDate,
+  releaseDatesMayMove,
+} from '../games/release-date-refresh';
+import { IgdbClient } from './igdb.client';
+
+/** Games read per nightly run. IGDB answers 500 per request. */
+const GAMES_PER_RUN = 2000;
+const IGDB_BATCH = 500;
+
+type Grouping = {
+  seriesSlug: string | null;
+  seriesName: string | null;
+  igdbDeveloper: string | null;
+  igdbPublisher: string | null;
+};
+
+/**
+ * Keeps a game's IGDB-backed fields current after ingestion: how IGDB groups
+ * it (series, developer, publisher, for the public pages) and, until it
+ * launches, its release dates (`releaseDate` and per platform, see
+ * `games/release-date-refresh.ts`). Each nightly run takes the games checked
+ * longest ago (never checked first), so the whole catalog is covered in a
+ * few nights and then re-read in turn.
+ */
+@Injectable()
+export class IgdbRefreshService {
+  private readonly logger = new Logger(IgdbRefreshService.name);
+
+  constructor(
+    @InjectRepository(Game) private readonly games: Repository<Game>,
+    @InjectRepository(GamePlatformReleaseDate)
+    private readonly platformDates: Repository<GamePlatformReleaseDate>,
+    private readonly igdb: IgdbClient,
+  ) {}
+
+  async refreshFromIgdb(limit = GAMES_PER_RUN): Promise<{
+    checked: number;
+    groupingChanged: number;
+    releaseDatesMoved: number;
+    platformDatesChanged: number;
+  }> {
+    const result = {
+      checked: 0,
+      groupingChanged: 0,
+      releaseDatesMoved: 0,
+      platformDatesChanged: 0,
+    };
+    if (!this.igdb.isConfigured()) return result;
+
+    const games = await this.games.find({
+      where: { igdbId: Not(IsNull()) },
+      select: {
+        id: true,
+        name: true,
+        igdbId: true,
+        developer: true,
+        publisher: true,
+        releaseDate: true,
+        manualFields: true,
+        seriesSlug: true,
+        seriesName: true,
+        igdbDeveloper: true,
+        igdbPublisher: true,
+      },
+      order: {
+        igdbCheckedAt: { direction: 'ASC', nulls: 'FIRST' },
+        id: 'ASC',
+      },
+      take: limit,
+    });
+
+    const now = new Date();
+    for (let start = 0; start < games.length; start += IGDB_BATCH) {
+      const batch = games.slice(start, start + IGDB_BATCH);
+      const fetched = await this.igdb.fetchRefreshFields(
+        batch.map((game) => game.igdbId as number),
+      );
+      // A failed request leaves the batch unchecked, so the next run retries it.
+      if (!fetched) break;
+
+      const unreleased = new Set<string>();
+      const rows = batch.map((game) => {
+        const igdb = fetched.get(game.igdbId as number);
+        const name = igdb ? pickSeriesName(game.name, igdb.series) : null;
+        const slug = name ? seriesSlug(name) || null : null;
+        const companies = pickCompanies(igdb?.companies ?? [], game);
+        const grouping: Grouping = {
+          seriesSlug: slug,
+          seriesName: slug ? name : null,
+          igdbDeveloper: companies.developer,
+          igdbPublisher: companies.publisher,
+        };
+        if (
+          (Object.keys(grouping) as (keyof Grouping)[]).some(
+            (key) => grouping[key] !== game[key],
+          )
+        ) {
+          result.groupingChanged += 1;
+        }
+        // An admin-set date is never touched, per platform either.
+        const igdbRelease =
+          igdb && !game.manualFields?.includes('releaseDate')
+            ? igdbEarliestRelease(
+                igdb.platformReleaseDates.values(),
+                igdb.firstReleaseDate,
+              )
+            : null;
+        if (
+          igdbRelease &&
+          releaseDatesMayMove(game.releaseDate, igdbRelease, now)
+        ) {
+          unreleased.add(game.id);
+        }
+        const releaseDate = nextReleaseDate(game.releaseDate, igdbRelease, now);
+        if (releaseDate) {
+          result.releaseDatesMoved += 1;
+          this.logger.log(
+            `[igdb-refresh] "${game.name}" release date ${game.releaseDate?.toISOString().slice(0, 10) ?? 'none'} -> ${releaseDate.toISOString().slice(0, 10)}`,
+          );
+        }
+        return { id: game.id, ...grouping, releaseDate };
+      });
+
+      await this.games.query(
+        `UPDATE game AS g
+         SET "seriesSlug" = v.series_slug, "seriesName" = v.series_name,
+             "igdbDeveloper" = v.developer, "igdbPublisher" = v.publisher,
+             "releaseDate" = COALESCE(v.release_date, g."releaseDate"),
+             "igdbCheckedAt" = now()
+         FROM unnest($1::uuid[], $2::varchar[], $3::varchar[], $4::varchar[],
+                     $5::varchar[], $6::timestamptz[])
+           AS v(id, series_slug, series_name, developer, publisher, release_date)
+         WHERE g.id = v.id`,
+        [
+          rows.map((r) => r.id),
+          rows.map((r) => r.seriesSlug),
+          rows.map((r) => r.seriesName),
+          rows.map((r) => r.igdbDeveloper),
+          rows.map((r) => r.igdbPublisher),
+          rows.map((r) => r.releaseDate),
+        ],
+      );
+
+      result.platformDatesChanged += await this.syncPlatformDates(
+        batch.filter((game) => unreleased.has(game.id)),
+        fetched,
+      );
+      result.checked += batch.length;
+    }
+
+    this.logger.log(
+      `IGDB refresh: ${result.checked} game(s) checked, ${result.groupingChanged} regrouped, ${result.releaseDatesMoved} release date(s) moved, ${result.platformDatesChanged} platform date set(s) rewritten.`,
+    );
+    return result;
+  }
+
+  /**
+   * Rewrites the per-platform dates of the given games (those not launched
+   * yet) whose IGDB breakdown changed, in one read for the batch. A game IGDB
+   * returns with no breakdown keeps the rows it has, as at ingestion.
+   */
+  private async syncPlatformDates(
+    batch: Game[],
+    fetched: Map<number, { platformReleaseDates: Map<Platform, Date> }>,
+  ): Promise<number> {
+    if (batch.length === 0) return 0;
+    const stored = await this.platformDates.find({
+      where: { gameId: In(batch.map((game) => game.id)) },
+    });
+    const storedByGame = new Map<string, Map<Platform, number>>();
+    for (const row of stored) {
+      const dates = storedByGame.get(row.gameId) ?? new Map<Platform, number>();
+      dates.set(row.platform, row.releaseDate.getTime());
+      storedByGame.set(row.gameId, dates);
+    }
+
+    let changed = 0;
+    for (const game of batch) {
+      const next = fetched.get(game.igdbId as number)?.platformReleaseDates;
+      if (!next || next.size === 0) continue;
+      const current = storedByGame.get(game.id) ?? new Map<Platform, number>();
+      const same =
+        current.size === next.size &&
+        [...next].every(
+          ([platform, date]) => current.get(platform) === date.getTime(),
+        );
+      if (same) continue;
+
+      const platforms = [...next.keys()];
+      await this.platformDates.delete({
+        gameId: game.id,
+        platform: Not(In(platforms)),
+      });
+      await this.platformDates.upsert(
+        platforms.map((platform) => ({
+          gameId: game.id,
+          platform,
+          releaseDate: next.get(platform) as Date,
+        })),
+        ['gameId', 'platform'],
+      );
+      changed += 1;
+    }
+    return changed;
+  }
+}
