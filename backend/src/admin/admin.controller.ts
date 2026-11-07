@@ -24,8 +24,6 @@ import { EstimationService } from '../estimation/estimation.service';
 import { ReferenceProfilesAdminService } from '../reference-profiles/reference-profiles-admin.service';
 import { RankService } from '../reference-profiles/rank.service';
 import { AddGameDto } from './dto/add-game.dto';
-import { ImportCcuCsvDto } from './dto/import-ccu-csv.dto';
-import { ImportReviewsCsvDto } from './dto/import-reviews-csv.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
 import { UpdateMilestoneDto } from './dto/update-milestone.dto';
 import { CreateMilestoneDto } from './dto/create-milestone.dto';
@@ -146,24 +144,6 @@ export class AdminController {
   @HttpCode(200)
   refreshGame(@Param('id', ParseUUIDPipe) id: string) {
     return this.ingestion.refreshGame(id);
-  }
-
-  @Post('games/:id/import-ccu-csv')
-  @HttpCode(200)
-  importCcuCsv(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: ImportCcuCsvDto,
-  ) {
-    return this.ingestion.importCcuCsv(id, body.csv);
-  }
-
-  @Post('games/:id/import-reviews-csv')
-  @HttpCode(200)
-  importReviewsCsv(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: ImportReviewsCsvDto,
-  ) {
-    return this.ingestion.importReviewsCsv(id, body.csv);
   }
 
   @Post('games/:id/backfill-reviews-histogram')

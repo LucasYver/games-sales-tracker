@@ -156,48 +156,6 @@ export async function rebuildEstimates(
   return result;
 }
 
-export interface ImportCcuCsvResult {
-  daysImported: number;
-  rowsParsed: number;
-  rangeStart: string | null;
-  rangeEnd: string | null;
-  peakValue: number;
-  peakAt: string | null;
-}
-
-export async function importCcuCsv(
-  id: string,
-  csv: string,
-): Promise<ImportCcuCsvResult> {
-  const result = await adminFetch<ImportCcuCsvResult>(
-    `/games/${id}/import-ccu-csv`,
-    { method: 'POST', body: JSON.stringify({ csv }) },
-  );
-  revalidatePath(`/admin/games/${id}`);
-  return result;
-}
-
-export interface ImportReviewsCsvResult {
-  daysImported: number;
-  rowsParsed: number;
-  rangeStart: string | null;
-  rangeEnd: string | null;
-  latestTotal: number;
-  latestRating: number | null;
-}
-
-export async function importReviewsCsv(
-  id: string,
-  csv: string,
-): Promise<ImportReviewsCsvResult> {
-  const result = await adminFetch<ImportReviewsCsvResult>(
-    `/games/${id}/import-reviews-csv`,
-    { method: 'POST', body: JSON.stringify({ csv }) },
-  );
-  revalidatePath(`/admin/games/${id}`);
-  return result;
-}
-
 export interface UpdateMilestonePayload {
   source?: SalesSource;
   platform?: string;

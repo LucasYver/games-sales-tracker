@@ -30,8 +30,6 @@ import { DeleteButton } from '../../_components/DeleteButton';
 import { RefreshGameButton } from '../../_components/RefreshGameButton';
 import { RebuildEstimatesButton } from '../../_components/RebuildEstimatesButton';
 import { GenerateBlogDraftButton } from '../../_components/GenerateBlogDraftButton';
-import { ImportCcuCsvButton } from '../../_components/ImportCcuCsvButton';
-import { ImportReviewsCsvButton } from '../../_components/ImportReviewsCsvButton';
 import { EditGameForm } from '../../_components/EditGameForm';
 import { MilestoneRow } from '../../_components/MilestoneRow';
 import { AddMilestoneForm } from '../../_components/AddMilestoneForm';
@@ -191,8 +189,6 @@ export default async function AdminGameDetailPage({
             <RefreshGameButton gameId={s.id} />
             {!s.isFree && <RebuildEstimatesButton gameId={s.id} />}
             {!s.isFree && <GenerateBlogDraftButton gameId={s.id} />}
-            <ImportCcuCsvButton gameId={s.id} />
-            <ImportReviewsCsvButton gameId={s.id} />
             <DeleteButton
               action={deleteGame.bind(null, s.id)}
               confirmMessage={`Permanently delete "${s.name}"?`}
