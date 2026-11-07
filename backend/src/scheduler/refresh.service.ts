@@ -267,9 +267,12 @@ export class RefreshService {
   }
 
   /**
-   * Poll live Twitch viewers for every tracked game during US/EU prime
-   * windows only (see vercel.json: every 30 min at 16–03 UTC — EU evening
-   * + US East evening; quiet 04–15 UTC skipped). Mirrors the CCU poll but
+   * Poll live Twitch viewers for every tracked game four times a day at
+   * US/EU prime time (see vercel.json: 18, 20 and 23 UTC for the EU evening,
+   * 01 UTC for the US evening). Each run covers the whole catalog in ~8 min,
+   * and the row kept is the day's highest sample. Was every 30 min over 12 h
+   * (~3.4 h of function time a day); four samples find a close enough peak
+   * for a chart and the blog, which are the only readers. Mirrors the CCU poll but
    * is platform-agnostic. A wall-clock budget keeps the run under the
    * Vercel `maxDuration`, and stalest-first ordering drains leftovers.
    */

@@ -69,9 +69,9 @@ const INGESTION_CRONS: IngestionCronConfig[] = [
   {
     pipeline: 'TWITCH_VIEWERS',
     cronPath: '/api/cron/twitch-viewers',
-    schedule: '15,45 * * * *',
-    cadence: 'Hourly',
-    cycle: 'hour',
+    schedule: '15 1,18,20,23 * * *',
+    cadence: '4x daily (prime time)',
+    cycle: 'day',
     target: 'paid',
   },
   {

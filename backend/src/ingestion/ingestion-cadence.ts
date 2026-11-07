@@ -7,7 +7,7 @@ export interface CycleWindow {
 
 /**
  * Calendar window for a cadence, always in UTC.
- * Hourly windows can be offset (Twitch polls at :30).
+ * Hourly windows can be offset by a few minutes past the hour.
  */
 export function cycleWindow(
   cadence: IngestionCadence,
