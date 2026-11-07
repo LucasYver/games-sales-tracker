@@ -183,8 +183,8 @@ Documentation : `ARCHITECTURE.md` (carte), `ESTIMATION.md` (formules),
 | GET | `/api/games/search?q=` | Recherche dans le catalogue local |
 | GET | `/api/games/:slug` | Détail jeu + dernière estimation + historique |
 | GET | `/api/games/:slug/related` | Jeux de la même franchise et du même studio |
-| GET | `/api/games/studios/:slug` | Page studio : tous ses jeux (à partir de 4 jeux) |
-| GET | `/api/games/franchises/:slug` | Page franchise : tous ses jeux (à partir de 3 jeux) |
+| GET | `/api/games/studios/:slug` | Page studio (développeur IGDB, sinon Steam) : tous ses jeux, à partir de 4 ; un ancien slug renvoie la page où ses jeux sont passés |
+| GET | `/api/games/franchises/:slug` | Page franchise (série IGDB, sinon déduite du titre) : tous ses jeux, à partir de 3 ; un ancien slug renvoie la page où ses jeux sont passés |
 | GET | `/api/games/hubs` | Slugs des pages studio et franchise, pour le sitemap |
 | GET | `/api/games/studios` | Tous les studios ayant une page, pour l'index |
 | GET | `/api/games/franchises` | Toutes les franchises ayant une page, pour l'index |

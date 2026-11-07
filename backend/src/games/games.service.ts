@@ -51,12 +51,18 @@ import {
   lifetimeSalesPct,
 } from './sales-modeling.constants';
 import { ESTIMATE_MIN_RELEASE, estimateOutOfScope } from './estimate-scope';
+import {
+  publicDeveloper,
+  publicDeveloperSql,
+  publicPublisher,
+} from './game-companies';
 import { platformReleaseDate } from './platform-release-date';
 import { normalizeSteamPriceCountry } from '../ingestion/steam-store-countries';
 import {
   FRANCHISE_HUB_MIN_GAMES,
   STUDIO_HUB_MIN_GAMES,
   franchiseName,
+  franchiseSlugSql,
   studioSlug,
   studioSlugSql,
 } from './hubs';
@@ -763,9 +769,22 @@ export class GamesService {
   async listRelated(slug: string) {
     const game = await this.games.findOne({
       where: { slug },
-      select: { id: true, developer: true, franchiseSlug: true },
+      select: {
+        id: true,
+        developer: true,
+        publisher: true,
+        igdbDeveloper: true,
+        igdbPublisher: true,
+        manualFields: true,
+        franchiseSlug: true,
+        seriesSlug: true,
+        seriesName: true,
+      },
     });
     if (!game) throw new NotFoundException(`Game "${slug}" not found`);
+    const franchiseSlug = game.seriesSlug ?? game.franchiseSlug;
+    const developer = publicDeveloper(game);
+    const slugOfStudio = developer ? studioSlug(developer) : '';
 
     const load = (where: FindOptionsWhere<Game>, take: number) =>
       this.games.find({
@@ -785,15 +804,25 @@ export class GamesService {
       });
 
     const [franchise, sameDeveloper] = await Promise.all<Game[]>([
-      game.franchiseSlug
-        ? load({ franchiseSlug: game.franchiseSlug }, RELATED_GAMES_LIMIT)
-        : [],
-      game.developer
+      franchiseSlug
         ? load(
             {
-              developer: Raw((alias) => `LOWER(${alias}) = LOWER(:developer)`, {
-                developer: game.developer,
-              }),
+              seriesSlug: Raw(
+                (alias) => `COALESCE(${alias}, "franchiseSlug") = :franchise`,
+                { franchise: franchiseSlug },
+              ),
+            },
+            RELATED_GAMES_LIMIT,
+          )
+        : [],
+      slugOfStudio
+        ? load(
+            {
+              // One table in the query: the expression names its columns bare.
+              developer: Raw(
+                () => `${studioSlugSql(publicDeveloperSql())} = :studio`,
+                { studio: slugOfStudio },
+              ),
             },
             // Enough to still fill the list once franchise games are removed.
             RELATED_GAMES_LIMIT * 2,
@@ -823,52 +852,101 @@ export class GamesService {
 
     // Each list leaves out the game itself. The lists are capped well above the
     // hub thresholds, so their length is enough to tell whether a hub exists.
-    const slugOfStudio = game.developer ? studioSlug(game.developer) : '';
     return {
       franchise: franchise.map(toItem),
       studio: studio.map(toItem),
       franchiseHub:
-        game.franchiseSlug && franchise.length + 1 >= FRANCHISE_HUB_MIN_GAMES
+        franchiseSlug && franchise.length + 1 >= FRANCHISE_HUB_MIN_GAMES
           ? {
-              slug: game.franchiseSlug,
-              name: franchiseName(game.franchiseSlug),
+              slug: franchiseSlug,
+              name: franchiseName(
+                franchiseSlug,
+                game.seriesSlug ? game.seriesName : null,
+              ),
             }
           : null,
       studioHub:
         slugOfStudio && sameDeveloper.length + 1 >= STUDIO_HUB_MIN_GAMES
-          ? { slug: slugOfStudio, name: game.developer as string }
+          ? { slug: slugOfStudio, name: developer as string }
           : null,
     };
   }
 
-  /** Every game of a studio, for its public hub page. */
+  /**
+   * Every game of a studio, for its public hub page. A slug built from a
+   * Steam spelling the IGDB name replaced ("capcom-co-ltd") returns the hub
+   * its games moved to, under that hub's slug, so the page can redirect.
+   */
   async getStudioHub(slug: string) {
-    const games = await this.hubGames(
-      `${studioSlugSql('g.developer')} = :slug`,
-      slug,
-    );
-    if (!slug || games.length < STUDIO_HUB_MIN_GAMES) {
+    if (!slug) throw new NotFoundException('Studio not found');
+    const hubWhere = `${studioSlugSql(publicDeveloperSql('g'))} = :slug`;
+    let games = await this.hubGames(hubWhere, slug);
+    let hubSlug = slug;
+    if (games.length < STUDIO_HUB_MIN_GAMES) {
+      const shown = studioSlugSql(publicDeveloperSql());
+      const [moved] = await this.games.query<{ slug: string }[]>(
+        `SELECT ${shown} AS slug
+         FROM game
+         WHERE "deletedAt" IS NULL AND ${studioSlugSql('developer')} = $1
+           AND ${shown} <> $1
+         GROUP BY 1
+         ORDER BY COUNT(*) DESC, 1
+         LIMIT 1`,
+        [slug],
+      );
+      if (moved) {
+        hubSlug = moved.slug;
+        games = await this.hubGames(hubWhere, hubSlug);
+      }
+    }
+    if (games.length < STUDIO_HUB_MIN_GAMES) {
       throw new NotFoundException(`Studio "${slug}" not found`);
     }
     // Spellings can differ by case across games: show the most common one.
     const spellings = new Map<string, number>();
     for (const game of games) {
-      const name = game.developer as string;
+      const name = publicDeveloper(game) as string;
       spellings.set(name, (spellings.get(name) ?? 0) + 1);
     }
     const [name] = [...spellings.entries()].sort(
       (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
     )[0];
-    return this.toHub(slug, name, games);
+    return this.toHub(hubSlug, name, games);
   }
 
-  /** Every game of a franchise, for its public hub page. */
+  /**
+   * Every game of a franchise, for its public hub page. A slug from before the
+   * IGDB series (derived from titles) returns the hub its games moved to, under
+   * that hub's slug, so the page can redirect.
+   */
   async getFranchiseHub(slug: string) {
-    const games = await this.hubGames('g.franchiseSlug = :slug', slug);
+    const hubWhere = `${franchiseSlugSql('g')} = :slug`;
+    let games = await this.hubGames(hubWhere, slug);
+    let hubSlug = slug;
+    if (games.length < FRANCHISE_HUB_MIN_GAMES) {
+      const [moved] = await this.games.query<{ slug: string }[]>(
+        `SELECT ${franchiseSlugSql()} AS slug
+         FROM game
+         WHERE "deletedAt" IS NULL AND "franchiseSlug" = $1
+           AND ${franchiseSlugSql()} <> $1
+         GROUP BY 1
+         ORDER BY COUNT(*) DESC, 1
+         LIMIT 1`,
+        [slug],
+      );
+      if (moved) {
+        hubSlug = moved.slug;
+        games = await this.hubGames(hubWhere, hubSlug);
+      }
+    }
     if (games.length < FRANCHISE_HUB_MIN_GAMES) {
       throw new NotFoundException(`Franchise "${slug}" not found`);
     }
-    return this.toHub(slug, franchiseName(slug), games);
+    return this.toHub(
+      hubSlug,
+      franchiseName(hubSlug, mostCommon(games.map((g) => g.seriesName))),
+      games,
+    );
   }
 
   /** Every studio with a hub page, for the public index. */
@@ -879,8 +957,12 @@ export class GamesService {
       `SELECT slug, MODE() WITHIN GROUP (ORDER BY developer) AS name, COUNT(*) AS games
        FROM (
          SELECT developer, ${studioSlugSql('developer')} AS slug
-         FROM game
-         WHERE "deletedAt" IS NULL AND developer IS NOT NULL
+         FROM (
+           SELECT ${publicDeveloperSql()} AS developer
+           FROM game
+           WHERE "deletedAt" IS NULL
+         ) shown
+         WHERE developer IS NOT NULL
        ) studios
        WHERE slug <> ''
        GROUP BY slug
@@ -893,10 +975,14 @@ export class GamesService {
 
   /** Every franchise with a hub page, for the public index. */
   async listFranchises() {
-    const rows = await this.games.query<{ slug: string; games: string }[]>(
-      `SELECT "franchiseSlug" AS slug, COUNT(*) AS games
+    const rows = await this.games.query<
+      { slug: string; name: string | null; games: string }[]
+    >(
+      `SELECT ${franchiseSlugSql()} AS slug,
+              MODE() WITHIN GROUP (ORDER BY "seriesName") AS name,
+              COUNT(*) AS games
        FROM game
-       WHERE "deletedAt" IS NULL AND "franchiseSlug" IS NOT NULL
+       WHERE "deletedAt" IS NULL AND ${franchiseSlugSql()} IS NOT NULL
        GROUP BY 1
        HAVING COUNT(*) >= $1`,
       [FRANCHISE_HUB_MIN_GAMES],
@@ -904,7 +990,7 @@ export class GamesService {
     return rows
       .map((row) => ({
         slug: row.slug,
-        name: franchiseName(row.slug),
+        name: franchiseName(row.slug, row.name),
         games: Number(row.games),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -915,17 +1001,21 @@ export class GamesService {
     const [studios, franchises] = await Promise.all([
       this.games.query<{ slug: string }[]>(
         `SELECT ${studioSlugSql('developer')} AS slug
-         FROM game
-         WHERE "deletedAt" IS NULL AND developer IS NOT NULL
+         FROM (
+           SELECT ${publicDeveloperSql()} AS developer
+           FROM game
+           WHERE "deletedAt" IS NULL
+         ) shown
+         WHERE developer IS NOT NULL
          GROUP BY 1
          HAVING COUNT(*) >= $1 AND ${studioSlugSql('developer')} <> ''
          ORDER BY 1`,
         [STUDIO_HUB_MIN_GAMES],
       ),
       this.games.query<{ slug: string }[]>(
-        `SELECT "franchiseSlug" AS slug
+        `SELECT ${franchiseSlugSql()} AS slug
          FROM game
-         WHERE "deletedAt" IS NULL AND "franchiseSlug" IS NOT NULL
+         WHERE "deletedAt" IS NULL AND ${franchiseSlugSql()} IS NOT NULL
          GROUP BY 1
          HAVING COUNT(*) >= $1
          ORDER BY 1`,
@@ -951,6 +1041,9 @@ export class GamesService {
         'g.genres',
         'g.isFree',
         'g.developer',
+        'g.igdbDeveloper',
+        'g.manualFields',
+        'g.seriesName',
       ])
       .where(where, { slug })
       .getMany();
@@ -1251,8 +1344,8 @@ export class GamesService {
       summary: game.summary,
       isFree: game.isFree,
       platforms: game.platforms,
-      developer: game.developer,
-      publisher: game.publisher,
+      developer: publicDeveloper(game),
+      publisher: publicPublisher(game),
       genres: game.genres ?? [],
       sources: game.sources,
       salesBreakdown: breakdown,
@@ -2249,4 +2342,16 @@ export class GamesService {
     }
     return map;
   }
+}
+
+/** The most frequent non-null value, ties broken alphabetically. */
+function mostCommon(values: (string | null)[]): string | null {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    if (value) counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  const ranked = [...counts.entries()].sort(
+    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+  );
+  return ranked[0]?.[0] ?? null;
 }

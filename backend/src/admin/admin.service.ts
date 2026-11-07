@@ -1438,6 +1438,7 @@ export class AdminService {
       }
     }
 
+    const igdbIdBefore = game.igdbId;
     if (input.igdbId !== undefined) {
       if (input.igdbId === null) {
         game.igdbId = null;
@@ -1456,6 +1457,15 @@ export class AdminService {
           }
           game.igdbId = input.igdbId;
         }
+      }
+      if (game.igdbId !== igdbIdBefore) {
+        // The IGDB grouping belonged to the old record: drop it and put the
+        // game first in line for the nightly refresh.
+        game.seriesSlug = null;
+        game.seriesName = null;
+        game.igdbDeveloper = null;
+        game.igdbPublisher = null;
+        game.igdbCheckedAt = null;
       }
     }
 

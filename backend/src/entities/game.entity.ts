@@ -122,6 +122,34 @@ export class Game {
   @Column({ type: 'int', nullable: true })
   iterationNumber: number | null;
 
+  // The series IGDB puts this game in (its collection, or its franchise when
+  // the collection is only a sub-series), for the public franchise pages and
+  // the related-games links. `null` when IGDB has none, or before the nightly
+  // refresh reaches the game: the public pages then fall back to
+  // `franchiseSlug`. Never read by the matcher or the ML.
+  @Column({ type: 'varchar', nullable: true })
+  seriesSlug: string | null;
+
+  // IGDB's display name for `seriesSlug`.
+  @Column({ type: 'varchar', nullable: true })
+  seriesName: string | null;
+
+  // Developer and publisher IGDB credits, porting and supporting studios left
+  // out and internal divisions folded (see `games/game-companies.ts`). The
+  // public pages show them ahead of the Steam `developer` / `publisher`
+  // unless an admin corrected those by hand. Never read by the matcher or
+  // the ML.
+  @Column({ type: 'varchar', nullable: true })
+  igdbDeveloper: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  igdbPublisher: string | null;
+
+  // Last time the nightly refresh read this game's series and companies from
+  // IGDB.
+  @Column({ type: 'timestamptz', nullable: true })
+  igdbCheckedAt: Date | null;
+
   // True for live-service titles (persistent online games with ongoing
   // content: MMOs, season-pass shooters, battle-royale). They retain
   // players — and accumulate reviews — for years, so both their

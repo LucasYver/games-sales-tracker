@@ -30,6 +30,12 @@ IGDB lists candidates. The job then:
 4. Writes `game_ingestion_state` pipeline `DISCOVERY` for the new stub only.
 5. Backfills a bounded number of missing source links (`LINK_BACKFILL_LIMIT`).
 
+After discovery, the same cron re-reads how IGDB groups the games checked
+longest ago (`IgdbGroupingService.refreshGrouping`, batches of 500 ids): their
+series (`seriesSlug`, see `games/game-series.ts`) and credited developer and
+publisher (`igdbDeveloper` / `igdbPublisher`, see `games/game-companies.ts`).
+These only feed the public pages; the Steam columns stay untouched.
+
 Free-to-play is rejected later, on Steam ingest (`isFree`), not by the
 IGDB rating bar.
 

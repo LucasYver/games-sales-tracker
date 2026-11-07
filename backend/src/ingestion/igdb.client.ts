@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { Platform } from '../entities';
+import type { IgdbInvolvedCompany } from '../games/game-companies';
+import type { IgdbSeriesFields } from '../games/game-series';
 import {
   DISCOVERY_RELEASE_FLOOR,
   IGDB_CATALOG_MIN_RATING_COUNT,
@@ -36,6 +38,11 @@ export interface IgdbGame {
   // earliest date across ALL platforms). Empty when IGDB has no
   // `release_dates` breakdown for this game.
   platformReleaseDates: Map<Platform, Date>;
+}
+
+export interface IgdbGrouping {
+  series: IgdbSeriesFields;
+  companies: IgdbInvolvedCompany[];
 }
 
 interface CachedToken {
@@ -351,6 +358,88 @@ export class IgdbClient {
         : String(error);
       this.logger.error(`IGDB /genres query failed: ${detail}`);
       return [];
+    }
+  }
+
+  /**
+   * How IGDB groups up to 500 games (series and credited companies), in one
+   * request, keyed by IGDB id. A game IGDB does not return is absent from the
+   * map. Returns null when the request fails, so the caller can tell a
+   * failure from "nothing on IGDB".
+   */
+  async fetchGrouping(
+    igdbIds: number[],
+  ): Promise<Map<number, IgdbGrouping> | null> {
+    if (!this.isConfigured()) return null;
+    const ids = igdbIds.filter((id) => Number.isInteger(id)).slice(0, 500);
+    if (ids.length === 0) return new Map();
+
+    const token = await this.getAccessToken();
+    const clientId = this.config.get<string>('IGDB_CLIENT_ID')!;
+    const body = [
+      `where id = (${ids.join(',')});`,
+      [
+        'fields collections.name, franchise.name, franchises.name,',
+        'involved_companies.company.name, involved_companies.developer,',
+        'involved_companies.publisher, involved_companies.porting,',
+        'involved_companies.supporting;',
+      ].join(' '),
+      `limit ${ids.length};`,
+    ].join(' ');
+
+    type Named = { name?: string };
+    type Involved = {
+      company?: Named;
+      developer?: boolean;
+      publisher?: boolean;
+      porting?: boolean;
+      supporting?: boolean;
+    };
+    try {
+      const { data } = await axios.post('https://api.igdb.com/v4/games', body, {
+        headers: {
+          'Client-ID': clientId,
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'text/plain',
+        },
+        timeout: 30000,
+      });
+      const names = (list: Named[] | undefined) =>
+        (list ?? [])
+          .map((entry) => entry.name?.trim())
+          .filter((name): name is string => Boolean(name));
+      const grouping = new Map<number, IgdbGrouping>();
+      for (const raw of data as Array<{
+        id: number;
+        collections?: Named[];
+        franchise?: Named;
+        franchises?: Named[];
+        involved_companies?: Involved[];
+      }>) {
+        grouping.set(raw.id, {
+          series: {
+            collections: names(raw.collections),
+            franchise: raw.franchise?.name?.trim() || null,
+            franchises: names(raw.franchises),
+          },
+          companies: (raw.involved_companies ?? [])
+            .filter((c) => c.company?.name?.trim())
+            .map((c) => ({
+              name: (c.company?.name as string).trim(),
+              developer: Boolean(c.developer),
+              publisher: Boolean(c.publisher),
+              porting: Boolean(c.porting),
+              supporting: Boolean(c.supporting),
+            })),
+        });
+      }
+      return grouping;
+    } catch (error) {
+      const detail = axios.isAxiosError(error)
+        ? JSON.stringify(error.response?.data ?? error.message)
+        : String(error);
+      this.logger.error(`IGDB grouping query failed: ${detail}`);
+      return null;
     }
   }
 

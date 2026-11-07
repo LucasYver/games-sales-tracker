@@ -59,10 +59,27 @@ const FRANCHISE_NAMES: Record<string, string> = {
   'wwe-2k': 'WWE 2K',
 };
 
-/** A franchise that newly reaches the threshold still gets a readable name. */
-export function franchiseName(slug: string): string {
+/**
+ * Franchise slug of a game in SQL: its IGDB series, else the slug derived from
+ * its title (games the nightly series refresh has not reached yet, and games
+ * IGDB puts in no series). `alias` is the table alias, if any.
+ */
+export function franchiseSlugSql(alias?: string): string {
+  const column = (name: string) => (alias ? `${alias}."${name}"` : `"${name}"`);
+  return `COALESCE(${column('seriesSlug')}, ${column('franchiseSlug')})`;
+}
+
+/**
+ * Display name of a franchise: the curated name, else IGDB's series name,
+ * else the slug with capitals so a new franchise is still readable.
+ */
+export function franchiseName(
+  slug: string,
+  seriesName?: string | null,
+): string {
   return (
     FRANCHISE_NAMES[slug] ??
+    seriesName ??
     slug
       .split('-')
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))

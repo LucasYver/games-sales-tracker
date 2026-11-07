@@ -56,7 +56,7 @@ on `DATABASE_URL_DIRECT`, then `DATABASE_URL`.
 
 | Entity | Table | Role |
 | ------ | ----- | ---- |
-| `Game` | `game` | Catalog row: identity, platforms, genres, Steam tags, franchise / live-service flags, free-to-play, catalog tier. |
+| `Game` | `game` | Catalog row: identity, platforms, genres, Steam tags, franchise / live-service flags, IGDB series and companies, free-to-play, catalog tier. |
 | `GameSource` | `game_source` | External id (Steam app, IGDB, store, Twitch). |
 | `GamePlatformReleaseDate` | `game_platform_release_date` | Per-platform launch date used by estimation. |
 | `GameIngestionState` | `game_ingestion_state` | Per-pipeline attempt / success, so budgeted crons resume stalest-first. |
@@ -136,6 +136,13 @@ copy the cron expressions into this file.
 Rough groups: hourly CCU and Twitch, several-times-daily reviews / store
 ratings / milestone harvest / prices / followers, nightly IGDB discovery,
 weekly estimate rebuild and rank, slower playtime and achievement passes.
+The nightly discovery run also re-reads how IGDB groups part of the catalog,
+oldest check first. Public franchise pages group games by the IGDB series
+(`seriesSlug`), falling back to the title-derived `franchiseSlug`. Public
+studio pages and the game page show the IGDB developer and publisher
+(`igdbDeveloper` / `igdbPublisher`), unless an admin corrected the Steam
+value by hand. The matcher and the ML keep `franchiseSlug`, `developer` and
+`publisher` only.
 Sunday `blog-draft` writes at most one draft — an update of a live article or
 ranking whose sourced figures changed first, else a new one — or mails a digest
 if one is already waiting. Daily `blog-news` writes at most one news item and
