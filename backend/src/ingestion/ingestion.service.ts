@@ -10,7 +10,6 @@ import {
   In,
   IsNull,
   MoreThan,
-  MoreThanOrEqual,
   Not,
   Repository,
 } from 'typeorm';
@@ -73,11 +72,6 @@ const STORE_SOURCE_BY_PLATFORM: Partial<Record<Platform, SourceType>> = {
   [Platform.XBOX]: SourceType.XBOX_STORE,
 };
 
-// A game whose only CCU/reviews snapshots are newer than this cutoff has no
-// real backfilled history (just a few daily-cron points) and is treated as
-// "missing" by the incremental Steam/PS backfill.
-const BACKFILL_HISTORY_STALE_DAYS = 7;
-
 // Steam review alert (`steamReviewsHealth`). The poll runs six times a day, so
 // a full day without a stored value means every run came back empty. Every game
 // is due once per UTC day, so 2 days without a value means it missed a full day.
@@ -99,27 +93,6 @@ export interface SteamReviewsHealth {
   failedLast24h: number;
   lastCapturedAt: Date | null;
   problems: string[];
-}
-
-// Per-metric counts for the incremental Steam/PS backfill.
-export interface BackfillTaskCounts {
-  ccu: number;
-  reviews: number;
-  followers: number;
-  ratings: number;
-}
-
-// One game to (partially) backfill: only the flags that are true still need
-// their history fetched.
-interface BackfillWorkItem {
-  gameId: string;
-  name: string;
-  platforms: Platform[];
-  appId: number | null;
-  ccu: boolean;
-  reviews: boolean;
-  followers: boolean;
-  ratings: boolean;
 }
 
 // Default `confidenceScore` (0–100) assigned to milestones from their
@@ -278,10 +251,6 @@ function parseIgdbSlug(rawUrl: string): string | null {
 @Injectable()
 export class IngestionService {
   private readonly logger = new Logger(IngestionService.name);
-
-  // Guards the catalog-wide incremental Steam/PS backfill so a second click
-  // (or cron overlap) can't launch a concurrent run.
-  private backfillAllRunning = false;
 
   constructor(
     @InjectRepository(Game)
@@ -3474,260 +3443,6 @@ export class IngestionService {
         (leftover > 0 ? `, ${leftover} left for next run` : ''),
     );
     return { polled, failed, leftover };
-  }
-
-  /**
-   * Kick off the catalog-wide incremental Steam/PS backfill in the background
-   * and return immediately. Fetching CCU (SteamCharts), reviews (histogram),
-   * followers and console store ratings for the whole catalog is far too slow
-   * to await inside a request, so the run is fire-and-forget: progress lands in
-   * the server logs and a re-launch is refused while one is in flight.
-   *
-   * The worklist is built synchronously (a handful of aggregate queries) so the
-   * caller still learns how many games / tasks were queued.
-   */
-  async startBackfillMissing(options: { createdAfter?: Date } = {}): Promise<{
-    started: boolean;
-    alreadyRunning: boolean;
-    games: number;
-    tasks: BackfillTaskCounts;
-  }> {
-    if (this.backfillAllRunning) {
-      return {
-        started: false,
-        alreadyRunning: true,
-        games: 0,
-        tasks: { ccu: 0, reviews: 0, followers: 0, ratings: 0 },
-      };
-    }
-
-    const worklist = await this.buildBackfillWorklist(options);
-    const tasks = this.countBackfillTasks(worklist);
-    if (worklist.length === 0) {
-      return { started: false, alreadyRunning: false, games: 0, tasks };
-    }
-
-    this.backfillAllRunning = true;
-    void this.processBackfillWorklist(worklist)
-      .catch((error) =>
-        this.logger.error(`[backfill-all] fatal: ${String(error)}`),
-      )
-      .finally(() => {
-        this.backfillAllRunning = false;
-      });
-
-    return {
-      started: true,
-      alreadyRunning: false,
-      games: worklist.length,
-      tasks,
-    };
-  }
-
-  /**
-   * Synchronous variant used by the one-off script: builds the worklist and
-   * processes it to completion, returning the run summary. Not guarded by the
-   * in-flight flag — the script owns its own process.
-   */
-  async runBackfillMissing(
-    options: { createdAfter?: Date } = {},
-  ): Promise<{ games: number; tasks: BackfillTaskCounts }> {
-    const worklist = await this.buildBackfillWorklist(options);
-    const tasks = this.countBackfillTasks(worklist);
-    if (worklist.length > 0) {
-      await this.processBackfillWorklist(worklist);
-    }
-    return { games: worklist.length, tasks };
-  }
-
-  private countBackfillTasks(worklist: BackfillWorkItem[]): BackfillTaskCounts {
-    return worklist.reduce<BackfillTaskCounts>(
-      (acc, item) => ({
-        ccu: acc.ccu + (item.ccu ? 1 : 0),
-        reviews: acc.reviews + (item.reviews ? 1 : 0),
-        followers: acc.followers + (item.followers ? 1 : 0),
-        ratings: acc.ratings + (item.ratings ? 1 : 0),
-      }),
-      { ccu: 0, reviews: 0, followers: 0, ratings: 0 },
-    );
-  }
-
-  /**
-   * Compute which non-free games still miss each backfillable series. A Steam
-   * link (appId) gates CCU/reviews/followers; a console platform gates store
-   * ratings. "Missing history" for CCU/reviews means no snapshot older than
-   * {@link BACKFILL_HISTORY_STALE_DAYS} (so daily-cron-only games still count
-   * as needing the historical backfill); followers and ratings just need any
-   * snapshot to be considered done.
-   */
-  private async buildBackfillWorklist(
-    options: { createdAfter?: Date } = {},
-  ): Promise<BackfillWorkItem[]> {
-    const staleCutoff = new Date(
-      Date.now() - BACKFILL_HISTORY_STALE_DAYS * 24 * 3600 * 1000,
-    );
-
-    const games = await this.games.find({
-      where: {
-        deletedAt: IsNull(),
-        isFree: false,
-        ...(options.createdAfter
-          ? { createdAt: MoreThanOrEqual(options.createdAfter) }
-          : {}),
-      },
-      select: { id: true, name: true, platforms: true },
-    });
-
-    const steamRows = await this.gameSources.find({
-      where: { source: SourceType.STEAM },
-      select: { gameId: true, externalId: true },
-    });
-    const appIdByGame = new Map<string, number>();
-    for (const row of steamRows) {
-      const appId = Number(row.externalId);
-      if (Number.isFinite(appId)) appIdByGame.set(row.gameId, appId);
-    }
-
-    const idSet = async (
-      sql: string,
-      params: unknown[],
-    ): Promise<Set<string>> =>
-      new Set(
-        (await this.signals.query(sql, params)).map(
-          (r: { gameId: string }) => r.gameId,
-        ),
-      );
-
-    const [ccuDone, reviewsDone, followersDone, ratingsDone] =
-      await Promise.all([
-        idSet(
-          `SELECT DISTINCT "gameId" FROM signal_snapshot WHERE metric = $1 AND "capturedAt" < $2`,
-          [SignalMetric.STEAM_CONCURRENT, staleCutoff.toISOString()],
-        ),
-        idSet(
-          `SELECT DISTINCT "gameId" FROM signal_snapshot WHERE metric = $1 AND "capturedAt" < $2`,
-          [SignalMetric.STEAM_REVIEWS, staleCutoff.toISOString()],
-        ),
-        idSet(
-          `SELECT DISTINCT "gameId" FROM signal_snapshot WHERE metric = $1`,
-          [SignalMetric.STEAM_FOLLOWERS],
-        ),
-        idSet(
-          `SELECT DISTINCT "gameId" FROM signal_snapshot WHERE metric IN ($1, $2, $3) AND synthetic = false`,
-          [
-            SignalMetric.PS_RATINGS,
-            SignalMetric.XBOX_RATINGS,
-            SignalMetric.SWITCH_RATINGS,
-          ],
-        ),
-      ]);
-
-    const items: BackfillWorkItem[] = [];
-    for (const game of games) {
-      const appId = appIdByGame.get(game.id) ?? null;
-      const hasSteam = appId !== null;
-      const ccu = hasSteam && !ccuDone.has(game.id);
-      const reviews = hasSteam && !reviewsDone.has(game.id);
-      const followers = hasSteam && !followersDone.has(game.id);
-      const ratings =
-        this.hasConsolePlatform(game.platforms) && !ratingsDone.has(game.id);
-      if (ccu || reviews || followers || ratings) {
-        items.push({
-          gameId: game.id,
-          name: game.name,
-          platforms: game.platforms,
-          appId,
-          ccu,
-          reviews,
-          followers,
-          ratings,
-        });
-      }
-    }
-    return items;
-  }
-
-  /**
-   * Run each game's outstanding backfills sequentially, best-effort: one failing
-   * source (or game) is logged and never aborts the run.
-   */
-  private async processBackfillWorklist(
-    worklist: BackfillWorkItem[],
-  ): Promise<void> {
-    const startedAt = Date.now();
-    const done: BackfillTaskCounts = {
-      ccu: 0,
-      reviews: 0,
-      followers: 0,
-      ratings: 0,
-    };
-    const failed: BackfillTaskCounts = {
-      ccu: 0,
-      reviews: 0,
-      followers: 0,
-      ratings: 0,
-    };
-    this.logger.log(
-      `[backfill-all] starting: ${worklist.length} game(s) queued`,
-    );
-
-    for (const item of worklist) {
-      if (item.ccu) {
-        try {
-          await this.backfillCcuFromSteamCharts(item.gameId);
-          done.ccu += 1;
-        } catch (error) {
-          failed.ccu += 1;
-          this.logger.warn(
-            `[backfill-all] ccu failed for "${item.name}": ${String(error)}`,
-          );
-        }
-      }
-      if (item.reviews) {
-        try {
-          await this.backfillReviewsFromHistogram(item.gameId);
-          done.reviews += 1;
-        } catch (error) {
-          failed.reviews += 1;
-          this.logger.warn(
-            `[backfill-all] reviews failed for "${item.name}": ${String(error)}`,
-          );
-        }
-      }
-      if (item.followers) {
-        try {
-          const result = await this.syncFollowersFromApi(item.gameId, {
-            fullHistory: true,
-            appId: item.appId ?? undefined,
-            throwIfMissing: false,
-          });
-          if (result.imported > 0) done.followers += 1;
-        } catch (error) {
-          failed.followers += 1;
-          this.logger.warn(
-            `[backfill-all] followers failed for "${item.name}": ${String(error)}`,
-          );
-        }
-      }
-      if (item.ratings) {
-        try {
-          await this.scrapeStoreRatings(item.gameId, item.name, item.platforms);
-          done.ratings += 1;
-        } catch (error) {
-          this.logger.warn(
-            `[backfill-all] ratings failed for "${item.name}": ${String(error)}`,
-          );
-        }
-      }
-    }
-
-    this.logger.log(
-      `[backfill-all] done in ${Date.now() - startedAt}ms — ` +
-        `ccu ${done.ccu}/${done.ccu + failed.ccu}, ` +
-        `reviews ${done.reviews}/${done.reviews + failed.reviews}, ` +
-        `followers ${done.followers}/${done.followers + failed.followers}, ` +
-        `ratings ${done.ratings}/${done.ratings + failed.ratings}`,
-    );
   }
 
   /**

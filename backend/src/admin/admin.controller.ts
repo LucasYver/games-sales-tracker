@@ -349,15 +349,6 @@ export class AdminController {
     return this.genres.syncFromIgdb();
   }
 
-  // Catalog-wide incremental Steam/PS backfill (CCU + reviews + followers +
-  // console store ratings). Fire-and-forget: returns immediately with the
-  // queued counts; progress is in the server logs.
-  @Post('backfill-steam-ps')
-  @HttpCode(200)
-  backfillSteamPs() {
-    return this.ingestion.startBackfillMissing();
-  }
-
   @Get('blog/candidates')
   blogCandidates(@Query('limit') limit?: string) {
     return this.blog.listCandidates(Number(limit) || undefined);

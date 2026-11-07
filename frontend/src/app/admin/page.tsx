@@ -9,7 +9,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { SteamPsBackfillButton } from './_components/SteamPsBackfillButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -188,7 +187,6 @@ export default async function AdminDashboard() {
             Health overview of the tracker.
           </p>
         </div>
-        <SteamPsBackfillButton />
       </header>
 
       {stats.steamReviewsHealth.problems.length > 0 && (

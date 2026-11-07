@@ -344,18 +344,6 @@ export async function syncGenresFromIgdb(): Promise<AdminGenreIgdbSyncResult> {
   return result;
 }
 
-export interface SteamPsBackfillResult {
-  started: boolean;
-  alreadyRunning: boolean;
-  games: number;
-  tasks: {
-    ccu: number;
-    reviews: number;
-    followers: number;
-    ratings: number;
-  };
-}
-
 export async function generateBlogDraft(
   gameId: string,
 ): Promise<AdminBlogDetail> {
@@ -464,13 +452,5 @@ export async function updateBlogTranslation(
   );
   revalidatePath(`/admin/blog/${id}`);
   if (result.status === 'PUBLISHED') revalidatePublicBlog(result);
-  return result;
-}
-
-export async function runSteamPsBackfill(): Promise<SteamPsBackfillResult> {
-  const result = await adminFetch<SteamPsBackfillResult>('/backfill-steam-ps', {
-    method: 'POST',
-  });
-  revalidatePath('/admin');
   return result;
 }
