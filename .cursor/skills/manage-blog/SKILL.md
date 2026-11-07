@@ -42,8 +42,9 @@ Candidate rules and thresholds are the constants and SQL in
   whose milestone has been rejected, unless forced. Nearly all recent figures
   come from press extraction, so the review is the real check.
 - Rankings: one figure per game (`pickAnswerFact`, worldwide only), highest
-  first. Publishers are the curated `Publisher` rows, not the raw
-  `game.publisher` string, which splits "Capcom" and "CAPCOM Co., Ltd.". A
+  first. Publishers are the `Publisher` rows (`game.publisherId`), one per
+  company: spellings and renames of one publisher share a row (see
+  `PublishersService`). A
   franchise has only a slug: its name is read off a game title. `compareFacts`
   skips consolidation for rankings, because their facts mix games.
 - Launch reports: Steam-based, so games not on Steam are not covered. They also

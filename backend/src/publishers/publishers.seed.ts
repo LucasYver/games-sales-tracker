@@ -1,13 +1,10 @@
 /**
- * Curated registry of "big" publishers used for **publisher identity in
- * the matcher**: linking a game to a curated `Publisher` row canonicalises
- * its publisher across raw-string variants (e.g. "Capcom" vs "CAPCOM Co.,
- * Ltd.", "Sony Computer Entertainment" vs "PlayStation Publishing LLC"),
- * so the matcher's publisher axis connects same-publisher titles that the
- * raw string would otherwise split.
+ * Curated publishers whose names must merge into one `Publisher` row beyond
+ * what spelling folding does: renames and subsidiaries (e.g. "Sony Computer
+ * Entertainment" vs "PlayStation Publishing LLC"). Every other publisher gets
+ * its own row automatically (see `PublishersService.linkGames`).
  *
- * On every game ingestion the raw IGDB/Steam publisher string is matched
- * against `patterns` here; on a match, the game is linked to the
+ * When a game's publisher matches `patterns` here, the game is linked to the
  * corresponding `Publisher` row (created idempotently at boot).
  *
  * Patterns are intentionally tight: every regex must clearly identify the

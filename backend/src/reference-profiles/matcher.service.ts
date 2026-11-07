@@ -169,12 +169,11 @@ export interface MatchTargetFeatures {
    * signal. Preferred over `genres` when both games carry them.
    */
   steamTags: string[] | null;
-  /** Curated publisher id (`Game.publisherId`), for exact publisher match. */
+  /** Publisher row id (`Game.publisherId`), for exact publisher match. */
   publisherId: string | null;
   /**
-   * Raw Steam/IGDB publisher string (`Game.publisher`). Used as the
-   * publisher-match fallback when either game lacks a curated `publisherId`
-   * (the vast majority) — the raw string is populated for nearly every game.
+   * Publisher name (`Game.publisher`). The publisher-match fallback when
+   * either game has no `publisherId` yet.
    */
   publisher: string | null;
   /** Steam DLC appIds (`Game.dlc`); only the count feeds the DLC axis. */
@@ -1157,13 +1156,9 @@ function identityMatch(a: string | null, b: string | null): number {
 }
 
 /**
- * Same-publisher axis. Prefers the curated `publisherId` (alias-resolved)
- * when BOTH games are linked; otherwise falls back to the normalised raw
- * `publisher` string, which is populated for nearly every game. Without the
- * fallback the axis is dead — `publisherId` is currently unset on the vast
- * majority of the corpus, so `identityMatch(null, null)` returned a flat
- * neutral 0.5 that never separated e.g. the Paradox grand-strategy family
- * from unrelated same-era strategy games.
+ * Same-publisher axis. Compares the `publisherId` rows when BOTH games are
+ * linked (spellings and renames of one company share a row); otherwise falls
+ * back to the normalised `publisher` string, for a game not linked yet.
  */
 function publisherMatch(
   aId: string | null,

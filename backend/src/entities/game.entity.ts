@@ -65,8 +65,8 @@ export class Game {
   @Column({ type: 'varchar', nullable: true })
   developer: string | null;
 
-  // Linked to a curated `Publisher` row (`publisherId`) when it matches the
-  // big-publisher list — see `PublishersService`.
+  // Linked to its `Publisher` row (`publisherId`), created the first time a
+  // game names that company — see `PublishersService`.
   @Column({ type: 'varchar', nullable: true })
   publisher: string | null;
 

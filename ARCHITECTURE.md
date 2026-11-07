@@ -61,7 +61,7 @@ on `DATABASE_URL_DIRECT`, then `DATABASE_URL`.
 | `GamePlatformReleaseDate` | `game_platform_release_date` | Per-platform launch date used by estimation. |
 | `GameIngestionState` | `game_ingestion_state` | Per-pipeline attempt / success, so budgeted crons resume stalest-first. |
 | `GameRank` | `game_rank` | Home-grown review-velocity rank. |
-| `Publisher` | `publisher` | Publisher identity used by the matcher. |
+| `Publisher` | `publisher` | One row per publishing company a game names, created on first sight (`game.publisherId`): matcher publisher axis, blog rankings. |
 | `Genre` | `genre` | IGDB genre dictionary. Not an estimation profile. |
 | `SignalSnapshot` | `signal_snapshot` | Dated public counts (reviews, CCU, ratings, followers, Twitch, leak, playtime). |
 | `PriceSnapshot` | `price_snapshot` | Regional store price. Display only. |

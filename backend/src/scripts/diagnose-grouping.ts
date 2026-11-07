@@ -4,6 +4,7 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../app.module';
+import { PUBLISHER_HEURISTICS } from '../publishers/publishers.seed';
 
 /**
  * Read-only diagnostic that measures, on the games covered by the July
@@ -180,7 +181,7 @@ async function loadLeakGames(
             g.categories AS categories,
             g.platforms::text[] AS platforms,
             COALESCE(p.name, g.publisher) AS "publisherName",
-            (p.id IS NOT NULL) AS "publisherIsCurated",
+            (p.name = ANY($2)) AS "publisherIsCurated",
             g."franchiseSlug" AS "franchiseSlug",
             g."isAnnualIteration" AS "isAnnualIteration",
             g."liveService" AS "liveService",
@@ -199,7 +200,7 @@ async function loadLeakGames(
         AND g."deletedAt" IS NULL
         AND (s."capturedAt" <= $1 OR s."capturedAt" IS NULL)
       ORDER BY g.name ASC`,
-    [leakDate],
+    [leakDate, PUBLISHER_HEURISTICS.map((h) => h.name)],
   );
 
   return raw.map((r) => ({

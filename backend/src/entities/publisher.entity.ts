@@ -10,14 +10,12 @@ import {
 import { Game } from './game.entity';
 
 /**
- * Curated registry of "big" publishers used to canonicalise a game's
- * publisher across raw-string variants (e.g. "Capcom" vs "CAPCOM Co.,
- * Ltd.") so the matcher's publisher axis connects same-publisher titles.
- * A Publisher row is created only for the publishers we know to treat
- * specially (see PublishersService seed list) — random IGDB publisher
- * names do not get their own row. Games whose IGDB publisher matches one
- * of these entries are linked via `Game.publisherId`; the others keep
- * their raw publisher string but no `publisherRecord` relation.
+ * One row per publishing company a game names, linked via `Game.publisherId`
+ * (matcher publisher axis, blog rankings). Spellings of one company share a
+ * row ("Capcom" and "CAPCOM Co., Ltd."), and the curated list in
+ * `publishers/publishers.seed.ts` also merges renames and subsidiaries. A new
+ * name gets its row the first time ingestion or the nightly IGDB refresh
+ * meets it — see `PublishersService`.
  */
 @Entity('publisher')
 export class Publisher {

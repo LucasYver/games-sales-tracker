@@ -1,7 +1,7 @@
-import Link from 'next/link';
-import { ChevronRight } from 'lucide-react';
-import { adminFetch, type AdminPublisherSummary } from '@/lib/admin';
-import { Card, CardContent } from '@/components/ui/card';
+import Link from "next/link";
+import { ChevronRight } from "lucide-react";
+import { adminFetch, type AdminPublisherSummary } from "@/lib/admin";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -9,13 +9,13 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { PublisherBackfillButton } from '../_components/PublisherBackfillButton';
+} from "@/components/ui/table";
+import { PublisherBackfillButton } from "../_components/PublisherBackfillButton";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 export default async function AdminPublishersPage() {
-  const publishers = await adminFetch<AdminPublisherSummary[]>('/publishers');
+  const publishers = await adminFetch<AdminPublisherSummary[]>("/publishers");
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-8">
@@ -23,13 +23,13 @@ export default async function AdminPublishersPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Publishers</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Curated registry of big publishers used to canonicalise a game&apos;s
-            publisher. Games whose IGDB publisher matches one of these entries
-            are linked via the
+            Every publisher a game names, one row per company, most games first.
+            Ingestion and the nightly IGDB refresh create the row of a new
+            publisher and link its games via the
             <code className="bg-muted mx-1 rounded px-1 py-0.5 font-mono text-xs">
               Game.publisherId
             </code>
-            FK, which the matcher uses as a similarity axis.
+            FK (matcher similarity axis, blog rankings).
           </p>
         </div>
         <PublisherBackfillButton />
@@ -53,10 +53,10 @@ export default async function AdminPublishersPage() {
                   {p.gameCount}
                 </TableCell>
                 <TableCell className="text-muted-foreground text-xs">
-                  {new Date(p.updatedAt).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
+                  {new Date(p.updatedAt).toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
                   })}
                 </TableCell>
                 <TableCell className="text-right">
@@ -76,8 +76,8 @@ export default async function AdminPublishersPage() {
                   colSpan={4}
                   className="text-muted-foreground py-12 text-center"
                 >
-                  No curated publishers yet. Restart the backend to seed the
-                  canonical list.
+                  No publishers yet. Restart the backend to seed the curated
+                  list and link the games.
                 </TableCell>
               </TableRow>
             )}
@@ -87,7 +87,8 @@ export default async function AdminPublishersPage() {
 
       <Card>
         <CardContent className="text-muted-foreground pt-6 text-sm">
-          To add a new big publisher, update
+          New publishers are added on their own. To merge a publisher&apos;s
+          names (a rename, a subsidiary) into one row, add a curated entry to
           <code className="bg-muted mx-1 rounded px-1 py-0.5 font-mono text-xs">
             backend/src/publishers/publishers.seed.ts
           </code>

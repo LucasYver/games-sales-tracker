@@ -9,6 +9,7 @@ import {
   nextReleaseDate,
   releaseDatesMayMove,
 } from '../games/release-date-refresh';
+import { PublishersService } from '../publishers/publishers.service';
 import { IgdbClient } from './igdb.client';
 
 /** Games read per nightly run. IGDB answers 500 per request. */
@@ -40,6 +41,7 @@ export class IgdbRefreshService {
     @InjectRepository(GamePlatformReleaseDate)
     private readonly platformDates: Repository<GamePlatformReleaseDate>,
     private readonly igdb: IgdbClient,
+    private readonly publishers: PublishersService,
   ) {}
 
   async refreshFromIgdb(limit = GAMES_PER_RUN): Promise<{
@@ -67,6 +69,7 @@ export class IgdbRefreshService {
         releaseDate: true,
         steamDeveloper: true,
         steamPublisher: true,
+        publisherId: true,
         manualFields: true,
         seriesSlug: true,
         seriesName: true,
@@ -149,6 +152,15 @@ export class IgdbRefreshService {
           rows.map((r) => r.publisher),
           rows.map((r) => r.releaseDate),
         ],
+      );
+
+      // A new publisher name gets its row and the game its link.
+      await this.publishers.linkGames(
+        rows.map((r, i) => ({
+          id: r.id,
+          publisher: r.publisher,
+          publisherId: batch[i].publisherId,
+        })),
       );
 
       result.platformDatesChanged += await this.syncPlatformDates(

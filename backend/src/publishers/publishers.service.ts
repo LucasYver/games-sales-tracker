@@ -5,8 +5,9 @@ import {
   OnApplicationBootstrap,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, Not, Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Game, Publisher } from '../entities';
+import { companyKey } from '../games/game-companies';
 import {
   PUBLISHER_HEURISTICS,
   findPublisherHeuristic,
@@ -30,9 +31,28 @@ export interface PublisherDetail extends PublisherWithCount {
   }>;
 }
 
+type GamePublisher = {
+  id: string;
+  publisher: string | null;
+  publisherId?: string | null;
+};
+
+/** How long an instance trusts its copy of the registry. */
+const REGISTRY_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Registry of every publisher a game names, one row per company, and the
+ * `game.publisherId` link that follows `game.publisher`. A name matching a
+ * curated heuristic (`publishers.seed.ts`) joins that curated row, so renamed
+ * companies stay one publisher (Sony Computer Entertainment and Sony
+ * Interactive Entertainment). Any other name gets its own row the first time a
+ * game names it, and spellings of one company share it (see `companyKey`).
+ */
 @Injectable()
 export class PublishersService implements OnApplicationBootstrap {
   private readonly logger = new Logger(PublishersService.name);
+  private registry: { byKey: Map<string, string>; loadedAt: number } | null =
+    null;
 
   constructor(
     @InjectRepository(Publisher)
@@ -43,10 +63,14 @@ export class PublishersService implements OnApplicationBootstrap {
 
   async onApplicationBootstrap(): Promise<void> {
     await this.seedCanonical();
-    const result = await this.backfillGameLinks();
-    this.logger.log(
-      `Publisher backfill: ${result.linked} game(s) newly linked, ${result.alreadyLinked} already linked, ${result.unmatched} without a curated publisher.`,
+    // Only games with a publisher and no link: after the first run, the few
+    // created since the last cold start.
+    const unlinked = await this.games.query<GamePublisher[]>(
+      `SELECT id, publisher FROM game
+       WHERE "publisherId" IS NULL AND NULLIF(trim(publisher), '') IS NOT NULL`,
     );
+    const linked = await this.linkGames(unlinked);
+    if (linked > 0) this.logger.log(`Linked ${linked} game(s) to a publisher.`);
   }
 
   /**
@@ -55,118 +79,103 @@ export class PublishersService implements OnApplicationBootstrap {
    * are left untouched.
    */
   async seedCanonical(): Promise<void> {
-    const existing = await this.publishers.find();
-    const byName = new Map(existing.map((p) => [p.name.toLowerCase(), p]));
-
+    const existing = await this.publishers.find({ select: ['name'] });
+    const names = new Set(existing.map((p) => p.name.toLowerCase()));
     const missing = PUBLISHER_HEURISTICS.filter(
-      (h) => !byName.has(h.name.toLowerCase()),
+      (h) => !names.has(h.name.toLowerCase()),
     );
     if (missing.length === 0) return;
-
-    const rows = missing.map((h) => this.publishers.create({ name: h.name }));
-    await this.publishers.save(rows);
-    this.logger.log(`Seeded ${rows.length} curated publisher(s).`);
+    await this.insertNames(missing.map((h) => h.name));
+    this.registry = null;
+    this.logger.log(`Seeded ${missing.length} curated publisher(s).`);
   }
 
   /**
-   * Walk every game that has a raw publisher string but no `publisherId`
-   * FK, and link it to a curated Publisher row when a heuristic matches.
-   * Idempotent: games already linked are skipped, unmatched games stay
-   * unlinked. Triggered automatically on boot and exposable as an admin
-   * endpoint to re-run after editing heuristics or after a bulk import.
+   * Point each game's `publisherId` at the row of its `publisher`, creating
+   * the rows that are missing, in one insert and one update for the batch. A
+   * game without a publisher loses its link. Pass the current `publisherId`
+   * to skip games already right. Returns the number of games changed.
    */
+  async linkGames(games: GamePublisher[]): Promise<number> {
+    if (games.length === 0) return 0;
+    const target = (raw: string | null): string | null => {
+      const name = raw?.trim();
+      if (!name) return null;
+      return findPublisherHeuristic(name)?.name ?? name;
+    };
+
+    let byKey = await this.loadRegistry();
+    const missing = new Map<string, string>();
+    for (const game of games) {
+      const name = target(game.publisher);
+      if (!name) continue;
+      const key = companyKey(name) || name.toLowerCase();
+      if (!byKey.has(key) && !missing.has(key)) missing.set(key, name);
+    }
+    if (missing.size > 0) {
+      await this.insertNames([...missing.values()]);
+      byKey = await this.loadRegistry(true);
+    }
+
+    const ids: string[] = [];
+    const publisherIds: (string | null)[] = [];
+    for (const game of games) {
+      const name = target(game.publisher);
+      const id = name
+        ? (byKey.get(companyKey(name) || name.toLowerCase()) ?? null)
+        : null;
+      if (game.publisherId !== undefined && game.publisherId === id) continue;
+      ids.push(game.id);
+      publisherIds.push(id);
+    }
+    if (ids.length === 0) return 0;
+    await this.games.query(
+      `UPDATE game AS g SET "publisherId" = v.publisher_id
+       FROM unnest($1::uuid[], $2::uuid[]) AS v(id, publisher_id)
+       WHERE g.id = v.id AND g."publisherId" IS DISTINCT FROM v.publisher_id`,
+      [ids, publisherIds],
+    );
+    return ids.length;
+  }
+
+  /** Link one game after an ingestion or an admin edit. */
+  async resolveAndLink(
+    gameId: string,
+    rawPublisher: string | null,
+  ): Promise<void> {
+    await this.linkGames([{ id: gameId, publisher: rawPublisher }]);
+  }
+
+  /** Relink every game, for the admin button. */
   async backfillGameLinks(): Promise<{
     linked: number;
     alreadyLinked: number;
     unmatched: number;
   }> {
-    const games = await this.games.find({
-      where: { publisher: Not(IsNull()) },
-      select: ['id', 'publisher', 'publisherId'],
-    });
-
-    let linked = 0;
-    let alreadyLinked = 0;
-    let unmatched = 0;
-
-    for (const game of games) {
-      if (game.publisherId) {
-        alreadyLinked += 1;
-        continue;
-      }
-      const heuristic = findPublisherHeuristic(game.publisher);
-      if (!heuristic) {
-        unmatched += 1;
-        continue;
-      }
-      const row = await this.publishers.findOne({
-        where: { name: heuristic.name },
-      });
-      if (!row) {
-        unmatched += 1;
-        continue;
-      }
-      await this.games.update(game.id, { publisherId: row.id });
-      linked += 1;
-    }
-
-    return { linked, alreadyLinked, unmatched };
-  }
-
-  /**
-   * Ensure `gameId` is linked to the right curated Publisher (if any).
-   * Called from every ingestion path so newly-discovered games inherit
-   * their publisher's profile immediately. No-op when the raw publisher
-   * string matches no heuristic.
-   */
-  async resolveAndLink(
-    gameId: string,
-    rawPublisher: string | null,
-  ): Promise<void> {
-    const heuristic = findPublisherHeuristic(rawPublisher);
-    if (!heuristic) {
-      // If the game was previously linked but the publisher field has
-      // since changed to something unmatched, we leave the existing link
-      // alone — manual admin edits should not be silently undone.
-      return;
-    }
-    const row = await this.publishers.findOne({
-      where: { name: heuristic.name },
-    });
-    if (!row) return;
-
-    const current = await this.games.findOne({
-      where: { id: gameId },
-      select: ['id', 'publisherId'],
-    });
-    if (!current || current.publisherId === row.id) return;
-    await this.games.update(gameId, { publisherId: row.id });
+    const games = await this.games.query<GamePublisher[]>(
+      `SELECT id, publisher, "publisherId" FROM game`,
+    );
+    const linked = await this.linkGames(games);
+    const unmatched = games.filter((g) => !g.publisher?.trim()).length;
+    return {
+      linked,
+      alreadyLinked: games.length - linked - unmatched,
+      unmatched,
+    };
   }
 
   async list(): Promise<PublisherWithCount[]> {
-    const publishers = await this.publishers.find({
-      order: { name: 'ASC' },
-    });
-    if (publishers.length === 0) return [];
-
-    const counts = await this.games
-      .createQueryBuilder('g')
-      .select('g.publisherId', 'publisherId')
-      .addSelect('COUNT(*)', 'count')
-      .where('g.publisherId IN (:...ids)', {
-        ids: publishers.map((p) => p.id),
-      })
-      .groupBy('g.publisherId')
-      .getRawMany<{ publisherId: string; count: string }>();
-    const byId = new Map(counts.map((c) => [c.publisherId, Number(c.count)]));
-
-    return publishers.map((p) => ({
-      id: p.id,
-      name: p.name,
-      gameCount: byId.get(p.id) ?? 0,
-      createdAt: p.createdAt,
-      updatedAt: p.updatedAt,
-    }));
+    const rows = await this.publishers.query<
+      (Omit<PublisherWithCount, 'gameCount'> & { gameCount: string })[]
+    >(
+      `SELECT p.id, p.name, p."createdAt", p."updatedAt",
+              COUNT(g.id) AS "gameCount"
+       FROM publisher p
+       LEFT JOIN game g ON g."publisherId" = p.id AND g."deletedAt" IS NULL
+       GROUP BY p.id
+       ORDER BY COUNT(g.id) DESC, p.name`,
+    );
+    return rows.map((row) => ({ ...row, gameCount: Number(row.gameCount) }));
   }
 
   async getDetail(id: string): Promise<PublisherDetail> {
@@ -199,5 +208,36 @@ export class PublishersService implements OnApplicationBootstrap {
     if (ids.length === 0) return new Map();
     const rows = await this.publishers.find({ where: { id: In(ids) } });
     return new Map(rows.map((r) => [r.id, r]));
+  }
+
+  /** Row id by `companyKey` of its name. A curated name wins a shared key. */
+  private async loadRegistry(force = false): Promise<Map<string, string>> {
+    if (
+      !force &&
+      this.registry &&
+      Date.now() - this.registry.loadedAt < REGISTRY_TTL_MS
+    ) {
+      return this.registry.byKey;
+    }
+    const rows = await this.publishers.find({ select: ['id', 'name'] });
+    const curated = new Set(PUBLISHER_HEURISTICS.map((h) => h.name));
+    const byKey = new Map<string, string>();
+    for (const row of [...rows].sort(
+      (a, b) => Number(curated.has(b.name)) - Number(curated.has(a.name)),
+    )) {
+      const key = companyKey(row.name) || row.name.toLowerCase();
+      if (!byKey.has(key)) byKey.set(key, row.id);
+    }
+    this.registry = { byKey, loadedAt: Date.now() };
+    return byKey;
+  }
+
+  private async insertNames(names: string[]): Promise<void> {
+    await this.publishers.query(
+      `INSERT INTO publisher (name)
+       SELECT DISTINCT unnest($1::varchar[])
+       ON CONFLICT (name) DO NOTHING`,
+      [names],
+    );
   }
 }

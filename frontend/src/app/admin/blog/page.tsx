@@ -1,14 +1,14 @@
-import { Suspense } from 'react';
-import Link from 'next/link';
-import { requireAdminSession, adminFetch } from '@/lib/admin';
+import { Suspense } from "react";
+import Link from "next/link";
+import { requireAdminSession, adminFetch } from "@/lib/admin";
 import type {
   AdminBlogCandidate,
   AdminBlogFormatCandidates,
   AdminBlogSummary,
   BlogPostStatus,
-} from '@/lib/admin';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+} from "@/lib/admin";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -16,30 +16,30 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
+} from "@/components/ui/table";
 import {
   GenerateBlogDraftButton,
   GenerateBlogFormatButton,
-} from '../_components/GenerateBlogDraftButton';
+} from "../_components/GenerateBlogDraftButton";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-const KIND_LABEL: Record<AdminBlogSummary['kind'], string | null> = {
+const KIND_LABEL: Record<AdminBlogSummary["kind"], string | null> = {
   GAME_SALES_FACTS: null,
-  SALES_NEWS: 'news',
-  LAUNCH_REPORT: 'launch',
-  SALES_RANKING: 'ranking',
+  SALES_NEWS: "news",
+  LAUNCH_REPORT: "launch",
+  SALES_RANKING: "ranking",
 };
 
 const TABS: {
-  id: BlogPostStatus | 'CANDIDATES' | 'FORMATS';
+  id: BlogPostStatus | "CANDIDATES" | "FORMATS";
   label: string;
 }[] = [
-  { id: 'DRAFT', label: 'Drafts' },
-  { id: 'PUBLISHED', label: 'Published' },
-  { id: 'REJECTED', label: 'Rejected' },
-  { id: 'CANDIDATES', label: 'Candidates' },
-  { id: 'FORMATS', label: 'News, launches, rankings' },
+  { id: "DRAFT", label: "Drafts" },
+  { id: "PUBLISHED", label: "Published" },
+  { id: "REJECTED", label: "Rejected" },
+  { id: "CANDIDATES", label: "Candidates" },
+  { id: "FORMATS", label: "News, launches, rankings" },
 ];
 
 export default async function AdminBlogPage({
@@ -50,8 +50,8 @@ export default async function AdminBlogPage({
   await requireAdminSession();
   const { status: raw } = await searchParams;
   const status = TABS.some((t) => t.id === raw)
-    ? (raw as (typeof TABS)[number]['id'])
-    : 'DRAFT';
+    ? (raw as (typeof TABS)[number]["id"])
+    : "DRAFT";
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5 px-6 py-6">
@@ -71,20 +71,18 @@ export default async function AdminBlogPage({
             key={tab.id}
             asChild
             size="sm"
-            variant={status === tab.id ? 'default' : 'outline'}
+            variant={status === tab.id ? "default" : "outline"}
           >
             <Link href={`/admin/blog?status=${tab.id}`}>{tab.label}</Link>
           </Button>
         ))}
       </div>
       <Suspense
-        fallback={
-          <p className="text-muted-foreground text-sm">Loading…</p>
-        }
+        fallback={<p className="text-muted-foreground text-sm">Loading…</p>}
       >
-        {status === 'CANDIDATES' ? (
+        {status === "CANDIDATES" ? (
           <CandidatesTable />
-        ) : status === 'FORMATS' ? (
+        ) : status === "FORMATS" ? (
           <FormatCandidates />
         ) : (
           <PostsTable status={status} />
@@ -95,11 +93,14 @@ export default async function AdminBlogPage({
 }
 
 async function PostsTable({ status }: { status: BlogPostStatus }) {
-  const { items } = await adminFetch<{ items: AdminBlogSummary[]; total: number }>(
-    `/blog?status=${status}&limit=50`,
-  );
+  const { items } = await adminFetch<{
+    items: AdminBlogSummary[];
+    total: number;
+  }>(`/blog?status=${status}&limit=50`);
   if (items.length === 0) {
-    return <p className="text-muted-foreground text-sm">Nothing in this tab.</p>;
+    return (
+      <p className="text-muted-foreground text-sm">Nothing in this tab.</p>
+    );
   }
   return (
     <Table>
@@ -116,7 +117,7 @@ async function PostsTable({ status }: { status: BlogPostStatus }) {
           <TableRow key={row.id}>
             <TableCell>
               <Link href={`/admin/blog/${row.id}`} className="hover:underline">
-                {row.gameName ?? '—'}
+                {row.gameName ?? "—"}
               </Link>
               {KIND_LABEL[row.kind] && (
                 <Badge variant="outline" className="ml-2">
@@ -135,7 +136,7 @@ async function PostsTable({ status }: { status: BlogPostStatus }) {
               )}
             </TableCell>
             <TableCell className="max-w-md truncate">
-              {row.titles.en ?? '—'}
+              {row.titles.en ?? "—"}
             </TableCell>
             <TableCell>
               <Badge variant="outline">
@@ -145,7 +146,7 @@ async function PostsTable({ status }: { status: BlogPostStatus }) {
             <TableCell className="font-mono text-xs">
               {row.generatedAt
                 ? new Date(row.generatedAt).toISOString().slice(0, 10)
-                : '—'}
+                : "—"}
             </TableCell>
           </TableRow>
         ))}
@@ -156,7 +157,7 @@ async function PostsTable({ status }: { status: BlogPostStatus }) {
 
 async function FormatCandidates() {
   const { news, launches, rankings } =
-    await adminFetch<AdminBlogFormatCandidates>('/blog/format-candidates');
+    await adminFetch<AdminBlogFormatCandidates>("/blog/format-candidates");
   const date = (iso: string) => new Date(iso).toISOString().slice(0, 10);
   const none = (
     <p className="text-muted-foreground text-sm">Nothing eligible right now.</p>
@@ -195,7 +196,7 @@ async function FormatCandidates() {
                     </Link>
                   </TableCell>
                   <TableCell className="font-mono">
-                    {c.units.toLocaleString('en-US')}
+                    {c.units.toLocaleString("en-US")}
                   </TableCell>
                   <TableCell>{c.source}</TableCell>
                   <TableCell className="font-mono text-xs">
@@ -203,7 +204,7 @@ async function FormatCandidates() {
                   </TableCell>
                   <TableCell>
                     <GenerateBlogFormatButton
-                      input={{ kind: 'SALES_NEWS', milestoneId: c.milestoneId }}
+                      input={{ kind: "SALES_NEWS", milestoneId: c.milestoneId }}
                     />
                   </TableCell>
                 </TableRow>
@@ -243,14 +244,14 @@ async function FormatCandidates() {
                     </Link>
                   </TableCell>
                   <TableCell className="font-mono">
-                    {c.steamPeak.toLocaleString('en-US')}
+                    {c.steamPeak.toLocaleString("en-US")}
                   </TableCell>
                   <TableCell className="font-mono text-xs">
                     {date(c.releaseDate)}
                   </TableCell>
                   <TableCell>
                     <GenerateBlogFormatButton
-                      input={{ kind: 'LAUNCH_REPORT', gameId: c.gameId }}
+                      input={{ kind: "LAUNCH_REPORT", gameId: c.gameId }}
                     />
                   </TableCell>
                 </TableRow>
@@ -263,8 +264,8 @@ async function FormatCandidates() {
       <section className="flex flex-col gap-2">
         <h2 className="font-semibold">Rankings</h2>
         <p className="text-muted-foreground text-sm">
-          Curated publishers and franchises with at least 5 CORE paid games
-          that have a worldwide figure.
+          Publishers and franchises with at least 5 CORE paid games that have a
+          worldwide figure.
         </p>
         {rankings.length === 0 ? (
           none
@@ -287,7 +288,7 @@ async function FormatCandidates() {
                   <TableCell>
                     <GenerateBlogFormatButton
                       input={{
-                        kind: 'SALES_RANKING',
+                        kind: "SALES_RANKING",
                         subjectType: c.subjectType,
                         subjectKey: c.subjectKey,
                       }}
@@ -305,7 +306,7 @@ async function FormatCandidates() {
 
 async function CandidatesTable() {
   const candidates = await adminFetch<AdminBlogCandidate[]>(
-    '/blog/candidates?limit=40',
+    "/blog/candidates?limit=40",
   );
   if (candidates.length === 0) {
     return (
@@ -338,7 +339,7 @@ async function CandidatesTable() {
               </Link>
             </TableCell>
             <TableCell className="text-muted-foreground max-w-xl text-xs">
-              {c.reasons.join(' · ')}
+              {c.reasons.join(" · ")}
             </TableCell>
             <TableCell>
               <GenerateBlogDraftButton gameId={c.gameId} label="Generate" />

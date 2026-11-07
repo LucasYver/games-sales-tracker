@@ -55,6 +55,14 @@ function compact(value: string): string {
 }
 
 /**
+ * Key under which two spellings of one company meet: aliases folded, then case,
+ * accents, symbols and legal suffixes ignored ("CAPCOM Co., Ltd." = "Capcom").
+ */
+export function companyKey(name: string): string {
+  return compact(canonicalCompany(name));
+}
+
+/**
  * One company for a role, or null when IGDB lists none (porting and
  * supporting studios never count). With several, the one Steam names wins,
  * else IGDB's first, so the choice is stable from one night to the next.
