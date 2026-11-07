@@ -26,7 +26,6 @@
     "blog": "Blog",
     "langSwitch": "Language",
     "privacy": "Privacy",
-    "ranking": "Ranking",
     "methodology": "How we estimate",
     "themeDark": "Switch to dark theme",
     "themeLight": "Switch to light theme"
@@ -169,7 +168,6 @@
     "range_3m": "3 months",
     "range_3y": "3 years",
     "range_all": "All",
-    "rankSummary": "Our ranking · peak #{rank} · {weeks} weeks in the top 10%",
     "ratingsLabel": "Store ratings",
     "recentCcuHint": "Steam daily peak · {date}",
     "recentCcuLabel": "Latest Steam CCU",
@@ -237,24 +235,6 @@
     "nav": "Pagination",
     "next": "Next page",
     "previous": "Previous page"
-  },
-  "ranking": {
-    "empty": "No ranked game yet.",
-    "explainer": "This ranking is ours. Every week we measure how fast each game accumulates Steam reviews, and compare those speeds across every game we track: the fastest of the week takes first place. It comes from no external source, and it never uses estimated sales — a sales chart built on our own sales estimates would go in circles. So it measures activity around a game, not its sales. The default order rewards staying power: a game that spent a hundred weeks in the top 10% ranks above one that led for a single week.",
-    "game": "Game",
-    "metaDescription": "Our own chart: the games accumulating Steam reviews fastest, week after week.",
-    "metaTitle": "Game ranking",
-    "peak": "Peak rank",
-    "peakShort": "peak #{rank}",
-    "sales": "Sales",
-    "sortLabel": "Sort",
-    "sortPeak": "Peak rank",
-    "sortTop": "Weeks in the top 10%",
-    "sortWeeks": "Weeks charted",
-    "title": "Our ranking",
-    "topDecile": "Wks top 10%",
-    "topDecileShort": "{count} wks top 10%",
-    "weeks": "Wks charted"
   },
   "blog": {
     "breadcrumbBlog": "Blog",

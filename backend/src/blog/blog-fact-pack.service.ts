@@ -634,14 +634,20 @@ export class BlogFactPackService {
       );
     }
     const base = publicAppUrl();
+    // A franchise ranking links its franchise hub (old slugs redirect to the
+    // IGDB one); a publisher ranking links the studio index.
+    const hubPath =
+      type === 'franchise'
+        ? `/franchise/${encodeURIComponent(key)}`
+        : '/studios';
     return {
       kind: 'SALES_RANKING',
       topicKey: `ranking:${type}:${key}`,
       game: null,
       facts: facts.map((fact, i) => ({ id: `F${i + 1}`, ...fact })),
       gameUrlByLocale: {
-        en: `${base}/en/ranking`,
-        fr: `${base}/fr/ranking`,
+        en: `${base}/en${hubPath}`,
+        fr: `${base}/fr${hubPath}`,
       },
       ranking: {
         subject,

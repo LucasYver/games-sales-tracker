@@ -14,7 +14,6 @@ http://localhost:3000. Sans `.env`, l’API appelée est `http://localhost:3001/
 | Route | Rôle |
 | ----- | ---- |
 | `/[locale]` | Catalogue (`fr`, `en`, `next-intl`) |
-| `/[locale]/ranking` | Classement |
 | `/[locale]/game/[slug]` | Fiche : estimation, historiques, prix |
 | `/admin` | Back-office, hors i18n, cookie session email/mdp |
 

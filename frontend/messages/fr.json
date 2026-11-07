@@ -26,7 +26,6 @@
     "blog": "Blog",
     "langSwitch": "Langue",
     "privacy": "Confidentialité",
-    "ranking": "Classement",
     "methodology": "Notre méthode",
     "themeDark": "Passer en thème sombre",
     "themeLight": "Passer en thème clair"
@@ -169,7 +168,6 @@
     "range_3m": "3 mois",
     "range_3y": "3 ans",
     "range_all": "Tout",
-    "rankSummary": "Notre classement · meilleur rang #{rank} · {weeks} sem. dans le top 10 %",
     "ratingsLabel": "Notes du store",
     "recentCcuHint": "pic journalier Steam · {date}",
     "recentCcuLabel": "CCU Steam récent",
@@ -237,24 +235,6 @@
     "nav": "Pagination",
     "next": "Page suivante",
     "previous": "Page précédente"
-  },
-  "ranking": {
-    "empty": "Aucun jeu classé pour le moment.",
-    "explainer": "Ce classement est le nôtre. Chaque semaine, nous mesurons la vitesse à laquelle chaque jeu accumule des avis Steam, et nous comparons ces vitesses entre tous les jeux que nous suivons : le plus rapide de la semaine prend la première place. Il ne vient d'aucune source externe, et il n'utilise jamais les ventes estimées — un classement des ventes construit sur nos propres estimations de ventes tournerait en rond. Il mesure donc l'activité autour d'un jeu, pas ses ventes. Le classement par défaut récompense la durée : un jeu resté cent semaines dans le top 10 % passe devant celui qui a fait une seule semaine en tête.",
-    "game": "Jeu",
-    "metaDescription": "Le classement maison : les jeux qui accumulent le plus vite des avis Steam, semaine après semaine.",
-    "metaTitle": "Classement des jeux",
-    "peak": "Meilleur rang",
-    "peakShort": "meilleur #{rank}",
-    "sales": "Ventes",
-    "sortLabel": "Tri",
-    "sortPeak": "Meilleur rang",
-    "sortTop": "Durée dans le top 10 %",
-    "sortWeeks": "Semaines classé",
-    "title": "Classement maison",
-    "topDecile": "Sem. top 10 %",
-    "topDecileShort": "{count} sem. top 10 %",
-    "weeks": "Sem. classé"
   },
   "blog": {
     "breadcrumbBlog": "Blog",

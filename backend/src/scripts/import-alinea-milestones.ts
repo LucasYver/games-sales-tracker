@@ -9,7 +9,7 @@ import { Platform, SalesSource } from '../entities/enums';
 
 /**
  * One-off import of Alinea Analytics ("The Alinea Insight" Substack) sales
- * estimates from `alinea-game-sales.csv` into the `milestone` table.
+ * estimates from `data/alinea-game-sales.csv` into the `milestone` table.
  *
  * Each CSV row is a cumulative units-sold total for a game at the article's
  * snapshot date. Rows are imported as MEDIA milestones, scoped to the CSV
@@ -71,7 +71,7 @@ function parseArgs(): CliOptions {
     return i >= 0 ? args[i + 1] : undefined;
   };
   return {
-    file: get('--file') ?? resolve(__dirname, '../../../alinea-game-sales.csv'),
+    file: get('--file') ?? resolve(__dirname, '../../../data/alinea-game-sales.csv'),
     commit: args.includes('--commit'),
     unmatchedOut: get('--unmatched-out') ?? null,
   };

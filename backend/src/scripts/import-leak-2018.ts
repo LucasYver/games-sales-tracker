@@ -7,7 +7,7 @@ import { IngestionService } from '../ingestion/ingestion.service';
 
 /**
  * One-off importer for the July 2018 Steam achievement-data leak
- * (`scripts/steam_players_2018_500k.csv` by default: the ~585 titles with
+ * (`data/steam_players_2018_500k.csv` by default: the ~585 titles with
  * >= 500k players; columns: title, players_estimate, steam_app_id).
  *
  * For every row it calls `IngestionService.importLeakPlayerCount`, which:
@@ -47,7 +47,7 @@ function parseArgs(): CliOptions {
   return {
     file: get('--file')
       ? resolve(process.cwd(), get('--file')!)
-      : resolve(__dirname, '../../../scripts/steam_players_2018_500k.csv'),
+      : resolve(__dirname, '../../../data/steam_players_2018_500k.csv'),
     minYear: get('--min-year') ? Number(get('--min-year')) : 2013,
     leakDate: new Date(`${get('--leak-date') ?? '2018-07-01'}T00:00:00.000Z`),
     limit: get('--limit') ? Number(get('--limit')) : null,

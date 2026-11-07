@@ -26,7 +26,6 @@
     "blog": "Blog",
     "langSwitch": "Idioma",
     "privacy": "Privacidad",
-    "ranking": "Clasificación",
     "methodology": "Cómo estimamos",
     "themeDark": "Cambiar al tema oscuro",
     "themeLight": "Cambiar al tema claro"
@@ -169,7 +168,6 @@
     "range_3m": "3 meses",
     "range_3y": "3 años",
     "range_all": "Todo",
-    "rankSummary": "Nuestra clasificación · mejor puesto n.º {rank} · {weeks} semanas en el 10 % superior",
     "ratingsLabel": "Valoraciones en tiendas",
     "recentCcuHint": "Pico diario en Steam · {date}",
     "recentCcuLabel": "Último dato de jugadores en Steam",
@@ -237,24 +235,6 @@
     "nav": "Paginación",
     "next": "Página siguiente",
     "previous": "Página anterior"
-  },
-  "ranking": {
-    "empty": "Aún no hay juegos clasificados.",
-    "explainer": "Esta clasificación es nuestra. Cada semana medimos a qué velocidad acumula reseñas de Steam cada juego y comparamos esas velocidades entre todos los juegos que seguimos: el más rápido de la semana ocupa el primer puesto. No procede de ninguna fuente externa y nunca usa ventas estimadas, porque una lista de ventas basada en nuestras propias estimaciones sería circular. Por eso mide la actividad en torno a un juego, no sus ventas. El orden predeterminado premia la constancia: un juego que ha pasado cien semanas en el 10 % superior queda por delante de otro que lideró una sola semana.",
-    "game": "Juego",
-    "metaDescription": "Nuestra propia lista: los juegos que acumulan reseñas de Steam más rápido, semana tras semana.",
-    "metaTitle": "Clasificación de juegos",
-    "peak": "Mejor puesto",
-    "peakShort": "mejor puesto n.º {rank}",
-    "sales": "Ventas",
-    "sortLabel": "Ordenar",
-    "sortPeak": "Mejor puesto",
-    "sortTop": "Semanas en el 10 % superior",
-    "sortWeeks": "Semanas en la lista",
-    "title": "Nuestra clasificación",
-    "topDecile": "Sem. top 10 %",
-    "topDecileShort": "{count} sem. top 10 %",
-    "weeks": "Sem. en lista"
   },
   "blog": {
     "breadcrumbBlog": "Blog",

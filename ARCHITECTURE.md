@@ -25,12 +25,12 @@ game-sales-tracker/
 ├── backend/             NestJS API (TypeScript, TypeORM, PostgreSQL 16)
 ├── frontend/            Next.js 16 (App Router, next-intl, Tailwind, shadcn/ui)
 ├── ml/                  Python lab: read-only snapshots, backtest, model bench, frozen models (ml/README.md)
-├── docker-compose.yml   PostgreSQL 16 + Redis (ports 5433 / 6380)
+├── data/                CSV inputs of the import scripts (Alinea, 2018 Steam leak)
+├── docker-compose.yml   PostgreSQL 16 (port 5433)
 └── vercel.json          Production routes and cron schedules
 ```
 
-Redis is started locally and is not used by the backend. PostgreSQL is
-the only datastore. Local credentials and the migration workflow:
+PostgreSQL is the only datastore. Local credentials and the migration workflow:
 `.cursor/skills/database-connection/SKILL.md`.
 
 ## Backend
@@ -175,7 +175,6 @@ are 404s, left out of the header and the sitemap.
 | Route | Role |
 | ----- | ---- |
 | `/[locale]` | Search and filterable catalog |
-| `/[locale]/ranking` | Review-velocity ranking |
 | `/[locale]/game/[slug]` | Headline estimate, history, signals, regional prices |
 | `/[locale]/blog` | Published official-sales articles (human-reviewed) |
 | `/[locale]/blog/[slug]` | One article, FR/EN, no model estimates |

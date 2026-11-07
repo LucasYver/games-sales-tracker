@@ -231,34 +231,6 @@ export interface PaginatedGames {
   total: number;
 }
 
-export interface RankedGame extends PopularGame {
-  weeksCharted: number;
-  peakRank: number;
-  avgRank: number;
-  weeksTopDecile: number;
-}
-
-export type RankSort = 'top' | 'peak' | 'weeks';
-
-export interface PaginatedRankedGames {
-  items: RankedGame[];
-  total: number;
-}
-
-export async function getRankedGames(params: {
-  limit?: number;
-  offset?: number;
-  sort?: RankSort;
-}): Promise<PaginatedRankedGames> {
-  const { limit = 50, offset = 0, sort = 'top' } = params;
-  const res = await fetch(
-    `${API_URL}/games/ranked?limit=${limit}&offset=${offset}&sort=${sort}`,
-    { next: { revalidate: LISTING_TTL } },
-  );
-  if (!res.ok) return { items: [], total: 0 };
-  return res.json();
-}
-
 export interface PopularGamesParams {
   limit?: number;
   sort?: SortOption;

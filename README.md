@@ -16,7 +16,7 @@ Le chiffre affiché est toujours la fourchette du modèle (`estimatedToday`), pa
 | Outil | Version | Rôle |
 | ----- | ------- | ---- |
 | [Node.js](https://nodejs.org/) | 20+ (22 recommandé) | Backend NestJS + frontend Next.js |
-| [Docker](https://www.docker.com/) | récent | PostgreSQL 16 + Redis en local |
+| [Docker](https://www.docker.com/) | récent | PostgreSQL 16 en local |
 | `psql` | optionnel | Restaurer le dump (sinon via `docker exec`, voir ci-dessous) |
 
 Ports utilisés en local :
@@ -26,7 +26,6 @@ Ports utilisés en local :
 | Frontend | `3000` |
 | Backend API | `3001` (`/api`) |
 | PostgreSQL | `5433` |
-| Redis | `6380` |
 
 ## Installation
 
@@ -37,15 +36,14 @@ git clone <url-du-repo> game-sales-tracker
 cd game-sales-tracker
 ```
 
-### 2. Démarrer PostgreSQL et Redis
+### 2. Démarrer PostgreSQL
 
 ```bash
 docker compose up -d
 ```
 
 Cela lance Postgres (`gamesales` / `gamesales` / base `gamesales` sur le port
-**5433**) et Redis sur **6380**. Redis est démarré pour le compose, mais le
-backend ne s’en sert pas.
+**5433**).
 
 ### 3. Restaurer le dump de prod (obligatoire pour avoir des données)
 
@@ -157,7 +155,7 @@ seuls l’ingestion live et certains crons sont ignorés.
 | Backend | NestJS (TypeScript) + TypeORM |
 | Base | PostgreSQL 16 |
 | Frontend | Next.js 16 (App Router) + Tailwind CSS |
-| Infra locale | Docker Compose (Postgres 16 ; Redis inutilisé) |
+| Infra locale | Docker Compose (Postgres 16) |
 | Prod crons | `vercel.json` (routes HTTP sous `/api/cron`) |
 | Sources | IGDB, Steam, stores PS/Xbox, Twitch, Wikipedia, presse |
 
@@ -168,8 +166,9 @@ game-sales-tracker/
 ├── backend/              API NestJS + ingestion + estimation
 │   ├── dumps/            Dumps SQL prod (gitignoré)
 │   └── src/              modules Nest (games, ingestion, estimation, …)
-├── frontend/             UI Next.js (catalogue, fiche, classement, admin)
-├── docker-compose.yml    Postgres (5433) + Redis (6380)
+├── frontend/             UI Next.js (catalogue, fiche, blog, admin)
+├── data/                 CSV sources des scripts d’import (Alinea, fuite Steam 2018)
+├── docker-compose.yml    Postgres (5433)
 └── vercel.json           Routes prod + schedules des crons
 ```
 
@@ -189,7 +188,6 @@ Documentation : `ARCHITECTURE.md` (carte), `ESTIMATION.md` (formules),
 | GET | `/api/games/studios` | Tous les studios ayant une page, pour l'index |
 | GET | `/api/games/franchises` | Toutes les franchises ayant une page, pour l'index |
 | GET | `/api/games/popular` | Jeux populaires (page d’accueil) |
-| GET | `/api/games/ranked` | Classement review-velocity |
 | POST | `/api/ingestion/steam` | Ingérer un app Steam (`{ "appId": 1145360 }`) |
 | POST | `/api/ingestion/igdb` | Importer depuis IGDB (`{ "query": "Hades" }`) |
 
@@ -215,7 +213,7 @@ npm run dev                # dev Next.js
 npm run build              # build production
 
 # Infra (depuis la racine)
-docker compose up -d       # démarrer Postgres + Redis
+docker compose up -d       # démarrer Postgres
 docker compose down -v     # arrêter + effacer les données Postgres
 ```
 

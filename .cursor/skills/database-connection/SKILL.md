@@ -44,7 +44,7 @@ Why two URLs: TypeORM DDL relies on session-scoped state that transaction-mode p
 From repo root:
 
 ```bash
-docker compose up -d          # Postgres on 5433 (+ Redis on 6380, not yet used by backend)
+docker compose up -d          # Postgres on 5433
 ```
 
 Then the backend:

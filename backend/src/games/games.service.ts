@@ -102,21 +102,6 @@ export interface PaginatedGames {
   total: number;
 }
 
-export type RankSort = 'top' | 'peak' | 'weeks';
-
-/** A listing row for our own chart: the game, plus how it has ranked. */
-export interface RankedGame extends PopularGame {
-  weeksCharted: number;
-  peakRank: number;
-  avgRank: number;
-  weeksTopDecile: number;
-}
-
-export interface PaginatedRankedGames {
-  items: RankedGame[];
-  total: number;
-}
-
 export type DisplaySource = SalesSource | 'ESTIMATE';
 
 // How a declared figure compares to our independent estimate for the same
@@ -386,108 +371,6 @@ export class GamesService {
         estimatedUnits: headline?.units ?? null,
       };
     });
-  }
-
-  /**
-   * Our own chart, as a listing: games ordered by their average weekly
-   * position. The ranking is computed from observed review velocity across the
-   * games we track (see `RankService`), never from estimated units — using
-   * sales to rank sales would be circular.
-   */
-  async listRanked(
-    options: { limit?: number; offset?: number; sort?: RankSort } = {},
-  ): Promise<PaginatedRankedGames> {
-    const { limit = 50, offset = 0, sort = 'top' } = options;
-
-    const qb = this.games
-      .createQueryBuilder('g')
-      .innerJoin('game_rank', 'r', 'r."gameId" = g.id')
-      .leftJoin('g.signals', 's', 's.metric = :metric', {
-        metric: SignalMetric.STEAM_REVIEWS,
-      })
-      .select('g.id', 'id')
-      .addSelect('g.name', 'name')
-      .addSelect('g.slug', 'slug')
-      .addSelect('g.releaseDate', 'releaseDate')
-      .addSelect('g.coverUrl', 'coverUrl')
-      .addSelect('g.platforms', 'platforms')
-      .addSelect('g.genres', 'genres')
-      .addSelect('g.isFree', 'isFree')
-      .addSelect('COALESCE(MAX(s.value), 0)', 'reviews')
-      .addSelect('r."weeksCharted"', 'weeksCharted')
-      .addSelect('r."peakRank"', 'peakRank')
-      .addSelect('r."avgRank"', 'avgRank')
-      .addSelect('r."weeksTopDecile"', 'weeksTopDecile')
-      .where('g.deletedAt IS NULL')
-      .andWhere('r."weeksCharted" > 0')
-      .groupBy('g.id')
-      .addGroupBy('r."weeksCharted"')
-      .addGroupBy('r."peakRank"')
-      .addGroupBy('r."avgRank"')
-      .addGroupBy('r."weeksTopDecile"');
-
-    // Default to staying power, not a lucky week: a game charted once at #1
-    // would otherwise sit above one that held the top decile for two years.
-    if (sort === 'peak') {
-      qb.orderBy('r."peakRank"', 'ASC').addOrderBy('r."weeksCharted"', 'DESC');
-    } else if (sort === 'weeks') {
-      qb.orderBy('r."weeksCharted"', 'DESC').addOrderBy('r."avgRank"', 'ASC');
-    } else {
-      qb.orderBy('r."weeksTopDecile"', 'DESC')
-        .addOrderBy('r."weeksCharted"', 'DESC')
-        .addOrderBy('r."avgRank"', 'ASC');
-    }
-
-    const [rows, totalRow] = await Promise.all([
-      qb.offset(offset).limit(limit).getRawMany<{
-        id: string;
-        name: string;
-        slug: string;
-        releaseDate: Date | null;
-        coverUrl: string | null;
-        platforms: Platform[];
-        genres: string | null;
-        isFree: boolean;
-        reviews: string;
-        weeksCharted: number;
-        peakRank: number;
-        avgRank: string;
-        weeksTopDecile: number;
-      }>(),
-      this.games
-        .createQueryBuilder('g')
-        .innerJoin('game_rank', 'r', 'r."gameId" = g.id')
-        .where('g.deletedAt IS NULL')
-        .andWhere('r."weeksCharted" > 0')
-        .getCount(),
-    ]);
-
-    const ids = rows.map((r) => r.id);
-    const latestByGame = await this.latestReconciledEstimates(ids);
-
-    const items = rows.map((r) => {
-      const headline = latestByGame.get(r.id) ?? null;
-      return {
-        id: r.id,
-        name: r.name,
-        slug: r.slug,
-        releaseDate: r.releaseDate,
-        coverUrl: r.coverUrl,
-        platforms: this.parsePlatforms(r.platforms),
-        genres: this.parseGenres(r.genres),
-        isFree: r.isFree,
-        reviews: Number(r.reviews),
-        estimatedLow: headline?.low ?? null,
-        estimatedHigh: headline?.high ?? null,
-        estimatedUnits: headline?.units ?? null,
-        weeksCharted: Number(r.weeksCharted),
-        peakRank: Number(r.peakRank),
-        avgRank: Number(r.avgRank),
-        weeksTopDecile: Number(r.weeksTopDecile),
-      };
-    });
-
-    return { items, total: totalRow };
   }
 
   async listPopular(

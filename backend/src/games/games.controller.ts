@@ -55,27 +55,6 @@ export class GamesController {
     });
   }
 
-  @Get('ranked')
-  ranked(
-    @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
-    @Query('sort') sort?: string,
-  ) {
-    const num = (v?: string): number | undefined => {
-      if (!v) return undefined;
-      const n = Number(v);
-      return Number.isFinite(n) ? n : undefined;
-    };
-    const validSort = ['top', 'peak', 'weeks'].includes(sort ?? '')
-      ? (sort as 'top' | 'peak' | 'weeks')
-      : 'top';
-    return this.games.listRanked({
-      limit: num(limit),
-      offset: num(offset),
-      sort: validSort,
-    });
-  }
-
   @Get('genres')
   genres() {
     return this.games.listGenres();
