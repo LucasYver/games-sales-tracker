@@ -113,9 +113,12 @@ Other clients in `ingestion/`:
   reviewer-playtime cron on the reviews it already reads. Display only.
 - Steam achievements. Exophase is off by default (`EXOPHASE_ENABLED`): it
   blocks automated requests.
-- LLM extraction (`llm/llm-extractor.service.ts`): grounded tool call on
-  fetched text. `OPENAI_MODEL` in `backend/.env.example` is `gpt-4o-mini`.
-  If that variable is unset, the code falls back to `gpt-5.6-luna`.
+- LLM extraction (`llm/llm-extractor.service.ts`): grounded structured call
+  on fetched text. `OPENAI_MODEL` in `backend/.env.example` is `gpt-4o-mini`.
+  If that variable is unset, the code falls back to `gpt-5.6-luna`. `gpt-6*`
+  models go through the Responses API (strict JSON schema, reasoning `low` by
+  default) and log input/output tokens per call; older models keep the chat
+  function-tool call.
 
 Trusted-source matching still gates article milestones. RSS polling was
 removed; articles are discovered by web search only. `searchUrlTemplate`

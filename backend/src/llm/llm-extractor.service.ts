@@ -23,11 +23,17 @@ export class LlmExtractorService {
   private readonly openai: OpenAI | null;
   private readonly openaiModel: string;
   private readonly reasoningEffort?: string;
+  private readonly useResponsesApi: boolean;
 
   constructor(config: ConfigService) {
     const openaiKey = config.get<string>('OPENAI_API_KEY');
     this.openai = openaiKey ? new OpenAI({ apiKey: openaiKey }) : null;
-    this.openaiModel = config.get<string>('OPENAI_MODEL') ?? 'gpt-5.6-luna';
+    this.openaiModel =
+      config.get<string>('OPENAI_MODEL')?.trim() || 'gpt-5.6-luna';
+    // gpt-6 models (e.g. gpt-6.1-sol) go through the Responses API with a
+    // strict JSON schema, like the blog writer: that path accepts structured
+    // output together with reasoning, which chat function tools do not.
+    this.useResponsesApi = /^gpt-6/.test(this.openaiModel);
     // Newer reasoning models (gpt-5.x, e.g. gpt-5.6-luna) reject function
     // tools on /v1/chat/completions unless reasoning_effort is 'none', while
     // older ones (gpt-5-mini) reject 'none' and only accept minimal|low|
@@ -54,6 +60,7 @@ export class LlmExtractorService {
    * previous behaviour of sending no reasoning_effort at all.
    */
   private static defaultReasoningEffort(model: string): string | undefined {
+    if (/^gpt-6/.test(model)) return 'low';
     return /^gpt-5\.\d/.test(model) ? 'none' : undefined;
   }
 
@@ -61,9 +68,52 @@ export class LlmExtractorService {
     if (!this.openai) return null;
 
     try {
-      return await this.extractWithOpenAI<T>(params);
+      return this.useResponsesApi
+        ? await this.extractWithResponses<T>(params)
+        : await this.extractWithOpenAI<T>(params);
     } catch (error) {
       this.logger.warn(`OpenAI extraction failed: ${error}`);
+      return null;
+    }
+  }
+
+  private async extractWithResponses<T>(
+    params: ExtractParams,
+  ): Promise<T | null> {
+    if (!this.openai) return null;
+
+    const response = await this.openai.responses.create({
+      model: this.openaiModel,
+      ...(this.reasoningEffort
+        ? {
+            reasoning: {
+              effort: this.reasoningEffort as 'low' | 'medium' | 'high',
+            },
+          }
+        : {}),
+      input: [
+        { role: 'system', content: params.system },
+        { role: 'user', content: params.user },
+      ],
+      text: {
+        format: {
+          type: 'json_schema',
+          name: params.schemaName,
+          strict: true,
+          schema: params.schema,
+        },
+      },
+    });
+
+    this.logger.log(
+      `${params.schemaName} ${this.openaiModel}: ${response.usage?.input_tokens ?? '?'} in, ${response.usage?.output_tokens ?? '?'} out`,
+    );
+    const text = response.output_text;
+    if (!text) return null;
+    try {
+      return JSON.parse(text) as T;
+    } catch (error) {
+      this.logger.warn(`Failed to parse OpenAI JSON output: ${error}`);
       return null;
     }
   }
