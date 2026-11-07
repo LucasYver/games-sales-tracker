@@ -185,6 +185,14 @@ export interface GameDetail {
   // Recent Steam reviews counted per Steam language code.
   reviewLanguages: Record<string, number> | null;
   blog: { slugByLocale: Partial<Record<string, string>> } | null;
+  /** Other editions IGDB lists; the sales on the page cover them all. */
+  editions: GameEdition[];
+}
+
+export interface GameEdition {
+  name: string;
+  versionTitle: string | null;
+  releaseDate: string | null;
 }
 
 /**
@@ -407,7 +415,26 @@ export async function getGame(
         ? game.priceStore
         : 'steam',
     blog: game.blog ?? null,
+    editions: game.editions ?? [],
   };
+}
+
+/**
+ * The slug a game merged into another now lives at (an edition folded into
+ * its base game), or null. A failure means no redirect: the page 404s.
+ */
+export async function getGameRedirect(slug: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `${API_URL}/games/${encodeURIComponent(slug)}/redirect`,
+      { next: { revalidate: GAME_TTL } },
+    );
+    if (!res.ok) return null;
+    const body = (await res.json()) as { slug?: string };
+    return body.slug ?? null;
+  } catch {
+    return null;
+  }
 }
 
 const BLOG_TTL = 3600;

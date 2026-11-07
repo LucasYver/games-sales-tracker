@@ -16,6 +16,7 @@ import {
   ConfidenceLevel,
   EstimateSnapshot,
   Game,
+  GameEdition,
   GameRank,
   Milestone,
   Platform,
@@ -283,6 +284,8 @@ export class GamesService {
     private readonly ranks: Repository<GameRank>,
     @InjectRepository(BlogPost)
     private readonly blogPosts: Repository<BlogPost>,
+    @InjectRepository(GameEdition)
+    private readonly editions: Repository<GameEdition>,
     private readonly estimation: EstimationService,
     private readonly estimationMethods: EstimationMethodService,
   ) {}
@@ -1098,6 +1101,7 @@ export class GamesService {
       reviewLanguagesRow,
       publishedBlog,
       estimateSnapshotRows,
+      editionRows,
     ] = await Promise.all([
       noEstimate
         ? Promise.resolve<LatestEstimates>({
@@ -1149,6 +1153,14 @@ export class GamesService {
             },
             take: 500,
           }),
+      this.editions.find({
+        where: { gameId: game.id },
+        order: {
+          releaseDate: { direction: 'ASC', nulls: 'LAST' },
+          igdbId: 'ASC',
+        },
+        select: { name: true, versionTitle: true, releaseDate: true },
+      }),
     ]);
 
     const { breakdown, total, reconciliation, estimatedToday } = game.isFree
@@ -1252,7 +1264,31 @@ export class GamesService {
       storeRatings,
       reviewLanguages: reviewLanguages ?? null,
       blog,
+      // The sales above cover every edition (see GameEdition).
+      editions: editionRows.map((e) => ({
+        name: e.name,
+        versionTitle: e.versionTitle,
+        releaseDate: e.releaseDate,
+      })),
     };
+  }
+
+  /**
+   * Where the URL of a game merged into another now leads: an edition game
+   * folded into its base keeps its IGDB id once soft-deleted, and that id is
+   * one of the base game's editions. Null when the slug is not such a game.
+   */
+  async findRedirectSlug(slug: string): Promise<{ slug: string } | null> {
+    const rows: { slug: string }[] = await this.games.query(
+      `SELECT base.slug
+         FROM game old
+         JOIN game_edition e ON e."igdbId" = old."igdbId"
+         JOIN game base ON base.id = e."gameId" AND base."deletedAt" IS NULL
+        WHERE old.slug = $1 AND old."deletedAt" IS NOT NULL
+        LIMIT 1`,
+      [slug],
+    );
+    return rows[0] ? { slug: rows[0].slug } : null;
   }
 
   private async latestRegionalPrices(

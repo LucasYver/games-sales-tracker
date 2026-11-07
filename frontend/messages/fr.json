@@ -172,6 +172,7 @@
     "recentCcuHint": "pic journalier Steam · {date}",
     "recentCcuLabel": "CCU Steam récent",
     "release": "Sortie",
+    "editions": "Les ventes incluent toutes les éditions : {editions}",
     "releasedOn": "sorti le {date}",
     "reviewsPlaystation": "Avis PlayStation",
     "reviewsSteam": "Avis Steam",

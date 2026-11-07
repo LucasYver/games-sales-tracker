@@ -1,10 +1,11 @@
 import { useTranslations, useFormatter, useLocale } from 'next-intl';
 import { getFormatter, getTranslations } from 'next-intl/server';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import {
   getGame,
+  getGameRedirect,
   getRelatedGames,
   headlineUnits,
   listingUnits,
@@ -232,6 +233,15 @@ function GameHeader({
             </span>
           ))}
         </div>
+        {game.editions.length > 0 && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            {t('editions', {
+              editions: game.editions
+                .map((e) => e.versionTitle ?? e.name)
+                .join(' · '),
+            })}
+          </p>
+        )}
         {game.summary && (
           <p className="mt-3 max-w-[80ch] text-xs leading-relaxed text-muted-foreground">
             {game.summary}
@@ -1334,7 +1344,12 @@ export default async function GamePage({
     getRelatedGames(slug),
   ]);
 
-  if (!game) notFound();
+  if (!game) {
+    // An edition game merged into its base keeps its old URL alive.
+    const target = await getGameRedirect(slug);
+    if (target) permanentRedirect(`/${locale}/game/${target}`);
+    notFound();
+  }
 
   return (
     <GamePageContent

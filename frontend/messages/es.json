@@ -172,6 +172,7 @@
     "recentCcuHint": "Pico diario en Steam · {date}",
     "recentCcuLabel": "Último dato de jugadores en Steam",
     "release": "Lanzamiento",
+    "editions": "Las ventas incluyen todas las ediciones: {editions}",
     "releasedOn": "publicado el {date}",
     "reviewsPlaystation": "Reseñas en PlayStation",
     "reviewsSteam": "Reseñas en Steam",

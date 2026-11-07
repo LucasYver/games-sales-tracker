@@ -59,6 +59,12 @@ through `version_parent`. One game, one catalog entry:
 - on Steam ingest, an edition's own Steam app is attached to the base game
   only when that game has no Steam app yet. Otherwise it is skipped.
 
+The nightly IGDB refresh (`IgdbRefreshService.syncEditions`, one request per
+500 games) lists each game's editions in `game_edition`. The game page shows
+them ("sales include every edition"), and `GET /games/:slug/redirect` sends the
+URL of a soft-deleted edition game to its base game, matched on the edition's
+IGDB id.
+
 Remasters (`game_type = 9`) and expanded games (`10`) are separate products and
 stay separate. The 2026-11-07 cleanup (`scripts/merge-igdb-editions.ts`) folded
 the existing editions into their base games. It skipped five whose base IGDB id

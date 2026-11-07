@@ -1,7 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Not, Repository } from 'typeorm';
-import { Game, GamePlatformReleaseDate, Platform } from '../entities';
+import {
+  Game,
+  GameEdition,
+  GamePlatformReleaseDate,
+  Platform,
+} from '../entities';
 import { resolveCompanies } from '../games/game-companies';
 import { pickSeriesName, seriesSlug } from '../games/game-series';
 import {
@@ -41,6 +46,8 @@ export class IgdbRefreshService {
     @InjectRepository(Game) private readonly games: Repository<Game>,
     @InjectRepository(GamePlatformReleaseDate)
     private readonly platformDates: Repository<GamePlatformReleaseDate>,
+    @InjectRepository(GameEdition)
+    private readonly editions: Repository<GameEdition>,
     private readonly igdb: IgdbClient,
     private readonly publishers: PublishersService,
     private readonly developers: DevelopersService,
@@ -51,12 +58,14 @@ export class IgdbRefreshService {
     groupingChanged: number;
     releaseDatesMoved: number;
     platformDatesChanged: number;
+    editions: number;
   }> {
     const result = {
       checked: 0,
       groupingChanged: 0,
       releaseDatesMoved: 0,
       platformDatesChanged: 0,
+      editions: 0,
     };
     if (!this.igdb.isConfigured()) return result;
 
@@ -177,13 +186,44 @@ export class IgdbRefreshService {
         batch.filter((game) => unreleased.has(game.id)),
         fetched,
       );
+      result.editions += await this.syncEditions(batch);
       result.checked += batch.length;
     }
 
     this.logger.log(
-      `IGDB refresh: ${result.checked} game(s) checked, ${result.groupingChanged} regrouped, ${result.releaseDatesMoved} release date(s) moved, ${result.platformDatesChanged} platform date set(s) rewritten.`,
+      `IGDB refresh: ${result.checked} game(s) checked, ${result.groupingChanged} regrouped, ${result.releaseDatesMoved} release date(s) moved, ${result.platformDatesChanged} platform date set(s) rewritten, ${result.editions} edition(s) listed.`,
     );
     return result;
+  }
+
+  /**
+   * Rewrites the editions of the batch's games from IGDB (one request for
+   * the batch). A failed request keeps the stored rows, so a game never loses
+   * its editions to a transient error. Returns the editions now listed.
+   */
+  private async syncEditions(batch: Game[]): Promise<number> {
+    const byParent = await this.igdb.fetchEditions(
+      batch.map((game) => game.igdbId as number),
+    );
+    if (!byParent) return 0;
+    const rows = batch.flatMap((game) =>
+      (byParent.get(game.igdbId as number) ?? []).map((e) => ({
+        igdbId: e.igdbId,
+        gameId: game.id,
+        name: e.name,
+        versionTitle: e.versionTitle,
+        releaseDate: e.releaseDate,
+      })),
+    );
+    await this.editions.manager.transaction(async (manager) => {
+      await manager.delete(GameEdition, {
+        gameId: In(batch.map((game) => game.id)),
+      });
+      // An edition id is unique on IGDB: an upsert only guards a row still
+      // held by a game outside this batch.
+      if (rows.length > 0) await manager.upsert(GameEdition, rows, ['igdbId']);
+    });
+    return rows.length;
   }
 
   /**

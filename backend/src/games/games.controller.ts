@@ -1,4 +1,10 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  Query,
+} from '@nestjs/common';
 import { GamesService } from './games.service';
 
 @Controller('games')
@@ -88,6 +94,13 @@ export class GamesController {
   @Get('franchises/:slug')
   franchise(@Param('slug') slug: string) {
     return this.games.getFranchiseHub(slug);
+  }
+
+  @Get(':slug/redirect')
+  async redirect(@Param('slug') slug: string) {
+    const target = await this.games.findRedirectSlug(slug);
+    if (!target) throw new NotFoundException(`No redirect for "${slug}"`);
+    return target;
   }
 
   @Get(':slug/related')

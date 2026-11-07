@@ -63,6 +63,15 @@ export interface IgdbRefreshFields {
   platformReleaseDates: Map<Platform, Date>;
 }
 
+/** A commercial edition of a game, as IGDB lists it under `version_parent`. */
+export interface IgdbEdition {
+  igdbId: number;
+  parentId: number;
+  name: string;
+  versionTitle: string | null;
+  releaseDate: Date | null;
+}
+
 interface CachedToken {
   accessToken: string;
   expiresAt: number;
@@ -477,6 +486,76 @@ export class IgdbClient {
         ? JSON.stringify(error.response?.data ?? error.message)
         : String(error);
       this.logger.error(`IGDB refresh query failed: ${detail}`);
+      return null;
+    }
+  }
+
+  /**
+   * The commercial editions of up to 500 games, keyed by base game IGDB id. A
+   * game with none is absent from the map. Returns null when a request
+   * fails, so the caller can tell a failure from "no editions".
+   */
+  async fetchEditions(
+    igdbIds: number[],
+  ): Promise<Map<number, IgdbEdition[]> | null> {
+    if (!this.isConfigured()) return null;
+    const ids = igdbIds.filter((id) => Number.isInteger(id)).slice(0, 500);
+    const editions = new Map<number, IgdbEdition[]>();
+    if (ids.length === 0) return editions;
+
+    const token = await this.getAccessToken();
+    const clientId = this.config.get<string>('IGDB_CLIENT_ID')!;
+    const pageSize = 500;
+    try {
+      // A few games have dozens of editions: page until IGDB runs out.
+      for (let offset = 0; ; offset += pageSize) {
+        const { data } = await axios.post(
+          'https://api.igdb.com/v4/games',
+          [
+            `where version_parent = (${ids.join(',')});`,
+            'fields name, version_parent, version_title, first_release_date;',
+            'sort id asc;',
+            `limit ${pageSize};`,
+            `offset ${offset};`,
+          ].join(' '),
+          {
+            headers: {
+              'Client-ID': clientId,
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'text/plain',
+            },
+            timeout: 30000,
+          },
+        );
+        const rows = data as Array<{
+          id: number;
+          name?: string;
+          version_parent?: number;
+          version_title?: string;
+          first_release_date?: number;
+        }>;
+        for (const row of rows) {
+          if (typeof row.version_parent !== 'number' || !row.name) continue;
+          const list = editions.get(row.version_parent) ?? [];
+          list.push({
+            igdbId: row.id,
+            parentId: row.version_parent,
+            name: row.name.trim(),
+            versionTitle: row.version_title?.trim() || null,
+            releaseDate: row.first_release_date
+              ? new Date(row.first_release_date * 1000)
+              : null,
+          });
+          editions.set(row.version_parent, list);
+        }
+        if (rows.length < pageSize) break;
+      }
+      return editions;
+    } catch (error) {
+      const detail = axios.isAxiosError(error)
+        ? JSON.stringify(error.response?.data ?? error.message)
+        : String(error);
+      this.logger.error(`IGDB editions query failed: ${detail}`);
       return null;
     }
   }

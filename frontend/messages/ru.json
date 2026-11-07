@@ -172,6 +172,7 @@
     "recentCcuHint": "Дневной пик в Steam · {date}",
     "recentCcuLabel": "Последний онлайн в Steam",
     "release": "Выход",
+    "editions": "Продажи включают все издания: {editions}",
     "releasedOn": "вышла {date}",
     "reviewsPlaystation": "Отзывы в PlayStation",
     "reviewsSteam": "Отзывы в Steam",

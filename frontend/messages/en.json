@@ -172,6 +172,7 @@
     "recentCcuHint": "Steam daily peak · {date}",
     "recentCcuLabel": "Latest Steam CCU",
     "release": "Release",
+    "editions": "Sales include every edition: {editions}",
     "releasedOn": "released {date}",
     "reviewsPlaystation": "PlayStation reviews",
     "reviewsSteam": "Steam reviews",
