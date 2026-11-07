@@ -46,6 +46,25 @@ ago (`IgdbRefreshService.refreshFromIgdb`, batches of 500 ids):
 Free-to-play is rejected later, on Steam ingest (`isFree`), not by the
 IGDB rating bar.
 
+## Editions are the base game
+
+IGDB gives each commercial edition ("Deluxe Edition", "GOTY Edition") its own
+record, with `game_type = 0` like a main game, pointing at the base game
+through `version_parent`. One game, one catalog entry:
+
+- discovery queries filter `version_parent = null`;
+- `IgdbClient` lookups (`findBySteamAppId`, `findById`, `findBySlug`,
+  `searchGames`, `findByName`) return the base game, with `editionOf` set to
+  the matched edition's id;
+- on Steam ingest, an edition's own Steam app is attached to the base game
+  only when that game has no Steam app yet. Otherwise it is skipped.
+
+Remasters (`game_type = 9`) and expanded games (`10`) are separate products and
+stay separate. The 2026-11-07 cleanup (`scripts/merge-igdb-editions.ts`) folded
+the existing editions into their base games. It skipped five whose base IGDB id
+belongs to a game deleted by hand (Persona 5 Royal, Rocket League, Anthem,
+GTA V Legacy, Horizon Forbidden West).
+
 ## Tier rules
 
 `classifyCatalogTier` returns `null` (do not track) when

@@ -4598,6 +4598,20 @@ export class IngestionService {
           await this.games.restore(existingByIgdb.id);
           existingByIgdb.deletedAt = null;
         }
+        // An edition's own Steam app ("… Deluxe Edition") resolves to its base
+        // game. When that game already polls its own Steam app, a second one
+        // would only mix two review and player series: leave it out.
+        if (igdb.editionOf != null) {
+          const tracked = await this.gameSources.findOne({
+            where: { gameId: existingByIgdb.id, source: SourceType.STEAM },
+          });
+          if (tracked) {
+            this.logger.log(
+              `[ingest-steam] skipping edition app ${appId} of "${existingByIgdb.name}" (already on Steam app ${tracked.externalId})`,
+            );
+            return null;
+          }
+        }
         await this.gameSources.save(
           this.gameSources.create({
             gameId: existingByIgdb.id,
@@ -4666,10 +4680,12 @@ export class IngestionService {
       igdb?.companies ?? null,
     );
 
+    // A Steam app sold only as an edition still names the base game.
+    const name = igdb?.editionOf != null ? igdb.name : details.name;
     const entity = this.games.create({
       igdbId: igdb?.igdbId ?? null,
-      name: details.name,
-      slug: await this.uniqueSlug(details.name),
+      name,
+      slug: await this.uniqueSlug(name),
       releaseDate: details.releaseDate,
       coverUrl: details.headerImage ?? igdb?.coverUrl ?? null,
       summary: details.shortDescription,

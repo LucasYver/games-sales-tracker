@@ -44,6 +44,13 @@ export interface IgdbGame {
   // earliest date across ALL platforms). Empty when IGDB has no
   // `release_dates` breakdown for this game.
   platformReleaseDates: Map<Platform, Date>;
+  // IGDB gives each commercial edition ("Deluxe Edition", "GOTY Edition") its
+  // own record that points at the base game through `version_parent`. The
+  // lookups below return the base game, so an edition never becomes a second
+  // catalog entry; `editionOf` then keeps the id of the edition that was
+  // actually matched (a Steam app sold only as "Deluxe Edition", say).
+  versionParentId: number | null;
+  editionOf: number | null;
 }
 
 /** What the nightly IGDB refresh reads for a game already in the catalog. */
@@ -88,6 +95,7 @@ const IGDB_FIELDS = [
   'involved_companies.porting',
   'involved_companies.supporting',
   'genres.name',
+  'version_parent',
 ].join(', ');
 
 // Steam apps that accompany a game rather than being the game itself. Matched
@@ -150,7 +158,10 @@ export class IgdbClient {
       `limit ${limit};`,
     ].join(' ');
 
-    return this.queryGames(body);
+    const results = await this.resolveEditions(await this.queryGames(body));
+    // An edition and its base game can both match; keep the base game once.
+    const seen = new Set<number>();
+    return results.filter((g) => !seen.has(g.igdbId) && seen.add(g.igdbId));
   }
 
   /**
@@ -206,7 +217,7 @@ export class IgdbClient {
       'limit 1;',
     ].join(' ');
     const results = await this.queryGames(gameBody);
-    return results[0] ?? null;
+    return results[0] ? this.resolveEdition(results[0]) : null;
   }
 
   /**
@@ -243,9 +254,11 @@ export class IgdbClient {
 
     // A — established hits since the date floor, ranked by popularity.
     // `game_type = 0` is "main game" (the old `category` field was removed).
+    // Commercial editions are main games too; `version_parent = null` drops
+    // them, since each one points at a base game discovered on its own.
     for (let page = 0; page < IGDB_DISCOVERY_MAX_PAGES; page++) {
       const body = [
-        `where game_type = 0 & total_rating_count >= ${IGDB_CATALOG_MIN_RATING_COUNT}`,
+        `where game_type = 0 & version_parent = null & total_rating_count >= ${IGDB_CATALOG_MIN_RATING_COUNT}`,
         `& first_release_date >= ${floorUnix} & platforms = (${platforms});`,
         `fields ${IGDB_FIELDS};`,
         `sort total_rating_count desc;`,
@@ -259,7 +272,7 @@ export class IgdbClient {
 
     // B — fresh releases (rating bar skipped; Steam review signal decides).
     const recentBody = [
-      `where game_type = 0 & first_release_date >= ${recentUnix}`,
+      `where game_type = 0 & version_parent = null & first_release_date >= ${recentUnix}`,
       `& platforms = (${platforms});`,
       `fields ${IGDB_FIELDS};`,
       `sort first_release_date desc;`,
@@ -270,7 +283,7 @@ export class IgdbClient {
     // C — unreleased games. `hypes` is IGDB's pre-release follow count, the
     // only popularity signal available before ratings and reviews exist.
     const upcomingBody = [
-      `where game_type = 0 & first_release_date >= ${nowUnix}`,
+      `where game_type = 0 & version_parent = null & first_release_date >= ${nowUnix}`,
       `& first_release_date <= ${upcomingUnix}`,
       `& platforms = (${platforms});`,
       `fields ${IGDB_FIELDS}, hypes;`,
@@ -301,7 +314,7 @@ export class IgdbClient {
     ].join(' ');
 
     const results = await this.queryGames(body);
-    return results[0] ?? null;
+    return results[0] ? this.resolveEdition(results[0]) : null;
   }
 
   /**
@@ -317,7 +330,7 @@ export class IgdbClient {
     ].join(' ');
 
     const results = await this.queryGames(body);
-    return results[0] ?? null;
+    return results[0] ? this.resolveEdition(results[0]) : null;
   }
 
   /**
@@ -470,6 +483,49 @@ export class IgdbClient {
 
   // ───── internals ────────────────────────────────────────────────────────
 
+  /**
+   * The base game of an IGDB edition, or the game itself when it is not one.
+   * Falls back to the edition when the parent cannot be read, so a failed
+   * request never loses the match.
+   */
+  private async resolveEdition(game: IgdbGame): Promise<IgdbGame> {
+    const [resolved] = await this.resolveEditions([game]);
+    return resolved;
+  }
+
+  /** {@link resolveEdition} for a list, with one request for every parent. */
+  private async resolveEditions(games: IgdbGame[]): Promise<IgdbGame[]> {
+    const parentIds = [
+      ...new Set(
+        games
+          .map((g) => g.versionParentId)
+          .filter((id): id is number => id != null),
+      ),
+    ];
+    if (parentIds.length === 0) return games;
+
+    const parents = await this.queryGames(
+      [
+        `where id = (${parentIds.join(',')});`,
+        `fields ${IGDB_FIELDS};`,
+        `limit ${parentIds.length};`,
+      ].join(' '),
+    );
+    const byId = new Map(parents.map((p) => [p.igdbId, p]));
+    return games.map((g) => {
+      const parent =
+        g.versionParentId != null ? byId.get(g.versionParentId) : undefined;
+      if (!parent) return g;
+      // The edition's own Steam app is the one that matched; keep it when the
+      // base game lists none.
+      return {
+        ...parent,
+        steamAppId: parent.steamAppId ?? g.steamAppId,
+        editionOf: g.igdbId,
+      };
+    });
+  }
+
   private async queryGames(body: string): Promise<IgdbGame[]> {
     const token = await this.getAccessToken();
     const clientId = this.config.get<string>('IGDB_CLIENT_ID')!;
@@ -525,6 +581,7 @@ export class IgdbClient {
         supporting?: boolean;
       }[];
       genres?: { name?: string }[];
+      version_parent?: number;
     };
 
     // external_game_source = 1 identifies the Steam store entry (the old
@@ -580,6 +637,9 @@ export class IgdbClient {
       totalRatingCount:
         typeof g.total_rating_count === 'number' ? g.total_rating_count : 0,
       platformReleaseDates,
+      versionParentId:
+        typeof g.version_parent === 'number' ? g.version_parent : null,
+      editionOf: null,
     };
   }
 
