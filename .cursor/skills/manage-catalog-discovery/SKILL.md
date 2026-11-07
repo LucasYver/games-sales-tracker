@@ -45,7 +45,14 @@ ago (`IgdbRefreshService.refreshFromIgdb`, batches of 500 ids):
 - console store links from IGDB `external_games` (`syncStoreIds`, one
   request per 500 games): PlayStation Store concept ids in `igdbPsConceptIds`
   and Xbox Store product ids in `igdbXboxProductIds`, which the store lookup
-  tries before searching (skill `console-store-matching`).
+  tries before searching (skill `console-store-matching`), plus the Epic and
+  GOG pages (`igdbEpicUrl`, `igdbGogUrl`) and Game Pass cloud presence
+  (`igdbGamePassCloud`).
+- release type (`gameType`), parent game (`igdbParentGameId` / `Name`, read
+  back to list a game's remakes) and game modes (`gameModes`), in the same
+  request as the series; time to beat (`timeToBeat`, `syncTimeToBeat`, one
+  request per 500 games). See `games/igdb-facts.ts`. Display only: nothing
+  here feeds the matcher or the ML.
 
 Free-to-play is rejected later, on Steam ingest (`isFree`), not by the
 IGDB rating bar.

@@ -46,6 +46,12 @@ import { DevelopersService } from '../developers/developers.service';
 import { EXTENDED_HARVEST_PERCENTILE } from '../scheduler/harvest-eligibility';
 import { harvestDueSql } from '../scheduler/refresh-interval';
 import { GamesService } from '../games/games.service';
+import {
+  shownTimeToBeat,
+  type GameMode,
+  type GameType,
+  type TimeToBeat,
+} from '../games/igdb-facts';
 import { ReferenceProfileService } from '../reference-profiles/reference-profile.service';
 
 interface IngestionCronConfig {
@@ -444,6 +450,24 @@ export interface AdminGameSummary2 {
   estimatesCount: number;
   // See `AdminGameDetail.platformReleaseDates`.
   platformReleaseDates: { platform: Platform; releaseDate: Date }[];
+  igdb: AdminIgdbFacts;
+}
+
+/** What the nightly IGDB refresh stored for a game, unfiltered. */
+export interface AdminIgdbFacts {
+  checkedAt: Date | null;
+  gameType: GameType | null;
+  parentGame: { igdbId: number; name: string; gameId: string | null } | null;
+  gameModes: GameMode[];
+  /** Raw, with the report count. */
+  timeToBeat: TimeToBeat | null;
+  /** Whether the public page shows it (`shownTimeToBeat`). */
+  timeToBeatShown: boolean;
+  psConceptIds: string[];
+  xboxProductIds: string[];
+  epicUrl: string | null;
+  gogUrl: string | null;
+  gamePassCloud: boolean;
 }
 
 export interface AdminGameCharts {
@@ -1179,6 +1203,13 @@ export class AdminService {
       }),
     ]);
     if (!game) throw new NotFoundException(`Game ${id} not found`);
+    // The parent's admin page, when the parent is in the catalog.
+    const parentGame = game.igdbParentGameId
+      ? await this.games.findOne({
+          where: { igdbId: game.igdbParentGameId },
+          select: { id: true },
+        })
+      : null;
 
     return {
       id: game.id,
@@ -1246,6 +1277,26 @@ export class AdminService {
         platform: r.platform,
         releaseDate: r.releaseDate,
       })),
+      igdb: {
+        checkedAt: game.igdbCheckedAt,
+        gameType: game.gameType,
+        parentGame:
+          game.igdbParentGameId && game.igdbParentGameName
+            ? {
+                igdbId: game.igdbParentGameId,
+                name: game.igdbParentGameName,
+                gameId: parentGame?.id ?? null,
+              }
+            : null,
+        gameModes: game.gameModes ?? [],
+        timeToBeat: game.timeToBeat,
+        timeToBeatShown: !!shownTimeToBeat(game.timeToBeat, game.liveService),
+        psConceptIds: game.igdbPsConceptIds ?? [],
+        xboxProductIds: game.igdbXboxProductIds ?? [],
+        epicUrl: game.igdbEpicUrl,
+        gogUrl: game.igdbGogUrl,
+        gamePassCloud: game.igdbGamePassCloud,
+      },
     };
   }
 

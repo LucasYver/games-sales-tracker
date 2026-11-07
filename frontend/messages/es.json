@@ -200,7 +200,41 @@
     "twitchViewersSeries": "Espectadores en Twitch",
     "updatedAt": "Cifras actualizadas el {date}.",
     "updatedUnknown": "Cifras actualizadas a diario.",
-    "methodologyLink": "Cómo estimamos"
+    "methodologyLink": "Cómo estimamos",
+    "gameTypeLabel": "Tipo",
+    "derivedFrom": "{type} de <game>{name}</game>",
+    "derivedGamesLabel": "Remakes y reediciones",
+    "gameModesLabel": "Modos",
+    "timeToBeatLabel": "Duración",
+    "ttbHastily": "{hours} h rápido",
+    "ttbNormally": "{hours} h normal",
+    "ttbCompletely": "{hours} h al 100 %",
+    "ttbReports": "{count} tiempos informados por jugadores (IGDB)",
+    "gameType": {
+      "MAIN_GAME": "Juego principal",
+      "DLC": "DLC",
+      "EXPANSION": "Expansión",
+      "BUNDLE": "Recopilatorio",
+      "STANDALONE_EXPANSION": "Expansión independiente",
+      "MOD": "Mod",
+      "EPISODE": "Episodio",
+      "SEASON": "Temporada",
+      "REMAKE": "Remake",
+      "REMASTER": "Remaster",
+      "EXPANDED_GAME": "Edición ampliada",
+      "PORT": "Port",
+      "FORK": "Derivado",
+      "PACK": "Pack",
+      "UPDATE": "Actualización"
+    },
+    "gameMode": {
+      "SINGLE_PLAYER": "Un jugador",
+      "MULTIPLAYER": "Multijugador",
+      "CO_OP": "Cooperativo",
+      "SPLIT_SCREEN": "Pantalla dividida",
+      "MMO": "MMO",
+      "BATTLE_ROYALE": "Battle royale"
+    }
   },
   "refreshButton": {
     "error": "Error al actualizar. Inténtalo de nuevo.",

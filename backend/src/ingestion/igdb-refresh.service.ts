@@ -60,6 +60,7 @@ export class IgdbRefreshService {
     platformDatesChanged: number;
     editions: number;
     storeLinks: number;
+    timesToBeat: number;
   }> {
     const result = {
       checked: 0,
@@ -68,6 +69,7 @@ export class IgdbRefreshService {
       platformDatesChanged: 0,
       editions: 0,
       storeLinks: 0,
+      timesToBeat: 0,
     };
     if (!this.igdb.isConfigured()) return result;
 
@@ -145,7 +147,15 @@ export class IgdbRefreshService {
             `[igdb-refresh] "${game.name}" release date ${game.releaseDate?.toISOString().slice(0, 10) ?? 'none'} -> ${releaseDate.toISOString().slice(0, 10)}`,
           );
         }
-        return { id: game.id, ...grouping, releaseDate };
+        return {
+          id: game.id,
+          ...grouping,
+          releaseDate,
+          gameType: igdb?.gameType ?? null,
+          parentId: igdb?.parentGame?.igdbId ?? null,
+          parentName: igdb?.parentGame?.name ?? null,
+          gameModes: igdb?.gameModes.length ? igdb.gameModes : null,
+        };
       });
 
       await this.games.query(
@@ -153,10 +163,16 @@ export class IgdbRefreshService {
          SET "seriesSlug" = v.series_slug, "seriesName" = v.series_name,
              "developer" = v.developer, "publisher" = v.publisher,
              "releaseDate" = COALESCE(v.release_date, g."releaseDate"),
+             "gameType" = v.game_type,
+             "igdbParentGameId" = v.parent_id,
+             "igdbParentGameName" = v.parent_name,
+             "gameModes" = v.game_modes::text[],
              "igdbCheckedAt" = now()
          FROM unnest($1::uuid[], $2::varchar[], $3::varchar[], $4::varchar[],
-                     $5::varchar[], $6::timestamptz[])
-           AS v(id, series_slug, series_name, developer, publisher, release_date)
+                     $5::varchar[], $6::timestamptz[], $7::varchar[],
+                     $8::int[], $9::varchar[], $10::text[])
+           AS v(id, series_slug, series_name, developer, publisher,
+                release_date, game_type, parent_id, parent_name, game_modes)
          WHERE g.id = v.id`,
         [
           rows.map((r) => r.id),
@@ -165,6 +181,11 @@ export class IgdbRefreshService {
           rows.map((r) => r.developer),
           rows.map((r) => r.publisher),
           rows.map((r) => r.releaseDate),
+          rows.map((r) => r.gameType),
+          rows.map((r) => r.parentId),
+          rows.map((r) => r.parentName),
+          // One array literal per game: unnest cannot take a ragged 2-D array.
+          rows.map((r) => (r.gameModes ? `{${r.gameModes.join(',')}}` : null)),
         ],
       );
 
@@ -190,11 +211,12 @@ export class IgdbRefreshService {
       );
       result.editions += await this.syncEditions(batch);
       result.storeLinks += await this.syncStoreIds(batch);
+      result.timesToBeat += await this.syncTimeToBeat(batch);
       result.checked += batch.length;
     }
 
     this.logger.log(
-      `IGDB refresh: ${result.checked} game(s) checked, ${result.groupingChanged} regrouped, ${result.releaseDatesMoved} release date(s) moved, ${result.platformDatesChanged} platform date set(s) rewritten, ${result.editions} edition(s) listed, ${result.storeLinks} game(s) with a console store link.`,
+      `IGDB refresh: ${result.checked} game(s) checked, ${result.groupingChanged} regrouped, ${result.releaseDatesMoved} release date(s) moved, ${result.platformDatesChanged} platform date set(s) rewritten, ${result.editions} edition(s) listed, ${result.storeLinks} game(s) with a store link, ${result.timesToBeat} with a time to beat.`,
     );
     return result;
   }
@@ -230,9 +252,10 @@ export class IgdbRefreshService {
   }
 
   /**
-   * Rewrites the console store products IGDB links to the batch's games (one
-   * request for the batch), read by the store lookup before it searches. A
-   * failed request keeps the stored ids. Returns the games with at least one.
+   * Rewrites the store links IGDB gives for the batch's games (one request
+   * for the batch): the console products the store lookup tries before it
+   * searches, the Epic and GOG pages and Game Pass cloud presence. A failed
+   * request keeps the stored values. Returns the games with at least one.
    */
   private async syncStoreIds(batch: Game[]): Promise<number> {
     const byGame = await this.igdb.fetchStoreIds(
@@ -245,16 +268,56 @@ export class IgdbRefreshService {
     await this.games.query(
       `UPDATE game AS g
        SET "igdbPsConceptIds" = v.ps::text[],
-           "igdbXboxProductIds" = v.xbox::text[]
-       FROM unnest($1::uuid[], $2::text[], $3::text[]) AS v(id, ps, xbox)
+           "igdbXboxProductIds" = v.xbox::text[],
+           "igdbEpicUrl" = v.epic,
+           "igdbGogUrl" = v.gog,
+           "igdbGamePassCloud" = v.game_pass
+       FROM unnest($1::uuid[], $2::text[], $3::text[], $4::varchar[],
+                   $5::varchar[], $6::boolean[])
+         AS v(id, ps, xbox, epic, gog, game_pass)
        WHERE g.id = v.id`,
       [
         batch.map((game) => game.id),
         links.map((link) => asArray(link?.playstation)),
         links.map((link) => asArray(link?.xbox)),
+        links.map((link) => link?.epicUrl ?? null),
+        links.map((link) => link?.gogUrl ?? null),
+        links.map((link) => link?.gamePassCloud ?? false),
       ],
     );
-    return links.filter((link) => link).length;
+    return links.filter(
+      (link) =>
+        link &&
+        (link.playstation.length > 0 ||
+          link.xbox.length > 0 ||
+          link.epicUrl ||
+          link.gogUrl ||
+          link.gamePassCloud),
+    ).length;
+  }
+
+  /**
+   * Rewrites the batch's player-reported times to beat (one request for the
+   * batch). A failed request keeps the stored values; a game IGDB has none
+   * for is cleared. Returns the games with one.
+   */
+  private async syncTimeToBeat(batch: Game[]): Promise<number> {
+    const byGame = await this.igdb.fetchTimeToBeat(
+      batch.map((game) => game.igdbId as number),
+    );
+    if (!byGame) return 0;
+    const times = batch.map((game) => byGame.get(game.igdbId as number));
+    await this.games.query(
+      `UPDATE game AS g
+       SET "timeToBeat" = v.time
+       FROM unnest($1::uuid[], $2::jsonb[]) AS v(id, time)
+       WHERE g.id = v.id`,
+      [
+        batch.map((game) => game.id),
+        times.map((time) => (time ? JSON.stringify(time) : null)),
+      ],
+    );
+    return times.filter(Boolean).length;
   }
 
   /**

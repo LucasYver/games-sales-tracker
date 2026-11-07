@@ -59,8 +59,11 @@ export async function adminFetch<T>(
 
 import type {
   ConfidenceLevel,
+  GameMode,
+  GameType,
   Platform,
   SalesSourceLabel,
+  TimeToBeat,
 } from './api';
 
 export type SalesSource = Exclude<SalesSourceLabel, 'ESTIMATE'>;
@@ -295,6 +298,24 @@ export interface AdminGamePageSummary {
   milestonesCount: number;
   estimatesCount: number;
   platformReleaseDates: AdminPlatformReleaseDate[];
+  igdb: AdminIgdbFacts;
+}
+
+/** What the nightly IGDB refresh stored for a game, unfiltered. */
+export interface AdminIgdbFacts {
+  checkedAt: string | null;
+  gameType: GameType | null;
+  parentGame: { igdbId: number; name: string; gameId: string | null } | null;
+  gameModes: GameMode[];
+  /** Raw, with the report count. */
+  timeToBeat: TimeToBeat | null;
+  /** Whether the public page shows it (backend `shownTimeToBeat`). */
+  timeToBeatShown: boolean;
+  psConceptIds: string[];
+  xboxProductIds: string[];
+  epicUrl: string | null;
+  gogUrl: string | null;
+  gamePassCloud: boolean;
 }
 
 // Charts-tab payload (GET /admin/games/:id/charts).

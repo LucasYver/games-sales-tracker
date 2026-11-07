@@ -200,7 +200,41 @@
     "twitchViewersSeries": "Зрители на Twitch",
     "updatedAt": "Данные обновлены {date}.",
     "updatedUnknown": "Данные обновляются ежедневно.",
-    "methodologyLink": "Как мы считаем"
+    "methodologyLink": "Как мы считаем",
+    "gameTypeLabel": "Тип",
+    "derivedFrom": "{type}: <game>{name}</game>",
+    "derivedGamesLabel": "Ремейки и переиздания",
+    "gameModesLabel": "Режимы",
+    "timeToBeatLabel": "Время прохождения",
+    "ttbHastily": "{hours} ч бегло",
+    "ttbNormally": "{hours} ч обычно",
+    "ttbCompletely": "{hours} ч на 100 %",
+    "ttbReports": "Отчётов игроков: {count} (IGDB)",
+    "gameType": {
+      "MAIN_GAME": "Основная игра",
+      "DLC": "DLC",
+      "EXPANSION": "Дополнение",
+      "BUNDLE": "Сборник",
+      "STANDALONE_EXPANSION": "Самостоятельное дополнение",
+      "MOD": "Мод",
+      "EPISODE": "Эпизод",
+      "SEASON": "Сезон",
+      "REMAKE": "Ремейк",
+      "REMASTER": "Ремастер",
+      "EXPANDED_GAME": "Расширенное издание",
+      "PORT": "Порт",
+      "FORK": "Ответвление",
+      "PACK": "Набор",
+      "UPDATE": "Обновление"
+    },
+    "gameMode": {
+      "SINGLE_PLAYER": "Одиночная игра",
+      "MULTIPLAYER": "Мультиплеер",
+      "CO_OP": "Кооператив",
+      "SPLIT_SCREEN": "Разделённый экран",
+      "MMO": "MMO",
+      "BATTLE_ROYALE": "Королевская битва"
+    }
   },
   "refreshButton": {
     "error": "Не удалось обновить. Попробуйте ещё раз.",

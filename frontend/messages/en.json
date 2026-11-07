@@ -200,7 +200,41 @@
     "twitchViewersSeries": "Twitch viewers",
     "updatedAt": "Figures updated on {date}.",
     "updatedUnknown": "Figures updated daily.",
-    "methodologyLink": "How we estimate"
+    "methodologyLink": "How we estimate",
+    "gameTypeLabel": "Type",
+    "derivedFrom": "{type} of <game>{name}</game>",
+    "derivedGamesLabel": "Remakes & re-releases",
+    "gameModesLabel": "Modes",
+    "timeToBeatLabel": "Time to beat",
+    "ttbHastily": "{hours} h rushed",
+    "ttbNormally": "{hours} h normal",
+    "ttbCompletely": "{hours} h complete",
+    "ttbReports": "{count} player reports (IGDB)",
+    "gameType": {
+      "MAIN_GAME": "Main game",
+      "DLC": "DLC",
+      "EXPANSION": "Expansion",
+      "BUNDLE": "Bundle",
+      "STANDALONE_EXPANSION": "Standalone expansion",
+      "MOD": "Mod",
+      "EPISODE": "Episode",
+      "SEASON": "Season",
+      "REMAKE": "Remake",
+      "REMASTER": "Remaster",
+      "EXPANDED_GAME": "Expanded edition",
+      "PORT": "Port",
+      "FORK": "Fork",
+      "PACK": "Pack",
+      "UPDATE": "Update"
+    },
+    "gameMode": {
+      "SINGLE_PLAYER": "Single player",
+      "MULTIPLAYER": "Multiplayer",
+      "CO_OP": "Co-op",
+      "SPLIT_SCREEN": "Split screen",
+      "MMO": "MMO",
+      "BATTLE_ROYALE": "Battle royale"
+    }
   },
   "refreshButton": {
     "error": "Refresh failed. Try again.",

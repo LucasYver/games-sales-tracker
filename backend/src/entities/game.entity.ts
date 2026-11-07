@@ -18,6 +18,7 @@ import { Milestone } from './milestone.entity';
 import { Publisher } from './publisher.entity';
 import { Developer } from './developer.entity';
 import { GamePlatformReleaseDate } from './game-platform-release-date.entity';
+import type { GameMode, GameType, TimeToBeat } from '../games/igdb-facts';
 
 @Entity('game')
 // GIN trigram index for fuzzy game-name search. Created (and refreshed)
@@ -179,6 +180,45 @@ export class Game {
 
   @Column({ type: 'text', array: true, nullable: true })
   igdbXboxProductIds: string[] | null;
+
+  // Other stores IGDB links to the game (`external_games`): its Epic Games
+  // Store and GOG pages, and whether it is in the Xbox Game Pass Ultimate
+  // cloud catalog. That catalog is the streamable subset of Game Pass, with
+  // no dates: a hint the game was on Game Pass, not proof it still is.
+  @Column({ type: 'varchar', nullable: true })
+  igdbEpicUrl: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  igdbGogUrl: string | null;
+
+  @Column({ type: 'boolean', default: false })
+  igdbGamePassCloud: boolean;
+
+  // What kind of release IGDB says this is (`games/igdb-facts.ts`): a main
+  // game, a remake, a remaster, a port… `null` before the nightly refresh.
+  @Column({ type: 'varchar', nullable: true })
+  gameType: GameType | null;
+
+  // The game a remake, remaster, port or expansion comes from (IGDB
+  // `parent_game`). The pages link it when it is in the catalog, and list
+  // a game's remakes and remasters by reading this column back.
+  @Index('IDX_game_igdbParentGameId', {
+    where: '"igdbParentGameId" IS NOT NULL',
+  })
+  @Column({ type: 'int', nullable: true })
+  igdbParentGameId: number | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  igdbParentGameName: string | null;
+
+  // Single player, multiplayer, co-op… (IGDB `game_modes`).
+  @Column({ type: 'text', array: true, nullable: true })
+  gameModes: GameMode[] | null;
+
+  // Player-reported completion times (IGDB `game_time_to_beats`), see
+  // `TimeToBeat` for the report floor the pages apply.
+  @Column({ type: 'jsonb', nullable: true })
+  timeToBeat: TimeToBeat | null;
 
   // True for live-service titles (persistent online games with ongoing
   // content: MMOs, season-pass shooters, battle-royale). They retain

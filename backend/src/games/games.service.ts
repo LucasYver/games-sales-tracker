@@ -54,6 +54,12 @@ import {
 import { ESTIMATE_MIN_RELEASE, estimateOutOfScope } from './estimate-scope';
 import { shownPublisher } from './game-companies';
 import { platformReleaseDate } from './platform-release-date';
+import {
+  shownTimeToBeat,
+  type GameMode,
+  type GameType,
+  type TimeToBeat,
+} from './igdb-facts';
 import { normalizeSteamPriceCountry } from '../ingestion/steam-store-countries';
 import {
   FRANCHISE_HUB_MIN_GAMES,
@@ -114,6 +120,18 @@ export type DisplaySource = SalesSource | 'ESTIMATE';
 // beyond what time/uncertainty explains, flagging a figure or model to review.
 // Defined in entities/enums.ts; re-exported here for backwards compatibility.
 export { type Agreement } from '../entities';
+
+/** IGDB facts shown on the public game page (`games/igdb-facts.ts`). */
+export interface PublicIgdbFacts {
+  gameType: GameType | null;
+  /** What a remake, remaster, port or expansion comes from. */
+  parentGame: { name: string; slug: string | null } | null;
+  /** Catalog games that come from this one (its remakes, remasters…). */
+  derivedGames: { name: string; slug: string; gameType: GameType | null }[];
+  gameModes: GameMode[];
+  /** Null below the report floor (`TIME_TO_BEAT_MIN_REPORTS`). */
+  timeToBeat: TimeToBeat | null;
+}
 
 export interface PlatformSales {
   platform: Platform;
@@ -1102,6 +1120,7 @@ export class GamesService {
       publishedBlog,
       estimateSnapshotRows,
       editionRows,
+      lineage,
     ] = await Promise.all([
       noEstimate
         ? Promise.resolve<LatestEstimates>({
@@ -1161,6 +1180,7 @@ export class GamesService {
         },
         select: { name: true, versionTitle: true, releaseDate: true },
       }),
+      this.igdbLineage(game),
     ]);
 
     const { breakdown, total, reconciliation, estimatedToday } = game.isFree
@@ -1269,6 +1289,61 @@ export class GamesService {
         name: e.name,
         versionTitle: e.versionTitle,
         releaseDate: e.releaseDate,
+      })),
+      igdbFacts: {
+        gameType: game.gameType,
+        parentGame: lineage.parentGame,
+        derivedGames: lineage.derivedGames,
+        gameModes: game.gameModes ?? [],
+        timeToBeat: shownTimeToBeat(game.timeToBeat, game.liveService),
+      } satisfies PublicIgdbFacts,
+      // Store pages IGDB links beyond the ones we track (see `sources`).
+      otherStores: {
+        epicUrl: game.igdbEpicUrl,
+        gogUrl: game.igdbGogUrl,
+      },
+    };
+  }
+
+  /**
+   * The game a remake, remaster or port comes from, and the catalog games
+   * that come from this one (both from IGDB `parent_game`). A parent outside
+   * the catalog keeps its IGDB name with no slug.
+   */
+  private async igdbLineage(game: Game): Promise<{
+    parentGame: PublicIgdbFacts['parentGame'];
+    derivedGames: PublicIgdbFacts['derivedGames'];
+  }> {
+    const [parent, derived] = await Promise.all([
+      game.igdbParentGameId
+        ? this.games.findOne({
+            where: { igdbId: game.igdbParentGameId },
+            select: { id: true, name: true, slug: true },
+          })
+        : null,
+      game.igdbId
+        ? this.games.find({
+            where: { igdbParentGameId: game.igdbId },
+            select: { id: true, name: true, slug: true, gameType: true },
+            order: {
+              releaseDate: { direction: 'ASC', nulls: 'LAST' },
+              name: 'ASC',
+            },
+            take: 10,
+          })
+        : [],
+    ]);
+    return {
+      parentGame: game.igdbParentGameName
+        ? {
+            name: parent?.name ?? game.igdbParentGameName,
+            slug: parent?.slug ?? null,
+          }
+        : null,
+      derivedGames: derived.map((g) => ({
+        name: g.name,
+        slug: g.slug,
+        gameType: g.gameType,
       })),
     };
   }

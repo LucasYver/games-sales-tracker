@@ -7,8 +7,9 @@ import {
   type AdminGameChartsData,
   type AdminMatcherInspection,
   type AdminEstimateBreakdown,
+  type AdminIgdbFacts,
 } from '@/lib/admin';
-import type { Platform } from '@/lib/api';
+import type { GameMode, GameType, Platform } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -360,6 +361,7 @@ function OverviewTab({ s }: { s: AdminGamePageSummary }) {
             </Meta>
             <Meta label="DLC">{s.dlc.length}</Meta>
           </dl>
+          <IgdbFactsList igdb={s.igdb} />
           {s.summary && (
             <p className="text-muted-foreground text-sm leading-relaxed">
               {s.summary}
@@ -424,6 +426,127 @@ function OverviewTab({ s }: { s: AdminGamePageSummary }) {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+const ADMIN_GAME_TYPE_LABELS: Record<GameType, string> = {
+  MAIN_GAME: 'Main game',
+  DLC: 'DLC',
+  EXPANSION: 'Expansion',
+  BUNDLE: 'Bundle',
+  STANDALONE_EXPANSION: 'Standalone expansion',
+  MOD: 'Mod',
+  EPISODE: 'Episode',
+  SEASON: 'Season',
+  REMAKE: 'Remake',
+  REMASTER: 'Remaster',
+  EXPANDED_GAME: 'Expanded game',
+  PORT: 'Port',
+  FORK: 'Fork',
+  PACK: 'Pack / add-on',
+  UPDATE: 'Update',
+};
+
+const ADMIN_GAME_MODE_LABELS: Record<GameMode, string> = {
+  SINGLE_PLAYER: 'Single player',
+  MULTIPLAYER: 'Multiplayer',
+  CO_OP: 'Co-op',
+  SPLIT_SCREEN: 'Split screen',
+  MMO: 'MMO',
+  BATTLE_ROYALE: 'Battle royale',
+};
+
+function fmtHours(seconds: number | null): string {
+  if (!seconds) return '—';
+  const hours = seconds / 3600;
+  return `${hours < 10 ? hours.toFixed(1) : Math.round(hours)} h`;
+}
+
+/** What the nightly IGDB refresh stored (`IgdbRefreshService`). */
+function IgdbFactsList({ igdb }: { igdb: AdminIgdbFacts }) {
+  const ttb = igdb.timeToBeat;
+  return (
+    <div className="flex flex-col gap-2 border-t pt-3">
+      <div className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
+        IGDB · refreshed {fmtDate(igdb.checkedAt)}
+      </div>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-2.5 text-sm">
+        <Meta label="Type">
+          {igdb.gameType ? ADMIN_GAME_TYPE_LABELS[igdb.gameType] : '—'}
+          {igdb.parentGame && (
+            <span className="text-muted-foreground">
+              {' of '}
+              {igdb.parentGame.gameId ? (
+                <Link
+                  href={`/admin/games/${igdb.parentGame.gameId}`}
+                  className="text-primary hover:underline"
+                >
+                  {igdb.parentGame.name}
+                </Link>
+              ) : (
+                <>
+                  {igdb.parentGame.name} (IGDB {igdb.parentGame.igdbId}, not in
+                  catalog)
+                </>
+              )}
+            </span>
+          )}
+        </Meta>
+        <Meta label="Modes">
+          <ChipSet items={igdb.gameModes.map((m) => ADMIN_GAME_MODE_LABELS[m])} />
+        </Meta>
+        <Meta label="Time to beat">
+          {ttb ? (
+            <span className="tabular-nums">
+              {fmtHours(ttb.hastily)} rushed · {fmtHours(ttb.normally)} normal ·{' '}
+              {fmtHours(ttb.completely)} complete{' '}
+              <span className="text-muted-foreground">
+                ({ttb.count} reports
+                {!igdb.timeToBeatShown &&
+                  ', hidden on the public page (too few reports or live service)'}
+                )
+              </span>
+            </span>
+          ) : (
+            '—'
+          )}
+        </Meta>
+        <Meta label="Store ids">
+          <span className="font-mono text-xs">
+            PS {igdb.psConceptIds.join(', ') || '—'} · Xbox{' '}
+            {igdb.xboxProductIds.join(', ') || '—'}
+          </span>
+        </Meta>
+        <Meta label="Other stores">
+          <span className="flex flex-wrap gap-3">
+            {igdb.epicUrl && (
+              <a
+                href={igdb.epicUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                Epic
+              </a>
+            )}
+            {igdb.gogUrl && (
+              <a
+                href={igdb.gogUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                GOG
+              </a>
+            )}
+            {igdb.gamePassCloud && (
+              <Badge variant="secondary">Game Pass cloud</Badge>
+            )}
+            {!igdb.epicUrl && !igdb.gogUrl && !igdb.gamePassCloud && '—'}
+          </span>
+        </Meta>
+      </dl>
     </div>
   );
 }

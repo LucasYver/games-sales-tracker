@@ -8,6 +8,13 @@ import {
 } from '../games/game-companies';
 import type { IgdbSeriesFields } from '../games/game-series';
 import {
+  gameModesFromIgdb,
+  gameTypeFromIgdb,
+  type GameMode,
+  type GameType,
+  type TimeToBeat,
+} from '../games/igdb-facts';
+import {
   DISCOVERY_RELEASE_FLOOR,
   IGDB_CATALOG_MIN_RATING_COUNT,
   IGDB_DISCOVERY_MAX_PAGES,
@@ -62,6 +69,11 @@ export interface IgdbRefreshFields {
   firstReleaseDate: Date | null;
   /** Earliest launch per platform bucket, same rule as `platformReleaseDates`. */
   platformReleaseDates: Map<Platform, Date>;
+  /** Release kind (`game_type`), null when IGDB gives an unknown one. */
+  gameType: GameType | null;
+  /** The game a remake, remaster, port or expansion comes from. */
+  parentGame: { igdbId: number; name: string } | null;
+  gameModes: GameMode[];
 }
 
 /** A commercial edition of a game, as IGDB lists it under `version_parent`. */
@@ -79,11 +91,43 @@ export interface IgdbStoreIds {
   playstation: string[];
   /** Xbox Store product ids, upper case (`9NCJSXWZTP88`). */
   xbox: string[];
+  /** Epic Games Store page, or null. */
+  epicUrl: string | null;
+  /** GOG page, or null. */
+  gogUrl: string | null;
+  /** Listed in the Xbox Game Pass Ultimate cloud catalog. */
+  gamePassCloud: boolean;
 }
 
 // IGDB `external_game_sources` ids (checked live on 2026-11-07).
+const IGDB_SOURCE_GOG = 5;
 const IGDB_SOURCE_MICROSOFT = 11;
+const IGDB_SOURCE_EPIC = 26;
 const IGDB_SOURCE_PLAYSTATION_US = 36;
+const IGDB_SOURCE_GAME_PASS_CLOUD = 54;
+const IGDB_STORE_SOURCES = [
+  IGDB_SOURCE_GOG,
+  IGDB_SOURCE_MICROSOFT,
+  IGDB_SOURCE_EPIC,
+  IGDB_SOURCE_PLAYSTATION_US,
+  IGDB_SOURCE_GAME_PASS_CLOUD,
+];
+
+/** An http(s) store page URL, or null for anything else. */
+function storePageUrl(url: string | undefined, host: RegExp): string | null {
+  const trimmed = url?.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (!/^https?:$/.test(parsed.protocol) || !host.test(parsed.hostname)) {
+      return null;
+    }
+    parsed.protocol = 'https:';
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
 
 interface CachedToken {
   accessToken: string;
@@ -432,7 +476,8 @@ export class IgdbClient {
         'involved_companies.publisher, involved_companies.porting,',
         'involved_companies.supporting, first_release_date,',
         'release_dates.date, release_dates.platform.name,',
-        'release_dates.status.name;',
+        'release_dates.status.name, game_type, parent_game.name,',
+        'game_modes.slug;',
       ].join(' '),
       `limit ${ids.length};`,
     ].join(' ');
@@ -471,7 +516,11 @@ export class IgdbClient {
           platform?: Named;
           status?: Named;
         }[];
+        game_type?: number;
+        parent_game?: { id?: number; name?: string };
+        game_modes?: { slug?: string }[];
       }>) {
+        const parentName = raw.parent_game?.name?.trim();
         fields.set(raw.id, {
           series: {
             collections: names(raw.collections),
@@ -491,6 +540,14 @@ export class IgdbClient {
             ? new Date(raw.first_release_date * 1000)
             : null,
           platformReleaseDates: this.mapReleaseDates(raw.release_dates),
+          gameType: gameTypeFromIgdb(raw.game_type),
+          parentGame:
+            typeof raw.parent_game?.id === 'number' && parentName
+              ? { igdbId: raw.parent_game.id, name: parentName }
+              : null,
+          gameModes: gameModesFromIgdb(
+            (raw.game_modes ?? []).map((mode) => mode.slug),
+          ),
         });
       }
       return fields;
@@ -579,10 +636,12 @@ export class IgdbClient {
    * neither is absent from the map. Returns null when a request fails, so the
    * caller can tell a failure from "no store links".
    *
-   * Only two `external_game_source` values carry an id our store clients
-   * read: 36 (PlayStation Store US, uid = concept id) and 11 (Microsoft,
-   * uid = 12-character Store product id). Source 11 also holds Xbox 360
-   * Marketplace GUIDs, and 31 only those: both are skipped by the id check.
+   * Console ids come from 36 (PlayStation Store US, uid = concept id) and 11
+   * (Microsoft, uid = 12-character Store product id). Source 11 also holds
+   * Xbox 360 Marketplace GUIDs, and 31 only those: both are skipped by the id
+   * check. Epic (26) and GOG (5) give their store page URL; Game Pass cloud
+   * (54) is read as presence only. A game IGDB lists only as Epic, GOG or
+   * Game Pass is in the map too.
    */
   async fetchStoreIds(
     igdbIds: number[],
@@ -601,8 +660,8 @@ export class IgdbClient {
           'https://api.igdb.com/v4/external_games',
           [
             `where game = (${ids.join(',')})`,
-            `& external_game_source = (${IGDB_SOURCE_PLAYSTATION_US},${IGDB_SOURCE_MICROSOFT});`,
-            'fields game, external_game_source, uid;',
+            `& external_game_source = (${IGDB_STORE_SOURCES.join(',')});`,
+            'fields game, external_game_source, uid, url;',
             'sort id asc;',
             `limit ${pageSize};`,
             `offset ${offset};`,
@@ -620,12 +679,32 @@ export class IgdbClient {
           game?: number;
           external_game_source?: number;
           uid?: string;
+          url?: string;
         }>;
         for (const row of rows) {
           const uid = row.uid?.trim();
-          if (typeof row.game !== 'number' || !uid) continue;
-          const entry = stores.get(row.game) ?? { playstation: [], xbox: [] };
-          if (
+          if (typeof row.game !== 'number') continue;
+          const entry = stores.get(row.game) ?? {
+            playstation: [],
+            xbox: [],
+            epicUrl: null,
+            gogUrl: null,
+            gamePassCloud: false,
+          };
+          if (row.external_game_source === IGDB_SOURCE_GAME_PASS_CLOUD) {
+            entry.gamePassCloud = true;
+          } else if (row.external_game_source === IGDB_SOURCE_EPIC) {
+            // IGDB keeps an old `epicgames.com/store/p/...` URL next to the
+            // current `store.epicgames.com` one: the current one wins.
+            const url = storePageUrl(row.url, /(^|\.)epicgames\.com$/);
+            if (url && (!entry.epicUrl || /store\.epicgames\.com/.test(url))) {
+              entry.epicUrl = url;
+            }
+          } else if (row.external_game_source === IGDB_SOURCE_GOG) {
+            entry.gogUrl ??= storePageUrl(row.url, /(^|\.)gog\.com$/);
+          } else if (!uid) {
+            continue;
+          } else if (
             row.external_game_source === IGDB_SOURCE_PLAYSTATION_US &&
             /^\d+$/.test(uid) &&
             !entry.playstation.includes(uid)
@@ -650,6 +729,67 @@ export class IgdbClient {
         ? JSON.stringify(error.response?.data ?? error.message)
         : String(error);
       this.logger.error(`IGDB store links query failed: ${detail}`);
+      return null;
+    }
+  }
+
+  /**
+   * Player-reported completion times (`game_time_to_beats`, in seconds) for
+   * up to 500 games, keyed by IGDB id. IGDB keeps one row per game; a game
+   * with none is absent from the map. Returns null when the request fails.
+   */
+  async fetchTimeToBeat(
+    igdbIds: number[],
+  ): Promise<Map<number, TimeToBeat> | null> {
+    if (!this.isConfigured()) return null;
+    const ids = igdbIds.filter((id) => Number.isInteger(id)).slice(0, 500);
+    const times = new Map<number, TimeToBeat>();
+    if (ids.length === 0) return times;
+
+    const token = await this.getAccessToken();
+    const clientId = this.config.get<string>('IGDB_CLIENT_ID')!;
+    const seconds = (value: unknown) =>
+      typeof value === 'number' && value > 0 ? Math.round(value) : null;
+    try {
+      const { data } = await axios.post<unknown>(
+        'https://api.igdb.com/v4/game_time_to_beats',
+        [
+          `where game_id = (${ids.join(',')});`,
+          'fields game_id, hastily, normally, completely, count;',
+          `limit 500;`,
+        ].join(' '),
+        {
+          headers: {
+            'Client-ID': clientId,
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'text/plain',
+          },
+          timeout: 30000,
+        },
+      );
+      for (const row of data as Array<{
+        game_id?: number;
+        hastily?: number;
+        normally?: number;
+        completely?: number;
+        count?: number;
+      }>) {
+        if (typeof row.game_id !== 'number') continue;
+        const time: TimeToBeat = {
+          hastily: seconds(row.hastily),
+          normally: seconds(row.normally),
+          completely: seconds(row.completely),
+          count: typeof row.count === 'number' ? row.count : 0,
+        };
+        if (!time.hastily && !time.normally && !time.completely) continue;
+        times.set(row.game_id, time);
+      }
+      return times;
+    } catch (error) {
+      const detail = axios.isAxiosError(error)
+        ? JSON.stringify(error.response?.data ?? error.message)
+        : String(error);
+      this.logger.error(`IGDB time-to-beat query failed: ${detail}`);
       return null;
     }
   }

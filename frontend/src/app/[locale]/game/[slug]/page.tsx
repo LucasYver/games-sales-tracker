@@ -803,6 +803,71 @@ function TechSheet({
       game.platforms.map((p) => tPlatform(p)).join(', '),
     ]);
   if (game.genres.length > 0) rows.push([t('genres'), game.genres.join(', ')]);
+
+  // IGDB facts (backend `games/igdb-facts.ts`). A main game needs no type row.
+  const { gameType, parentGame, derivedGames, gameModes, timeToBeat } =
+    game.igdbFacts;
+  if (gameType && gameType !== 'MAIN_GAME') {
+    const typeLabel = t(`gameType.${gameType}`);
+    rows.push([
+      t('gameTypeLabel'),
+      parentGame
+        ? t.rich('derivedFrom', {
+            type: typeLabel,
+            name: parentGame.name,
+            game: (chunks) =>
+              parentGame.slug
+                ? hubLink(`/game/${parentGame.slug}`, chunks)
+                : chunks,
+          })
+        : typeLabel,
+    ]);
+  }
+  if (derivedGames.length > 0)
+    rows.push([
+      t('derivedGamesLabel'),
+      derivedGames.map((derived, i) => (
+        <span key={derived.slug}>
+          {i > 0 && ', '}
+          {hubLink(`/game/${derived.slug}`, derived.name)}
+          {derived.gameType && derived.gameType !== 'MAIN_GAME' && (
+            <span className="text-muted-foreground">
+              {' '}
+              ({t(`gameType.${derived.gameType}`)})
+            </span>
+          )}
+        </span>
+      )),
+    ]);
+  if (gameModes.length > 0)
+    rows.push([
+      t('gameModesLabel'),
+      gameModes.map((mode) => t(`gameMode.${mode}`)).join(', '),
+    ]);
+  if (timeToBeat) {
+    const hours = (seconds: number) => {
+      const h = seconds / 3600;
+      return format.number(h, { maximumFractionDigits: h < 10 ? 1 : 0 });
+    };
+    const parts = [
+      timeToBeat.hastily &&
+        t('ttbHastily', { hours: hours(timeToBeat.hastily) }),
+      timeToBeat.normally &&
+        t('ttbNormally', { hours: hours(timeToBeat.normally) }),
+      timeToBeat.completely &&
+        t('ttbCompletely', { hours: hours(timeToBeat.completely) }),
+    ].filter(Boolean);
+    rows.push([
+      t('timeToBeatLabel'),
+      <>
+        {parts.join(' · ')}
+        <span className="block text-[0.7rem] text-muted-foreground">
+          {t('ttbReports', { count: timeToBeat.count })}
+        </span>
+      </>,
+    ]);
+  }
+
   if (steam)
     rows.push([
       t('steamLabel'),
@@ -847,7 +912,7 @@ function TechSheet({
     WIKIPEDIA: 'Wikipedia',
   };
   const LINK_ORDER = Object.keys(LINK_LABELS);
-  const links = game.sources
+  const links: { key: string; url: string; label: string }[] = game.sources
     .filter((s) => s.url)
     .sort((a, b) => {
       const ia = LINK_ORDER.indexOf(a.source);
@@ -856,7 +921,21 @@ function TechSheet({
         (ia === -1 ? LINK_ORDER.length : ia) -
         (ib === -1 ? LINK_ORDER.length : ib)
       );
+    })
+    .map((s) => ({
+      key: s.id,
+      url: s.url as string,
+      label: LINK_LABELS[s.source] ?? s.source,
+    }));
+  // Store pages IGDB links that we do not track ourselves.
+  if (game.otherStores.epicUrl)
+    links.push({
+      key: 'epic',
+      url: game.otherStores.epicUrl,
+      label: 'Epic Games Store',
     });
+  if (game.otherStores.gogUrl)
+    links.push({ key: 'gog', url: game.otherStores.gogUrl, label: 'GOG' });
 
   return (
     <aside className="border-b border-border px-4 py-5 lg:col-start-1 lg:row-start-1 lg:border-r lg:border-b-0">
@@ -878,15 +957,15 @@ function TechSheet({
 
       {links.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 border-t border-border-soft pt-3 font-mono text-[0.7rem]">
-          {links.map((s) => (
+          {links.map((link) => (
             <a
-              key={s.id}
-              href={s.url ?? '#'}
+              key={link.key}
+              href={link.url}
               rel="nofollow noopener"
               target="_blank"
               className="text-source-media hover:underline"
             >
-              {LINK_LABELS[s.source] ?? s.source}
+              {link.label}
             </a>
           ))}
         </div>

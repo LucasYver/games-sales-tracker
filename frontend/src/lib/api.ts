@@ -187,6 +187,55 @@ export interface GameDetail {
   blog: { slugByLocale: Partial<Record<string, string>> } | null;
   /** Other editions IGDB lists; the sales on the page cover them all. */
   editions: GameEdition[];
+  igdbFacts: IgdbFacts;
+  /** Store pages IGDB links beyond the ones in `sources`. */
+  otherStores: { epicUrl: string | null; gogUrl: string | null };
+}
+
+export type GameType =
+  | 'MAIN_GAME'
+  | 'DLC'
+  | 'EXPANSION'
+  | 'BUNDLE'
+  | 'STANDALONE_EXPANSION'
+  | 'MOD'
+  | 'EPISODE'
+  | 'SEASON'
+  | 'REMAKE'
+  | 'REMASTER'
+  | 'EXPANDED_GAME'
+  | 'PORT'
+  | 'FORK'
+  | 'PACK'
+  | 'UPDATE';
+
+export type GameMode =
+  | 'SINGLE_PLAYER'
+  | 'MULTIPLAYER'
+  | 'CO_OP'
+  | 'SPLIT_SCREEN'
+  | 'MMO'
+  | 'BATTLE_ROYALE';
+
+/** Player-reported completion times from IGDB, in seconds. */
+export interface TimeToBeat {
+  hastily: number | null;
+  normally: number | null;
+  completely: number | null;
+  /** Reports behind the figures. */
+  count: number;
+}
+
+/** What IGDB says about the game (see backend `games/igdb-facts.ts`). */
+export interface IgdbFacts {
+  gameType: GameType | null;
+  /** What a remake, remaster, port or expansion comes from. */
+  parentGame: { name: string; slug: string | null } | null;
+  /** Catalog games that come from this one. */
+  derivedGames: { name: string; slug: string; gameType: GameType | null }[];
+  gameModes: GameMode[];
+  /** Null when too few players reported a time. */
+  timeToBeat: TimeToBeat | null;
 }
 
 export interface GameEdition {
@@ -416,6 +465,17 @@ export async function getGame(
         : 'steam',
     blog: game.blog ?? null,
     editions: game.editions ?? [],
+    igdbFacts: {
+      gameType: game.igdbFacts?.gameType ?? null,
+      parentGame: game.igdbFacts?.parentGame ?? null,
+      derivedGames: game.igdbFacts?.derivedGames ?? [],
+      gameModes: game.igdbFacts?.gameModes ?? [],
+      timeToBeat: game.igdbFacts?.timeToBeat ?? null,
+    },
+    otherStores: {
+      epicUrl: game.otherStores?.epicUrl ?? null,
+      gogUrl: game.otherStores?.gogUrl ?? null,
+    },
   };
 }
 
