@@ -5,14 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import {
-  Between,
-  In,
-  IsNull,
-  MoreThan,
-  Not,
-  Repository,
-} from 'typeorm';
+import { Between, In, IsNull, MoreThan, Not, Repository } from 'typeorm';
 import {
   AchievementSnapshot,
   CatalogTier,
@@ -32,6 +25,7 @@ import { EstimationService } from '../estimation/estimation.service';
 import { GamesService } from '../games/games.service';
 import { deriveFranchise, deriveLiveService } from '../games/game-features';
 import { keepManualFields } from '../games/manual-fields';
+import { resolveCompanies } from '../games/game-companies';
 import { slugify } from '../common/slug';
 import { STEAM_STORE_COUNTRIES } from './steam-store-countries';
 import { XBOX_STORE_COUNTRIES } from './xbox-store-countries';
@@ -545,7 +539,9 @@ export class IngestionService {
     try {
       await this.scrapeStoreRatings(game.id, game.name, game.platforms);
     } catch (error) {
-      this.logger.warn(`Store ratings scrape failed for "${game.name}": ${error}`);
+      this.logger.warn(
+        `Store ratings scrape failed for "${game.name}": ${error}`,
+      );
     }
     await this.gamesService.rebuildEstimateHistory(game.id);
   }
@@ -650,7 +646,9 @@ export class IngestionService {
     try {
       await this.scrapeStoreRatings(game.id, game.name, game.platforms);
     } catch (error) {
-      this.logger.warn(`Store ratings scrape failed for "${game.name}": ${error}`);
+      this.logger.warn(
+        `Store ratings scrape failed for "${game.name}": ${error}`,
+      );
     }
 
     await Promise.all([
@@ -1014,10 +1012,7 @@ export class IngestionService {
       );
     }
 
-    if (
-      platforms.includes(Platform.PLAYSTATION) &&
-      !playstationConceptUrl
-    ) {
+    if (platforms.includes(Platform.PLAYSTATION) && !playstationConceptUrl) {
       throw new Error(`PlayStation concept not found for "${name}"`);
     }
 
@@ -1394,9 +1389,7 @@ export class IngestionService {
             if (consecutiveBad >= CCU_CIRCUIT_AFTER) {
               circuitOpen = true;
             }
-            throw new Error(
-              `Steam CCU unavailable for appId ${appId}`,
-            );
+            throw new Error(`Steam CCU unavailable for appId ${appId}`);
           });
         } catch (error) {
           this.logger.warn(`[ccu] poll failed for game ${gameId}: ${error}`);
@@ -1509,7 +1502,11 @@ export class IngestionService {
 
       let countriesAttempted = 0;
       let ranOutOfBudget = false;
-      for (let c = 0; c < STEAM_STORE_COUNTRIES.length; c += COUNTRY_CONCURRENCY) {
+      for (
+        let c = 0;
+        c < STEAM_STORE_COUNTRIES.length;
+        c += COUNTRY_CONCURRENCY
+      ) {
         if (Date.now() - startedAt >= RUN_BUDGET_MS) {
           ranOutOfBudget = true;
           break;
@@ -1557,9 +1554,7 @@ export class IngestionService {
             return 'ok' as const;
           });
         } catch (error) {
-          this.logger.warn(
-            `[price] failed to stamp game ${game.id}: ${error}`,
-          );
+          this.logger.warn(`[price] failed to stamp game ${game.id}: ${error}`);
         }
       }
       processedGames += chunk.length;
@@ -1729,9 +1724,7 @@ export class IngestionService {
       }
 
       const chunk = eligibleGames.slice(i, i + APP_BATCH);
-      const productIds = chunk.map(
-        (game) => productIdByGameId.get(game.id)!,
-      );
+      const productIds = chunk.map((game) => productIdByGameId.get(game.id)!);
       const gameIdByProductId = new Map(
         chunk.map((game) => [productIdByGameId.get(game.id)!, game.id]),
       );
@@ -1779,10 +1772,7 @@ export class IngestionService {
         }
       }
 
-      if (
-        ranOutOfBudget &&
-        countriesAttempted < XBOX_STORE_COUNTRIES.length
-      ) {
+      if (ranOutOfBudget && countriesAttempted < XBOX_STORE_COUNTRIES.length) {
         this.logger.log(
           `[xbox-price] run budget reached mid-chunk after ${countriesAttempted}/` +
             `${XBOX_STORE_COUNTRIES.length} countries; chunk not stamped.`,
@@ -1950,9 +1940,7 @@ export class IngestionService {
       }
 
       const chunk = eligibleGames.slice(i, i + GAME_BATCH);
-      const conceptIds = chunk.map(
-        (game) => conceptIdByGameId.get(game.id)!,
-      );
+      const conceptIds = chunk.map((game) => conceptIdByGameId.get(game.id)!);
       const gameIdByConceptId = new Map(
         chunk.map((game) => [conceptIdByGameId.get(game.id)!, game.id]),
       );
@@ -2220,8 +2208,7 @@ export class IngestionService {
     // carries the full cumulative total, but only emit snapshots from release
     // onward to avoid polluting the week-1 lifecycle window. Stop before
     // HISTORY_BACKFILL_END_EXCLUSIVE so cron-era rows stay intact.
-    const historyEndExclusive =
-      IngestionService.HISTORY_BACKFILL_END_EXCLUSIVE;
+    const historyEndExclusive = IngestionService.HISTORY_BACKFILL_END_EXCLUSIVE;
     let cumulativePositive = 0;
     let cumulativeNegative = 0;
     let skippedPreRelease = 0;
@@ -2375,8 +2362,7 @@ export class IngestionService {
         ? hist.buckets
         : this.aggregateBucketsToMonthly(hist.buckets);
 
-    const historyEndExclusive =
-      IngestionService.HISTORY_BACKFILL_END_EXCLUSIVE;
+    const historyEndExclusive = IngestionService.HISTORY_BACKFILL_END_EXCLUSIVE;
     let cumulativePositive = 0;
     let cumulativeNegative = 0;
     let skippedPreRelease = 0;
@@ -2562,10 +2548,9 @@ export class IngestionService {
       .select(`DISTINCT (s."capturedAt" AT TIME ZONE 'UTC')::date`, 'day')
       .where('s."gameId" = :gameId', { gameId })
       .andWhere('s.metric = :metric', { metric: SignalMetric.STEAM_REVIEWS })
-      .andWhere(
-        `(s."capturedAt" AT TIME ZONE 'UTC')::date IN (:...days)`,
-        { days: targetDays },
-      )
+      .andWhere(`(s."capturedAt" AT TIME ZONE 'UTC')::date IN (:...days)`, {
+        days: targetDays,
+      })
       .getRawMany<{ day: string | Date }>();
 
     const existingDays = new Set(
@@ -2700,8 +2685,7 @@ export class IngestionService {
     const releaseMonthStart = game.releaseDate
       ? `${game.releaseDate.toISOString().slice(0, 7)}-01`
       : null;
-    const historyEndExclusive =
-      IngestionService.HISTORY_BACKFILL_END_EXCLUSIVE;
+    const historyEndExclusive = IngestionService.HISTORY_BACKFILL_END_EXCLUSIVE;
 
     const usable = months.filter(
       (m) =>
@@ -4335,8 +4319,7 @@ export class IngestionService {
           existing.releaseDate = g.releaseDate;
           existing.coverUrl = g.coverUrl;
           if (g.platforms.length > 0) existing.platforms = g.platforms;
-          if (g.developer) existing.developer = g.developer;
-          if (g.publisher) existing.publisher = g.publisher;
+          Object.assign(existing, resolveCompanies(existing, g.companies));
           if (g.genres.length > 0) existing.genres = g.genres;
         });
         const saved = await this.games.save(existing);
@@ -4569,15 +4552,12 @@ export class IngestionService {
         game.summary = details.shortDescription ?? game.summary;
         game.isFree = details.isFree;
         if (details.developers.length > 0) {
-          game.developer = details.developers[0];
-        } else if (igdb?.developer) {
-          game.developer = igdb.developer;
+          game.steamDeveloper = details.developers[0];
         }
         if (details.publishers.length > 0) {
-          game.publisher = details.publishers[0];
-        } else if (igdb?.publisher) {
-          game.publisher = igdb.publisher;
+          game.steamPublisher = details.publishers[0];
         }
+        Object.assign(game, resolveCompanies(game, igdb?.companies ?? null));
         if (details.genres.length > 0) game.genres = details.genres;
         else if (igdb?.genres.length) game.genres = igdb.genres;
         if (details.categories.length > 0) game.categories = details.categories;
@@ -4634,12 +4614,16 @@ export class IngestionService {
           existingByIgdb.summary =
             details.shortDescription ?? existingByIgdb.summary;
           existingByIgdb.isFree = details.isFree;
-          if (details.developers.length > 0 && !existingByIgdb.developer) {
-            existingByIgdb.developer = details.developers[0];
+          if (details.developers.length > 0) {
+            existingByIgdb.steamDeveloper = details.developers[0];
           }
-          if (details.publishers.length > 0 && !existingByIgdb.publisher) {
-            existingByIgdb.publisher = details.publishers[0];
+          if (details.publishers.length > 0) {
+            existingByIgdb.steamPublisher = details.publishers[0];
           }
+          Object.assign(
+            existingByIgdb,
+            resolveCompanies(existingByIgdb, igdb.companies),
+          );
           if (
             details.genres.length > 0 &&
             (!existingByIgdb.genres || existingByIgdb.genres.length === 0)
@@ -4668,6 +4652,19 @@ export class IngestionService {
 
     const platforms =
       igdb && igdb.platforms.length > 0 ? igdb.platforms : [Platform.PC];
+    const steamCompanies = {
+      steamDeveloper: details.developers[0] ?? null,
+      steamPublisher: details.publishers[0] ?? null,
+    };
+    const companies = resolveCompanies(
+      {
+        developer: null,
+        publisher: null,
+        manualFields: null,
+        ...steamCompanies,
+      },
+      igdb?.companies ?? null,
+    );
 
     const entity = this.games.create({
       igdbId: igdb?.igdbId ?? null,
@@ -4678,8 +4675,8 @@ export class IngestionService {
       summary: details.shortDescription,
       isFree: details.isFree,
       platforms,
-      developer: details.developers[0] ?? igdb?.developer ?? null,
-      publisher: details.publishers[0] ?? igdb?.publisher ?? null,
+      ...companies,
+      ...steamCompanies,
       genres:
         details.genres.length > 0
           ? details.genres

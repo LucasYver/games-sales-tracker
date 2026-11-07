@@ -57,15 +57,28 @@ export class Game {
   @Column({ type: 'enum', enum: Platform, array: true, default: '{}' })
   platforms: Platform[];
 
+  // The developer and publisher every reader uses: the public pages, the
+  // studio hubs, the matcher, the ML and the blog. An admin correction first,
+  // else IGDB's credit (porting and supporting studios left out, internal
+  // divisions folded), else the store's name below. Written by ingestion and
+  // the nightly IGDB refresh through `games/game-companies.ts`.
   @Column({ type: 'varchar', nullable: true })
   developer: string | null;
 
-  // Raw publisher name as reported by IGDB (or Steam fallback). Kept as a
-  // plain string so a game still has *some* publisher info even when not
-  // linked to a curated `Publisher` row. The FK `publisherId` is set only
-  // for the curated big-publisher list — see `PublishersService`.
+  // Linked to a curated `Publisher` row (`publisherId`) when it matches the
+  // big-publisher list — see `PublishersService`.
   @Column({ type: 'varchar', nullable: true })
   publisher: string | null;
+
+  // The names the Steam store gives (empty for a game without Steam). Raw
+  // input only: the fallback when IGDB credits nobody, IGDB's tie-break,
+  // and the redirect from a studio slug built on a store spelling. Nothing
+  // shows them or reads them for estimates.
+  @Column({ type: 'varchar', nullable: true })
+  steamDeveloper: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  steamPublisher: string | null;
 
   @Column({ type: 'uuid', nullable: true })
   publisherId: string | null;
@@ -133,17 +146,6 @@ export class Game {
   // IGDB's display name for `seriesSlug`.
   @Column({ type: 'varchar', nullable: true })
   seriesName: string | null;
-
-  // Developer and publisher IGDB credits, porting and supporting studios left
-  // out and internal divisions folded (see `games/game-companies.ts`). The
-  // public pages show them ahead of the Steam `developer` / `publisher`
-  // unless an admin corrected those by hand. Never read by the matcher or
-  // the ML.
-  @Column({ type: 'varchar', nullable: true })
-  igdbDeveloper: string | null;
-
-  @Column({ type: 'varchar', nullable: true })
-  igdbPublisher: string | null;
 
   // Last time the nightly refresh read this game's series, companies and
   // release dates from IGDB (`ingestion/igdb-refresh.service.ts`).

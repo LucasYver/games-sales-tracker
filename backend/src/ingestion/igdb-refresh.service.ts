@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Not, Repository } from 'typeorm';
 import { Game, GamePlatformReleaseDate, Platform } from '../entities';
-import { pickCompanies } from '../games/game-companies';
+import { resolveCompanies } from '../games/game-companies';
 import { pickSeriesName, seriesSlug } from '../games/game-series';
 import {
   igdbEarliestRelease,
@@ -18,13 +18,14 @@ const IGDB_BATCH = 500;
 type Grouping = {
   seriesSlug: string | null;
   seriesName: string | null;
-  igdbDeveloper: string | null;
-  igdbPublisher: string | null;
+  developer: string | null;
+  publisher: string | null;
 };
 
 /**
  * Keeps a game's IGDB-backed fields current after ingestion: how IGDB groups
- * it (series, developer, publisher, for the public pages) and, until it
+ * it (series for the franchise pages; developer and publisher, read
+ * everywhere, see `games/game-companies.ts`) and, until it
  * launches, its release dates (`releaseDate` and per platform, see
  * `games/release-date-refresh.ts`). Each nightly run takes the games checked
  * longest ago (never checked first), so the whole catalog is covered in a
@@ -64,11 +65,11 @@ export class IgdbRefreshService {
         developer: true,
         publisher: true,
         releaseDate: true,
+        steamDeveloper: true,
+        steamPublisher: true,
         manualFields: true,
         seriesSlug: true,
         seriesName: true,
-        igdbDeveloper: true,
-        igdbPublisher: true,
       },
       order: {
         igdbCheckedAt: { direction: 'ASC', nulls: 'FIRST' },
@@ -91,12 +92,13 @@ export class IgdbRefreshService {
         const igdb = fetched.get(game.igdbId as number);
         const name = igdb ? pickSeriesName(game.name, igdb.series) : null;
         const slug = name ? seriesSlug(name) || null : null;
-        const companies = pickCompanies(igdb?.companies ?? [], game);
+        // A game IGDB no longer returns credits nobody: the store names apply.
+        const companies = resolveCompanies(game, igdb?.companies ?? []);
         const grouping: Grouping = {
           seriesSlug: slug,
           seriesName: slug ? name : null,
-          igdbDeveloper: companies.developer,
-          igdbPublisher: companies.publisher,
+          developer: companies.developer,
+          publisher: companies.publisher,
         };
         if (
           (Object.keys(grouping) as (keyof Grouping)[]).some(
@@ -132,7 +134,7 @@ export class IgdbRefreshService {
       await this.games.query(
         `UPDATE game AS g
          SET "seriesSlug" = v.series_slug, "seriesName" = v.series_name,
-             "igdbDeveloper" = v.developer, "igdbPublisher" = v.publisher,
+             "developer" = v.developer, "publisher" = v.publisher,
              "releaseDate" = COALESCE(v.release_date, g."releaseDate"),
              "igdbCheckedAt" = now()
          FROM unnest($1::uuid[], $2::varchar[], $3::varchar[], $4::varchar[],
@@ -143,8 +145,8 @@ export class IgdbRefreshService {
           rows.map((r) => r.id),
           rows.map((r) => r.seriesSlug),
           rows.map((r) => r.seriesName),
-          rows.map((r) => r.igdbDeveloper),
-          rows.map((r) => r.igdbPublisher),
+          rows.map((r) => r.developer),
+          rows.map((r) => r.publisher),
           rows.map((r) => r.releaseDate),
         ],
       );

@@ -69,6 +69,7 @@ import { AddSteamReviewsIndex1788860000000 } from './1788860000000-AddSteamRevie
 import { AddGameManualFields1788870000000 } from './1788870000000-AddGameManualFields';
 import { AddBlogPostTopicKey1788880000000 } from './1788880000000-AddBlogPostTopicKey';
 import { AddGameIgdbGrouping1788890000000 } from './1788890000000-AddGameIgdbGrouping';
+import { UnifyGameCompanies1788900000000 } from './1788900000000-UnifyGameCompanies';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -149,4 +150,5 @@ export const migrations: MixedList<Function | string> = [
   AddGameManualFields1788870000000,
   AddBlogPostTopicKey1788880000000,
   AddGameIgdbGrouping1788890000000,
+  UnifyGameCompanies1788900000000,
 ];

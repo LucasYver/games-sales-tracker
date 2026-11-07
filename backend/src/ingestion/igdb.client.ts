@@ -2,7 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { Platform } from '../entities';
-import type { IgdbInvolvedCompany } from '../games/game-companies';
+import {
+  pickCompanies,
+  type IgdbInvolvedCompany,
+} from '../games/game-companies';
 import type { IgdbSeriesFields } from '../games/game-series';
 import {
   DISCOVERY_RELEASE_FLOOR,
@@ -29,8 +32,11 @@ export interface IgdbGame {
   coverUrl: string | null;
   steamAppId: number | null;
   platforms: Platform[];
+  // IGDB's credit (see `games/game-companies.ts`), without a store name to
+  // break ties. `companies` lets a caller that has one pick again.
   developer: string | null;
   publisher: string | null;
+  companies: IgdbInvolvedCompany[];
   genres: string[];
   totalRatingCount: number;
   // Earliest launch date per our Platform bucket, e.g. a PlayStation launch
@@ -79,6 +85,8 @@ const IGDB_FIELDS = [
   'involved_companies.company.name',
   'involved_companies.developer',
   'involved_companies.publisher',
+  'involved_companies.porting',
+  'involved_companies.supporting',
   'genres.name',
 ].join(', ');
 
@@ -513,6 +521,8 @@ export class IgdbClient {
         company?: { name?: string };
         developer?: boolean;
         publisher?: boolean;
+        porting?: boolean;
+        supporting?: boolean;
       }[];
       genres?: { name?: string }[];
     };
@@ -532,13 +542,19 @@ export class IgdbClient {
     const platforms = this.mapPlatforms(g.platforms);
     const platformReleaseDates = this.mapReleaseDates(g.release_dates);
 
-    const companies = g.involved_companies ?? [];
-    const developer =
-      companies.find((c) => c.developer && c.company?.name)?.company?.name ??
-      null;
-    const publisher =
-      companies.find((c) => c.publisher && c.company?.name)?.company?.name ??
-      null;
+    const companies: IgdbInvolvedCompany[] = (g.involved_companies ?? [])
+      .filter((c) => c.company?.name?.trim())
+      .map((c) => ({
+        name: (c.company?.name as string).trim(),
+        developer: Boolean(c.developer),
+        publisher: Boolean(c.publisher),
+        porting: Boolean(c.porting),
+        supporting: Boolean(c.supporting),
+      }));
+    const { developer, publisher } = pickCompanies(companies, {
+      developer: null,
+      publisher: null,
+    });
 
     const genres = (g.genres ?? [])
       .map((x) => x.name)
@@ -559,6 +575,7 @@ export class IgdbClient {
       platforms,
       developer,
       publisher,
+      companies,
       genres,
       totalRatingCount:
         typeof g.total_rating_count === 'number' ? g.total_rating_count : 0,

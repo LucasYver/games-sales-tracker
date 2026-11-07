@@ -51,11 +51,7 @@ import {
   lifetimeSalesPct,
 } from './sales-modeling.constants';
 import { ESTIMATE_MIN_RELEASE, estimateOutOfScope } from './estimate-scope';
-import {
-  publicDeveloper,
-  publicDeveloperSql,
-  publicPublisher,
-} from './game-companies';
+import { developerSql, shownPublisher } from './game-companies';
 import { platformReleaseDate } from './platform-release-date';
 import { normalizeSteamPriceCountry } from '../ingestion/steam-store-countries';
 import {
@@ -655,10 +651,6 @@ export class GamesService {
       select: {
         id: true,
         developer: true,
-        publisher: true,
-        igdbDeveloper: true,
-        igdbPublisher: true,
-        manualFields: true,
         franchiseSlug: true,
         seriesSlug: true,
         seriesName: true,
@@ -666,7 +658,7 @@ export class GamesService {
     });
     if (!game) throw new NotFoundException(`Game "${slug}" not found`);
     const franchiseSlug = game.seriesSlug ?? game.franchiseSlug;
-    const developer = publicDeveloper(game);
+    const developer = game.developer?.trim() || null;
     const slugOfStudio = developer ? studioSlug(developer) : '';
 
     const load = (where: FindOptionsWhere<Game>, take: number) =>
@@ -703,7 +695,7 @@ export class GamesService {
             {
               // One table in the query: the expression names its columns bare.
               developer: Raw(
-                () => `${studioSlugSql(publicDeveloperSql())} = :studio`,
+                () => `${studioSlugSql(developerSql())} = :studio`,
                 { studio: slugOfStudio },
               ),
             },
@@ -757,20 +749,20 @@ export class GamesService {
 
   /**
    * Every game of a studio, for its public hub page. A slug built from a
-   * Steam spelling the IGDB name replaced ("capcom-co-ltd") returns the hub
+   * store spelling the IGDB name replaced ("capcom-co-ltd") returns the hub
    * its games moved to, under that hub's slug, so the page can redirect.
    */
   async getStudioHub(slug: string) {
     if (!slug) throw new NotFoundException('Studio not found');
-    const hubWhere = `${studioSlugSql(publicDeveloperSql('g'))} = :slug`;
+    const hubWhere = `${studioSlugSql(developerSql('g'))} = :slug`;
     let games = await this.hubGames(hubWhere, slug);
     let hubSlug = slug;
     if (games.length < STUDIO_HUB_MIN_GAMES) {
-      const shown = studioSlugSql(publicDeveloperSql());
+      const shown = studioSlugSql(developerSql());
       const [moved] = await this.games.query<{ slug: string }[]>(
         `SELECT ${shown} AS slug
          FROM game
-         WHERE "deletedAt" IS NULL AND ${studioSlugSql('developer')} = $1
+         WHERE "deletedAt" IS NULL AND ${studioSlugSql('"steamDeveloper"')} = $1
            AND ${shown} <> $1
          GROUP BY 1
          ORDER BY COUNT(*) DESC, 1
@@ -788,7 +780,7 @@ export class GamesService {
     // Spellings can differ by case across games: show the most common one.
     const spellings = new Map<string, number>();
     for (const game of games) {
-      const name = publicDeveloper(game) as string;
+      const name = (game.developer as string).trim();
       spellings.set(name, (spellings.get(name) ?? 0) + 1);
     }
     const [name] = [...spellings.entries()].sort(
@@ -841,7 +833,7 @@ export class GamesService {
        FROM (
          SELECT developer, ${studioSlugSql('developer')} AS slug
          FROM (
-           SELECT ${publicDeveloperSql()} AS developer
+           SELECT ${developerSql()} AS developer
            FROM game
            WHERE "deletedAt" IS NULL
          ) shown
@@ -885,7 +877,7 @@ export class GamesService {
       this.games.query<{ slug: string }[]>(
         `SELECT ${studioSlugSql('developer')} AS slug
          FROM (
-           SELECT ${publicDeveloperSql()} AS developer
+           SELECT ${developerSql()} AS developer
            FROM game
            WHERE "deletedAt" IS NULL
          ) shown
@@ -924,8 +916,6 @@ export class GamesService {
         'g.genres',
         'g.isFree',
         'g.developer',
-        'g.igdbDeveloper',
-        'g.manualFields',
         'g.seriesName',
       ])
       .where(where, { slug })
@@ -1227,8 +1217,8 @@ export class GamesService {
       summary: game.summary,
       isFree: game.isFree,
       platforms: game.platforms,
-      developer: publicDeveloper(game),
-      publisher: publicPublisher(game),
+      developer: game.developer?.trim() || null,
+      publisher: shownPublisher(game),
       genres: game.genres ?? [],
       sources: game.sources,
       salesBreakdown: breakdown,

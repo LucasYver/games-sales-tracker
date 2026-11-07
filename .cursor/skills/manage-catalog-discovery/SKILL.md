@@ -33,10 +33,12 @@ IGDB lists candidates. The job then:
 After discovery, the same cron re-reads IGDB for the games checked longest
 ago (`IgdbRefreshService.refreshFromIgdb`, batches of 500 ids):
 
-- series (`seriesSlug`, see `games/game-series.ts`) and credited developer
-  and publisher (`igdbDeveloper` / `igdbPublisher`, see
-  `games/game-companies.ts`). These only feed the public pages; the Steam
-  columns stay untouched.
+- series (`seriesSlug`, see `games/game-series.ts`), for the public pages.
+- credited developer and publisher, written to `developer` / `publisher`
+  (`resolveCompanies` in `games/game-companies.ts`): the one value the public
+  pages, the matcher, the ML and the blog read. Order: an admin correction,
+  else IGDB's credit, else the Steam store name kept in `steamDeveloper` /
+  `steamPublisher`.
 - release dates, for games not launched yet or with no date only
   (`games/release-date-refresh.ts`): `releaseDate` and the per-platform rows.
   A released game and an admin-set date are never moved.

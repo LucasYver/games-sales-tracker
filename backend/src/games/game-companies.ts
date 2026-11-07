@@ -1,8 +1,8 @@
 /**
- * The developer and publisher shown on the public pages, from IGDB. Pure: the
- * nightly IGDB refresh stores the result in `game.igdbDeveloper` /
- * `igdbPublisher`. The Steam columns `developer` / `publisher` are left alone:
- * the matcher, the ML and the curated publisher link read them.
+ * A game's one developer and one publisher, in `game.developer` /
+ * `game.publisher`, read everywhere: public pages, studio hubs, matcher, ML,
+ * blog. Order: an admin correction, else IGDB's credit, else the store's name
+ * (`steamDeveloper` / `steamPublisher`).
  *
  * IGDB names each company once, without legal suffixes or spelling variants,
  * and tells the porting and supporting studios apart from the real developer.
@@ -85,36 +85,47 @@ export function pickCompanies(
 type CompanyColumns = {
   developer: string | null;
   publisher: string | null;
-  igdbDeveloper: string | null;
-  igdbPublisher: string | null;
+  steamDeveloper: string | null;
+  steamPublisher: string | null;
   manualFields: string[] | null;
 };
 
 /**
- * Developer shown on the public pages: an admin correction first, then IGDB,
- * then Steam. Same rule as `publicDeveloperSql`.
+ * The developer and publisher to store. `igdb` is IGDB's list of credited
+ * companies, or null when IGDB was not asked or did not answer: the current
+ * value then stays, and only an empty one takes the store's name. A column an
+ * admin corrected is never replaced.
  */
-export function publicDeveloper(game: CompanyColumns): string | null {
-  const steam = game.developer?.trim() || null;
-  if (game.manualFields?.includes('developer')) return steam;
-  return game.igdbDeveloper ?? steam;
+export function resolveCompanies(
+  game: CompanyColumns,
+  igdb: IgdbInvolvedCompany[] | null,
+): { developer: string | null; publisher: string | null } {
+  const steam = {
+    developer: game.steamDeveloper?.trim() || null,
+    publisher: game.steamPublisher?.trim() || null,
+  };
+  const picked = igdb ? pickCompanies(igdb, steam) : null;
+  const resolve = (role: 'developer' | 'publisher'): string | null => {
+    const current = game[role]?.trim() || null;
+    if (game.manualFields?.includes(role)) return current;
+    if (picked) return picked[role] ?? steam[role] ?? current;
+    return current ?? steam[role];
+  };
+  return { developer: resolve('developer'), publisher: resolve('publisher') };
 }
 
 /**
- * Publisher shown on the public pages, same order as the developer. With no
- * publisher anywhere, the game is taken as self-published.
+ * Publisher shown on the public pages. With no publisher anywhere, the game is
+ * taken as self-published.
  */
-export function publicPublisher(game: CompanyColumns): string | null {
-  const steam = game.publisher?.trim() || null;
-  const publisher = game.manualFields?.includes('publisher')
-    ? steam
-    : (game.igdbPublisher ?? steam);
-  return publisher ?? publicDeveloper(game);
+export function shownPublisher(game: {
+  developer: string | null;
+  publisher: string | null;
+}): string | null {
+  return game.publisher?.trim() || game.developer?.trim() || null;
 }
 
-/** `publicDeveloper` in SQL. `alias` is the table alias, if any. */
-export function publicDeveloperSql(alias?: string): string {
-  const column = (name: string) => (alias ? `${alias}."${name}"` : `"${name}"`);
-  const steam = `NULLIF(trim(${column('developer')}), '')`;
-  return `(CASE WHEN 'developer' = ANY(${column('manualFields')}) THEN ${steam} ELSE COALESCE(${column('igdbDeveloper')}, ${steam}) END)`;
+/** `game.developer` in SQL, empty as NULL. `alias` is the table alias, if any. */
+export function developerSql(alias?: string): string {
+  return `NULLIF(trim(${alias ? `${alias}."developer"` : '"developer"'}), '')`;
 }

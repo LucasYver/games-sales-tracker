@@ -142,11 +142,12 @@ weekly estimate rebuild and rank, slower playtime and achievement passes.
 The nightly discovery run also re-reads IGDB for part of the catalog, oldest
 check first. It moves the release dates of games not launched yet (a delay,
 an early launch) or with no date; released games keep theirs. Public franchise pages group games by the IGDB series
-(`seriesSlug`), falling back to the title-derived `franchiseSlug`. Public
-studio pages and the game page show the IGDB developer and publisher
-(`igdbDeveloper` / `igdbPublisher`), unless an admin corrected the Steam
-value by hand. The matcher and the ML keep `franchiseSlug`, `developer` and
-`publisher` only.
+(`seriesSlug`), falling back to the title-derived `franchiseSlug`. A game has
+one developer and one publisher (`developer` / `publisher`), read by the
+public pages, the studio pages, the matcher, the ML and the blog: an admin
+correction, else IGDB's credit (written by ingestion and this nightly pass),
+else the Steam store name kept in `steamDeveloper` / `steamPublisher`. The
+matcher and the ML keep the title-derived `franchiseSlug`.
 Sunday `blog-draft` writes at most one draft — an update of a live article or
 ranking whose sourced figures changed first, else a new one — or mails a digest
 if one is already waiting. Daily `blog-news` writes at most one news item and

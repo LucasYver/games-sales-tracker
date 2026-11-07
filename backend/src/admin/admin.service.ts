@@ -174,6 +174,16 @@ export interface UpdateGameInput {
 }
 
 // Trimmed text, or null when the admin cleared it.
+/** The store's name for a company, the fallback until IGDB credits one. */
+function storeCompany(
+  game: Game,
+  role: 'developer' | 'publisher',
+): string | null {
+  const store =
+    role === 'developer' ? game.steamDeveloper : game.steamPublisher;
+  return store?.trim() || game[role];
+}
+
 function cleanText(value: string | null): string | null {
   const trimmed = value?.trim() ?? '';
   return trimmed === '' ? null : trimmed;
@@ -1463,8 +1473,9 @@ export class AdminService {
         // game first in line for the nightly refresh.
         game.seriesSlug = null;
         game.seriesName = null;
-        game.igdbDeveloper = null;
-        game.igdbPublisher = null;
+        for (const role of ['developer', 'publisher'] as const) {
+          if (!locked.has(role)) game[role] = storeCompany(game, role);
+        }
         game.igdbCheckedAt = null;
       }
     }
@@ -1517,6 +1528,18 @@ export class AdminService {
       if (value === undefined || value === game[field]) continue;
       game[field] = value;
       touched(field);
+    }
+
+    // A company handed back to the crons takes the store name until the
+    // nightly refresh, which comes first for this game, reads IGDB's credit.
+    for (const role of ['developer', 'publisher'] as const) {
+      if (!input.unlock?.includes(role) || changed.has(role)) continue;
+      game[role] = storeCompany(game, role);
+      game.igdbCheckedAt = null;
+      if (role === 'publisher') {
+        game.publisherId = null;
+        publisherChanged = true;
+      }
     }
 
     // Live-service is derived from name + categories unless locked.
