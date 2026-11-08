@@ -132,6 +132,11 @@ export interface AdminDashboardOverview {
     weekStart: string;
     bySource: Record<SalesSource, number>;
   }>;
+  /** Last 30 days, oldest first; `day` is `YYYY-MM-DD` (UTC). */
+  dailyMilestones: Array<{
+    day: string;
+    bySource: Record<SalesSource, number>;
+  }>;
   coreCoverageByYear: Array<{
     label: string;
     games: number;

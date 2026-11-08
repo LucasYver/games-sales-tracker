@@ -10,6 +10,7 @@ import {
 import { ESTIMATE_MIN_RELEASE } from '../games/estimate-scope';
 
 const WEEKS_SHOWN = 12;
+const DAYS_SHOWN = 30;
 const YEARS_SHOWN = 5;
 const GENRE_MIN_COMPARISONS = 15;
 const GENRES_SHOWN = 8;
@@ -55,6 +56,11 @@ export interface AdminDashboardOverview {
   /** Oldest week first. `weekStart` is a Monday (UTC). */
   weeklyMilestones: Array<{
     weekStart: string;
+    bySource: Record<SalesSource, number>;
+  }>;
+  /** Oldest day first, today (UTC) last. `day` is `YYYY-MM-DD`. */
+  dailyMilestones: Array<{
+    day: string;
     bySource: Record<SalesSource, number>;
   }>;
   /** Released, paid CORE games with at least one sales milestone. */
@@ -153,7 +159,7 @@ export class AdminDashboardService {
       milestones,
       bySource,
       estimated,
-      weekly,
+      daily,
       years,
       platforms,
     ] = await Promise.all([
@@ -207,9 +213,10 @@ export class AdminDashboardService {
              AND (g."releaseDate" IS NULL OR g."releaseDate" >= $1)`,
         [ESTIMATE_MIN_RELEASE],
       ),
+      // Per day over the whole weekly window; weeks are summed from it.
       // capturedAt is a UTC timestamp without time zone.
-      this.db.query<Array<{ week: string; source: SalesSource; c: string }>>(
-        `SELECT to_char(date_trunc('week', "capturedAt"), 'YYYY-MM-DD') AS week,
+      this.db.query<Array<{ day: string; source: SalesSource; c: string }>>(
+        `SELECT to_char("capturedAt", 'YYYY-MM-DD') AS day,
                   source, COUNT(*) AS c
            FROM milestone
            WHERE "rejectedAt" IS NULL AND "capturedAt" >= $1
@@ -263,9 +270,28 @@ export class AdminDashboardService {
     const weekIndex = new Map(
       weeks.map((w, i) => [w.weekStart.slice(0, 10), i]),
     );
-    for (const row of weekly) {
-      const i = weekIndex.get(row.week);
-      if (i !== undefined) weeks[i].bySource[row.source] += Number(row.c);
+    const today = new Date();
+    const days = Array.from({ length: DAYS_SHOWN }, (_, i) => {
+      const d = new Date(
+        Date.UTC(
+          today.getUTCFullYear(),
+          today.getUTCMonth(),
+          today.getUTCDate() - (DAYS_SHOWN - 1 - i),
+        ),
+      );
+      return { day: d.toISOString().slice(0, 10), bySource: emptyBySource() };
+    });
+    const dayIndex = new Map(days.map((d, i) => [d.day, i]));
+    for (const row of daily) {
+      const count = Number(row.c);
+      const week = weekIndex.get(
+        weekStartUtc(new Date(`${row.day}T00:00:00Z`))
+          .toISOString()
+          .slice(0, 10),
+      );
+      if (week !== undefined) weeks[week].bySource[row.source] += count;
+      const day = dayIndex.get(row.day);
+      if (day !== undefined) days[day].bySource[row.source] += count;
     }
 
     const currentYear = new Date().getUTCFullYear();
@@ -302,6 +328,7 @@ export class AdminDashboardService {
         bySource: sourceTotals,
       },
       weeklyMilestones: weeks,
+      dailyMilestones: days,
       coreCoverageByYear: [...yearBuckets, earlier],
       platformCoverage: COVERAGE_PLATFORMS.map((platform) => ({
         platform,

@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { compactNumber } from './_components/format';
-import { WeeklyMilestonesChart } from './_components/WeeklyMilestonesChart';
+import { MilestonesAddedChart } from './_components/MilestonesAddedChart';
 import { RatioHistogramChart } from './_components/RatioHistogramChart';
 import {
   SOURCE_GROUPS,
@@ -358,10 +358,13 @@ export default async function AdminDashboard() {
         <h2 className="text-lg font-semibold tracking-tight">Data</h2>
         <div className="grid gap-4 lg:grid-cols-2">
           <SectionCard
-            title="Milestones added per week"
-            description="Last 12 weeks, by date added. Bulk imports show up as spikes."
+            title="Milestones added"
+            description="By date added: last 30 days or last 12 weeks. Bulk imports show up as spikes."
           >
-            <WeeklyMilestonesChart weeks={overview.weeklyMilestones} />
+            <MilestonesAddedChart
+              days={overview.dailyMilestones}
+              weeks={overview.weeklyMilestones}
+            />
           </SectionCard>
           <SectionCard
             title="CORE games with a sales figure"
