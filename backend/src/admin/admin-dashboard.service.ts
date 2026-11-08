@@ -100,6 +100,15 @@ export interface AdminDashboardQuality {
     estimatedUnits: number;
     ratio: number;
     agreement: Agreement;
+    declaredSource: SalesSource;
+    declaredAt: string | null;
+    estimateLow: number;
+    estimateHigh: number;
+    estimateMethod: string;
+    /** `GamesService.classifyAgreement`'s verdict, frozen with the snapshot. */
+    detail: string;
+    /** Likely reasons for the gap, from the facts above (`gapCauses`). */
+    causes: string[];
   }>;
 }
 
@@ -134,6 +143,106 @@ function weekStartUtc(date: Date): Date {
   const daysSinceMonday = (d.getUTCDay() + 6) % 7;
   d.setUTCDate(d.getUTCDate() - daysSinceMonday);
   return d;
+}
+
+const DERIVED_TYPES: Record<string, string> = {
+  DLC: 'DLC',
+  EXPANSION: 'Expansion',
+  STANDALONE_EXPANSION: 'Standalone expansion',
+  BUNDLE: 'Bundle',
+  PACK: 'Pack',
+  EPISODE: 'Episode',
+  SEASON: 'Season',
+};
+const VERSION_TYPES: Record<string, string> = {
+  REMAKE: 'Remake',
+  REMASTER: 'Remaster',
+  PORT: 'Port',
+  EXPANDED_GAME: 'Expanded edition',
+};
+const DAY_MS = 24 * 3600 * 1000;
+const YEAR_MS = 365.25 * DAY_MS;
+// A figure declared within this many days of release counts launch sales only.
+const LAUNCH_FIGURE_DAYS = 90;
+const WIDE_RANGE_FACTOR = 5;
+
+interface GapFacts {
+  ratio: number;
+  platform: Platform;
+  declaredSource: SalesSource;
+  declaredAt: Date | null;
+  releaseDate: Date | null;
+  computedAt: Date;
+  estimateLow: number;
+  estimateHigh: number;
+  estimateMethod: string;
+  gameType: string | null;
+  parentName: string | null;
+}
+
+/**
+ * Likely reasons why an estimate and a declared figure disagree, read off the
+ * facts we hold. Each one is a lead to check on the game page, not a verdict.
+ */
+export function gapCauses(f: GapFacts): string[] {
+  const causes: string[] = [];
+  const over = f.ratio > 1;
+
+  if (f.declaredAt && f.releaseDate && f.declaredAt < f.releaseDate) {
+    causes.push(
+      'The figure was declared before the release date (early access or pre-orders), so most sales came after it.',
+    );
+  } else if (over && f.declaredAt) {
+    const daysAfterRelease = f.releaseDate
+      ? Math.round((f.declaredAt.getTime() - f.releaseDate.getTime()) / DAY_MS)
+      : null;
+    if (daysAfterRelease !== null && daysAfterRelease <= LAUNCH_FIGURE_DAYS) {
+      causes.push(
+        `The figure was declared ${daysAfterRelease} days after release: a launch figure, not lifetime sales.`,
+      );
+    }
+    const years = (f.computedAt.getTime() - f.declaredAt.getTime()) / YEAR_MS;
+    if (years >= 1) {
+      causes.push(
+        `The figure is ${years.toFixed(1)} years older than the estimate: sales kept growing since.`,
+      );
+    }
+  }
+
+  if (!over && f.gameType && DERIVED_TYPES[f.gameType]) {
+    causes.push(
+      `${DERIVED_TYPES[f.gameType]} of ${f.parentName ?? 'another game'}: the declared figure may count the base game.`,
+    );
+  }
+  if (!over && f.gameType && VERSION_TYPES[f.gameType]) {
+    causes.push(
+      `${VERSION_TYPES[f.gameType]}${f.parentName ? ` of ${f.parentName}` : ''}: the declared figure may add up every version.`,
+    );
+  }
+  if (!over && f.declaredSource !== SalesSource.OFFICIAL) {
+    causes.push(
+      'Press and Wikipedia figures sometimes count players, bundles or subscription players rather than copies sold.',
+    );
+  }
+  if (!over && f.platform === Platform.GLOBAL) {
+    causes.push(
+      'Console sales are not measured, only inferred from PC signals and genre priors, so a console-heavy game is often undershot.',
+    );
+  }
+  if (
+    f.estimateLow > 0 &&
+    f.estimateHigh / f.estimateLow >= WIDE_RANGE_FACTOR
+  ) {
+    causes.push(
+      `The estimate range is wide (high is ×${Math.round(f.estimateHigh / f.estimateLow)} the low): the signals disagree for this game.`,
+    );
+  }
+  if (f.estimateMethod === 'ml-ensemble') {
+    causes.push(
+      "The worldwide ML model gave this figure. It never sees the game's own declared figures, so it does not bend toward them.",
+    );
+  }
+  return causes;
 }
 
 // "Milestone" in these queries means a sales figure: not rejected and not an
@@ -353,10 +462,21 @@ export class AdminDashboardService {
         ratio: number;
         agreement: Agreement;
         declared: string;
+        declaredSource: SalesSource;
+        declaredAt: string | null;
+        estimateLow: string;
+        estimateHigh: string;
+        estimateMethod: string;
+        detail: string;
+        computedAt: Date;
+        releaseDate: Date | null;
+        gameType: string | null;
+        parentName: string | null;
       }>
     >(
       `WITH latest AS (
-         SELECT DISTINCT ON (s."gameId") s."gameId", s.reconciliation
+         SELECT DISTINCT ON (s."gameId")
+                s."gameId", s.reconciliation, s."computedAt"
          FROM estimate_snapshot s
          ORDER BY s."gameId", s."computedAt" DESC
        )
@@ -364,7 +484,15 @@ export class AdminDashboardService {
               e->>'platform' AS platform,
               (e->>'ratio')::float AS ratio,
               e->>'agreement' AS agreement,
-              (e->>'declaredUnits')::bigint AS declared
+              (e->>'declaredUnits')::bigint AS declared,
+              e->>'declaredSource' AS "declaredSource",
+              e->>'declaredAt' AS "declaredAt",
+              (e->>'estimateLow')::bigint AS "estimateLow",
+              (e->>'estimateHigh')::bigint AS "estimateHigh",
+              e->>'estimateMethod' AS "estimateMethod",
+              e->>'detail' AS detail,
+              l."computedAt", g."releaseDate", g."gameType",
+              g."igdbParentGameName" AS "parentName"
        FROM latest l
        CROSS JOIN LATERAL jsonb_array_elements(l.reconciliation) e
        JOIN game g ON g.id = l."gameId"
@@ -419,6 +547,25 @@ export class AdminDashboardService {
         estimatedUnits: Math.round(r.ratio * Number(r.declared)),
         ratio: round2(r.ratio),
         agreement: r.agreement,
+        declaredSource: r.declaredSource,
+        declaredAt: r.declaredAt,
+        estimateLow: Number(r.estimateLow),
+        estimateHigh: Number(r.estimateHigh),
+        estimateMethod: r.estimateMethod,
+        detail: r.detail,
+        causes: gapCauses({
+          ratio: r.ratio,
+          platform: r.platform,
+          declaredSource: r.declaredSource,
+          declaredAt: r.declaredAt ? new Date(r.declaredAt) : null,
+          releaseDate: r.releaseDate,
+          computedAt: r.computedAt,
+          estimateLow: Number(r.estimateLow),
+          estimateHigh: Number(r.estimateHigh),
+          estimateMethod: r.estimateMethod,
+          gameType: r.gameType,
+          parentName: r.parentName,
+        }),
       }));
 
     const medianFactor = median(factors);

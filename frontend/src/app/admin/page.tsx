@@ -1,9 +1,11 @@
+import { Fragment } from 'react';
 import Link from 'next/link';
 import {
   adminFetch,
   requireAdminSession,
   type AdminDashboardOverview,
   type AdminDashboardQuality,
+  type SalesSource,
 } from '@/lib/admin';
 import type { Platform } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -218,6 +220,55 @@ const AGREEMENT_LABELS: Record<
   conflict: 'Conflict',
 };
 
+const SOURCE_LABELS: Record<SalesSource, string> = {
+  OFFICIAL: 'official',
+  ANNOUNCEMENT: 'announcement',
+  MEDIA: 'media',
+  WIKIPEDIA: 'Wikipedia',
+  STEAM_LEAK: 'Steam leak',
+  PLAYSTATION_LEAK: 'PlayStation leak',
+};
+
+const METHOD_LABELS: Record<string, string> = {
+  'platform-sum': 'sum of per-platform estimates',
+  'ml-ensemble': 'worldwide ML model',
+};
+
+function formatMonth(iso: string | null): string {
+  if (!iso) return 'undated';
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+function GapExplanation({
+  row,
+}: {
+  row: AdminDashboardQuality['divergences'][number];
+}) {
+  return (
+    <div className="text-muted-foreground space-y-1.5 text-xs">
+      <p className="text-foreground">{row.detail}</p>
+      <p>
+        Declared {compactNumber(row.declaredUnits)} (
+        {SOURCE_LABELS[row.declaredSource] ?? row.declaredSource},{' '}
+        {formatMonth(row.declaredAt)}) · estimated{' '}
+        {compactNumber(row.estimateLow)}–{compactNumber(row.estimateHigh)} by
+        the {METHOD_LABELS[row.estimateMethod] ?? row.estimateMethod}
+      </p>
+      {row.causes.length > 0 && (
+        <ul className="list-disc space-y-0.5 pl-4">
+          {row.causes.map((cause) => (
+            <li key={cause}>{cause}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function Divergences({ rows }: { rows: AdminDashboardQuality['divergences'] }) {
   if (rows.length === 0) {
     return (
@@ -241,37 +292,44 @@ function Divergences({ rows }: { rows: AdminDashboardQuality['divergences'] }) {
         </TableHeader>
         <TableBody>
           {rows.map((r) => (
-            <TableRow key={`${r.gameId}-${r.platform}`}>
-              <TableCell>
-                <Link
-                  href={`/admin/games/${r.gameId}`}
-                  className="font-medium underline-offset-2 hover:underline"
-                >
-                  {r.name}
-                </Link>
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {PLATFORM_LABELS[r.platform] ?? r.platform}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {compactNumber(r.declaredUnits)}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {compactNumber(r.estimatedUnits)}
-              </TableCell>
-              <TableCell className="text-right font-medium tabular-nums">
-                {formatFactor(r.ratio)}
-              </TableCell>
-              <TableCell>
-                <Badge
-                  variant={
-                    r.agreement === 'conflict' ? 'destructive' : 'secondary'
-                  }
-                >
-                  {AGREEMENT_LABELS[r.agreement]}
-                </Badge>
-              </TableCell>
-            </TableRow>
+            <Fragment key={`${r.gameId}-${r.platform}`}>
+              <TableRow className="border-b-0">
+                <TableCell>
+                  <Link
+                    href={`/admin/games/${r.gameId}`}
+                    className="font-medium underline-offset-2 hover:underline"
+                  >
+                    {r.name}
+                  </Link>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {PLATFORM_LABELS[r.platform] ?? r.platform}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {compactNumber(r.declaredUnits)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {compactNumber(r.estimatedUnits)}
+                </TableCell>
+                <TableCell className="text-right font-medium tabular-nums">
+                  {formatFactor(r.ratio)}
+                </TableCell>
+                <TableCell>
+                  <Badge
+                    variant={
+                      r.agreement === 'conflict' ? 'destructive' : 'secondary'
+                    }
+                  >
+                    {AGREEMENT_LABELS[r.agreement]}
+                  </Badge>
+                </TableCell>
+              </TableRow>
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={6} className="pt-0 pb-4 whitespace-normal">
+                  <GapExplanation row={r} />
+                </TableCell>
+              </TableRow>
+            </Fragment>
           ))}
         </TableBody>
       </Table>
@@ -431,7 +489,7 @@ export default async function AdminDashboard() {
         </div>
         <SectionCard
           title="Largest gaps"
-          description={`${quality.agreement.conflict} games in conflict with their declared figure.`}
+          description={`${quality.agreement.conflict} games in conflict with their declared figure. Under each game: the verdict, the two figures compared, and likely causes to check on its page.`}
         >
           <Divergences rows={quality.divergences} />
         </SectionCard>

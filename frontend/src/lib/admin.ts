@@ -172,6 +172,15 @@ export interface AdminDashboardQuality {
     estimatedUnits: number;
     ratio: number;
     agreement: Agreement;
+    declaredSource: SalesSource;
+    declaredAt: string | null;
+    estimateLow: number;
+    estimateHigh: number;
+    estimateMethod: string;
+    /** The agreement verdict, frozen with the estimate snapshot. */
+    detail: string;
+    /** Likely reasons for the gap, worked out from the facts above. */
+    causes: string[];
   }>;
 }
 
