@@ -67,11 +67,6 @@ export class AdminController {
     return this.dashboard.overview();
   }
 
-  @Get('dashboard/quality')
-  dashboardQuality() {
-    return this.dashboard.quality();
-  }
-
   @Get('games')
   listGames(
     @Query('q') q?: string,

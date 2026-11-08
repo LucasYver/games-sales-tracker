@@ -58,7 +58,6 @@ export async function adminFetch<T>(
 // ---- Shared admin DTOs (mirror the backend AdminService types) -------------
 
 import type {
-  Agreement,
   ConfidenceLevel,
   GameMode,
   GameType,
@@ -146,41 +145,6 @@ export interface AdminDashboardOverview {
     platform: Platform;
     games: number;
     withMilestone: number;
-  }>;
-}
-
-export interface AdminDashboardQuality {
-  comparisons: number;
-  /** Median of max(ratio, 1/ratio). */
-  medianFactor: number | null;
-  /** Median of estimate / declared: above 1 the model overestimates. */
-  medianRatio: number | null;
-  withinFactor1_5: number;
-  agreement: Record<Agreement, number>;
-  histogram: Array<{ label: string; count: number }>;
-  byGenre: Array<{
-    genre: string;
-    comparisons: number;
-    medianFactor: number;
-    medianRatio: number;
-  }>;
-  divergences: Array<{
-    gameId: string;
-    name: string;
-    platform: Platform;
-    declaredUnits: number;
-    estimatedUnits: number;
-    ratio: number;
-    agreement: Agreement;
-    declaredSource: SalesSource;
-    declaredAt: string | null;
-    estimateLow: number;
-    estimateHigh: number;
-    estimateMethod: string;
-    /** The agreement verdict, frozen with the estimate snapshot. */
-    detail: string;
-    /** Likely reasons for the gap, worked out from the facts above. */
-    causes: string[];
   }>;
 }
 

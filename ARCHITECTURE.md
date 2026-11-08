@@ -171,8 +171,8 @@ an HttpOnly cookie (`X-Admin-Session`). Fail-closed when the secret is unset.
 Bootstrap the first user with `ADMIN_BOOTSTRAP_EMAIL` /
 `ADMIN_BOOTSTRAP_PASSWORD` or `npm run admin:create-user`. Account creation
 sends a Chart Room–styled welcome email via Resend when `RESEND_API_KEY` is
-set. Pages: dashboard (catalog growth, sales-figure coverage, estimate accuracy
-from `AdminDashboardService`), games, crons (progress + manual run), milestones, trusted
+set. Pages: dashboard (catalog growth and sales-figure coverage from
+`AdminDashboardService`), games, crons (progress + manual run), milestones, trusted
 sources, publishers, genres, reference profiles, ranks, blog. Draft-ready and leftover-draft digest
 mails reuse Resend, as does the daily alert sent while Steam reviews are not
 being collected (`steamReviewsHealth`, also a banner on the crons page). The

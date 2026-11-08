@@ -1,26 +1,13 @@
-import { Fragment } from 'react';
 import Link from 'next/link';
 import {
   adminFetch,
   requireAdminSession,
   type AdminDashboardOverview,
-  type AdminDashboardQuality,
-  type SalesSource,
 } from '@/lib/admin';
 import type { Platform } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { compactNumber } from './_components/format';
 import { MilestonesAddedChart } from './_components/MilestonesAddedChart';
-import { RatioHistogramChart } from './_components/RatioHistogramChart';
 import {
   SOURCE_GROUPS,
   groupBySource,
@@ -38,10 +25,6 @@ const PLATFORM_LABELS: Partial<Record<Platform, string>> = {
 
 function percent(part: number, total: number): number {
   return total > 0 ? Math.round((part / total) * 100) : 0;
-}
-
-function formatFactor(value: number | null): string {
-  return value === null ? '—' : `×${value.toFixed(2)}`;
 }
 
 function StatCard({
@@ -177,174 +160,9 @@ function SourceMix({
   );
 }
 
-function GenreGaps({ genres }: { genres: AdminDashboardQuality['byGenre'] }) {
-  if (genres.length === 0) {
-    return (
-      <p className="text-muted-foreground text-sm">
-        No genre has enough comparisons yet.
-      </p>
-    );
-  }
-  const maxFactor = Math.max(...genres.map((g) => g.medianFactor));
-  return (
-    <div className="space-y-3">
-      {genres.map((g) => (
-        <div key={g.genre} className="flex items-center gap-3 text-sm">
-          <span className="w-36 shrink-0 truncate" title={g.genre}>
-            {g.genre}
-          </span>
-          <div className="bg-muted h-2 flex-1 overflow-hidden rounded-full">
-            <div
-              className="bg-primary h-full rounded-full"
-              style={{ width: `${(g.medianFactor / maxFactor) * 100}%` }}
-            />
-          </div>
-          <span className="w-12 text-right tabular-nums">
-            {formatFactor(g.medianFactor)}
-          </span>
-          <span className="text-muted-foreground hidden w-28 text-right text-xs sm:inline">
-            {g.medianRatio >= 1 ? 'over' : 'under'} · {g.comparisons} games
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-const AGREEMENT_LABELS: Record<
-  AdminDashboardQuality['divergences'][number]['agreement'],
-  string
-> = {
-  strong: 'Strong',
-  weak: 'Weak',
-  conflict: 'Conflict',
-};
-
-const SOURCE_LABELS: Record<SalesSource, string> = {
-  OFFICIAL: 'official',
-  ANNOUNCEMENT: 'announcement',
-  MEDIA: 'media',
-  WIKIPEDIA: 'Wikipedia',
-  STEAM_LEAK: 'Steam leak',
-  PLAYSTATION_LEAK: 'PlayStation leak',
-};
-
-const METHOD_LABELS: Record<string, string> = {
-  'platform-sum': 'sum of per-platform estimates',
-  'ml-ensemble': 'worldwide ML model',
-};
-
-function formatMonth(iso: string | null): string {
-  if (!iso) return 'undated';
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
-}
-
-function GapExplanation({
-  row,
-}: {
-  row: AdminDashboardQuality['divergences'][number];
-}) {
-  return (
-    <div className="text-muted-foreground space-y-1.5 text-xs">
-      <p className="text-foreground">{row.detail}</p>
-      <p>
-        Declared {compactNumber(row.declaredUnits)} (
-        {SOURCE_LABELS[row.declaredSource] ?? row.declaredSource},{' '}
-        {formatMonth(row.declaredAt)}) · estimated{' '}
-        {compactNumber(row.estimateLow)}–{compactNumber(row.estimateHigh)} by
-        the {METHOD_LABELS[row.estimateMethod] ?? row.estimateMethod}
-      </p>
-      {row.causes.length > 0 && (
-        <ul className="list-disc space-y-0.5 pl-4">
-          {row.causes.map((cause) => (
-            <li key={cause}>{cause}</li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function Divergences({ rows }: { rows: AdminDashboardQuality['divergences'] }) {
-  if (rows.length === 0) {
-    return (
-      <p className="text-muted-foreground text-sm">
-        No game has both an estimate and a declared figure yet.
-      </p>
-    );
-  }
-  return (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Game</TableHead>
-            <TableHead>Platform</TableHead>
-            <TableHead className="text-right">Declared</TableHead>
-            <TableHead className="text-right">Estimated</TableHead>
-            <TableHead className="text-right">Estimate ÷ declared</TableHead>
-            <TableHead>Agreement</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((r) => (
-            <Fragment key={`${r.gameId}-${r.platform}`}>
-              <TableRow className="border-b-0">
-                <TableCell>
-                  <Link
-                    href={`/admin/games/${r.gameId}`}
-                    className="font-medium underline-offset-2 hover:underline"
-                  >
-                    {r.name}
-                  </Link>
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {PLATFORM_LABELS[r.platform] ?? r.platform}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {compactNumber(r.declaredUnits)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {compactNumber(r.estimatedUnits)}
-                </TableCell>
-                <TableCell className="text-right font-medium tabular-nums">
-                  {formatFactor(r.ratio)}
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant={
-                      r.agreement === 'conflict' ? 'destructive' : 'secondary'
-                    }
-                  >
-                    {AGREEMENT_LABELS[r.agreement]}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={6} className="pt-0 pb-4 whitespace-normal">
-                  <GapExplanation row={r} />
-                </TableCell>
-              </TableRow>
-            </Fragment>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
 export default async function AdminDashboard() {
   await requireAdminSession();
-  // Both endpoints answer in well under 200 ms, so the page waits for both
-  // rather than streaming the accuracy section in later.
-  const [overview, quality] = await Promise.all([
-    adminFetch<AdminDashboardOverview>('/dashboard'),
-    adminFetch<AdminDashboardQuality>('/dashboard/quality'),
-  ]);
+  const overview = await adminFetch<AdminDashboardOverview>('/dashboard');
   const { games, milestones } = overview;
   const platforms = overview.platformCoverage.filter((p) => p.games > 0);
 
@@ -353,8 +171,8 @@ export default async function AdminDashboard() {
       <header>
         <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground text-sm">
-          How much data the tracker holds and how close its estimates land. Cron
-          progress and manual runs are on the{' '}
+          How much data the tracker holds and how fast it grows. Cron progress
+          and manual runs are on the{' '}
           <Link href="/admin/crons" className="underline underline-offset-2">
             Crons
           </Link>{' '}
@@ -395,20 +213,13 @@ export default async function AdminDashboard() {
               text: `+${games.withSalesAddedLast7d} this week`,
               positive: games.withSalesAddedLast7d > 0,
             },
-            {
-              text: `${compactNumber(games.estimated)} games estimated (2017+)`,
-            },
+            { text: `${percent(games.withSales, games.total)}% of all games` },
           ]}
         />
         <StatCard
-          label="Median gap"
-          value={formatFactor(quality.medianFactor)}
-          lines={[
-            {
-              text: `${percent(quality.withinFactor1_5, quality.comparisons)}% within ×1.5`,
-            },
-            { text: `${quality.comparisons.toLocaleString()} games compared` },
-          ]}
+          label="Games estimated"
+          value={compactNumber(games.estimated)}
+          lines={[{ text: 'Released from 2017 on, or not dated yet' }]}
         />
       </section>
 
@@ -461,38 +272,6 @@ export default async function AdminDashboard() {
             <SourceMix bySource={milestones.bySource} />
           </SectionCard>
         </div>
-      </section>
-
-      <section className="flex flex-col gap-4">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">
-            Estimate accuracy
-          </h2>
-          <p className="text-muted-foreground text-sm">
-            Each game&apos;s latest estimate against the declared figure it was
-            checked with. Games released before 2017 are left out.
-          </p>
-        </div>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <SectionCard
-            title="Estimate ÷ declared"
-            description={`Strong ${quality.agreement.strong} · weak ${quality.agreement.weak} · conflict ${quality.agreement.conflict}`}
-          >
-            <RatioHistogramChart histogram={quality.histogram} />
-          </SectionCard>
-          <SectionCard
-            title="Median gap by genre"
-            description="Most compared genres. A game counts in each of its genres."
-          >
-            <GenreGaps genres={quality.byGenre} />
-          </SectionCard>
-        </div>
-        <SectionCard
-          title="Largest gaps"
-          description={`${quality.agreement.conflict} games in conflict with their declared figure. Under each game: the verdict, the two figures compared, and likely causes to check on its page.`}
-        >
-          <Divergences rows={quality.divergences} />
-        </SectionCard>
       </section>
     </div>
   );
