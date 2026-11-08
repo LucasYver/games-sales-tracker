@@ -233,15 +233,6 @@ function GameHeader({
             </span>
           ))}
         </div>
-        {game.editions.length > 0 && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            {t('editions', {
-              editions: game.editions
-                .map((e) => e.versionTitle ?? e.name)
-                .join(' · '),
-            })}
-          </p>
-        )}
         {game.summary && (
           <p className="mt-3 max-w-[80ch] text-xs leading-relaxed text-muted-foreground">
             {game.summary}
@@ -836,6 +827,21 @@ function TechSheet({
           )}
         </span>
       )),
+    ]);
+  // Commercial editions (backend `GameEdition`): the sales above cover them.
+  if (game.editions.length > 0)
+    rows.push([
+      t('editionsLabel'),
+      <>
+        {game.editions.map((edition) => (
+          <span key={edition.name} className="block">
+            {edition.versionTitle ?? edition.name}
+          </span>
+        ))}
+        <span className="block text-[0.7rem] text-muted-foreground">
+          {t('editionsNote')}
+        </span>
+      </>,
     ]);
   if (gameModes.length > 0)
     rows.push([

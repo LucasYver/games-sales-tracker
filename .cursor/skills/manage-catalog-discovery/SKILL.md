@@ -71,8 +71,8 @@ through `version_parent`. One game, one catalog entry:
   only when that game has no Steam app yet. Otherwise it is skipped.
 
 The nightly IGDB refresh (`IgdbRefreshService.syncEditions`, one request per
-500 games) lists each game's editions in `game_edition`. The game page shows
-them ("sales include every edition"), and `GET /games/:slug/redirect` sends the
+500 games) lists each game's editions in `game_edition`. The game page lists
+them in an "Editions" row of its tech sheet, noted as included in the sales, and `GET /games/:slug/redirect` sends the
 URL of a soft-deleted edition game to its base game, matched on the edition's
 IGDB id.
 
