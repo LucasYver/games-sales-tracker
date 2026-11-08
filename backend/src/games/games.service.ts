@@ -62,7 +62,10 @@ import {
 } from './igdb-facts';
 import { normalizeSteamPriceCountry } from '../ingestion/steam-store-countries';
 import {
+  COMPANY_HUBS,
+  type CompanyHub,
   FRANCHISE_HUB_MIN_GAMES,
+  PUBLISHER_HUB_MIN_GAMES,
   STUDIO_HUB_MIN_GAMES,
   franchiseName,
   franchiseSlugSql,
@@ -70,11 +73,12 @@ import {
   studioSlugSql,
 } from './hubs';
 
-// One row per live game linked to a studio: its studio's name and hub slug.
-const STUDIO_GAMES_SQL = `
-  SELECT d.name, ${studioSlugSql('d.name')} AS slug
+// One row per live game linked to a studio or a publisher: that company's
+// name and hub slug.
+const companyGamesSql = (hub: CompanyHub) => `
+  SELECT c.name, ${studioSlugSql('c.name')} AS slug
   FROM game g
-  JOIN developer d ON d.id = g."developerId"
+  JOIN ${hub.table} c ON c.id = g."${hub.idColumn}"
   WHERE g."deletedAt" IS NULL`;
 
 // The `trending` listing sort: games released in the window, with enough Steam
@@ -671,7 +675,8 @@ export class GamesService {
   /**
    * Other games of the same franchise and the same developer, for the links
    * on a game page. Newest first, so a list only changes when the catalog does.
-   * A game shown under its franchise is not repeated under its studio.
+   * A game shown under its franchise is not repeated under its studio. The
+   * publisher only gets its hub link.
    */
   async listRelated(slug: string) {
     const game = await this.games.findOne({
@@ -679,17 +684,21 @@ export class GamesService {
       select: {
         id: true,
         developerId: true,
+        publisherId: true,
         franchiseSlug: true,
         seriesSlug: true,
         seriesName: true,
         developerRecord: { id: true, name: true },
+        publisherRecord: { id: true, name: true },
       },
-      relations: { developerRecord: true },
+      relations: { developerRecord: true, publisherRecord: true },
     });
     if (!game) throw new NotFoundException(`Game "${slug}" not found`);
     const franchiseSlug = game.seriesSlug ?? game.franchiseSlug;
     const developer = game.developerRecord?.name ?? null;
     const slugOfStudio = developer ? studioSlug(developer) : '';
+    const publisher = game.publisherRecord?.name ?? null;
+    const slugOfPublisher = publisher ? studioSlug(publisher) : '';
 
     const load = (where: FindOptionsWhere<Game>, take: number) =>
       this.games.find({
@@ -708,7 +717,7 @@ export class GamesService {
         take,
       });
 
-    const [franchise, sameDeveloper] = await Promise.all<Game[]>([
+    const [franchise, sameDeveloper, publisherGames] = await Promise.all([
       franchiseSlug
         ? load(
             {
@@ -727,6 +736,11 @@ export class GamesService {
             RELATED_GAMES_LIMIT * 2,
           )
         : [],
+      // The publisher has no list on the page, only its hub link, so a count
+      // is enough. Counted on its own row, as the studio link is.
+      slugOfPublisher && game.publisherId
+        ? this.games.count({ where: { publisherId: game.publisherId } })
+        : 0,
     ]);
 
     const inFranchise = new Set(franchise.map((g) => g.id));
@@ -768,6 +782,11 @@ export class GamesService {
         slugOfStudio && sameDeveloper.length + 1 >= STUDIO_HUB_MIN_GAMES
           ? { slug: slugOfStudio, name: developer as string }
           : null,
+      // The count includes the game itself.
+      publisherHub:
+        slugOfPublisher && publisherGames >= PUBLISHER_HUB_MIN_GAMES
+          ? { slug: slugOfPublisher, name: publisher as string }
+          : null,
     };
   }
 
@@ -778,21 +797,32 @@ export class GamesService {
    * the hub its games moved to, under that hub's slug, so the page can
    * redirect.
    */
-  async getStudioHub(slug: string) {
-    if (!slug) throw new NotFoundException('Studio not found');
-    const hubWhere = `g."developerId" IN (
-      SELECT d.id FROM developer d WHERE ${studioSlugSql('d.name')} = :slug)`;
+  getStudioHub(slug: string) {
+    return this.getCompanyHub(COMPANY_HUBS.studio, slug);
+  }
+
+  /** Same as `getStudioHub`, for a publisher (its `publisher` rows). */
+  getPublisherHub(slug: string) {
+    return this.getCompanyHub(COMPANY_HUBS.publisher, slug);
+  }
+
+  private async getCompanyHub(hub: CompanyHub, slug: string) {
+    const notFound = () =>
+      new NotFoundException(`${hub.label} "${slug}" not found`);
+    if (!slug) throw notFound();
+    const shown = studioSlugSql('c.name');
+    const hubWhere = `g."${hub.idColumn}" IN (
+      SELECT c.id FROM ${hub.table} c WHERE ${shown} = :slug)`;
     let games = await this.hubGames(hubWhere, slug);
     let hubSlug = slug;
-    if (games.length < STUDIO_HUB_MIN_GAMES) {
-      const shown = studioSlugSql('d.name');
+    if (games.length < hub.minGames) {
       const [moved] = await this.games.query<{ slug: string }[]>(
         `SELECT ${shown} AS slug
          FROM game g
-         JOIN developer d ON d.id = g."developerId"
+         JOIN ${hub.table} c ON c.id = g."${hub.idColumn}"
          WHERE g."deletedAt" IS NULL
-           AND (${studioSlugSql('g."steamDeveloper"')} = $1
-                OR ${studioSlugSql('g.developer')} = $1)
+           AND (${studioSlugSql(`g."${hub.steamColumn}"`)} = $1
+                OR ${studioSlugSql(`g.${hub.nameColumn}`)} = $1)
            AND ${shown} <> $1
          GROUP BY 1
          ORDER BY COUNT(*) DESC, 1
@@ -804,17 +834,15 @@ export class GamesService {
         games = await this.hubGames(hubWhere, hubSlug);
       }
     }
-    if (games.length < STUDIO_HUB_MIN_GAMES) {
-      throw new NotFoundException(`Studio "${slug}" not found`);
-    }
+    if (games.length < hub.minGames) throw notFound();
     // Rows sharing a slug: the name of the one with the most games.
     const [{ name }] = await this.games.query<{ name: string }[]>(
-      `SELECT d.name
-       FROM developer d
-       JOIN game g ON g."developerId" = d.id AND g."deletedAt" IS NULL
-       WHERE ${studioSlugSql('d.name')} = $1
-       GROUP BY d.id
-       ORDER BY COUNT(*) DESC, d.name
+      `SELECT c.name
+       FROM ${hub.table} c
+       JOIN game g ON g."${hub.idColumn}" = c.id AND g."deletedAt" IS NULL
+       WHERE ${shown} = $1
+       GROUP BY c.id
+       ORDER BY COUNT(*) DESC, c.name
        LIMIT 1`,
       [hubSlug],
     );
@@ -857,17 +885,26 @@ export class GamesService {
   }
 
   /** Every studio with a hub page, for the public index. */
-  async listStudios() {
+  listStudios() {
+    return this.listCompanyHubs(COMPANY_HUBS.studio);
+  }
+
+  /** Every publisher with a hub page, for the public index. */
+  listPublishers() {
+    return this.listCompanyHubs(COMPANY_HUBS.publisher);
+  }
+
+  private async listCompanyHubs(hub: CompanyHub) {
     const rows = await this.games.query<
       { slug: string; name: string; games: string }[]
     >(
       `SELECT slug, MODE() WITHIN GROUP (ORDER BY name) AS name, COUNT(*) AS games
-       FROM (${STUDIO_GAMES_SQL}) studios
+       FROM (${companyGamesSql(hub)}) companies
        WHERE slug <> ''
        GROUP BY slug
        HAVING COUNT(*) >= $1
        ORDER BY LOWER(MODE() WITHIN GROUP (ORDER BY name)), slug`,
-      [STUDIO_HUB_MIN_GAMES],
+      [hub.minGames],
     );
     return rows.map((row) => ({ ...row, games: Number(row.games) }));
   }
@@ -896,17 +933,24 @@ export class GamesService {
   }
 
   /** Slugs of the hubs that exist, for the sitemap. */
-  async listHubs(): Promise<{ studios: string[]; franchises: string[] }> {
-    const [studios, franchises] = await Promise.all([
+  async listHubs(): Promise<{
+    studios: string[];
+    publishers: string[];
+    franchises: string[];
+  }> {
+    const companySlugs = (hub: CompanyHub) =>
       this.games.query<{ slug: string }[]>(
         `SELECT slug
-         FROM (${STUDIO_GAMES_SQL}) studios
+         FROM (${companyGamesSql(hub)}) companies
          WHERE slug <> ''
          GROUP BY 1
          HAVING COUNT(*) >= $1
          ORDER BY 1`,
-        [STUDIO_HUB_MIN_GAMES],
-      ),
+        [hub.minGames],
+      );
+    const [studios, publishers, franchises] = await Promise.all([
+      companySlugs(COMPANY_HUBS.studio),
+      companySlugs(COMPANY_HUBS.publisher),
       this.games.query<{ slug: string }[]>(
         `SELECT ${franchiseSlugSql()} AS slug
          FROM game
@@ -919,6 +963,7 @@ export class GamesService {
     ]);
     return {
       studios: studios.map((row) => row.slug),
+      publishers: publishers.map((row) => row.slug),
       franchises: franchises.map((row) => row.slug),
     };
   }

@@ -87,10 +87,12 @@ async function pagesSitemap(
   // Hubs change with the games they list, so no lastmod of their own.
   const hubPaths = [
     '/studios',
+    '/publishers',
     '/franchises',
     ...hubYears().map((year) => `/year/${year}`),
     ...hubs.franchises.map((slug) => `/franchise/${slug}`),
     ...hubs.studios.map((slug) => `/studio/${slug}`),
+    ...hubs.publishers.map((slug) => `/publisher/${slug}`),
   ];
   for (const path of hubPaths) {
     for (const locale of routing.locales) {

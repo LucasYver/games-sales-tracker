@@ -61,7 +61,7 @@ on `DATABASE_URL_DIRECT`, then `DATABASE_URL`.
 | `GamePlatformReleaseDate` | `game_platform_release_date` | Per-platform launch date used by estimation. |
 | `GameIngestionState` | `game_ingestion_state` | Per-pipeline attempt / success, so budgeted crons resume stalest-first. |
 | `GameRank` | `game_rank` | Home-grown review-velocity rank. |
-| `Publisher` | `publisher` | One row per publishing company a game names, created on first sight (`game.publisherId`): matcher publisher axis, blog rankings. |
+| `Publisher` | `publisher` | One row per publishing company a game names, created on first sight (`game.publisherId`): public publisher pages, matcher publisher axis, blog rankings. |
 | `Developer` | `developer` | One row per studio a game names, created on first sight (`game.developerId`): public studio pages. |
 | `Genre` | `genre` | IGDB genre dictionary. Not an estimation profile. |
 | `SignalSnapshot` | `signal_snapshot` | Dated public counts (reviews, CCU, ratings, followers, Twitch, leak, playtime). |
@@ -151,12 +151,13 @@ check first. It moves the release dates of games not launched yet (a delay,
 an early launch) or with no date; released games keep theirs. Public franchise pages group games by the IGDB series
 (`seriesSlug`), falling back to the title-derived `franchiseSlug`. A game has
 one developer and one publisher (`developer` / `publisher`), read by the
-public pages, the studio pages, the matcher, the ML and the blog: an admin
+public pages, the studio and publisher pages, the matcher, the ML and the blog: an admin
 correction, else IGDB's credit (written by ingestion and this nightly pass),
 else the Steam store name kept in `steamDeveloper` / `steamPublisher`. Each
 name is linked to its `publisher` / `developer` row (`publisherId` /
 `developerId`, `games/company-registry.ts`), created the first time a game
-names that company; studio pages group games by `developerId`. The matcher and
+names that company; studio pages group games by `developerId` and publisher
+pages by `publisherId`. The matcher and
 the ML keep the title-derived `franchiseSlug`.
 Sunday `blog-draft` writes at most one draft — an update of a live article or
 ranking whose sourced figures changed first, else a new one — or mails a digest

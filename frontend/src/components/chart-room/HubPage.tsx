@@ -144,7 +144,7 @@ function Stat({
   );
 }
 
-/** Body of a studio or franchise page: every game fits on one page. */
+/** Body of a studio, publisher or franchise page: every game fits on one page. */
 export function GameHubPage({
   locale,
   path,
@@ -156,14 +156,16 @@ export function GameHubPage({
   path: string;
   title: string;
   hub: GameHub;
-  kind: 'studio' | 'franchise';
+  kind: 'studio' | 'publisher' | 'franchise';
 }) {
   const t = useTranslations('hubs');
   const tNav = useTranslations('nav');
-  const parent =
-    kind === 'studio'
-      ? { path: '/studios', label: tNav('studios') }
-      : { path: '/franchises', label: tNav('franchises') };
+  const parents = {
+    studio: { path: '/studios', label: tNav('studios') },
+    publisher: { path: '/publishers', label: tNav('publishers') },
+    franchise: { path: '/franchises', label: tNav('franchises') },
+  };
+  const parent = parents[kind];
   const format = useFormatter();
   const compact = (units: number) =>
     format.number(units, { notation: 'compact', maximumFractionDigits: 1 });
@@ -253,7 +255,7 @@ export function GameHubPage({
   );
 }
 
-/** Index of the studios or franchises that have a page. */
+/** Index of the studios, publishers or franchises that have a page. */
 export function HubIndexPage({
   locale,
   path,

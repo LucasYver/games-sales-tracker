@@ -29,17 +29,22 @@ export async function fetchSitemapGames(): Promise<SitemapGame[]> {
 
 export async function fetchSitemapHubs(): Promise<{
   studios: string[];
+  publishers: string[];
   franchises: string[];
 }> {
   try {
     const res = await fetch(`${API_URL}/games/hubs`, {
       next: { revalidate: 3600 },
     });
-    if (res.ok) return await res.json();
+    if (res.ok) {
+      const hubs = await res.json();
+      // A backend from before the publisher pages answers without them.
+      return { publishers: [], ...hubs };
+    }
   } catch {
     // The sitemap keeps its other entries.
   }
-  return { studios: [], franchises: [] };
+  return { studios: [], publishers: [], franchises: [] };
 }
 
 /** Sitemap ids: 0 holds the home, blog and posts; 1..n hold the games. */

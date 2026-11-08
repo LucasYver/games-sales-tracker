@@ -361,9 +361,10 @@ export interface HubLink {
 export interface RelatedGames {
   franchise: RelatedGame[];
   studio: RelatedGame[];
-  /** Null when the franchise or studio is too small to have a hub page. */
+  /** Null when the franchise, studio or publisher is too small to have a hub page. */
   franchiseHub: HubLink | null;
   studioHub: HubLink | null;
+  publisherHub: HubLink | null;
 }
 
 export interface GameHub extends HubLink {
@@ -393,12 +394,20 @@ export function getStudios(): Promise<HubIndexItem[]> {
   return getHubIndex('studios');
 }
 
+export function getPublishers(): Promise<HubIndexItem[]> {
+  return getHubIndex('publishers');
+}
+
 export function getFranchises(): Promise<HubIndexItem[]> {
   return getHubIndex('franchises');
 }
 
 export function getStudioHub(slug: string): Promise<GameHub | null> {
   return getHub(`studios/${encodeURIComponent(slug)}`);
+}
+
+export function getPublisherHub(slug: string): Promise<GameHub | null> {
+  return getHub(`publishers/${encodeURIComponent(slug)}`);
 }
 
 export function getFranchiseHub(slug: string): Promise<GameHub | null> {
@@ -412,6 +421,7 @@ export async function getRelatedGames(slug: string): Promise<RelatedGames> {
     studio: [],
     franchiseHub: null,
     studioHub: null,
+    publisherHub: null,
   };
   try {
     const res = await fetch(

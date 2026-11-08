@@ -16,6 +16,12 @@ export function SiteFooter() {
           {tNav('studios')}
         </Link>
         <Link
+          href="/publishers"
+          className="text-muted-foreground hover:text-foreground"
+        >
+          {tNav('publishers')}
+        </Link>
+        <Link
           href="/franchises"
           className="text-muted-foreground hover:text-foreground"
         >

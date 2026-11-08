@@ -81,6 +81,11 @@ export class GamesController {
     return this.games.listStudios();
   }
 
+  @Get('publishers')
+  publishers() {
+    return this.games.listPublishers();
+  }
+
   @Get('franchises')
   franchises() {
     return this.games.listFranchises();
@@ -89,6 +94,11 @@ export class GamesController {
   @Get('studios/:slug')
   studio(@Param('slug') slug: string) {
     return this.games.getStudioHub(slug);
+  }
+
+  @Get('publishers/:slug')
+  publisher(@Param('slug') slug: string) {
+    return this.games.getPublisherHub(slug);
   }
 
   @Get('franchises/:slug')

@@ -1,15 +1,49 @@
 /**
- * Public hub pages (`/studio/:slug`, `/franchise/:slug`). A hub needs enough
- * games to be worth indexing: below these counts it does not exist, in the API,
- * in the sitemap and in the links from game pages.
+ * Public hub pages (`/studio/:slug`, `/publisher/:slug`, `/franchise/:slug`).
+ * A hub needs enough games to be worth indexing: below these counts it does
+ * not exist, in the API, in the sitemap and in the links from game pages.
  */
 export const STUDIO_HUB_MIN_GAMES = 4;
+export const PUBLISHER_HUB_MIN_GAMES = 4;
 export const FRANCHISE_HUB_MIN_GAMES = 3;
 
 /**
- * Studio slug in SQL. It has no table of its own, so the slug is derived from
- * the developer name. ASCII only and lowered last, so this and `studioSlug` agree
- * whatever the database locale does with accented capitals.
+ * A company hub: studios group games by their `developer` row, publishers by
+ * their `publisher` row. Same slugs, same redirects from an older spelling.
+ */
+export interface CompanyHub {
+  label: string;
+  table: 'developer' | 'publisher';
+  idColumn: 'developerId' | 'publisherId';
+  /** The name every reader uses, then the Steam store one: both feed redirects. */
+  nameColumn: 'developer' | 'publisher';
+  steamColumn: 'steamDeveloper' | 'steamPublisher';
+  minGames: number;
+}
+
+export const COMPANY_HUBS = {
+  studio: {
+    label: 'Studio',
+    table: 'developer',
+    idColumn: 'developerId',
+    nameColumn: 'developer',
+    steamColumn: 'steamDeveloper',
+    minGames: STUDIO_HUB_MIN_GAMES,
+  },
+  publisher: {
+    label: 'Publisher',
+    table: 'publisher',
+    idColumn: 'publisherId',
+    nameColumn: 'publisher',
+    steamColumn: 'steamPublisher',
+    minGames: PUBLISHER_HUB_MIN_GAMES,
+  },
+} as const satisfies Record<string, CompanyHub>;
+
+/**
+ * Studio or publisher slug in SQL. Neither has a slug column, so the slug is
+ * derived from the company name. ASCII only and lowered last, so this and
+ * `studioSlug` agree whatever the database locale does with accented capitals.
  */
 export function studioSlugSql(column: string): string {
   return `trim(both '-' from lower(regexp_replace(${column}, '[^a-zA-Z0-9]+', '-', 'g')))`;

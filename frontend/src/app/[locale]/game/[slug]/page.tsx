@@ -772,10 +772,8 @@ function TechSheet({
   if (game.publisher)
     rows.push([
       t('publisher'),
-      // Publishers have no page: only a self-published game can link here.
-      studioHref &&
-      game.publisher.toLowerCase() === game.developer?.toLowerCase()
-        ? hubLink(studioHref, game.publisher)
+      related.publisherHub
+        ? hubLink(`/publisher/${related.publisherHub.slug}`, game.publisher)
         : game.publisher,
     ]);
   if (related.franchiseHub)
@@ -1205,7 +1203,7 @@ function GamePageContent({
     game.twitchViewersHistory.length > 1 ? game.twitchViewersHistory : null;
 
   const gameUrl = `${SITE_URL}/${locale}/game/${game.slug}`;
-  // The studio when it has a page, else the franchise.
+  // The studio when it has a page, else the franchise, else the publisher.
   const parentCrumb = related.studioHub
     ? {
         href: `/studio/${related.studioHub.slug}`,
@@ -1216,7 +1214,12 @@ function GamePageContent({
           href: `/franchise/${related.franchiseHub.slug}`,
           name: related.franchiseHub.name,
         }
-      : null;
+      : related.publisherHub
+        ? {
+            href: `/publisher/${related.publisherHub.slug}`,
+            name: related.publisherHub.name,
+          }
+        : null;
   const jsonLd = {
     '@context': 'https://schema.org',
     '@graph': [
