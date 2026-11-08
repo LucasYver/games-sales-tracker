@@ -97,6 +97,30 @@ const TRENDING_GAIN_DAYS = 14;
 // Per list on a game page: enough to link around, short enough to stay read.
 const RELATED_GAMES_LIMIT = 6;
 
+// A game's Steam review count (MAX of its STEAM_REVIEWS snapshots), read as
+// one index-only probe on IDX_signal_snapshot_steam_reviews. The metric stays
+// a literal so Postgres can match the partial index predicate.
+const steamReviewsSql = (gameId: string) => `COALESCE((
+  SELECT MAX(rs.value) FROM signal_snapshot rs
+  WHERE rs."gameId" = ${gameId} AND rs.metric = 'STEAM_REVIEWS'
+), 0)`;
+
+// The "Reviews" figure of every listing: Steam reviews plus PlayStation, Xbox
+// and Switch store ratings, each platform's latest count (its MAX). Console
+// rows read IDX_signal_snapshot_store_ratings; synthetic PS points are not
+// real ratings and stay out, as on the game page.
+const totalReviewsSql = (gameId: string) =>
+  [steamReviewsSql(gameId)]
+    .concat(
+      ['PS_RATINGS', 'XBOX_RATINGS', 'SWITCH_RATINGS'].map(
+        (metric) => `COALESCE((
+  SELECT MAX(rs.value) FROM signal_snapshot rs
+  WHERE rs."gameId" = ${gameId} AND rs.metric = '${metric}' AND NOT rs.synthetic
+), 0)`,
+      ),
+    )
+    .join(' + ');
+
 export interface PopularGame {
   id: string;
   name: string;
@@ -371,23 +395,10 @@ export class GamesService {
     if (games.length === 0) return [];
 
     const ids = games.map((g) => g.id);
-    const [reviewRows, estimates] = await Promise.all([
-      this.signals
-        .createQueryBuilder('s')
-        .select('s.gameId', 'gameId')
-        .addSelect('MAX(s.value)', 'reviews')
-        .where('s.gameId IN (:...ids)', { ids })
-        .andWhere('s.metric = :metric', {
-          metric: SignalMetric.STEAM_REVIEWS,
-        })
-        .groupBy('s.gameId')
-        .getRawMany<{ gameId: string; reviews: string }>(),
+    const [reviewsByGame, estimates] = await Promise.all([
+      this.totalReviews(ids),
       this.latestReconciledEstimates(ids),
     ]);
-
-    const reviewsByGame = new Map(
-      reviewRows.map((r) => [r.gameId, Number(r.reviews)]),
-    );
 
     return games.map((game) => {
       const headline = estimates.get(game.id) ?? null;
@@ -433,14 +444,10 @@ export class GamesService {
       minReviews,
     } = options;
 
-    // Steam review count per game, read as one index-only probe on
-    // IDX_signal_snapshot_steam_reviews. Joining signal_snapshot instead
-    // scanned all ~3.9M rows on every call. The metric stays a literal so
-    // Postgres can match the partial index predicate.
-    const reviewsSql = `COALESCE((
-      SELECT MAX(rs.value) FROM signal_snapshot rs
-      WHERE rs."gameId" = g.id AND rs.metric = 'STEAM_REVIEWS'
-    ), 0)`;
+    // Review count per game, all platforms summed, as correlated index
+    // probes. Joining signal_snapshot instead scanned all ~3.9M rows on
+    // every call.
+    const reviewsSql = totalReviewsSql('g.id');
 
     const qb = this.games
       .createQueryBuilder('g')
@@ -506,9 +513,10 @@ export class GamesService {
     applyRowFilters(countQb);
 
     // `minReviews` filters on an aggregate, so it must go through HAVING on
-    // the grouped query and be counted via a wrapping subquery.
+    // the grouped query and be counted via a wrapping subquery. The filter
+    // is labelled "Steam reviews", so it reads Steam only.
     if (minReviews != null && minReviews > 0) {
-      qb.having(`${reviewsSql} >= :minReviews`, { minReviews });
+      qb.having(`${steamReviewsSql('g.id')} >= :minReviews`, { minReviews });
     }
 
     if (sort === 'sales') {
@@ -996,23 +1004,24 @@ export class GamesService {
       .getMany();
   }
 
+  /** The listing's review count (all platforms summed) for these games. */
+  private async totalReviews(ids: string[]): Promise<Map<string, number>> {
+    if (ids.length === 0) return new Map();
+    const rows = await this.games.query<{ gameId: string; reviews: string }[]>(
+      `SELECT g.id AS "gameId", ${totalReviewsSql('g.id')} AS reviews
+       FROM unnest($1::uuid[]) AS g(id)`,
+      [ids],
+    );
+    return new Map(rows.map((r) => [r.gameId, Number(r.reviews)]));
+  }
+
   /** Same row shape as the listing, best seller first. */
   private async toHub(slug: string, name: string, games: Game[]) {
     const ids = games.map((game) => game.id);
-    const [estimates, reviewRows] = await Promise.all([
+    const [estimates, reviews] = await Promise.all([
       this.latestReconciledEstimates(ids),
-      // The metric stays a literal so Postgres can use the partial index.
-      this.games.query<{ gameId: string; reviews: string }[]>(
-        `SELECT "gameId", MAX(value) AS reviews
-         FROM signal_snapshot
-         WHERE "gameId" = ANY($1::uuid[]) AND metric = 'STEAM_REVIEWS'
-         GROUP BY "gameId"`,
-        [ids],
-      ),
+      this.totalReviews(ids),
     ]);
-    const reviews = new Map(
-      reviewRows.map((r) => [r.gameId, Number(r.reviews)]),
-    );
 
     const items = games
       .map((game) => {

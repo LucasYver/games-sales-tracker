@@ -16,6 +16,10 @@ import { Game } from './game.entity';
 @Index('IDX_signal_snapshot_steam_reviews', ['gameId', 'value'], {
   where: `"metric" = 'STEAM_REVIEWS'`,
 })
+// Console store-rating counts for the same listing figure (all platforms summed).
+@Index('IDX_signal_snapshot_store_ratings', ['gameId', 'metric', 'value'], {
+  where: `"metric" IN ('PS_RATINGS', 'XBOX_RATINGS', 'SWITCH_RATINGS') AND NOT "synthetic"`,
+})
 export class SignalSnapshot {
   @PrimaryGeneratedColumn('uuid')
   id: string;

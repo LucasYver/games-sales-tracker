@@ -32,9 +32,13 @@ Measured on 2026-11-04:
   in a request path costs about 0.7 s and real Neon compute. Its indexes are
   `("gameId", metric, "capturedAt")` and the partial
   `IDX_signal_snapshot_steam_reviews` on `("gameId", value)` for
-  `STEAM_REVIEWS` rows (24 MB). The listing reads each game's review count
-  through the latter as a correlated `MAX(value)` subquery (50 ms for the
-  whole catalog instead of 680 ms).
+  `STEAM_REVIEWS` rows (24 MB), plus the partial
+  `IDX_signal_snapshot_store_ratings` on `("gameId", metric, value)` for real
+  (non-synthetic) `PS_RATINGS`, `XBOX_RATINGS` and `SWITCH_RATINGS` rows. The
+  listing's "Reviews" figure sums all four platforms (`totalReviewsSql` in
+  `games.service.ts`), each read as a correlated `MAX(value)` index probe.
+  Steam alone took 50 ms for the whole catalog instead of 680 ms; the console
+  probes without their index took about 1 s.
 - Public pages cache backend calls through `fetch(..., { next: { revalidate } })`
   in `frontend/src/lib/api.ts`: 3 h for listings (same for every visitor,
   reviews land every 4 h), 15 min for game pages, 1 h for genres, 5 min for
