@@ -3,6 +3,7 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 import { notFound, permanentRedirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import Image from 'next/image';
+import { ChartLine } from 'lucide-react';
 import {
   getGame,
   getGameRedirect,
@@ -611,6 +612,35 @@ function PlatformBreakdown({ game }: { game: GameDetail }) {
           ))}
         </tbody>
       </table>
+    </section>
+  );
+}
+
+/**
+ * Stands in for the charts before launch, so the column says when they start
+ * instead of sitting empty next to the tech sheet.
+ */
+function UpcomingCharts({ game }: { game: GameDetail }) {
+  const t = useTranslations('gamePage');
+  const format = useFormatter();
+  if (!game.releaseDate) return null;
+
+  return (
+    <section className="border-b border-border px-4 py-5">
+      <div className="flex min-h-48 flex-col items-center justify-center border border-dashed border-muted-foreground/40 px-6 py-8 text-center">
+        <ChartLine aria-hidden className="size-5 text-text-faint" />
+        <p className="mt-2 font-mono text-sm font-semibold">
+          {t('upcomingChartsTitle', {
+            date: format.dateTime(new Date(game.releaseDate), {
+              month: 'long',
+              day: 'numeric',
+            }),
+          })}
+        </p>
+        <p className="mt-1 max-w-[40ch] text-xs leading-relaxed text-muted-foreground">
+          {t('upcomingChartsNote')}
+        </p>
+      </div>
     </section>
   );
 }
@@ -1427,6 +1457,8 @@ function GamePageContent({
             ) : (
               <>
                 <PlatformBreakdown game={game} />
+
+                {upcoming && <UpcomingCharts game={game} />}
 
                 {hasPlatformCharts && (
                   <section className="border-b border-border px-4 py-5">

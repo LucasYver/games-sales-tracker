@@ -246,7 +246,9 @@
     "estimatePendingTitle": "Estimación en curso",
     "estimatePendingNote": "El juego salió el {date}. La primera estimación de ventas se publicará en unos días.",
     "pricePreorder": "en reserva",
-    "updatedUpcoming": "Las cifras se publicarán tras el lanzamiento."
+    "updatedUpcoming": "Las cifras se publicarán tras el lanzamiento.",
+    "upcomingChartsTitle": "Las gráficas empiezan el {date}",
+    "upcomingChartsNote": "Desde el lanzamiento, seguimos cada día las señales del juego para estimar sus ventas."
   },
   "refreshButton": {
     "error": "Error al actualizar. Inténtalo de nuevo.",

@@ -246,7 +246,9 @@
     "estimatePendingTitle": "Estimate in progress",
     "estimatePendingNote": "The game came out on {date}. The first sales estimate will be published in a few days.",
     "pricePreorder": "pre-order",
-    "updatedUpcoming": "Figures will be published after launch."
+    "updatedUpcoming": "Figures will be published after launch.",
+    "upcomingChartsTitle": "Charts start on {date}",
+    "upcomingChartsNote": "From launch, we track the game's signals every day to estimate its sales."
   },
   "refreshButton": {
     "error": "Refresh failed. Try again.",
