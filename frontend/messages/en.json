@@ -3,7 +3,8 @@
     "estimatedUnits": "est. units",
     "freeToPlay": "Free-to-play",
     "noImage": "No image",
-    "units": "units"
+    "units": "units",
+    "upcoming": "Upcoming"
   },
   "platform": {
     "GLOBAL": "All platforms",
@@ -51,7 +52,8 @@
     "title": "{name} ({year}) — Sales",
     "titleFree": "{name} — Free-to-play",
     "titleNoYear": "{name} — Sales",
-    "titleUnits": "{name} sales — {units} copies"
+    "titleUnits": "{name} sales — {units} copies",
+    "descriptionUpcoming": "{name} releases on {date}. Sales data will arrive at launch, and the first estimate a few days later."
   },
   "home": {
     "gamesCount": "{count, number} games",
@@ -236,7 +238,15 @@
       "SPLIT_SCREEN": "Split screen",
       "MMO": "MMO",
       "BATTLE_ROYALE": "Battle royale"
-    }
+    },
+    "releasesOn": "releases {date}",
+    "upcomingTitle": "Not out yet",
+    "upcomingCountdown": "{days, plural, one {# day} other {# days}} to go",
+    "upcomingNote": "Data will arrive at launch, on {date}. The first sales estimate will be published a few days later.",
+    "estimatePendingTitle": "Estimate in progress",
+    "estimatePendingNote": "The game came out on {date}. The first sales estimate will be published in a few days.",
+    "pricePreorder": "pre-order",
+    "updatedUpcoming": "Figures will be published after launch."
   },
   "refreshButton": {
     "error": "Refresh failed. Try again.",
@@ -387,7 +397,8 @@
     "examplesTitle": "See it on real games",
     "examplesBody": "Each game page shows the figure, its split by platform and the signals we track:",
     "examplesBlog": "Read our articles on official sales",
-    "notEstimatedBody": "We would rather show \"not estimated\" than a figure we don't believe in."
+    "notEstimatedBody": "We would rather show \"not estimated\" than a figure we don't believe in.",
+    "notEstimatedUnreleased": "<strong>Games not out yet</strong>: with no sales, there is nothing to estimate. Data arrives at launch, and the first estimate a few days later."
   },
   "og": {
     "tagline": "How many copies did that game sell?",
@@ -397,6 +408,7 @@
     "free": "Free to play",
     "notEstimated": "Not estimated",
     "salesOf": "{name} sales",
-    "blog": "Blog"
+    "blog": "Blog",
+    "upcoming": "Not out yet"
   }
 }

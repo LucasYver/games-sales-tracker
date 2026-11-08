@@ -238,6 +238,14 @@ even if the code emits the tag.
   no headline, platform lines or history, and they rank last when sorting by
   sales. The game page says so. Estimates are still computed and stay visible
   in the admin. Why: skill `estimate-scope-2017`.
+- **Before launch:** a game whose `releaseDate` is still ahead
+  (`awaitingRelease`, `games/estimate-scope.ts`) gets no public figure: no
+  headline, platform lines, history or declared milestone, and no listing
+  figure. After launch, only snapshots and estimates computed from a signal
+  captured on or after `releaseDate` are public (`computedAfterReleaseSql`),
+  so the first figure appears at the next weekly rebuild following the
+  release. The game page says "not out yet", then "estimate in progress" for
+  up to 30 days. Pre-launch estimates stay visible in the admin.
 - `estimatedToday` = the ML range when the batch has an `ml-ensemble` row,
   else the platform sum. It carries `units`, the figure to display: the ML
   estimate itself (never the midpoint of its range, which would overstate

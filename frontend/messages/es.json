@@ -3,7 +3,8 @@
     "estimatedUnits": "uds. est.",
     "freeToPlay": "Gratuito",
     "noImage": "Sin imagen",
-    "units": "unidades"
+    "units": "unidades",
+    "upcoming": "Próximamente"
   },
   "platform": {
     "GLOBAL": "Todas las plataformas",
@@ -51,7 +52,8 @@
     "title": "{name} ({year}) — Ventas",
     "titleFree": "{name} — Gratuito",
     "titleNoYear": "{name} — Ventas",
-    "titleUnits": "Ventas de {name} — {units} copias"
+    "titleUnits": "Ventas de {name} — {units} copias",
+    "descriptionUpcoming": "{name} sale el {date}. Los datos de ventas llegarán con el lanzamiento y la primera estimación unos días después."
   },
   "home": {
     "gamesCount": "{count, number} juegos",
@@ -236,7 +238,15 @@
       "SPLIT_SCREEN": "Pantalla dividida",
       "MMO": "MMO",
       "BATTLE_ROYALE": "Battle royale"
-    }
+    },
+    "releasesOn": "sale el {date}",
+    "upcomingTitle": "Aún no ha salido",
+    "upcomingCountdown": "{days, plural, one {falta # día} other {faltan # días}}",
+    "upcomingNote": "Los datos llegarán con el lanzamiento, el {date}. La primera estimación de ventas se publicará unos días después.",
+    "estimatePendingTitle": "Estimación en curso",
+    "estimatePendingNote": "El juego salió el {date}. La primera estimación de ventas se publicará en unos días.",
+    "pricePreorder": "en reserva",
+    "updatedUpcoming": "Las cifras se publicarán tras el lanzamiento."
   },
   "refreshButton": {
     "error": "Error al actualizar. Inténtalo de nuevo.",
@@ -387,7 +397,8 @@
     "examplesTitle": "Compruébalo en juegos reales",
     "examplesBody": "Cada ficha muestra la cifra, su reparto por plataforma y las señales que seguimos:",
     "examplesBlog": "Leer nuestros artículos sobre ventas oficiales",
-    "notEstimatedBody": "Preferimos mostrar «sin estimación» antes que una cifra en la que no creemos."
+    "notEstimatedBody": "Preferimos mostrar «sin estimación» antes que una cifra en la que no creemos.",
+    "notEstimatedUnreleased": "<strong>Los juegos que aún no han salido</strong>: sin ventas, no hay nada que estimar. Los datos llegan con el lanzamiento y la primera estimación unos días después."
   },
   "og": {
     "tagline": "¿Cuántas copias vendió ese juego?",
@@ -397,6 +408,7 @@
     "free": "Gratuito",
     "notEstimated": "Sin estimación",
     "salesOf": "Ventas de {name}",
-    "blog": "Blog"
+    "blog": "Blog",
+    "upcoming": "Aún no ha salido"
   }
 }

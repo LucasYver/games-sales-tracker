@@ -165,6 +165,8 @@ export interface GameDetail {
   estimatedToday: HeadlineSales | null;
   /** Released before 2017: the site publishes no estimate for this game. */
   estimateOutOfScope: boolean;
+  /** Release date still ahead: no sales figure until launch. */
+  awaitingRelease?: boolean;
   estimateSnapshots: PublicEstimateSnapshot[];
   reviewHistory: ReviewPoint[];
   followersHistory: ReviewPoint[];
@@ -257,14 +259,39 @@ function roundedUnits(units: number | null): number | null {
 
 /** Listing and search rows. */
 export function listingUnits(
-  game: Pick<PopularGame, 'estimatedUnits'>,
+  game: Pick<PopularGame, 'estimatedUnits' | 'releaseDate'>,
 ): number | null {
+  if (isUpcoming(game.releaseDate)) return null;
   return roundedUnits(game.estimatedUnits);
 }
 
+/**
+ * Release date still ahead. The API publishes no figure before launch, and the
+ * first estimate follows a few days after it (next rebuild on fresh signals).
+ */
+export function isUpcoming(
+  releaseDate: string | null,
+  now: number = Date.now(),
+): boolean {
+  return releaseDate != null && new Date(releaseDate).getTime() > now;
+}
+
+/** Whole days until the release date (negative once the game is out). */
+export function daysUntilRelease(
+  releaseDate: string,
+  now: number = Date.now(),
+): number {
+  return Math.ceil(
+    (new Date(releaseDate).getTime() - now) / (24 * 60 * 60 * 1000),
+  );
+}
+
+/** Released this recently with no estimate yet: the first one is on its way. */
+export const ESTIMATE_PENDING_DAYS = 30;
+
 /** Game page. Same resolution as the listing — the API decides, not the page. */
 export function headlineUnits(game: GameDetail): number | null {
-  if (!game.headline) return null;
+  if (!game.headline || isUpcoming(game.releaseDate)) return null;
   return roundedUnits(game.headline.units);
 }
 

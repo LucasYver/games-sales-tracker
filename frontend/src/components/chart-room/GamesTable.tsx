@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import { useFormatter, useTranslations } from 'next-intl';
 import {
+  isUpcoming,
   listingUnits,
   type PopularGame,
   type SortOption,
@@ -205,6 +206,10 @@ export function GamesTable({
                   </span>
                 ) : sold ? (
                   compact(sold)
+                ) : isUpcoming(game.releaseDate) ? (
+                  <span className="text-muted-foreground">
+                    {tCommon('upcoming')}
+                  </span>
                 ) : (
                   <span className="text-text-faint">—</span>
                 )}

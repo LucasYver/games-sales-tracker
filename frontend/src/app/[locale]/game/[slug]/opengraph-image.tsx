@@ -1,6 +1,6 @@
 import { ImageResponse } from 'next/og';
 import { getTranslations } from 'next-intl/server';
-import { getGame, headlineUnits } from '@/lib/api';
+import { getGame, headlineUnits, isUpcoming } from '@/lib/api';
 import {
   OG_CACHE_HEADERS,
   OG_COLORS,
@@ -43,7 +43,9 @@ export default async function Image({
     ? null
     : game.isFree
       ? t('free')
-      : units == null && game.estimateOutOfScope
+      : isUpcoming(game.releaseDate)
+        ? t('upcoming')
+        : units == null && game.estimateOutOfScope
         ? t('notEstimated')
         : null;
   const platforms = (game?.platforms ?? [])

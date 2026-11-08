@@ -7,7 +7,10 @@ import {
   getGame,
   getGameRedirect,
   getRelatedGames,
+  daysUntilRelease,
+  ESTIMATE_PENDING_DAYS,
   headlineUnits,
+  isUpcoming,
   listingUnits,
   type GameDetail,
   type Platform,
@@ -101,7 +104,17 @@ export async function generateMetadata({
     title = year
       ? t('title', { name: game.name, year })
       : t('titleNoYear', { name: game.name });
-    description = t('description', { name: game.name });
+    description =
+      isUpcoming(game.releaseDate) && game.releaseDate
+        ? t('descriptionUpcoming', {
+            name: game.name,
+            date: format.dateTime(new Date(game.releaseDate), {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            }),
+          })
+        : t('description', { name: game.name });
   }
   const url = `/${locale}/game/${game.slug}`;
 
@@ -215,7 +228,7 @@ function GameHeader({
           )}
           {game.developer && game.releaseDate && ' · '}
           {game.releaseDate &&
-            t('releasedOn', {
+            t(isUpcoming(game.releaseDate) ? 'releasesOn' : 'releasedOn', {
               date: format.dateTime(new Date(game.releaseDate), {
                 year: 'numeric',
                 month: 'long',
@@ -280,7 +293,27 @@ function SalesHeadline({ game }: { game: GameDetail }) {
         month: 'short',
       })
     : null;
-  const showCcu = steamCcuIsMeaningful(game);
+  const upcoming = isUpcoming(game.releaseDate);
+  const releaseLabel = game.releaseDate
+    ? format.dateTime(new Date(game.releaseDate), {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    : null;
+  const daysToRelease = game.releaseDate
+    ? daysUntilRelease(game.releaseDate)
+    : null;
+  // Out a few days, no estimate yet: the next rebuild on post-launch signals
+  // publishes the first one.
+  const estimatePending =
+    !upcoming &&
+    !game.isFree &&
+    !game.estimateOutOfScope &&
+    !units &&
+    daysToRelease != null &&
+    -daysToRelease <= ESTIMATE_PENDING_DAYS;
+  const showCcu = !upcoming && steamCcuIsMeaningful(game);
   const recentCcu = showCcu ? (game.ccuHistory.at(-1) ?? null) : null;
   const recentCcuDate = recentCcu
     ? format.dateTime(new Date(recentCcu.capturedAt), {
@@ -330,6 +363,35 @@ function SalesHeadline({ game }: { game: GameDetail }) {
                 {t('methodologyLink')}
               </Link>
             </>
+          ) : upcoming && releaseLabel ? (
+            <>
+              <p className="mt-1 font-mono text-xl font-bold text-muted-foreground">
+                {t('upcomingTitle')}
+                {daysToRelease != null && daysToRelease > 0 && (
+                  <span className="ml-2 text-base text-primary">
+                    · {t('upcomingCountdown', { days: daysToRelease })}
+                  </span>
+                )}
+              </p>
+              <p className="mt-1 max-w-[46ch] text-sm text-muted-foreground">
+                {t('upcomingNote', { date: releaseLabel })}
+              </p>
+              <Link
+                href="/methodology"
+                className="mt-1 inline-block font-mono text-xs text-primary hover:underline"
+              >
+                {t('methodologyLink')}
+              </Link>
+            </>
+          ) : estimatePending ? (
+            <>
+              <p className="mt-1 font-mono text-xl font-bold text-muted-foreground">
+                {t('estimatePendingTitle')}
+              </p>
+              <p className="mt-1 max-w-[46ch] text-sm text-muted-foreground">
+                {t('estimatePendingNote', { date: releaseLabel ?? '' })}
+              </p>
+            </>
           ) : game.estimateOutOfScope ? (
             <>
               <p className="mt-1 font-mono text-xl font-bold text-muted-foreground">
@@ -378,7 +440,7 @@ function SalesHeadline({ game }: { game: GameDetail }) {
       </div>
       {showPrice && (
         <div className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-3 border-t border-border-soft pt-3">
-          <PriceBlock game={game} />
+          <PriceBlock game={game} preorder={upcoming} />
         </div>
       )}
     </section>
@@ -409,7 +471,14 @@ function OfficialSalesRecap({ game }: { game: GameDetail }) {
  * Current price, and the discount louder than the price itself when one is
  * running — that is the thing a visitor scanning the page wants to catch.
  */
-function PriceBlock({ game }: { game: GameDetail }) {
+function PriceBlock({
+  game,
+  preorder = false,
+}: {
+  game: GameDetail;
+  /** Not out yet: the price is a pre-order, its history means little. */
+  preorder?: boolean;
+}) {
   const t = useTranslations('gamePage');
   const format = useFormatter();
 
@@ -447,7 +516,9 @@ function PriceBlock({ game }: { game: GameDetail }) {
         </span>
       )}
       <span className="font-mono text-[0.7rem] text-muted-foreground">
-        {atLowest
+        {preorder
+          ? t('pricePreorder')
+          : atLowest
           ? t('priceAtLowest')
           : lowest
             ? t('priceLowest', { price: money(lowest.final) })
@@ -462,7 +533,7 @@ function PlatformBreakdown({ game }: { game: GameDetail }) {
   const tPlatform = useTranslations('platform');
   const format = useFormatter();
 
-  if (game.isFree) return null;
+  if (game.isFree || isUpcoming(game.releaseDate)) return null;
 
   const rows = game.salesBreakdown
     .filter((row) => row.platform !== 'GLOBAL' && row.high > 0)
@@ -744,7 +815,12 @@ function TechSheet({
   const t = useTranslations('gamePage');
   const tPlatform = useTranslations('platform');
   const format = useFormatter();
-  const { steam, playstation, xbox } = game.storeRatings;
+  // Before launch, store ratings and review languages are teasers, not sales
+  // signals: they come back with the rest of the data on release day.
+  const upcoming = isUpcoming(game.releaseDate);
+  const { steam, playstation, xbox } = upcoming
+    ? { steam: null, playstation: null, xbox: null }
+    : game.storeRatings;
 
   const hubLink = (href: string, label: React.ReactNode) => (
     <Link href={href} className="text-primary hover:underline">
@@ -955,7 +1031,7 @@ function TechSheet({
         ))}
       </dl>
 
-      {game.reviewLanguages && (
+      {!upcoming && game.reviewLanguages && (
         <ReviewLanguages counts={game.reviewLanguages} />
       )}
 
@@ -1102,6 +1178,10 @@ function RelatedList({
                   </span>
                 ) : sold ? (
                   compactUnits(sold, locale)
+                ) : isUpcoming(game.releaseDate) ? (
+                  <span className="text-muted-foreground">
+                    {tCommon('upcoming')}
+                  </span>
                 ) : (
                   <span className="text-text-faint">—</span>
                 )}
@@ -1200,13 +1280,19 @@ function GamePageContent({
       ],
     },
   ].filter((group): group is PlatformChartGroup => Boolean(group));
-  const hasPlatformCharts = platformGroups.some((group) =>
+  // No data shown before launch: the page says when it arrives instead.
+  const upcoming = isUpcoming(game.releaseDate);
+  const hasPlatformCharts =
+    !upcoming &&
+    platformGroups.some((group) =>
     group.charts.some((chart) => chart.points.length > 1),
   );
 
   // Twitch is cross-platform — outside the storefront tabs.
   const twitchChart =
-    game.twitchViewersHistory.length > 1 ? game.twitchViewersHistory : null;
+    !upcoming && game.twitchViewersHistory.length > 1
+      ? game.twitchViewersHistory
+      : null;
 
   const gameUrl = `${SITE_URL}/${locale}/game/${game.slug}`;
   // The studio when it has a page, else the franchise, else the publisher.
@@ -1400,7 +1486,9 @@ function GamePageContent({
         )}
 
         <footer className="px-4 py-5 text-xs leading-relaxed text-text-faint">
-          {asOf
+          {upcoming
+            ? t('updatedUpcoming')
+            : asOf
             ? t('updatedAt', {
                 date: format.dateTime(new Date(asOf), {
                   year: 'numeric',

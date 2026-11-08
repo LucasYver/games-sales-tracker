@@ -54,6 +54,15 @@ no known date stays in scope.
 - **Production model:** since v1.3 (`ml/models/2026-11-01T1054`, now v1.5 in `ml/models/2026-11-04T19`), it is trained on
   these games only.
 
+## Games not out yet
+
+A separate rule in the same file (2026-11-08): a game whose release date is
+still ahead shows no figure at all (`awaitingRelease`), and after launch only
+estimates computed from signals captured since the release are public
+(`computedAfterReleaseSql`). The game page shows `upcomingTitle` /
+`upcomingNote`, then `estimatePendingTitle` for up to 30 days after launch.
+This rule does not change the 2017 floor.
+
 ## What stays
 
 - Game pages, signals, prices and the sitemap.

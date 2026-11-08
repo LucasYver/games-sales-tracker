@@ -5,7 +5,12 @@ import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { useFormatter, useTranslations } from 'next-intl';
 import { Search, X } from 'lucide-react';
-import { API_URL, listingUnits, type PopularGame } from '@/lib/api';
+import {
+  API_URL,
+  isUpcoming,
+  listingUnits,
+  type PopularGame,
+} from '@/lib/api';
 import { useRouter } from '@/i18n/navigation';
 import {
   GamePageSkeleton,
@@ -306,6 +311,10 @@ export function SearchBar() {
                                   notation: 'compact',
                                   maximumFractionDigits: 1,
                                 })
+                              ) : isUpcoming(game.releaseDate) ? (
+                                <span className="text-muted-foreground">
+                                  {tCommon('upcoming')}
+                                </span>
                               ) : (
                                 <span className="text-text-faint">—</span>
                               )}

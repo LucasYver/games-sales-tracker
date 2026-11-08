@@ -62,6 +62,7 @@ const SIGNALS = [
 const NOT_ESTIMATED = [
   'notEstimatedOld',
   'notEstimatedFree',
+  'notEstimatedUnreleased',
   'notEstimatedPlatforms',
 ] as const;
 

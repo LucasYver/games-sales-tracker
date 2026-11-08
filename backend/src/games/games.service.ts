@@ -1,10 +1,12 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  And,
   type FindOptionsWhere,
   In,
   IsNull,
   LessThanOrEqual,
+  MoreThanOrEqual,
   Not,
   Or,
   Raw,
@@ -51,7 +53,12 @@ import {
   ageInYears,
   lifetimeSalesPct,
 } from './sales-modeling.constants';
-import { ESTIMATE_MIN_RELEASE, estimateOutOfScope } from './estimate-scope';
+import {
+  awaitingRelease,
+  computedAfterReleaseSql,
+  ESTIMATE_MIN_RELEASE,
+  estimateOutOfScope,
+} from './estimate-scope';
 import { shownPublisher } from './game-companies';
 import { platformReleaseDate } from './platform-release-date';
 import {
@@ -514,13 +521,15 @@ export class GamesService {
             "gameId",
             "estimatedTodayLow" AS low,
             "estimatedTodayHigh" AS high,
-            "estimatedTodayUnits" AS units
+            "estimatedTodayUnits" AS units,
+            "computedAt" AS computed_at
           FROM estimate_snapshot
           ORDER BY "gameId", "computedAt" DESC
         )`,
         'snap',
-        // Games out of the estimate scope show no figure, so they rank last.
-        'snap."gameId" = g.id AND (g."releaseDate" IS NULL OR g."releaseDate" >= :estimateMinRelease)',
+        // Games out of the estimate scope or not yet estimated since launch
+        // show no figure, so they rank last.
+        `snap."gameId" = g.id AND (g."releaseDate" IS NULL OR g."releaseDate" >= :estimateMinRelease) AND ${computedAfterReleaseSql('g', 'snap.computed_at')}`,
         { estimateMinRelease: ESTIMATE_MIN_RELEASE },
       );
       qb.addSelect(
@@ -1093,10 +1102,15 @@ export class GamesService {
 
     if (!game) throw new NotFoundException(`Game "${slug}" not found`);
 
-    const visibleMilestones = game.isFree ? [] : game.milestones;
+    // Before launch there are no sales: no estimate, no declared figure.
+    const unreleased = awaitingRelease(game.releaseDate);
+    const visibleMilestones = game.isFree || unreleased ? [] : game.milestones;
 
     const outOfScope = estimateOutOfScope(game.releaseDate);
-    const noEstimate = game.isFree || outOfScope;
+    const noEstimate = game.isFree || outOfScope || unreleased;
+    // Only estimates computed from signals captured after launch are public:
+    // the first one lands at the next rebuild following the release.
+    const estimatesSince = game.releaseDate ?? undefined;
 
     // Everything below hangs off game.id alone, so it goes out in one wave
     // instead of a dozen sequential round trips. Only the price rows wait on
@@ -1172,7 +1186,7 @@ export class GamesService {
             byPlatform: new Map<Platform, SalesEstimate>(),
             ml: null,
           })
-        : this.latestEstimates(game.id),
+        : this.latestEstimates(game.id, undefined, estimatesSince),
       series(SignalMetric.STEAM_REVIEWS),
       series(SignalMetric.STEAM_FOLLOWERS),
       series(SignalMetric.TWITCH_VIEWERS),
@@ -1207,7 +1221,12 @@ export class GamesService {
       noEstimate
         ? Promise.resolve([])
         : this.estimateSnapshots.find({
-            where: { gameId: game.id },
+            where: {
+              gameId: game.id,
+              ...(estimatesSince
+                ? { computedAt: MoreThanOrEqual(estimatesSince) }
+                : {}),
+            },
             order: { computedAt: 'ASC' },
             select: {
               computedAt: true,
@@ -1307,6 +1326,7 @@ export class GamesService {
       reconciliation,
       estimatedToday,
       estimateOutOfScope: outOfScope,
+      awaitingRelease: unreleased,
       estimateSnapshots,
       reviewHistory,
       followersHistory,
@@ -2278,6 +2298,7 @@ export class GamesService {
   private async latestEstimates(
     gameId: string,
     asOf?: Date,
+    since?: Date,
   ): Promise<LatestEstimates> {
     const aggregateMethod = this.estimationMethods.findByCode(
       AGGREGATED_METHOD_CODE,
@@ -2287,7 +2308,13 @@ export class GamesService {
     const estimates = await this.estimates.find({
       where: {
         gameId,
-        ...(asOf ? { computedAt: LessThanOrEqual(asOf) } : {}),
+        ...(asOf && since
+          ? { computedAt: And(MoreThanOrEqual(since), LessThanOrEqual(asOf)) }
+          : asOf
+            ? { computedAt: LessThanOrEqual(asOf) }
+            : since
+              ? { computedAt: MoreThanOrEqual(since) }
+              : {}),
       },
       order: { computedAt: 'DESC' },
     });
@@ -2347,11 +2374,13 @@ export class GamesService {
       .addSelect('s.estimatedTodayLow', 'low')
       .addSelect('s.estimatedTodayHigh', 'high')
       .addSelect('s.estimatedTodayUnits', 'units')
+      .innerJoin(Game, 'g', 'g.id = s.gameId')
       .where('s.gameId IN (:...gameIds)', { gameIds })
       .andWhere(
-        `s.gameId NOT IN (SELECT id FROM game WHERE "releaseDate" < :estimateMinRelease)`,
+        '(g."releaseDate" IS NULL OR g."releaseDate" >= :estimateMinRelease)',
         { estimateMinRelease: ESTIMATE_MIN_RELEASE },
       )
+      .andWhere(computedAfterReleaseSql('g', 's."computedAt"'))
       .orderBy('s.gameId')
       .addOrderBy('s.computedAt', 'DESC')
       .getRawMany<{
