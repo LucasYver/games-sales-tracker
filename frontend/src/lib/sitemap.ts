@@ -14,17 +14,24 @@ export interface SitemapGame {
  */
 export const GAMES_PER_SITEMAP = 1000;
 
+/**
+ * Throws when the API fails or answers with no games, so an ISR regeneration
+ * fails and Next keeps serving the last good sitemap. Returning [] here once
+ * published an index without game sitemaps and cached 404s for /sitemap/N.xml
+ * for an hour, which crawlers report as "page not accessible".
+ */
 export async function fetchSitemapGames(): Promise<SitemapGame[]> {
-  try {
-    const res = await fetch(`${API_URL}/games/sitemap`, {
-      next: { revalidate: 3600 },
-    });
-    if (!res.ok) return [];
-    const data = (await res.json()) as { items?: SitemapGame[] };
-    return data.items ?? [];
-  } catch {
-    return [];
+  const res = await fetch(`${API_URL}/games/sitemap`, {
+    next: { revalidate: 3600 },
+  });
+  if (!res.ok) {
+    throw new Error(`Sitemap games fetch failed: HTTP ${res.status}`);
   }
+  const data = (await res.json()) as { items?: SitemapGame[] };
+  if (!data.items?.length) {
+    throw new Error('Sitemap games fetch returned no games');
+  }
+  return data.items;
 }
 
 export async function fetchSitemapHubs(): Promise<{

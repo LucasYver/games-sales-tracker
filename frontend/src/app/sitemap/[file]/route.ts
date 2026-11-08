@@ -17,7 +17,9 @@ import {
 export const revalidate = 3600;
 
 export async function generateStaticParams() {
-  const games = await fetchSitemapGames();
+  // An unreachable API must not fail the build: the files then render on
+  // their first request instead.
+  const games = await fetchSitemapGames().catch(() => []);
   return sitemapIds(games.length).map((id) => ({ file: `${id}.xml` }));
 }
 
