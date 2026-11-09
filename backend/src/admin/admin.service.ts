@@ -1380,12 +1380,12 @@ export class AdminService {
   async setEstimateHidden(
     id: string,
     hidden: boolean,
-  ): Promise<{ id: string; estimateHidden: boolean }> {
+  ): Promise<{ id: string; slug: string; estimateHidden: boolean }> {
     const game = await this.games.findOne({ where: { id } });
     if (!game) throw new NotFoundException(`Game ${id} not found`);
     game.estimateHidden = hidden;
     await this.games.save(game);
-    return { id, estimateHidden: hidden };
+    return { id, slug: game.slug, estimateHidden: hidden };
   }
 
   /**

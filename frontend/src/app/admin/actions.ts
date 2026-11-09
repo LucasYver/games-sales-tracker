@@ -105,11 +105,13 @@ export async function setEstimateHidden(
   gameId: string,
   hidden: boolean,
 ): Promise<void> {
-  await adminFetch(`/games/${gameId}/estimate-hidden`, {
-    method: 'POST',
-    body: JSON.stringify({ hidden }),
-  });
+  const result = await adminFetch<{ slug: string }>(
+    `/games/${gameId}/estimate-hidden`,
+    { method: 'POST', body: JSON.stringify({ hidden }) },
+  );
   revalidatePath(`/admin/games/${gameId}`);
+  // Public game page: its API fetch is cached 15 min under this tag.
+  updateTag(gameCacheTag(result.slug));
 }
 
 export interface AddGameResult {
