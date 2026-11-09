@@ -406,6 +406,7 @@ export interface AdminGameSummary2 {
   iterationNumber: number | null;
   liveService: boolean;
   excludedFromReference: boolean;
+  estimateHidden: boolean;
   manualFields: string[];
   igdbId: number | null;
   lastRefreshedAt: Date | null;
@@ -1160,6 +1161,7 @@ export class AdminService {
       iterationNumber: game.iterationNumber,
       liveService: game.liveService,
       excludedFromReference: game.excludedFromReference,
+      estimateHidden: game.estimateHidden,
       manualFields: game.manualFields ?? [],
       igdbId: game.igdbId,
       lastRefreshedAt: game.lastRefreshedAt,
@@ -1369,6 +1371,21 @@ export class AdminService {
     game.excludedFromReference = excluded;
     await this.games.save(game);
     return { id, excludedFromReference: excluded };
+  }
+
+  /**
+   * Hide or show a game's estimate on the public site (`game.estimateHidden`).
+   * The estimate is still computed and stays visible in the admin.
+   */
+  async setEstimateHidden(
+    id: string,
+    hidden: boolean,
+  ): Promise<{ id: string; estimateHidden: boolean }> {
+    const game = await this.games.findOne({ where: { id } });
+    if (!game) throw new NotFoundException(`Game ${id} not found`);
+    game.estimateHidden = hidden;
+    await this.games.save(game);
+    return { id, estimateHidden: hidden };
   }
 
   /**

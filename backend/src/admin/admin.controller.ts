@@ -177,6 +177,15 @@ export class AdminController {
     return this.admin.setReferenceExclusion(id, Boolean(body?.excluded));
   }
 
+  @Post('games/:id/estimate-hidden')
+  @HttpCode(200)
+  setEstimateHidden(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { hidden: boolean },
+  ) {
+    return this.admin.setEstimateHidden(id, Boolean(body?.hidden));
+  }
+
   @Post('games/:id/backfill-ps-reconstruction')
   @HttpCode(200)
   backfillPsReconstruction(@Param('id', ParseUUIDPipe) id: string) {

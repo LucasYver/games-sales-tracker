@@ -40,7 +40,11 @@ import { FollowersHistoryChart } from '../../_components/FollowersHistoryChart';
 import { TwitchViewersHistoryChart } from '../../_components/TwitchViewersHistoryChart';
 import { EstimateBreakdownView } from '../../_components/EstimateBreakdownPanel';
 import { MlExplanationPanel } from '../../_components/MlExplanationPanel';
-import { deleteGame, setReferenceExclusion } from '../../actions';
+import {
+  deleteGame,
+  setEstimateHidden,
+  setReferenceExclusion,
+} from '../../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -616,6 +620,28 @@ async function EstimatesTab({
 
   return (
     <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center gap-2">
+        {s.estimateHidden && (
+          <Badge variant="destructive">Estimate hidden on the public site</Badge>
+        )}
+        <form
+          action={setEstimateHidden.bind(null, gameId, !s.estimateHidden)}
+          className="ml-auto"
+        >
+          <Button type="submit" variant="outline" size="sm">
+            {s.estimateHidden
+              ? 'Show estimate on the site'
+              : 'Hide estimate on the site'}
+          </Button>
+        </form>
+      </div>
+      {s.estimateHidden && (
+        <p className="text-muted-foreground -mt-3 text-xs">
+          The site shows no figure and no chart for this game: its public
+          signals do not measure it alone (shared launcher or store page). The
+          estimate is still computed here.
+        </p>
+      )}
       <p className="text-muted-foreground text-xs">
         Inputs refreshed {fmtDate(s.lastRefreshedAt)}. Use{' '}
         <strong>Refresh</strong> / <strong>Rebuild</strong> in the header to

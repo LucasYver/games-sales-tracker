@@ -50,7 +50,7 @@ import {
   firstWeekProjectionMultiplier,
   genreProjectionMultiplier,
 } from '../games/sales-modeling.constants';
-import { estimateOutOfScope } from '../games/estimate-scope';
+import { estimateNotPublic } from '../games/estimate-scope';
 import { platformReleaseDate } from '../games/platform-release-date';
 
 // How aggressively `aggregateMethods` widens the combined band when the
@@ -1186,9 +1186,9 @@ export class EstimationService {
     const ml = mlExplanation?.estimate ?? null;
     const game = await this.games.findOne({
       where: { id: gameId },
-      select: { id: true, releaseDate: true },
+      select: { id: true, releaseDate: true, estimateHidden: true },
     });
-    const hiddenOnSite = estimateOutOfScope(game?.releaseDate ?? null);
+    const hiddenOnSite = game ? estimateNotPublic(game) : false;
 
     return {
       computedAt,

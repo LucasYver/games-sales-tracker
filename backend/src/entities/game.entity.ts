@@ -235,6 +235,13 @@ export class Game {
   @Column({ type: 'boolean', default: false })
   excludedFromReference: boolean;
 
+  // When true, the public site shows no estimate for this game (see
+  // `games/estimate-scope.ts`). Set in the admin for games whose public
+  // signals do not measure the game alone, such as the Call of Duty titles
+  // run through the shared Call of Duty HQ launcher.
+  @Column({ type: 'boolean', default: false })
+  estimateHidden: boolean;
+
   // Metadata columns an admin corrected by hand (see `games/manual-fields.ts`).
   // The Steam and IGDB upserts keep their values instead of overwriting them.
   @Column({ type: 'text', array: true, default: '{}' })

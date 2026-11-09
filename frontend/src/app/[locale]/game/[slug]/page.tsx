@@ -399,7 +399,7 @@ function SalesHeadline({ game }: { game: GameDetail }) {
                 {t('outOfScopeTitle')}
               </p>
               <p className="mt-1 max-w-[42ch] text-sm text-muted-foreground">
-                {t('outOfScopeNote')}
+                {t(game.estimateHidden ? 'hiddenEstimateNote' : 'outOfScopeNote')}
               </p>
               <Link
                 href="/methodology"

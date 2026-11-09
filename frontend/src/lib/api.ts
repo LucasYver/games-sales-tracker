@@ -163,8 +163,10 @@ export interface GameDetail {
   totalSales: TotalSales | null;
   headline: HeadlineSales | null;
   estimatedToday: HeadlineSales | null;
-  /** Released before 2017: the site publishes no estimate for this game. */
+  /** Released before 2017 or hidden by hand: no estimate for this game. */
   estimateOutOfScope: boolean;
+  /** Hidden by hand: its public signals do not measure the game alone. */
+  estimateHidden?: boolean;
   /** Release date still ahead: no sales figure until launch. */
   awaitingRelease?: boolean;
   estimateSnapshots: PublicEstimateSnapshot[];

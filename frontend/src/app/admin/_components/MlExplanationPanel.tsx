@@ -99,7 +99,7 @@ export function MlExplanationPanel({
         </CardTitle>
         <p className="text-muted-foreground text-xs">
           {hiddenOnSite
-            ? 'The public site shows no estimate: this game was released before 2017.'
+            ? 'The public site shows no estimate for this game (released before 2017, or hidden by hand).'
             : shown
               ? 'The public site displays this estimate.'
               : `The public site shows the platform sum instead: ${reasons.join('; ') || 'outside the zone the model was tested on'}.`}{' '}

@@ -63,6 +63,19 @@ estimates computed from signals captured since the release are public
 `upcomingNote`, then `estimatePendingTitle` for up to 30 days after launch.
 This rule does not change the 2017 floor.
 
+## Games hidden by hand
+
+A second switch in the same file (2026-11-09): `game.estimateHidden`, toggled
+in the admin Estimates tab (`POST /admin/games/:id/estimate-hidden`). It is for
+games whose public signals do not measure the game alone. The first case is the
+Call of Duty titles run through the Call of Duty HQ launcher (MW II onwards):
+their Steam page records ~0 concurrent players and their PlayStation ratings
+belong to the HQ title `PPSA01649`, shared by the whole series. The migration
+`AddGameEstimateHidden` turns it on for their Steam apps; a new HQ-era Call of
+Duty must be hidden by hand. `estimateNotPublic` / `estimatePublicSql` apply
+both rules; the API sets `estimateOutOfScope` and `estimateHidden`, and the game
+page shows `hiddenEstimateNote` instead of the 2017 note.
+
 ## What stays
 
 - Game pages, signals, prices and the sitemap.

@@ -297,6 +297,8 @@ export interface AdminGamePageSummary {
   iterationNumber: number | null;
   liveService: boolean;
   excludedFromReference: boolean;
+  /** The public site shows no estimate for this game. */
+  estimateHidden: boolean;
   /** Metadata columns corrected by hand; the crons keep their values. */
   manualFields: ManualGameField[];
   igdbId: number | null;

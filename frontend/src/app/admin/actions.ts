@@ -101,6 +101,17 @@ export async function setReferenceExclusion(
   revalidatePath(`/admin/games/${gameId}`);
 }
 
+export async function setEstimateHidden(
+  gameId: string,
+  hidden: boolean,
+): Promise<void> {
+  await adminFetch(`/games/${gameId}/estimate-hidden`, {
+    method: 'POST',
+    body: JSON.stringify({ hidden }),
+  });
+  revalidatePath(`/admin/games/${gameId}`);
+}
+
 export interface AddGameResult {
   gameId: string;
   name: string;

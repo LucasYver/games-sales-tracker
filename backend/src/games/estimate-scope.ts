@@ -13,6 +13,23 @@ export function estimateOutOfScope(releaseDate: Date | null): boolean {
 }
 
 /**
+ * Whether the public site shows no estimate for a game: released before 2017,
+ * or hidden by hand in the admin (`game.estimateHidden`) because its public
+ * signals do not measure the game alone.
+ */
+export function estimateNotPublic(game: {
+  releaseDate: Date | null;
+  estimateHidden?: boolean | null;
+}): boolean {
+  return Boolean(game.estimateHidden) || estimateOutOfScope(game.releaseDate);
+}
+
+/** SQL twin of `estimateNotPublic`, negated: the game's estimate is public. */
+export function estimatePublicSql(gameAlias: string): string {
+  return `(NOT ${gameAlias}."estimateHidden" AND (${gameAlias}."releaseDate" IS NULL OR ${gameAlias}."releaseDate" >= :estimateMinRelease))`;
+}
+
+/**
  * A game whose release date is still ahead has no sales yet: the public site
  * shows no figure, no platform split and no declared milestone until launch.
  */

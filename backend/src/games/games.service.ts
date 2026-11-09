@@ -58,6 +58,7 @@ import {
   computedAfterReleaseSql,
   ESTIMATE_MIN_RELEASE,
   estimateOutOfScope,
+  estimatePublicSql,
 } from './estimate-scope';
 import { shownPublisher } from './game-companies';
 import { platformReleaseDate } from './platform-release-date';
@@ -537,7 +538,7 @@ export class GamesService {
         'snap',
         // Games out of the estimate scope or not yet estimated since launch
         // show no figure, so they rank last.
-        `snap."gameId" = g.id AND (g."releaseDate" IS NULL OR g."releaseDate" >= :estimateMinRelease) AND ${computedAfterReleaseSql('g', 'snap.computed_at')}`,
+        `snap."gameId" = g.id AND ${estimatePublicSql('g')} AND ${computedAfterReleaseSql('g', 'snap.computed_at')}`,
         { estimateMinRelease: ESTIMATE_MIN_RELEASE },
       );
       qb.addSelect(
@@ -1115,7 +1116,8 @@ export class GamesService {
     const unreleased = awaitingRelease(game.releaseDate);
     const visibleMilestones = game.isFree || unreleased ? [] : game.milestones;
 
-    const outOfScope = estimateOutOfScope(game.releaseDate);
+    const estimateHidden = game.estimateHidden;
+    const outOfScope = estimateHidden || estimateOutOfScope(game.releaseDate);
     const noEstimate = game.isFree || outOfScope || unreleased;
     // Only estimates computed from signals captured after launch are public:
     // the first one lands at the next rebuild following the release.
@@ -1335,6 +1337,8 @@ export class GamesService {
       reconciliation,
       estimatedToday,
       estimateOutOfScope: outOfScope,
+      // Hidden by hand rather than by the 2017 floor: the page explains why.
+      estimateHidden,
       awaitingRelease: unreleased,
       estimateSnapshots,
       reviewHistory,
@@ -2386,7 +2390,7 @@ export class GamesService {
       .innerJoin(Game, 'g', 'g.id = s.gameId')
       .where('s.gameId IN (:...gameIds)', { gameIds })
       .andWhere(
-        '(g."releaseDate" IS NULL OR g."releaseDate" >= :estimateMinRelease)',
+        estimatePublicSql('g'),
         { estimateMinRelease: ESTIMATE_MIN_RELEASE },
       )
       .andWhere(computedAfterReleaseSql('g', 's."computedAt"'))

@@ -138,6 +138,7 @@
     "headingUnits": "{units} copias",
     "interestTitle": "Señales de audiencia",
     "officialRecap": "¿Cuántas copias ha vendido {name}?",
+    "hiddenEstimateNote": "Este juego comparte jugadores y valoraciones con otros títulos de su serie (lanzador y página de tienda comunes): nuestras señales no pueden medirlo por separado, así que no publicamos una estimación.",
     "outOfScopeNote": "Nuestro modelo no es lo bastante fiable para dar una estimación precisa de los juegos publicados antes de 2017.",
     "outOfScopeTitle": "Sin estimación",
     "officialRecapLead": "Resumen de ventas oficiales",
