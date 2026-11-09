@@ -64,7 +64,8 @@ export async function generateMetadata({
       locale,
     },
     twitter: { card: 'summary_large_image' },
-    robots: { index: true, follow: true },
+    // No site-wide robots tag: pages are indexable by default, and a layout
+    // `index, follow` would also land on 404s next to Next.js's `noindex`.
     ...(ADSENSE_CLIENT && {
       other: { 'google-adsense-account': ADSENSE_CLIENT },
     }),
