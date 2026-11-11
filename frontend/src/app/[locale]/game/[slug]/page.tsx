@@ -36,6 +36,7 @@ import {
   RegionalPricesTable,
 } from '@/components/chart-room/PriceCountrySelect';
 import { Suspense } from 'react';
+import { GTA6_PATH, GTA6_SLUG } from '@/lib/gta6';
 
 function compactUnits(units: number, locale: string) {
   return new Intl.NumberFormat(locale, {
@@ -167,6 +168,20 @@ function gamePageHref(
 
 function defaultPriceCountry(locale: string): string {
   return locale === 'en' ? 'us' : locale;
+}
+
+/** GTA 6 gets a dedicated tracker; its game page points there. */
+function Gta6TrackerLink() {
+  const t = useTranslations('gta6Sales');
+  return (
+    <Link
+      href={GTA6_PATH}
+      className="mx-4 mt-3 flex items-center gap-2 rounded-[3px] border border-primary/40 bg-accent px-3 py-2 text-sm font-medium text-accent-foreground hover:underline"
+    >
+      <ChartLine className="size-4 shrink-0" aria-hidden />
+      {t('gamePageLink')}
+    </Link>
+  );
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -1438,6 +1453,7 @@ function GamePageContent({
         </nav>
 
         <GameHeader game={game} studioHub={related.studioHub} />
+        {game.slug === GTA6_SLUG && <Gta6TrackerLink />}
         <SalesHeadline game={game} />
         <OfficialSalesRecap game={game} />
         <TabNav

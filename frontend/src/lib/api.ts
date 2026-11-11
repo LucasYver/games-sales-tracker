@@ -519,6 +519,43 @@ export async function getGame(
   };
 }
 
+/** Expired by the admin whenever a milestone is added, edited or removed. */
+export const SALES_TIMELINE_TAG = 'sales-timeline';
+
+export interface SalesTimelineFigure {
+  units: number;
+  platform: Platform;
+  source: SalesSourceLabel;
+  publisher: string | null;
+  sourceUrl: string | null;
+  reportedAt: string | null;
+}
+
+export interface SalesTimeline {
+  name: string;
+  releaseDate: string | null;
+  figures: SalesTimelineFigure[];
+}
+
+/** Every sourced figure of a game, oldest first. A failure shows none. */
+export async function getSalesTimeline(
+  slug: string,
+): Promise<SalesTimeline | null> {
+  try {
+    const res = await fetch(
+      `${API_URL}/games/${encodeURIComponent(slug)}/sales-timeline`,
+      // Launch week moves fast: a new figure shows within 5 minutes, and an
+      // admin edit expires the tag at once.
+      { next: { revalidate: 300, tags: [SALES_TIMELINE_TAG] } },
+    );
+    if (!res.ok) return null;
+    const body = (await res.json()) as SalesTimeline;
+    return { ...body, figures: body.figures ?? [] };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The slug a game merged into another now lives at (an edition folded into
  * its base game), or null. A failure means no redirect: the page 404s.

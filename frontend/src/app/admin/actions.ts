@@ -13,7 +13,12 @@ import {
   type RunCronResult,
   type SalesSource,
 } from '@/lib/admin';
-import { API_URL, gameCacheTag, type Platform } from '@/lib/api';
+import {
+  API_URL,
+  SALES_TIMELINE_TAG,
+  gameCacheTag,
+  type Platform,
+} from '@/lib/api';
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
@@ -228,6 +233,7 @@ export async function createMilestone(
   });
   revalidatePath('/admin/milestones');
   revalidatePath(`/admin/games/${gameId}`);
+  updateTag(SALES_TIMELINE_TAG);
 }
 
 export async function updateMilestone(
@@ -241,6 +247,7 @@ export async function updateMilestone(
   });
   revalidatePath('/admin/milestones');
   revalidatePath(`/admin/games/${gameId}`);
+  updateTag(SALES_TIMELINE_TAG);
   revalidatePath('/admin/trusted-sources', 'layout');
 }
 
@@ -256,6 +263,7 @@ export async function deleteMilestone(
   }
   revalidatePath('/admin/milestones');
   revalidatePath(`/admin/games/${gameId}`);
+  updateTag(SALES_TIMELINE_TAG);
   revalidatePath('/admin/trusted-sources', 'layout');
 }
 

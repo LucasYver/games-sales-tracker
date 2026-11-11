@@ -86,6 +86,16 @@ async function pagesSitemap(
     });
   }
 
+  // The GTA 6 tracker moves daily around launch.
+  for (const locale of routing.locales) {
+    entries.push({
+      url: `${SITE_URL}/${locale}/gta-6-sales`,
+      changeFrequency: 'daily',
+      priority: 0.9,
+      alternates: localeAlternates('/gta-6-sales'),
+    });
+  }
+
   // Hubs change with the games they list, so no lastmod of their own.
   const hubPaths = [
     '/studios',

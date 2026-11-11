@@ -1431,6 +1431,43 @@ export class GamesService {
    * folded into its base keeps its IGDB id once soft-deleted, and that id is
    * one of the base game's editions. Null when the slug is not such a game.
    */
+  /**
+   * Every sourced sales figure of one game, oldest first, for a page that
+   * tracks a launch figure by figure. Rejected rows, player counts and
+   * third-party model estimates are left out; notes are internal and never
+   * exposed. Shown even before launch, unlike the game page.
+   */
+  async getSalesTimeline(slug: string) {
+    const games: { id: string; name: string; releaseDate: Date | null }[] =
+      await this.games.query(
+        `SELECT id, name, "releaseDate" FROM game
+          WHERE slug = $1 AND "deletedAt" IS NULL`,
+        [slug],
+      );
+    const game = games[0];
+    if (!game) throw new NotFoundException(`Game "${slug}" not found`);
+    const figures: {
+      units: number;
+      platform: string;
+      source: string;
+      publisher: string | null;
+      sourceUrl: string | null;
+      reportedAt: Date | null;
+    }[] = await this.milestones.query(
+      `SELECT units, platform, source, publisher, "sourceUrl", "reportedAt"
+         FROM milestone
+        WHERE "gameId" = $1 AND "rejectedAt" IS NULL
+          AND NOT "isEngagement" AND NOT "isEstimate"
+        ORDER BY "reportedAt" ASC NULLS LAST, units ASC`,
+      [game.id],
+    );
+    return {
+      name: game.name,
+      releaseDate: game.releaseDate,
+      figures,
+    };
+  }
+
   async findRedirectSlug(slug: string): Promise<{ slug: string } | null> {
     const rows: { slug: string }[] = await this.games.query(
       `SELECT base.slug

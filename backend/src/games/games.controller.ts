@@ -113,6 +113,11 @@ export class GamesController {
     return target;
   }
 
+  @Get(':slug/sales-timeline')
+  salesTimeline(@Param('slug') slug: string) {
+    return this.games.getSalesTimeline(slug);
+  }
+
   @Get(':slug/related')
   related(@Param('slug') slug: string) {
     return this.games.listRelated(slug);
