@@ -47,8 +47,13 @@ class Blend:
         return np.mean([m.predict(x) for m in self.models], axis=0)
 
 
+# What the boosting minimises: the squared error (it learns the mean), or the absolute
+# error (it learns the median, which is what the bench scores).
+BOOSTING_LOSS = {"boosting": "squared_error", "boosting_median": "absolute_error"}
+
 ALGORITHMS = {
     "boosting": lambda: HistGradientBoostingRegressor(**BOOSTING),
+    "boosting_median": lambda: HistGradientBoostingRegressor(**BOOSTING, loss="absolute_error"),
     "forest": lambda: RandomForestRegressor(**FOREST),
     "linear": Linear,
     "boosting+linear": lambda: Blend("boosting", "linear"),
@@ -57,5 +62,9 @@ ALGORITHMS = {
 }
 
 
-def make(name: str):
+def make(name: str, monotonic_cst: dict[str, int] | None = None):
+    """`monotonic_cst`: columns the answer may never go down with (+1) or up with (-1)."""
+    if monotonic_cst:
+        assert name in BOOSTING_LOSS, "only the boosting takes monotonic constraints"
+        return HistGradientBoostingRegressor(**BOOSTING, loss=BOOSTING_LOSS[name], monotonic_cst=monotonic_cst)
     return ALGORITHMS[name]()

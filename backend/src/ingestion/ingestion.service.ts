@@ -224,25 +224,6 @@ export interface ArticleIngestResult {
   milestonesStored: number;
 }
 
-/**
- * Extract the URL slug from a canonical IGDB game URL. Accepts both bare
- * slugs and full URLs (with or without protocol, query, hash, trailing slash).
- * Returns null when no slug can be identified.
- */
-function parseIgdbSlug(rawUrl: string): string | null {
-  const trimmed = rawUrl.trim();
-  if (!trimmed) return null;
-
-  const urlMatch = trimmed.match(/\/games\/([^/?#\s]+)/i);
-  if (urlMatch) return urlMatch[1].toLowerCase();
-
-  // Plain slug pasted without a URL prefix (alphanumerics + dashes).
-  if (/^[a-z0-9][a-z0-9-]*$/i.test(trimmed)) {
-    return trimmed.toLowerCase();
-  }
-  return null;
-}
-
 @Injectable()
 export class IngestionService {
   private readonly logger = new Logger(IngestionService.name);
@@ -440,119 +421,11 @@ export class IngestionService {
     return game;
   }
 
-  /**
-   * Manually add a game by IGDB URL (typically pasted from the admin UI).
-   * Accepts the canonical `https://www.igdb.com/games/<slug>` form. When the
-   * IGDB record links to a Steam app, runs the full Steam ingest path so the
-   * new game ships with live signals; otherwise falls back to the console-only
-   * IGDB ingest (store ratings + initial estimate). Idempotent: re-adding an
-   * already-tracked game returns the existing row with `alreadyExisted=true`.
-   */
-  async addGameFromIgdbUrl(rawUrl: string): Promise<{
-    gameId: string;
-    name: string;
-    alreadyExisted: boolean;
-    steamLinked: boolean;
-  }> {
-    const slug = parseIgdbSlug(rawUrl);
-    if (!slug) {
-      throw new BadRequestException(
-        'Invalid IGDB URL. Expected https://www.igdb.com/games/<slug>.',
-      );
-    }
-
-    const candidate = await this.igdb.findBySlug(slug);
-    if (!candidate) {
-      throw new NotFoundException(`No IGDB game found for slug "${slug}".`);
-    }
-
-    const existing = await this.games.findOne({
-      where: { igdbId: candidate.igdbId },
-      withDeleted: true,
-    });
-    if (existing && !existing.deletedAt) {
-      return {
-        gameId: existing.id,
-        name: existing.name,
-        alreadyExisted: true,
-        steamLinked: candidate.steamAppId != null,
-      };
-    }
-    // A soft-deleted existing row is intentionally NOT returned here: we let
-    // the ingest path below run with `restoreDeleted: true` so the row is
-    // resurrected and refreshed in one go.
-
-    // Mirror the discovery path: if no Steam external id is linked on IGDB but
-    // the title ships on PC, try resolving the appId by name search.
-    let steamAppId = candidate.steamAppId;
-    if (!steamAppId && candidate.platforms.includes(Platform.PC)) {
-      steamAppId = await this.steam.findAppIdByName(candidate.name);
-      if (steamAppId) {
-        this.logger.log(
-          `[admin-add] resolved Steam appId ${steamAppId} for "${candidate.name}" via name search`,
-        );
-      }
-    }
-
-    let gameId: string | null = null;
-    if (steamAppId) {
-      gameId = await this.ingestSteamApp(steamAppId, {
-        restoreDeleted: true,
-        catalogTier: CatalogTier.CORE,
-      });
-    }
-    if (!gameId) {
-      await this.ingestIgdbGame(candidate, {
-        restoreDeleted: true,
-        catalogTier: CatalogTier.CORE,
-      });
-      const created = await this.games.findOne({
-        where: { igdbId: candidate.igdbId },
-      });
-      gameId = created?.id ?? null;
-    }
-
-    if (!gameId) {
-      throw new BadRequestException(
-        `Failed to ingest IGDB game "${candidate.name}" (slug=${slug}).`,
-      );
-    }
-
-    return {
-      gameId,
-      name: candidate.name,
-      alreadyExisted: false,
-      steamLinked: steamAppId != null,
-    };
-  }
-
-  /**
-   * Create a console-only game from IGDB data (no Steam source), seed its
-   * console store ratings as signals, and compute an initial estimate via
-   * the canonical rebuild path so the (single) point lands consistently
-   * with later refreshes.
-   */
-  private async ingestIgdbGame(
-    candidate: IgdbGame,
-    options: { restoreDeleted?: boolean; catalogTier?: CatalogTier } = {},
-  ): Promise<void> {
-    const game = await this.upsertGameFromIgdb(candidate, options);
-    if (!game) return;
-    try {
-      await this.scrapeStoreRatings(game.id, game.name, game.platforms);
-    } catch (error) {
-      this.logger.warn(
-        `Store ratings scrape failed for "${game.name}": ${error}`,
-      );
-    }
-    await this.gamesService.rebuildEstimateHistory(game.id);
-  }
-
   private async upsertGameFromIgdb(
     candidate: IgdbGame,
-    options: { restoreDeleted?: boolean; catalogTier?: CatalogTier } = {},
+    options: { catalogTier?: CatalogTier } = {},
   ): Promise<Game | null> {
-    const { restoreDeleted = false, catalogTier } = options;
+    const { catalogTier } = options;
 
     const existing = await this.games.findOne({
       where: { igdbId: candidate.igdbId },
@@ -560,14 +433,10 @@ export class IngestionService {
     });
     if (existing) {
       if (existing.deletedAt) {
-        if (!restoreDeleted) {
-          this.logger.log(
-            `[ingest-igdb] skipping soft-deleted game "${existing.name}" (igdb=${candidate.igdbId})`,
-          );
-          return null;
-        }
-        await this.games.restore(existing.id);
-        existing.deletedAt = null;
+        this.logger.log(
+          `[ingest-igdb] skipping soft-deleted game "${existing.name}" (igdb=${candidate.igdbId})`,
+        );
+        return null;
       }
       await this.ensureIgdbSource(
         existing.id,
@@ -623,7 +492,7 @@ export class IngestionService {
    */
   async ingestSteamApp(
     appId: number,
-    options: { restoreDeleted?: boolean; catalogTier?: CatalogTier } = {},
+    options: { catalogTier?: CatalogTier } = {},
   ): Promise<string | null> {
     const details = await this.steam.getAppDetails(appId);
     if (!details) {
@@ -4507,9 +4376,9 @@ export class IngestionService {
   private async upsertGameFromSteam(
     appId: number,
     details: SteamAppDetails,
-    options: { restoreDeleted?: boolean; catalogTier?: CatalogTier } = {},
+    options: { catalogTier?: CatalogTier } = {},
   ): Promise<Game | null> {
-    const { restoreDeleted = false, catalogTier } = options;
+    const { catalogTier } = options;
 
     const existingSource = await this.gameSources.findOne({
       where: {
@@ -4540,14 +4409,10 @@ export class IngestionService {
 
     if (existingGame) {
       if (existingGame.deletedAt) {
-        if (!restoreDeleted) {
-          this.logger.log(
-            `[ingest-steam] skipping soft-deleted game "${existingGame.name}" (app=${appId})`,
-          );
-          return null;
-        }
-        await this.games.restore(existingGame.id);
-        existingGame.deletedAt = null;
+        this.logger.log(
+          `[ingest-steam] skipping soft-deleted game "${existingGame.name}" (app=${appId})`,
+        );
+        return null;
       }
       const game = existingGame;
       keepManualFields(game, () => {
@@ -4594,14 +4459,10 @@ export class IngestionService {
       });
       if (existingByIgdb) {
         if (existingByIgdb.deletedAt) {
-          if (!restoreDeleted) {
-            this.logger.log(
-              `[ingest-steam] skipping soft-deleted game "${existingByIgdb.name}" (igdb=${igdb.igdbId})`,
-            );
-            return null;
-          }
-          await this.games.restore(existingByIgdb.id);
-          existingByIgdb.deletedAt = null;
+          this.logger.log(
+            `[ingest-steam] skipping soft-deleted game "${existingByIgdb.name}" (igdb=${igdb.igdbId})`,
+          );
+          return null;
         }
         // An edition's own Steam app ("… Deluxe Edition") resolves to its base
         // game. When that game already polls its own Steam app, a second one

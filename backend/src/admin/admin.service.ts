@@ -784,13 +784,7 @@ export class AdminService {
 
   async listGames(opts: {
     q?: string;
-    platform?: string;
-    platformExclusive?: boolean;
-    hasSales?: boolean;
-    hasEstimates?: boolean;
-    needsRefresh?: boolean;
-    catalogTier?: CatalogTier;
-    sort?: 'updated' | 'releaseDate' | 'lastRefreshed';
+    sort?: 'updated' | 'releaseDate' | 'lastRefreshed' | 'created';
     direction?: 'asc' | 'desc';
     offset?: number;
     limit?: number;
@@ -809,49 +803,10 @@ export class AdminService {
     const hasEstimateExpr =
       'EXISTS (SELECT 1 FROM sales_estimate e WHERE e."gameId" = g.id)';
 
-    const needsRefreshExpr = harvestDueSql('g').isDue;
-
+    const q = opts.q?.trim();
     const applyFilters = (
       builder: ReturnType<typeof this.games.createQueryBuilder>,
-    ) => {
-      if (opts.q && opts.q.trim()) {
-        builder.andWhere('g.name ILIKE :q', { q: `%${opts.q.trim()}%` });
-      }
-      if (opts.platform) {
-        if (opts.platformExclusive) {
-          builder.andWhere(
-            'g.platforms = ARRAY[:platform]::game_platforms_enum[]',
-            { platform: opts.platform },
-          );
-        } else {
-          builder.andWhere(
-            'g.platforms @> ARRAY[:platform]::game_platforms_enum[]',
-            { platform: opts.platform },
-          );
-        }
-      }
-      if (opts.hasSales === true) {
-        builder.andWhere(hasMilestoneExpr);
-      } else if (opts.hasSales === false) {
-        builder.andWhere(`NOT ${hasMilestoneExpr}`);
-      }
-      if (opts.hasEstimates === true) {
-        builder.andWhere(hasEstimateExpr);
-      } else if (opts.hasEstimates === false) {
-        builder.andWhere(`NOT ${hasEstimateExpr}`);
-      }
-      if (opts.needsRefresh === true) {
-        builder.andWhere(`(${needsRefreshExpr})`);
-      } else if (opts.needsRefresh === false) {
-        builder.andWhere(`NOT (${needsRefreshExpr})`);
-      }
-      if (opts.catalogTier) {
-        builder.andWhere('g.catalogTier = :catalogTier', {
-          catalogTier: opts.catalogTier,
-        });
-      }
-      return builder;
-    };
+    ) => (q ? builder.andWhere('g.name ILIKE :q', { q: `%${q}%` }) : builder);
 
     const qb = this.games
       .createQueryBuilder('g')
@@ -880,6 +835,7 @@ export class AdminService {
       updated: 'g.updatedAt',
       releaseDate: 'g.releaseDate',
       lastRefreshed: 'g.lastRefreshedAt',
+      created: 'g.createdAt',
     };
     const sortExpr = SORT_EXPR[opts.sort ?? 'updated'] ?? SORT_EXPR.updated;
 

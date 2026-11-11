@@ -263,7 +263,6 @@ export class Game {
   // Soft-delete marker. When set, the row stays in the DB but is hidden from
   // every standard read (TypeORM excludes soft-deleted rows by default) so the
   // discovery / refresh pipelines never re-create a game an admin removed.
-  // Manual re-add via `addGameFromIgdbUrl` restores the row.
   @DeleteDateColumn({ type: 'timestamptz', nullable: true })
   deletedAt: Date | null;
 

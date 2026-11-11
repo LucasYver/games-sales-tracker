@@ -46,6 +46,7 @@ ALINEA_RE = re.compile(r"alinea|aliena|rhys\s*elliott?", re.I)
 PLATFORMS = ("PC", "PLAYSTATION", "XBOX")
 
 KEPT = "gardé"
+OUT_OF_SCOPE = "jeu sorti avant 2017"
 EXCLUSIONS = Path(__file__).resolve().parent / "exclusions.csv"
 
 
@@ -322,7 +323,7 @@ def build(snapshot: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
         (g.deleted.to_numpy(), "jeu supprimé"),
         (g.isFree.fillna(False).to_numpy(), "jeu gratuit"),
         ((g.excluded != "").to_numpy(), "jeu exclu à la main"),
-        ((g.firstRelease < SCOPE_START).to_numpy(), "jeu sorti avant 2017"),
+        ((g.firstRelease < SCOPE_START).to_numpy(), OUT_OF_SCOPE),
         (f.units <= 0, "chiffre à zéro"),
         (f.isEstimate, "estimation d'un tiers"),
         (f.platform == "SWITCH", "Switch (non estimée par le site)"),
@@ -333,6 +334,13 @@ def build(snapshot: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     kept = f[f.status == KEPT].sort_values("reportedAt")
     repeated = kept[kept.duplicated(["gameId", "target", "measure", "units"], keep="first")].index
     f.loc[repeated, "status"] = "même chiffre répété"
+    # Figures of games released before 2017 that pass every other filter: a model may
+    # learn from them (`trainOnly`). Their status stays dropped: never judged, and their
+    # games are not in the catalog, so never estimated.
+    later = [c for c, r in reasons if r in ("chiffre à zéro", "estimation d'un tiers", "Switch (non estimée par le site)", "daté avant la sortie")]
+    f["trainOnly"] = (f.status == OUT_OF_SCOPE) & ~np.logical_or.reduce([np.asarray(c, bool) for c in later])
+    old = f[f.trainOnly].sort_values("reportedAt")
+    f.loc[old[old.duplicated(["gameId", "target", "measure", "units"], keep="first")].index, "trainOnly"] = False
 
     # PC release, or the game's first release when the PC date is missing but Steam reads it.
     pc_release = {gid: d.to_datetime64() for gid, d in games.firstRelease.dropna().items() if gid in store.series.get("STEAM_REVIEWS", {})}
@@ -373,6 +381,9 @@ def main() -> None:
           f"catalog {len(catalog):,} games")
     print(figures.status.value_counts().to_string())
     print(kept.groupby(["target", "measure"]).agg(figures=("units", "size"), games=("gameId", "nunique")).to_string())
+    old = figures[figures.trainOnly]
+    print(f"training only (games released before 2017): {len(old):,} figures on {old.gameId.nunique():,} games")
+    print(old.groupby(["target", "measure"]).agg(figures=("units", "size"), games=("gameId", "nunique")).to_string())
 
 
 if __name__ == "__main__":

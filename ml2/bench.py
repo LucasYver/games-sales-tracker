@@ -53,17 +53,35 @@ def fold_of(game_id: str, repeat: int) -> int:
     return _hash(f"v2-fold-{repeat}:{game_id}") % FOLDS
 
 
-def load_figures(snapshot: Path) -> pd.DataFrame:
-    """Kept figures, with the set each game belongs to."""
+def load_figures(snapshot: Path, train_only: bool = False) -> pd.DataFrame:
+    """Kept figures, with the set each game belongs to. `train_only` adds the figures of
+    games released before 2017: a model may learn from them, they are never judged."""
     f = pd.read_parquet(snapshot / "figures.parquet")
-    f = f[f.status == KEPT].reset_index(drop=True)
-    f["locked"] = f.gameId.map(is_locked)
+    if "trainOnly" not in f:
+        f["trainOnly"] = False
+    f = f[(f.status == KEPT) | (f.trainOnly & train_only)].reset_index(drop=True)
+    f["locked"] = f.gameId.map(is_locked) & ~f.trainOnly
     return f
 
 
 def judged(figures: pd.DataFrame) -> pd.DataFrame:
     sales = (figures.measure == "ventes") & figures.target.isin(TARGETS)
-    return figures[sales | ((figures.measure == "joueurs") & (figures.target == "PC"))]
+    out = figures[sales | ((figures.measure == "joueurs") & (figures.target == "PC"))]
+    return out[~out.trainOnly] if "trainOnly" in out else out
+
+
+def _extra(model_class, figures: pd.DataFrame) -> pd.DataFrame:
+    """Training-only figures (games released before 2017), for a model that asks for them."""
+    return figures[figures.trainOnly & bool(getattr(model_class, "old_games", False))]
+
+
+def _with(train: pd.DataFrame, extra: pd.DataFrame) -> pd.DataFrame:
+    return pd.concat([train, extra]) if len(extra) else train
+
+
+def training_rows(model_class, figures: pd.DataFrame) -> pd.DataFrame:
+    """Everything a model may learn from outside the locked test."""
+    return _with(figures[~figures.locked & ~figures.trainOnly], _extra(model_class, figures))
 
 
 # ---- running a model ---------------------------------------------------------
@@ -78,26 +96,26 @@ def _predict(model_class, train: pd.DataFrame, test: pd.DataFrame) -> pd.DataFra
 
 
 def cross_validate(model_class, figures: pd.DataFrame) -> pd.DataFrame:
-    dev = figures[~figures.locked]
+    dev, extra = figures[~figures.locked & ~figures.trainOnly], _extra(model_class, figures)
 
     def one(repeat: int, k: int) -> pd.DataFrame:
         folds = dev.gameId.map(lambda g: fold_of(g, repeat))
-        return _predict(model_class, dev[folds != k], judged(dev[folds == k])).assign(test="cv", repeat=repeat)
+        return _predict(model_class, _with(dev[folds != k], extra), judged(dev[folds == k])).assign(test="cv", repeat=repeat)
 
     parts = Parallel(n_jobs=-1)(delayed(one)(repeat, k) for repeat in range(REPEATS) for k in range(FOLDS))
     return pd.concat(parts, ignore_index=True)
 
 
 def time_test(model_class, figures: pd.DataFrame) -> pd.DataFrame:
-    dev = figures[~figures.locked]
+    dev, extra = figures[~figures.locked & ~figures.trainOnly], _extra(model_class, figures)
     recent = dev.releaseDate >= TIME_CUTOFF
     # A game released before 2025 stays out of both sides if its figures came later.
-    train = dev[~recent & (dev.reportedAt < TIME_CUTOFF)]
+    train = _with(dev[~recent & (dev.reportedAt < TIME_CUTOFF)], extra[extra.reportedAt < TIME_CUTOFF])
     return _predict(model_class, train, judged(dev[recent])).assign(test="time", repeat=0)
 
 
 def final_test(model_class, figures: pd.DataFrame) -> pd.DataFrame:
-    return _predict(model_class, figures[~figures.locked], judged(figures[figures.locked])).assign(test="final", repeat=0)
+    return _predict(model_class, training_rows(model_class, figures), judged(figures[figures.locked])).assign(test="final", repeat=0)
 
 
 # ---- scoring -------------------------------------------------------------------
@@ -211,7 +229,7 @@ def main() -> None:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     final = "--final" in sys.argv
     snapshot = latest_snapshot()
-    figures = load_figures(snapshot)
+    figures = load_figures(snapshot, train_only=True)
     out = predictions_dir(snapshot)
     out.mkdir(exist_ok=True)
     for key in args or REGISTRY:

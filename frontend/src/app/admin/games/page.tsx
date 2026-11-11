@@ -4,7 +4,7 @@ import {
   type AdminGameSummary,
   type PaginatedAdmin,
 } from '@/lib/admin';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -17,37 +17,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { AddGameForm } from '../_components/AddGameForm';
 import { DeleteButton } from '../_components/DeleteButton';
 import { deleteGame } from '../actions';
 
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 50;
-const PLATFORM_OPTIONS = [
-  { value: 'PC', label: 'PC' },
-  { value: 'PC_ONLY', label: 'PC only' },
-  { value: 'PLAYSTATION', label: 'PlayStation' },
-  { value: 'PLAYSTATION_ONLY', label: 'PlayStation only' },
-  { value: 'XBOX', label: 'Xbox' },
-  { value: 'XBOX_ONLY', label: 'Xbox only' },
-  { value: 'SWITCH', label: 'Switch' },
-  { value: 'SWITCH_ONLY', label: 'Switch only' },
-  { value: 'MOBILE', label: 'Mobile' },
-  { value: 'MOBILE_ONLY', label: 'Mobile only' },
-];
-
-function parsePlatformFilter(raw: string | undefined): {
-  platform?: string;
-  platformExclusive?: boolean;
-} {
-  if (!raw) return {};
-  if (raw.endsWith('_ONLY')) {
-    return { platform: raw.slice(0, -5), platformExclusive: true };
-  }
-  return { platform: raw };
-}
-
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-US', {
@@ -109,11 +84,6 @@ export default async function AdminGamesPage({
 }: {
   searchParams: Promise<{
     q?: string;
-    platform?: string;
-    hasSales?: string;
-    hasEstimates?: string;
-    needsRefresh?: string;
-    catalogTier?: string;
     sort?: string;
     direction?: string;
     page?: string;
@@ -121,11 +91,6 @@ export default async function AdminGamesPage({
 }) {
   const {
     q,
-    platform,
-    hasSales,
-    hasEstimates,
-    needsRefresh,
-    catalogTier,
     sort,
     direction,
     page: pageParam,
@@ -136,24 +101,11 @@ export default async function AdminGamesPage({
   // Active filters/sort shared by the fetch query and the pagination links.
   const filters: Record<string, string> = {};
   if (q) filters.q = q;
-  if (platform) filters.platform = platform;
-  if (hasSales) filters.hasSales = hasSales;
-  if (hasEstimates) filters.hasEstimates = hasEstimates;
-  if (needsRefresh) filters.needsRefresh = needsRefresh;
-  if (catalogTier) filters.catalogTier = catalogTier;
   if (sort) filters.sort = sort;
   if (direction) filters.direction = direction;
 
-  const { platform: apiPlatform, platformExclusive } =
-    parsePlatformFilter(platform);
-
-  const filtersWithoutPlatform = Object.fromEntries(
-    Object.entries(filters).filter(([k]) => k !== 'platform'),
-  );
   const params = new URLSearchParams({
-    ...filtersWithoutPlatform,
-    ...(apiPlatform ? { platform: apiPlatform } : {}),
-    ...(platformExclusive ? { platformExclusive: 'true' } : {}),
+    ...filters,
     limit: String(PAGE_SIZE),
     offset: String(offset),
   });
@@ -174,96 +126,11 @@ export default async function AdminGamesPage({
       </header>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-            Add game from IGDB
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2">
-          <p className="text-muted-foreground text-sm">
-            Paste the canonical IGDB game URL (e.g.{' '}
-            <code className="text-xs">https://www.igdb.com/games/elden-ring</code>
-            ). If a Steam app is linked, the full Steam ingest runs; otherwise
-            we seed console store ratings and an initial estimate.
-          </p>
-          <AddGameForm />
-        </CardContent>
-      </Card>
-
-      <Card>
         <CardContent className="pt-6">
           <form className="flex flex-wrap items-end gap-4">
             <div className="flex min-w-[16rem] flex-1 flex-col gap-1.5">
               <Label htmlFor="q">Search by name</Label>
               <Input id="q" name="q" defaultValue={q ?? ''} placeholder="Halo, Witcher…" />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="platform">Platform</Label>
-              <select
-                id="platform"
-                name="platform"
-                defaultValue={platform ?? ''}
-                className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs"
-              >
-                <option value="">All</option>
-                {PLATFORM_OPTIONS.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="hasSales">Milestones</Label>
-              <select
-                id="hasSales"
-                name="hasSales"
-                defaultValue={hasSales ?? ''}
-                className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs"
-              >
-                <option value="">Any</option>
-                <option value="true">With milestone</option>
-                <option value="false">Without milestone</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="hasEstimates">Estimates</Label>
-              <select
-                id="hasEstimates"
-                name="hasEstimates"
-                defaultValue={hasEstimates ?? ''}
-                className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs"
-              >
-                <option value="">Any</option>
-                <option value="true">With estimate</option>
-                <option value="false">Without estimate</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="needsRefresh">Needs refresh</Label>
-              <select
-                id="needsRefresh"
-                name="needsRefresh"
-                defaultValue={needsRefresh ?? ''}
-                className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs"
-              >
-                <option value="">Any</option>
-                <option value="true">Due for refresh</option>
-                <option value="false">Up to date</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="catalogTier">Catalog</Label>
-              <select
-                id="catalogTier"
-                name="catalogTier"
-                defaultValue={catalogTier ?? ''}
-                className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs"
-              >
-                <option value="">Any</option>
-                <option value="CORE">Core</option>
-                <option value="EXTENDED">Extended</option>
-              </select>
             </div>
             <Button type="submit">Apply</Button>
             <Button asChild variant="ghost">
@@ -288,6 +155,14 @@ export default async function AdminGamesPage({
               />
               <TableHead className="text-right">Milestone</TableHead>
               <TableHead className="text-right">Estimate</TableHead>
+              <SortableHead
+                column="created"
+                label="Added"
+                align="right"
+                sort={sort}
+                direction={direction}
+                filters={filters}
+              />
               <SortableHead
                 column="lastRefreshed"
                 label="Last refresh"
@@ -340,6 +215,9 @@ export default async function AdminGamesPage({
                   {g.hasEstimate ? 'Yes' : '—'}
                 </TableCell>
                 <TableCell className="text-muted-foreground text-right text-sm">
+                  {formatDate(g.createdAt)}
+                </TableCell>
+                <TableCell className="text-muted-foreground text-right text-sm">
                   {formatDate(g.lastRefreshedAt)}
                 </TableCell>
                 <TableCell className="text-right">
@@ -358,7 +236,7 @@ export default async function AdminGamesPage({
                   colSpan={8}
                   className="text-muted-foreground py-12 text-center"
                 >
-                  No games match these filters.
+                  No games match this search.
                 </TableCell>
               </TableRow>
             )}

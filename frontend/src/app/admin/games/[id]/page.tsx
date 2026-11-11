@@ -107,10 +107,10 @@ export default async function AdminGameDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; platform?: string }>;
 }) {
   const { id } = await params;
-  const { tab: tabParam } = await searchParams;
+  const { tab: tabParam, platform: platformParam } = await searchParams;
   const tab = tabParam ?? 'overview';
 
   const s = await adminFetch<AdminGamePageSummary>(`/games/${id}/summary`);
@@ -283,7 +283,9 @@ export default async function AdminGameDetailPage({
             excluded={s.excludedFromReference}
           />
         )}
-        {tab === 'milestones' && <MilestonesTab s={s} />}
+        {tab === 'milestones' && (
+          <MilestonesTab s={s} platform={platformParam ?? null} />
+        )}
       </Suspense>
     </div>
   );
@@ -1327,7 +1329,45 @@ function FeatBar({
 
 // ─── Milestones tab ──────────────────────────────────────────────────────────
 
-function MilestonesTab({ s }: { s: AdminGamePageSummary }) {
+// Worldwide first, then the storefronts in the usual order; anything else
+// (rare platform labels) follows alphabetically.
+const MILESTONE_PLATFORM_ORDER = ['GLOBAL', ...PLATFORM_ORDER];
+
+function milestonePlatformRank(p: string): number {
+  const i = MILESTONE_PLATFORM_ORDER.indexOf(p);
+  return i === -1 ? MILESTONE_PLATFORM_ORDER.length : i;
+}
+
+function MilestonesTab({
+  s,
+  platform,
+}: {
+  s: AdminGamePageSummary;
+  platform: string | null;
+}) {
+  const counts = new Map<string, number>();
+  for (const m of s.milestones)
+    counts.set(m.platform, (counts.get(m.platform) ?? 0) + 1);
+  const platforms = [...counts.keys()].sort(
+    (a, b) =>
+      milestonePlatformRank(a) - milestonePlatformRank(b) || a.localeCompare(b),
+  );
+  // An unknown ?platform= (stale link) falls back to "All".
+  const active = platform && counts.has(platform) ? platform : null;
+  const rows = active
+    ? s.milestones.filter((m) => m.platform === active)
+    : s.milestones;
+  const hrefFor = (p: string | null) =>
+    `/admin/games/${s.id}?tab=milestones${p ? `&platform=${encodeURIComponent(p)}` : ''}`;
+  const chips: { key: string | null; label: string; count: number }[] = [
+    { key: null, label: 'All', count: s.milestones.length },
+    ...platforms.map((p) => ({
+      key: p,
+      label: p === 'GLOBAL' ? 'Worldwide' : p,
+      count: counts.get(p) ?? 0,
+    })),
+  ];
+
   return (
     <Card>
       <CardHeader>
@@ -1339,6 +1379,32 @@ function MilestonesTab({ s }: { s: AdminGamePageSummary }) {
         <div className="px-6">
           <AddMilestoneForm gameId={s.id} />
         </div>
+        {platforms.length > 1 && (
+          <nav
+            aria-label="Filter by platform"
+            className="flex flex-wrap gap-1.5 px-6"
+          >
+            {chips.map((c) => {
+              const on = c.key === active;
+              return (
+                <Link
+                  key={c.key ?? 'all'}
+                  href={hrefFor(c.key)}
+                  scroll={false}
+                  aria-current={on ? 'page' : undefined}
+                  className={
+                    on
+                      ? 'border-primary bg-primary/10 text-foreground flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold'
+                      : 'border-border text-muted-foreground hover:text-foreground flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs'
+                  }
+                >
+                  {c.label}
+                  <span className="tabular-nums opacity-70">{c.count}</span>
+                </Link>
+              );
+            })}
+          </nav>
+        )}
         {/* Same MilestoneRow component as the /admin/milestones listing — it's a
             table row, so it must live inside a <Table>. `gameName` is omitted
             here (we're already on the game), giving the 8-column layout. */}
@@ -1357,10 +1423,10 @@ function MilestonesTab({ s }: { s: AdminGamePageSummary }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {s.milestones.map((m) => (
+              {rows.map((m) => (
                 <MilestoneRow key={m.id} milestone={m} />
               ))}
-              {s.milestones.length === 0 && (
+              {rows.length === 0 && (
                 <TableRow>
                   <TableCell
                     colSpan={8}

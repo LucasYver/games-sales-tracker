@@ -251,3 +251,95 @@ What the check found (2026-11-10), 4,428 games estimated, 543 anchored:
 - Some games have fewer than 200 Steam reviews while their console ratings point to
   more than 20,000 sales: console-heavy games, or a Steam entry pointing at the wrong
   product. Page 5 lists them.
+
+Five more leads, each tested alone against H8 (2026-11-11). Reference H8: totals ×1.47
+in CV and ×1.54 in time, PC ×1.42 / ×1.58, small games (2018 leak players) ×1.35.
+"Wins" is the share of game resamples where the lead beats H8 on totals, CV / time.
+
+| Lead | What changes | Totals CV | Totals time | PC CV / time | Small games | Wins CV / time | Verdict |
+| ---- | ------------ | --------- | ----------- | ------------ | ----------- | -------------- | ------- |
+| H21 | The boosting minimises the absolute error (`boosting_median` in `algorithms.py`) | ×1.47 | ×1.57 | ×1.39 / ×1.99 | ×1.32 | 63 % / 39 % | rejected |
+| H22 | Training weight of a figure halved every 3 years of age | ×1.47 | ×1.52 | ×1.41 / ×1.51 | ×1.34 | 55 % / 56 % | rejected |
+| H23 | Same, halved every 5 years | ×1.48 | ×1.55 | ×1.40 / ×1.44 | ×1.35 | 25 % / 44 % | rejected |
+| H24 | Monotonic constraints: never lower when a signal rises | ×1.48 | ×1.53 | ×1.42 / ×1.50 | ×1.35 | 21 % / 68 % | rejected for accuracy |
+| H25 | 1,528 figures of 1,214 games released before 2017 as training-only rows | ×1.49 | ×1.61 | ×1.44 / ×1.49 | ×1.33 | 17 % / 4 % | rejected |
+| H26 | IGDB type in detail, number in the series, has a parent game (`traits_detail`) | ×1.48 | ×1.52 | ×1.40 / ×1.60 | ×1.35 | 22 % / 64 % | rejected |
+
+None passes the rule, so nothing was combined. H24 was then adopted by the owner for
+consistency, not accuracy (see below). Details:
+
+- H21 is better where figures are many and alike (small games 99 % of resamples, PC in
+  CV 89 %) and much worse on recent PC games (bias ×1.41 → ×1.99).
+- H22 / H23 count a figure's age from the latest figure of the training rows. The 2018
+  leak rows keep 15 % (3 years) or 32 % (5 years) of their weight; small games do not
+  move. PC in time improves (82 % and 85 % of resamples), short of the rule.
+- H24 constrains `log_steamPeakPlayers`, `log_psRatings`, `log_xboxRatings`,
+  `log_steamFollowers` in both models, `log_peakPerReview` in the per-review model, and
+  `log_steamReviews`, `log_reviewsPerDay` in the direct model (the one that answers for
+  games with no Steam review). `check_monotony.py` raises each signal by 20 % on the
+  4,428 released games of the catalog and counts the estimates that drop:
+
+  | Signal raised by 20 % | H8 | H24 |
+  | --------------------- | -- | --- |
+  | Peak players (4,056 games) | 23.6 % (median drop 1.4 %, largest 14.9 %) | 0 % |
+  | PlayStation ratings (2,335) | 3.0 % (median 3.3 %, largest 10.2 %) | 0 % |
+  | Xbox ratings (2,289) | 3.1 % (median 0.9 %, largest 3.3 %) | 0 % |
+  | Steam followers (3,921) | 22.0 % (median 5.2 %, largest 27.4 %) | 0 % |
+  | At least one of the four | 36.7 % of all games | 0 % |
+  | Steam reviews (4,109), not constrained | 5.6 % | 7.3 % |
+
+  It costs ×0.01 in CV and nothing in time: not an accuracy gain, so rejected by the
+  rule. The owner adopted it for consistency alone (below).
+- H25: `dataset.py` marks these figures `trainOnly` (status unchanged, "jeu sorti avant
+  2017"), after the same filters as the others (not rejected, dated, no engagement, not a
+  third-party estimate, not Switch, not dated before release, no repeat): 363 totals of
+  203 games, 22 PC, 10 PlayStation and 5 Xbox sales figures, 1,121 Steam leak players,
+  7 PlayStation leak players. `bench.load_figures(train_only=True)` hands them to a
+  model with `old_games = True` in every training set (before 2025 only for the test in
+  time); `judged` never returns them and their games are not in the catalog. Old games
+  sold far more per review (totals: 219 per review against 67 for games in scope; leak
+  players: 104 against 62), and the model carries part of that over to recent games
+  (bias in time ×1.15 → ×1.24).
+- H26: too few games carry the information (25 of the 888 games with a kept figure are
+  not "main game", 106 have a number in their series, 21 a parent game; the number is
+  sometimes a year, such as 2077).
+
+The dataset rebuilt with `trainOnly` is otherwise identical (figures and catalog), and
+H8, `anchor.py`, `consoles.py`, `estimate_catalog.py` and `diagnose.py` give the same
+outputs as before.
+
+H24 adopted as the reference model (owner's decision, 2026-11-11): `BEST` in
+`learned.py` is now `H24Monotone`, and `anchor.py`, `consoles.py`,
+`estimate_catalog.py`, `diagnose.py` were rerun.
+
+| Test | H8 | H24 |
+| ---- | -- | --- |
+| Model alone, totals, CV / time | ×1.47 / ×1.54 | ×1.48 / ×1.53 |
+| First week after release, CV / time | ×1.53 / ×1.59 | ×1.54 / ×1.65 |
+| Anchoring, 463 totals with an earlier total | ×1.14 (model ×1.41) | ×1.14 (model ×1.42) |
+| Whole system on the 896 development totals | ×1.46 → ×1.35 | ×1.45 → ×1.36 |
+| Console rule, all 411 unseen games | ×1.52 → ×1.50 | ×1.48 → ×1.47 |
+| Console rule, games raised by their ratings | ×1.71 → ×1.54 (64 games) | ×1.64 → ×1.49 (70 games) |
+| Catalog: by the model / raised by console ratings | 3,310 / 248 | 3,258 / 298 |
+
+Side effect found after the switch: on published figures the two models have the same
+bias at every size (within ×0.02 almost everywhere), but on the catalog today H24's
+model answers 15 % lower in the median (final estimates 12 % lower; their sum 6.68 →
+6.44 billion):
+
+| Steam reviews today | Games | Model H24 / H8 (median) | Sales per review, PC-only games: H8 → H24 |
+| ------------------- | ----- | ----------------------- | ------------------------------------------ |
+| 1 to 100 | 115 | ×0.83 | 144 → 119 |
+| 100 to 1,000 | 887 | ×0.77 | 82 → 66 |
+| 1,000 to 10,000 | 2,020 | ×0.82 | 56 → 48 |
+| 10,000 to 100,000 | 925 | ×0.95 | 45 → 42 |
+| 100,000 and more | 162 | ×0.98 | 32 → 32 |
+
+The drop goes with the follower count: ×0.83 for games that have one, ×0.98 without.
+95 % of catalog games have a follower count today, against 52 % of the published
+figures at their date, and the catalog's games are much older (median 5.4 years against
+0.6) with far fewer peak players per review (0.17 against 1.02). The catalog is mostly
+outside what the published figures cover, so they cannot say which level is right
+(known marks for PC-only games: about 65 sales per review in the 2018 leak and the
+published totals, 34 to 47 for totals published since 2020). The owner kept H24
+knowing this (2026-11-11).

@@ -52,7 +52,7 @@ model ──bench.py──▶ judged on published figures (CV by game ×8, test 
 model + anchor.py + consoles.py ──estimate_catalog.py──▶ every game estimated today
 ```
 
-- **Model** (`learned.BEST`, currently H8): one gradient-boosted model for
+- **Model** (`learned.BEST`, currently H24 = H8 + monotonic constraints): one gradient-boosted model for
   every type of figure. It predicts sales per Steam review; inputs are the
   families of `features.py` (signals at the date, time, platforms, type of
   figure, game traits, track record of series and studio). Leak players of
@@ -74,14 +74,15 @@ All commands from `ml2/`, with the v1 environment (`../ml/.venv/bin/python`).
 | `bench.py [model …]` | Judge models (`REGISTRY` in `models.py`). About 1 to 2 min each. |
 | `compare.py a b …` | Compare models on the figures they share; the first is the reference. |
 | `anchor.py`, `consoles.py`, `estimate_catalog.py`, `diagnose.py` | Anchoring test, console test, whole catalog, error diagnosis. |
+| `check_monotony.py a b …` | Share of catalog games whose estimate drops when a signal is raised by 20 %. |
 | `../ml/.venv/bin/streamlit run app.py` | The UI (or the `ml2` entry of `.claude/launch.json`, port 8512). |
 
 After changing `dataset.py`, rerun `dataset.py`, then `bench.py` for the models
 compared, then `anchor.py`, `consoles.py`, `estimate_catalog.py`, `diagnose.py`.
 Restart the UI server after changing a Python module.
 
-To try a hypothesis: add a small subclass in `learned.py` (see `H8PcOnly`,
-`H19LaunchPeak`), register it in `VARIANTS`, run `bench.py <key>` and
+To try a hypothesis: add a small subclass of `BEST` in `learned.py` (see
+`H19LaunchPeak`, `H24Monotone`), register it in `VARIANTS`, run `bench.py <key>` and
 `compare.py <BEST_KEY> <key>`. Then add an entry to `history.py`, kept or not.
 
 ## Where it stands (2026-11-11)
@@ -90,17 +91,17 @@ Typical error = factor between estimate and published figure for the middle game
 
 | Test | Result |
 | ---- | ------ |
-| Model alone, totals, cross-validation | ×1.47 |
-| Model alone, totals, test in time | ×1.54 (17 % too high on recent games) |
-| Model alone, PC figures | ×1.42 |
+| Model alone, totals, cross-validation | ×1.48 |
+| Model alone, totals, test in time | ×1.53 (14 % too high on recent games) |
+| Model alone, PC figures | ×1.42 (×1.50 in time) |
 | Small PC games (2018 Steam leak players) | ×1.35, no bias |
-| Anchoring, games that had an earlier total | ×1.14 (model alone ×1.41) |
-| Whole system on all development totals | ×1.46 → ×1.35 |
-| Games raised by console ratings | ×1.71 → ×1.54 |
+| Anchoring, games that had an earlier total | ×1.14 (model alone ×1.42) |
+| Whole system on all development totals | ×1.45 → ×1.36 |
+| Games raised by console ratings | ×1.64 → ×1.49 |
 
-Catalog today: 4,428 released games; 543 anchored, about 3,350 by the model,
-about 210 raised by console ratings, 126 by console ratings alone, 198 not
-estimated (no signal).
+Catalog today: 4,428 released games; 543 anchored, 3,258 by the model, 298
+raised by console ratings, 126 by console ratings alone, 5 floored by a
+platform figure, 198 not estimated (no signal).
 
 What was learned:
 
@@ -111,14 +112,37 @@ What was learned:
   rebuilt at the date. What did not: other algorithms, console structure,
   neighbours, publisher, other stores, age cap, launch peak, the era the
   reviews were written in (H20: the year of the figure already carries it).
-- The first week after release stays at ×1.53: 38 first-week totals have no
+- Five more leads tested alone against H8 on 2026-11-11, all rejected (totals
+  CV / time, H8 is ×1.47 / ×1.54): H21 boosting on the absolute error ×1.47 /
+  ×1.57 (PC in time ×1.99); H22 / H23 training weight halved every 3 or 5
+  years ×1.47 / ×1.52 and ×1.48 / ×1.55; H24 monotonic constraints ×1.48 /
+  ×1.53; H25 the 1,528 figures of games released before 2017 as training-only
+  rows ×1.49 / ×1.61; H26 IGDB type in detail, number in the series, parent
+  game ×1.48 / ×1.52. None wins in 9 resamples out of 10.
+- H24 was adopted all the same by the owner on 2026-11-11, for consistency:
+  with H8, 37 % of catalog games got a lower estimate when their peak players,
+  console ratings or followers were raised by 20 % (drops of 1 to 5 % mostly);
+  with H24, none. It costs ×0.01 in CV and nothing in time (first week in time
+  ×1.59 → ×1.65). This is an exception to the rule, decided by the owner; it
+  does not make "no gain" changes acceptable in general.
+- Side effect of H24, found after the switch: same bias as H8 on published
+  figures at every size, but the model answers 15 % lower on the catalog in
+  the median (×0.77 from 100 to 1,000 reviews, ×0.82 from 1,000 to 10,000,
+  ×0.95 to ×0.98 above). The drop goes with the follower count, known for 95 %
+  of catalog games but only 52 % of published figures at their date. Published
+  figures cannot say which level is right (README, last section). The owner
+  kept H24 knowing this.
+- The plumbing of H25 stays: `figures.parquet` has a `trainOnly` column
+  (status unchanged), `bench.load_figures(train_only=True)` returns those rows
+  and only a model with `old_games = True` learns from them.
+- The first week after release stays at ×1.54: 38 first-week totals have no
   review count at their date, 23 because the base has no Steam review reading
   before 2026-09-12 for games released earlier in 2026.
 
 ## Open points
 
-1. Level of small games: about 59 to 80 sales per review for PC-only games
-   under 10,000 reviews; known figures say about 65; almost no recent small
+1. Level of small games: 48 to 66 sales per review for PC-only games from 100
+   to 10,000 reviews with H24 (56 to 82 with H8); known figures say about 65; almost no recent small
    game has published sales to check.
 2. Missing review history for games released in 2026 before September.
 3. Games sold mostly through a launcher outside Steam (EA, Ubisoft,
@@ -129,6 +153,14 @@ What was learned:
    Morales) and Steam entries to check (page 5 of the UI lists them).
 5. Not started: ranges per game for unanchored games, anchors from platform
    figures, the locked test, freezing the model, the backend port.
+6. H24 is confirmed by the owner (2026-11-11), knowing its effect on the
+   catalog (about 15 % lower on games under 10,000 reviews). Do not reopen it
+   unless new published figures on small games say its level is wrong. Not
+   tried: constraining peak players and console ratings only, leaving the
+   follower count free.
+7. The model is on a plateau: the last 10 hypotheses tried on H8 (H17 to H26) were
+   all rejected. What still pays is data, not the model: a new published
+   figure moves its game from about ×1.45 to ×1.14 through anchoring.
 
 ## Keep this skill current
 

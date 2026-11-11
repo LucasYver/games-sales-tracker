@@ -85,7 +85,7 @@ record, with `game_type = 0` like a main game, pointing at the base game
 through `version_parent`. One game, one catalog entry:
 
 - discovery queries filter `version_parent = null`;
-- `IgdbClient` lookups (`findBySteamAppId`, `findById`, `findBySlug`,
+- `IgdbClient` lookups (`findBySteamAppId`, `findById`,
   `searchGames`, `findByName`) return the base game, with `editionOf` set to
   the matched edition's id;
 - on Steam ingest, an edition's own Steam app is attached to the base game

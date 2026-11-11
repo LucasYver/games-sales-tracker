@@ -119,23 +119,6 @@ export async function setEstimateHidden(
   updateTag(gameCacheTag(result.slug));
 }
 
-export interface AddGameResult {
-  gameId: string;
-  name: string;
-  alreadyExisted: boolean;
-  steamLinked: boolean;
-}
-
-export async function addGameByIgdbUrl(url: string): Promise<AddGameResult> {
-  const result = await adminFetch<AddGameResult>('/games', {
-    method: 'POST',
-    body: JSON.stringify({ url }),
-  });
-  revalidatePath('/admin/games');
-  revalidatePath('/admin');
-  return result;
-}
-
 export interface UpdateGamePayload {
   name?: string;
   releaseDate?: string | null;

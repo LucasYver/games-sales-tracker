@@ -212,6 +212,19 @@ def traits(rows: pd.DataFrame, ctx: Context) -> pd.DataFrame:
     return out
 
 
+GAME_TYPES = ("REMAKE", "REMASTER", "PORT", "STANDALONE_EXPANSION", "EXPANDED_GAME", "BUNDLE")
+
+
+def traits_detail(rows: pd.DataFrame, ctx: Context) -> pd.DataFrame:
+    """More of the game's traits: its IGDB type beyond "main game or not", its number in
+    the series, and whether it hangs from a parent game."""
+    g = ctx.games.reindex(rows.gameId)
+    out = pd.DataFrame({f"type_{t.lower()}": (g.gameType == t).to_numpy(float) for t in GAME_TYPES}, index=rows.index)
+    out["iterationNumber"] = g.iterationNumber.to_numpy(float)
+    out["hasParentGame"] = g.igdbParentGameId.notna().to_numpy(float)
+    return out
+
+
 def track_record(rows: pd.DataFrame, ctx: Context) -> pd.DataFrame:
     out = []
     for r in rows.itertuples():
@@ -263,7 +276,7 @@ def review_era(rows: pd.DataFrame, ctx: Context) -> pd.DataFrame:
     return pd.DataFrame({"reviewsMeanYear": mean, "reviewsShareBefore2020": before, "reviewsYearsOld": report - mean}, index=rows.index)
 
 
-FAMILIES = {"review_era": review_era, "group_coefficients": group_coefficients, "stores": stores, "publisher": publisher, "signals": signals, "time": time, "platforms": platforms, "target": target, "traits": traits,
+FAMILIES = {"traits_detail": traits_detail, "review_era": review_era, "group_coefficients": group_coefficients, "stores": stores, "publisher": publisher, "signals": signals, "time": time, "platforms": platforms, "target": target, "traits": traits,
             "track_record": track_record}
 
 

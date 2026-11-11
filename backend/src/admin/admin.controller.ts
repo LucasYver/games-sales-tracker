@@ -17,7 +17,7 @@ import type { Request } from 'express';
 import { AdminService } from './admin.service';
 import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminAuthGuard } from './admin-auth.guard';
-import { CatalogTier, SalesSource } from '../entities';
+import { SalesSource } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
 import { PublishersService } from '../publishers/publishers.service';
 import { DevelopersService } from '../developers/developers.service';
@@ -25,7 +25,6 @@ import { GenresService } from '../genres/genres.service';
 import { EstimationService } from '../estimation/estimation.service';
 import { ReferenceProfilesAdminService } from '../reference-profiles/reference-profiles-admin.service';
 import { RankService } from '../reference-profiles/rank.service';
-import { AddGameDto } from './dto/add-game.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
 import { UpdateMilestoneDto } from './dto/update-milestone.dto';
 import { CreateMilestoneDto } from './dto/create-milestone.dto';
@@ -70,12 +69,6 @@ export class AdminController {
   @Get('games')
   listGames(
     @Query('q') q?: string,
-    @Query('platform') platform?: string,
-    @Query('platformExclusive') platformExclusive?: string,
-    @Query('hasSales') hasSales?: string,
-    @Query('hasEstimates') hasEstimates?: string,
-    @Query('needsRefresh') needsRefresh?: string,
-    @Query('catalogTier') catalogTier?: string,
     @Query('sort') sort?: string,
     @Query('direction') direction?: string,
     @Query('offset') offset?: string,
@@ -83,38 +76,14 @@ export class AdminController {
   ) {
     return this.admin.listGames({
       q,
-      platform,
-      platformExclusive: platformExclusive === 'true',
-      hasSales:
-        hasSales === 'true' ? true : hasSales === 'false' ? false : undefined,
-      hasEstimates:
-        hasEstimates === 'true'
-          ? true
-          : hasEstimates === 'false'
-            ? false
-            : undefined,
-      needsRefresh:
-        needsRefresh === 'true'
-          ? true
-          : needsRefresh === 'false'
-            ? false
-            : undefined,
-      catalogTier:
-        catalogTier === CatalogTier.CORE || catalogTier === CatalogTier.EXTENDED
-          ? catalogTier
-          : undefined,
       sort:
-        sort === 'releaseDate' || sort === 'lastRefreshed' ? sort : undefined,
+        sort === 'releaseDate' || sort === 'lastRefreshed' || sort === 'created'
+          ? sort
+          : undefined,
       direction: direction === 'asc' ? 'asc' : undefined,
       offset: offset ? Number(offset) : undefined,
       limit: limit ? Number(limit) : undefined,
     });
-  }
-
-  @Post('games')
-  @HttpCode(200)
-  addGame(@Body() body: AddGameDto) {
-    return this.ingestion.addGameFromIgdbUrl(body.url);
   }
 
   @Get('games/:id')

@@ -79,6 +79,15 @@ def pc_only_total(rows: pd.DataFrame) -> np.ndarray:
     return ((rows.target == "TOTAL") & (on.onPc == 1) & (on.platformCount == 1)).to_numpy()
 
 
+# Signals more of which can only mean more sales. `log_peakPerReview` rises with the peak,
+# so it is constrained with it in the per-review model. In the direct model it would also
+# fall when reviews rise, so it is left free there: that model only answers for games
+# with no Steam review, where the column is empty.
+MONOTONE_UP = ("log_steamPeakPlayers", "log_psRatings", "log_xboxRatings", "log_steamFollowers")
+MONOTONE_UP_PER_REVIEW = ("log_peakPerReview",)
+MONOTONE_UP_DIRECT = ("log_steamReviews", "log_reviewsPerDay")
+
+
 class Learned:
     label = "Modèle appris"
     families: tuple[str, ...] = ("signals", "time", "platforms", "target")
@@ -93,6 +102,9 @@ class Learned:
                               # "residual": shift the estimate by the error made on similar games
 
     pc_only_is_pc = False  # the total of a game sold on PC only (at that date) is a PC figure
+    recency_half_life_years = None  # a figure's training weight is halved every so many years of age
+    monotone = False       # the estimate may never go down when a signal of `MONOTONE_UP` goes up
+    old_games = False      # also learn from the figures of games released before 2017 (never judged)
 
     def _prep(self, rows: pd.DataFrame) -> pd.DataFrame:
         if self.reviews != "steamReviews":
@@ -137,12 +149,17 @@ class Learned:
         for t in rows.target.unique():  # each game counts once per type of figure
             mask = (rows.target == t).to_numpy()
             w[mask] = game_weights(rows.gameId[mask])
-        direct = algorithms.make(self.algorithm).fit(x, y, sample_weight=w)
+        if self.recency_half_life_years:  # age counted from the latest figure of the training rows
+            age = ((rows.reportedAt.max() - rows.reportedAt) / pd.Timedelta(days=365.25)).to_numpy(float)
+            w = w * 0.5 ** (age / self.recency_half_life_years)
+        up = lambda names: {c: 1 for c in names if c in columns} if self.monotone else None
+        direct = algorithms.make(self.algorithm, up(MONOTONE_UP + MONOTONE_UP_DIRECT)).fit(x, y, sample_weight=w)
         per_review = None
         known = (rows.steamReviews > 0).to_numpy()
         if self.ratio and known.sum() >= 50:
             offset = np.log(rows.steamReviews.to_numpy(float)[known])
-            per_review = algorithms.make(self.algorithm).fit(x[known], y[known] - offset, sample_weight=w[known])
+            per_review = algorithms.make(self.algorithm, up(MONOTONE_UP + MONOTONE_UP_PER_REVIEW)).fit(
+                x[known], y[known] - offset, sample_weight=w[known])
 
         def predict(new: pd.DataFrame) -> np.ndarray:
             nx = self._x(new, False)
@@ -166,6 +183,8 @@ class Learned:
         for k in range(INNER_FOLDS):
             gap[folds == k] = np.log(rows.units[folds == k]) - self._core(rows[folds != k])(rows[folds == k])
         sales = (rows.measure == "ventes").to_numpy()
+        if "trainOnly" in rows:  # the width of the range is measured on games the site estimates
+            sales = sales & ~rows.trainOnly.to_numpy(bool)
         self.game_gap = pd.Series(gap[sales]).groupby(rows.gameId[sales].to_numpy()).mean()
         if self.neighbours == "residual":  # the width must be the one left after the correction
             gap = gap - RESIDUAL_SHARE * np.nan_to_num(neighbour_mean(self.game_gap, rows.gameId))
@@ -372,6 +391,36 @@ class H20ReviewEra(H8PcOnly):
     families = (*H8PcOnly.families, "review_era")
 
 
+class H21MedianLoss(H8PcOnly):
+    label = "H21 · H8 + boosting appris sur l'erreur absolue (médiane)"
+    algorithm = "boosting_median"
+
+
+class H22Recency3(H8PcOnly):
+    label = "H22 · H8 + poids d'un chiffre divisé par deux tous les 3 ans"
+    recency_half_life_years = 3
+
+
+class H23Recency5(H8PcOnly):
+    label = "H23 · H8 + poids d'un chiffre divisé par deux tous les 5 ans"
+    recency_half_life_years = 5
+
+
+class H24Monotone(H8PcOnly):
+    label = "H24 · H8 + l'estimation ne baisse jamais quand un signal monte"
+    monotone = True
+
+
+class H25OldGames(H8PcOnly):
+    label = "H25 · H8 + jeux sortis avant 2017 à l'apprentissage"
+    old_games = True
+
+
+class H26GameKind(H8PcOnly):
+    label = "H26 · H8 + type de jeu en détail (remake, portage, épisode, jeu parent)"
+    families = (*H8PcOnly.families, "traits_detail")
+
+
 def _with_algorithm(name: str, title: str):
     return type(f"H7{name.title().replace('+', '')}", (H7ReviewsAtDate,), {"algorithm": name, "label": f"H7 · {title}"})
 
@@ -386,8 +435,12 @@ ALGORITHM_VARIANTS = {
 
 # The model the rest of the lab builds on (anchoring, consoles, catalog). H8 scores like
 # H7 on the bench and, unlike it, gives a PC-only game the same PC and total estimates.
-BEST_KEY, BEST = "h8_pc_only", H8PcOnly
+# H24 is H8 with monotonic constraints: it scores the same, and its estimate never drops
+# when peak players, console ratings or followers rise (owner's decision, 2026-11-11).
+BEST_KEY, BEST = "h24_monotone", H24Monotone
 
-VARIANTS = {"h20_review_era": H20ReviewEra, "h19_launch_peak": H19LaunchPeak, "h17_age_cap_1": H17AgeCap1, "h18_age_cap_2": H18AgeCap2, "h15_publisher_offset": H15PublisherOffset, "h16_big_and_small": H16BigAndSmall, "h14_group_coefficients": H14GroupCoefficients, "h12_publisher": H12Publisher, "h13_stores": H13Stores, "h10_neighbour_ratio": H10NeighbourRatio, "h11_neighbour_residual": H11NeighbourResidual,
+VARIANTS = {"h21_median_loss": H21MedianLoss, "h22_recency_3": H22Recency3, "h23_recency_5": H23Recency5, "h24_monotone": H24Monotone,
+            "h25_old_games": H25OldGames, "h26_game_kind": H26GameKind,
+            "h20_review_era": H20ReviewEra, "h19_launch_peak": H19LaunchPeak, "h17_age_cap_1": H17AgeCap1, "h18_age_cap_2": H18AgeCap2, "h15_publisher_offset": H15PublisherOffset, "h16_big_and_small": H16BigAndSmall, "h14_group_coefficients": H14GroupCoefficients, "h12_publisher": H12Publisher, "h13_stores": H13Stores, "h10_neighbour_ratio": H10NeighbourRatio, "h11_neighbour_residual": H11NeighbourResidual,
             **ALGORITHM_VARIANTS, "h9_two_stage": H9TwoStage, "h8_pc_only": H8PcOnly, "h7_reviews_at_date": H7ReviewsAtDate, "h6_combined": H6Combined, "h1_signals": H1Signals, "h2_per_review": H2PerReview, "h3_leak": H3Leak, "h3_leak_flag": H3LeakFlag,
             "h4_traits": H4Traits, "h5_track_record": H5TrackRecord}
