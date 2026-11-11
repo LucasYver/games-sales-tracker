@@ -210,11 +210,6 @@
     "derivedFrom": "{type} of <game>{name}</game>",
     "derivedGamesLabel": "Remakes & re-releases",
     "gameModesLabel": "Modes",
-    "timeToBeatLabel": "Time to beat",
-    "ttbHastily": "{hours} h rushed",
-    "ttbNormally": "{hours} h normal",
-    "ttbCompletely": "{hours} h complete",
-    "ttbReports": "{count} player reports (IGDB)",
     "gameType": {
       "MAIN_GAME": "Main game",
       "DLC": "DLC",

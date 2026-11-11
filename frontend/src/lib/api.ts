@@ -239,8 +239,6 @@ export interface IgdbFacts {
   /** Catalog games that come from this one. */
   derivedGames: { name: string; slug: string; gameType: GameType | null }[];
   gameModes: GameMode[];
-  /** Null when too few players reported a time. */
-  timeToBeat: TimeToBeat | null;
 }
 
 export interface GameEdition {
@@ -510,7 +508,6 @@ export async function getGame(
       parentGame: game.igdbFacts?.parentGame ?? null,
       derivedGames: game.igdbFacts?.derivedGames ?? [],
       gameModes: game.igdbFacts?.gameModes ?? [],
-      timeToBeat: game.igdbFacts?.timeToBeat ?? null,
     },
     otherStores: {
       epicUrl: game.otherStores?.epicUrl ?? null,

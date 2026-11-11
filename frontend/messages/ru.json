@@ -210,11 +210,6 @@
     "derivedFrom": "{type}: <game>{name}</game>",
     "derivedGamesLabel": "Ремейки и переиздания",
     "gameModesLabel": "Режимы",
-    "timeToBeatLabel": "Время прохождения",
-    "ttbHastily": "{hours} ч бегло",
-    "ttbNormally": "{hours} ч обычно",
-    "ttbCompletely": "{hours} ч на 100 %",
-    "ttbReports": "Отчётов игроков: {count} (IGDB)",
     "gameType": {
       "MAIN_GAME": "Основная игра",
       "DLC": "DLC",

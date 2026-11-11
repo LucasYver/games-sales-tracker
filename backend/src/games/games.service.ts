@@ -62,12 +62,7 @@ import {
 } from './estimate-scope';
 import { shownPublisher } from './game-companies';
 import { platformReleaseDate } from './platform-release-date';
-import {
-  shownTimeToBeat,
-  type GameMode,
-  type GameType,
-  type TimeToBeat,
-} from './igdb-facts';
+import { type GameMode, type GameType } from './igdb-facts';
 import { normalizeSteamPriceCountry } from '../ingestion/steam-store-countries';
 import {
   COMPANY_HUBS,
@@ -165,8 +160,6 @@ export interface PublicIgdbFacts {
   /** Catalog games that come from this one (its remakes, remasters…). */
   derivedGames: { name: string; slug: string; gameType: GameType | null }[];
   gameModes: GameMode[];
-  /** Null below the report floor (`TIME_TO_BEAT_MIN_REPORTS`). */
-  timeToBeat: TimeToBeat | null;
 }
 
 export interface PlatformSales {
@@ -1373,7 +1366,6 @@ export class GamesService {
         parentGame: lineage.parentGame,
         derivedGames: lineage.derivedGames,
         gameModes: game.gameModes ?? [],
-        timeToBeat: shownTimeToBeat(game.timeToBeat, game.liveService),
       } satisfies PublicIgdbFacts,
       // Store pages IGDB links beyond the ones we track (see `sources`).
       otherStores: {

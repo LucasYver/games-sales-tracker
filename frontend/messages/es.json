@@ -210,11 +210,6 @@
     "derivedFrom": "{type} de <game>{name}</game>",
     "derivedGamesLabel": "Remakes y reediciones",
     "gameModesLabel": "Modos",
-    "timeToBeatLabel": "Duración",
-    "ttbHastily": "{hours} h rápido",
-    "ttbNormally": "{hours} h normal",
-    "ttbCompletely": "{hours} h al 100 %",
-    "ttbReports": "{count} tiempos informados por jugadores (IGDB)",
     "gameType": {
       "MAIN_GAME": "Juego principal",
       "DLC": "DLC",

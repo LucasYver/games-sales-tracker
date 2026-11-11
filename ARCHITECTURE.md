@@ -115,9 +115,9 @@ Other clients in `ingestion/`:
 - IGDB facts, read by the nightly IGDB refresh (`IgdbRefreshService`) and
   shown on the game pages only, never fed to the estimate: release type and
   parent game (`gameType`, `igdbParentGameId`), game modes, player-reported
-  time to beat (`games/igdb-facts.ts`, public pages filter it through
-  `shownTimeToBeat`), and store links from `external_games` (PlayStation and
-  Xbox ids for the store lookup, Epic and GOG pages, Game Pass cloud).
+  time to beat (`games/igdb-facts.ts`, admin only), and store links from
+  `external_games` (PlayStation and Xbox ids for the store lookup, Epic and
+  GOG pages, Game Pass cloud).
 - Steam achievements. Exophase is off by default (`EXOPHASE_ENABLED`): it
   blocks automated requests.
 - LLM extraction (`llm/llm-extractor.service.ts`): grounded structured call

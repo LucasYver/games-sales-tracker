@@ -47,7 +47,6 @@ import { EXTENDED_HARVEST_PERCENTILE } from '../scheduler/harvest-eligibility';
 import { harvestDueSql } from '../scheduler/refresh-interval';
 import { GamesService } from '../games/games.service';
 import {
-  shownTimeToBeat,
   type GameMode,
   type GameType,
   type TimeToBeat,
@@ -445,8 +444,6 @@ export interface AdminIgdbFacts {
   gameModes: GameMode[];
   /** Raw, with the report count. */
   timeToBeat: TimeToBeat | null;
-  /** Whether the public page shows it (`shownTimeToBeat`). */
-  timeToBeatShown: boolean;
   psConceptIds: string[];
   xboxProductIds: string[];
   epicUrl: string | null;
@@ -1170,7 +1167,6 @@ export class AdminService {
             : null,
         gameModes: game.gameModes ?? [],
         timeToBeat: game.timeToBeat,
-        timeToBeatShown: !!shownTimeToBeat(game.timeToBeat, game.liveService),
         psConceptIds: game.igdbPsConceptIds ?? [],
         xboxProductIds: game.igdbXboxProductIds ?? [],
         epicUrl: game.igdbEpicUrl,

@@ -508,10 +508,7 @@ function IgdbFactsList({ igdb }: { igdb: AdminIgdbFacts }) {
               {fmtHours(ttb.hastily)} rushed · {fmtHours(ttb.normally)} normal ·{' '}
               {fmtHours(ttb.completely)} complete{' '}
               <span className="text-muted-foreground">
-                ({ttb.count} reports
-                {!igdb.timeToBeatShown &&
-                  ', hidden on the public page (too few reports or live service)'}
-                )
+                ({ttb.count} reports)
               </span>
             </span>
           ) : (

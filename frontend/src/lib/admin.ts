@@ -337,8 +337,6 @@ export interface AdminIgdbFacts {
   gameModes: GameMode[];
   /** Raw, with the report count. */
   timeToBeat: TimeToBeat | null;
-  /** Whether the public page shows it (backend `shownTimeToBeat`). */
-  timeToBeatShown: boolean;
   psConceptIds: string[];
   xboxProductIds: string[];
   epicUrl: string | null;

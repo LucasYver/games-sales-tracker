@@ -931,8 +931,7 @@ function TechSheet({
   if (game.genres.length > 0) rows.push([t('genres'), game.genres.join(', ')]);
 
   // IGDB facts (backend `games/igdb-facts.ts`). A main game needs no type row.
-  const { gameType, parentGame, derivedGames, gameModes, timeToBeat } =
-    game.igdbFacts;
+  const { gameType, parentGame, derivedGames, gameModes } = game.igdbFacts;
   if (gameType && gameType !== 'MAIN_GAME') {
     const typeLabel = t(`gameType.${gameType}`);
     rows.push([
@@ -985,29 +984,6 @@ function TechSheet({
       t('gameModesLabel'),
       gameModes.map((mode) => t(`gameMode.${mode}`)).join(', '),
     ]);
-  if (timeToBeat) {
-    const hours = (seconds: number) => {
-      const h = seconds / 3600;
-      return format.number(h, { maximumFractionDigits: h < 10 ? 1 : 0 });
-    };
-    const parts = [
-      timeToBeat.hastily &&
-        t('ttbHastily', { hours: hours(timeToBeat.hastily) }),
-      timeToBeat.normally &&
-        t('ttbNormally', { hours: hours(timeToBeat.normally) }),
-      timeToBeat.completely &&
-        t('ttbCompletely', { hours: hours(timeToBeat.completely) }),
-    ].filter(Boolean);
-    rows.push([
-      t('timeToBeatLabel'),
-      <>
-        {parts.join(' · ')}
-        <span className="block text-[0.7rem] text-muted-foreground">
-          {t('ttbReports', { count: timeToBeat.count })}
-        </span>
-      </>,
-    ]);
-  }
 
   if (steam)
     rows.push([

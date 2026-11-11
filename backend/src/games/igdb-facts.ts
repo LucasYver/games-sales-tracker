@@ -42,9 +42,8 @@ const GAME_MODE_ORDER = Object.values(IGDB_GAME_MODES) as GameMode[];
 
 /**
  * Player-reported completion times, in seconds, from IGDB
- * `game_time_to_beats`. `count` is the number of reports behind them: a
- * handful can be wildly off (Palworld: 2 reports, "hastily" longer than
- * "normally"), so public pages go through `shownTimeToBeat`.
+ * `game_time_to_beats`. `count` is the number of reports behind them.
+ * Shown in the admin only.
  */
 export interface TimeToBeat {
   hastily: number | null;
@@ -52,8 +51,6 @@ export interface TimeToBeat {
   completely: number | null;
   count: number;
 }
-
-export const TIME_TO_BEAT_MIN_REPORTS = 3;
 
 export function gameTypeFromIgdb(id: unknown): GameType | null {
   return typeof id === 'number' && id in IGDB_GAME_TYPES
@@ -72,30 +69,4 @@ export function gameModesFromIgdb(
     }
   }
   return GAME_MODE_ORDER.filter((mode) => modes.has(mode));
-}
-
-/**
- * The time to beat a public page may show, or null when it cannot be trusted:
- * below the report floor, or for a live-service game, which has no end (The
- * Finals: 1,500 h "complete"). A rushed or complete time on the wrong side of
- * the normal one is dropped rather than the whole figure (The Last of Us
- * Part I: 19.5 h rushed, 18.8 h normal, on 23 reports).
- */
-export function shownTimeToBeat(
-  value: TimeToBeat | null | undefined,
-  liveService: boolean,
-): TimeToBeat | null {
-  if (!value || liveService || value.count < TIME_TO_BEAT_MIN_REPORTS) {
-    return null;
-  }
-  const { normally } = value;
-  let { hastily, completely } = value;
-  if (normally) {
-    if (hastily && hastily > normally) hastily = null;
-    if (completely && completely < normally) completely = null;
-  } else if (hastily && completely && hastily > completely) {
-    return null;
-  }
-  if (!hastily && !normally && !completely) return null;
-  return { hastily, normally, completely, count: value.count };
 }
