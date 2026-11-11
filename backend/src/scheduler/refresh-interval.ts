@@ -2,8 +2,9 @@
  * Milestone harvest cadence based on a game's age (days since release):
  *   - Unknown release date:                never (returns null)
  *   - Pre-release (date in the future):    never (returns null)
- *   - 0 to 180 days:                       every 3 days
- *   - 180 days to 1 year:                  every 7 days
+ *   - 0 to 30 days:                        every 3 days
+ *   - 30 to 180 days:                      every 7 days
+ *   - 180 days to 1 year:                  every 15 days
  *   - 1 year to 3 years:                   every 30 days
  *   - 3 years to 5 years:                  every 90 days
  *   - More than 5 years:                   every 180 days
@@ -22,8 +23,9 @@ export function getRefreshIntervalDays(
     (now.getTime() - releaseDate.getTime()) / (1000 * 60 * 60 * 24);
 
   if (ageDays < 0) return null;
-  if (ageDays <= 180) return 3;
-  if (ageDays <= 365) return 7;
+  if (ageDays <= 30) return 3;
+  if (ageDays <= 180) return 7;
+  if (ageDays <= 365) return 15;
   if (ageDays <= 365 * 3) return 30;
   if (ageDays <= 365 * 5) return 90;
   return 180;
@@ -42,8 +44,9 @@ export function harvestDueSql(alias: string): {
   const intervalDays =
     `(CASE ` +
     `WHEN ${alias}."releaseDate" IS NULL OR ${alias}."releaseDate" > now() THEN NULL ` +
-    `WHEN ${ageDays} <= 180 THEN 3 ` +
-    `WHEN ${ageDays} <= 365 THEN 7 ` +
+    `WHEN ${ageDays} <= 30 THEN 3 ` +
+    `WHEN ${ageDays} <= 180 THEN 7 ` +
+    `WHEN ${ageDays} <= 365 THEN 15 ` +
     `WHEN ${ageDays} <= 1095 THEN 30 ` +
     `WHEN ${ageDays} <= 1825 THEN 90 ` +
     `ELSE 180 END)`;
