@@ -1,0 +1,6 @@
+pandas>=2.2
+numpy>=2.0
+pyarrow>=17
+psycopg[binary]>=3.2
+streamlit>=1.45
+plotly>=5.24
