@@ -16,6 +16,8 @@ export enum SourceType {
   WIKIPEDIA = 'WIKIPEDIA',
   EXOPHASE = 'EXOPHASE',
   TWITCH = 'TWITCH',
+  // Affiliate product page, matched by title from the store's sitemap.
+  INSTANT_GAMING = 'INSTANT_GAMING',
   MANUAL = 'MANUAL',
 }
 

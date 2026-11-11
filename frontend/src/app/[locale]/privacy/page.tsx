@@ -96,6 +96,10 @@ export default function PrivacyPage() {
           </ul>
         </Section>
 
+        <Section title={t('affiliateTitle')}>
+          <p>{t('affiliateBody')}</p>
+        </Section>
+
         {CONTACT_EMAIL && (
           <Section title={t('contactTitle')}>
             <p>

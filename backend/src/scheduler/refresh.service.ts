@@ -6,6 +6,7 @@ import { Game, GameRank } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
 import { IngestionStateService } from '../ingestion/ingestion-state.service';
 import { IgdbRefreshService } from '../ingestion/igdb-refresh.service';
+import { InstantGamingLinksService } from '../ingestion/instant-gaming-links.service';
 import { RankService } from '../reference-profiles/rank.service';
 import { ReferenceProfileService } from '../reference-profiles/reference-profile.service';
 import { cycleWindow } from '../ingestion/ingestion-cadence';
@@ -30,6 +31,7 @@ export class RefreshService {
     private readonly blog: BlogService,
     private readonly mail: AdminMailService,
     private readonly igdbRefresh: IgdbRefreshService,
+    private readonly instantGaming: InstantGamingLinksService,
   ) {}
 
   // Wall-clock cap per invocation, with headroom under the 800s Vercel
@@ -444,6 +446,12 @@ export class RefreshService {
       await this.igdbRefresh.refreshFromIgdb();
     } catch (error) {
       this.logger.warn(`IGDB refresh failed: ${error}`);
+    }
+    // After discovery, so a game added tonight gets its affiliate link now.
+    try {
+      await this.instantGaming.sync();
+    } catch (error) {
+      this.logger.warn(`Instant Gaming links sync failed: ${error}`);
     }
     await this.announceNewGames();
   }

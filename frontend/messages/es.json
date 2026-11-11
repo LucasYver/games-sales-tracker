@@ -249,7 +249,10 @@
     "pricePreorder": "en reserva",
     "updatedUpcoming": "Las cifras se publicarán tras el lanzamiento.",
     "upcomingChartsTitle": "Las gráficas empiezan el {date}",
-    "upcomingChartsNote": "Desde el lanzamiento, seguimos cada día las señales del juego para estimar sus ventas."
+    "upcomingChartsNote": "Desde el lanzamiento, seguimos cada día las señales del juego para estimar sus ventas.",
+    "instantGamingBuy": "Comprar en Instant Gaming",
+    "instantGamingPreorder": "Reservar en Instant Gaming",
+    "affiliateLink": "Enlace de afiliado"
   },
   "refreshButton": {
     "error": "Error al actualizar. Inténtalo de nuevo.",
@@ -364,12 +367,14 @@
     "adsGooglePolicy": "Cómo usa Google los datos de los sitios que muestran sus anuncios",
     "adsGoogleSettings": "Gestionar la personalización de anuncios en tu configuración de Google",
     "adsTitle": "Publicidad",
-    "analyticsBody": "Medimos las páginas vistas y la velocidad de las páginas con Vercel Analytics y Speed Insights. Estas herramientas no usan cookies y solo generan estadísticas agregadas.",
+    "analyticsBody": "Medimos las páginas vistas, la velocidad de las páginas y los clics hacia las tiendas con Vercel Analytics y Speed Insights. Estas herramientas no usan cookies y solo producen estadísticas agregadas.",
     "analyticsTitle": "Medición de audiencia",
     "contactBody": "Para cualquier pregunta sobre esta página o tus datos:",
     "contactTitle": "Contacto",
     "intro": "Esta página explica qué datos se tratan cuando visitas este sitio. Aquí no hay cuentas de usuario.",
-    "title": "Privacidad"
+    "title": "Privacidad",
+    "affiliateTitle": "Enlaces a tiendas",
+    "affiliateBody": "Algunas fichas de juegos enlazan a la tienda Instant Gaming. Son enlaces de afiliado: si compras después de hacer clic, podemos recibir una comisión, sin coste adicional para ti. Contamos los clics en estos enlaces con Vercel Analytics, sin cookies."
   },
   "methodology": {
     "title": "Cómo estimamos las ventas",

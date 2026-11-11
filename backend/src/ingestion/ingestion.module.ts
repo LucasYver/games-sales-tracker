@@ -36,6 +36,7 @@ import { GamesPopularityClient } from './games-popularity.client';
 import { TwitchClient } from './twitch.client';
 import { IngestionStateService } from './ingestion-state.service';
 import { IgdbRefreshService } from './igdb-refresh.service';
+import { InstantGamingLinksService } from './instant-gaming-links.service';
 
 @Module({
   imports: [
@@ -77,6 +78,7 @@ import { IgdbRefreshService } from './igdb-refresh.service';
     TwitchClient,
     IngestionStateService,
     IgdbRefreshService,
+    InstantGamingLinksService,
   ],
   exports: [
     IngestionService,
@@ -84,6 +86,7 @@ import { IgdbRefreshService } from './igdb-refresh.service';
     IngestionStateService,
     SteamClient,
     IgdbRefreshService,
+    InstantGamingLinksService,
   ],
 })
 export class IngestionModule {}

@@ -24,6 +24,8 @@ import { ADSENSE_CLIENT, ADSENSE_GAME_SLOT } from '@/lib/ads';
 import { SITE_URL } from '@/lib/site-url';
 import { Link } from '@/i18n/navigation';
 import { AdSlot } from '@/components/AdSlot';
+import { InstantGamingLink } from '@/components/InstantGamingLink';
+import { instantGamingUrl } from '@/lib/affiliate';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
 import { RangedChart } from '@/components/chart-room/RangedChart';
 import {
@@ -293,6 +295,7 @@ function SalesHeadline({ game }: { game: GameDetail }) {
   const t = useTranslations('gamePage');
   const tCommon = useTranslations('common');
   const format = useFormatter();
+  const locale = useLocale();
 
   const units = game.isFree ? null : headlineUnits(game);
   const asOf = asOfDate(game);
@@ -339,6 +342,7 @@ function SalesHeadline({ game }: { game: GameDetail }) {
       })
     : null;
   const showPrice = !game.isFree && game.currentPrice != null;
+  const instantGaming = instantGamingUrl(game, locale);
   const hasCcuHeadline = recentCcu != null || (showCcu && game.peakCcu != null);
 
   return (
@@ -454,9 +458,20 @@ function SalesHeadline({ game }: { game: GameDetail }) {
           </div>
         )}
       </div>
-      {showPrice && (
+      {(showPrice || instantGaming) && (
         <div className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-3 border-t border-border-soft pt-3">
-          <PriceBlock game={game} preorder={upcoming} />
+          {showPrice && <PriceBlock game={game} preorder={upcoming} />}
+          {instantGaming && (
+            <InstantGamingLink
+              href={instantGaming}
+              game={game.slug}
+              placement="price"
+              label={t(
+                upcoming ? 'instantGamingPreorder' : 'instantGamingBuy',
+              )}
+              note={t('affiliateLink')}
+            />
+          )}
         </div>
       )}
     </section>
@@ -860,6 +875,7 @@ function TechSheet({
   const t = useTranslations('gamePage');
   const tPlatform = useTranslations('platform');
   const format = useFormatter();
+  const locale = useLocale();
   // Before launch, store ratings and review languages are teasers, not sales
   // signals: they come back with the rest of the data on release day.
   const upcoming = isUpcoming(game.releaseDate);
@@ -1038,7 +1054,8 @@ function TechSheet({
   };
   const LINK_ORDER = Object.keys(LINK_LABELS);
   const links: { key: string; url: string; label: string }[] = game.sources
-    .filter((s) => s.url)
+    // The affiliate link has its own markup, appended after the store links.
+    .filter((s) => s.url && s.source !== 'INSTANT_GAMING')
     .sort((a, b) => {
       const ia = LINK_ORDER.indexOf(a.source);
       const ib = LINK_ORDER.indexOf(b.source);
@@ -1052,6 +1069,7 @@ function TechSheet({
       url: s.url as string,
       label: LINK_LABELS[s.source] ?? s.source,
     }));
+  const instantGaming = instantGamingUrl(game, locale);
   // Store pages IGDB links that we do not track ourselves.
   if (game.otherStores.epicUrl)
     links.push({
@@ -1080,7 +1098,7 @@ function TechSheet({
         <ReviewLanguages counts={game.reviewLanguages} />
       )}
 
-      {links.length > 0 && (
+      {(links.length > 0 || instantGaming) && (
         <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 border-t border-border-soft pt-3 font-mono text-[0.7rem]">
           {links.map((link) => (
             <a
@@ -1093,6 +1111,14 @@ function TechSheet({
               {link.label}
             </a>
           ))}
+          {instantGaming && (
+            <InstantGamingLink
+              href={instantGaming}
+              game={game.slug}
+              placement="links"
+              label="Instant Gaming"
+            />
+          )}
         </div>
       )}
     </aside>

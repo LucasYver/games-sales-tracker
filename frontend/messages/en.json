@@ -249,7 +249,10 @@
     "pricePreorder": "pre-order",
     "updatedUpcoming": "Figures will be published after launch.",
     "upcomingChartsTitle": "Charts start on {date}",
-    "upcomingChartsNote": "From launch, we track the game's signals every day to estimate its sales."
+    "upcomingChartsNote": "From launch, we track the game's signals every day to estimate its sales.",
+    "instantGamingBuy": "Buy on Instant Gaming",
+    "instantGamingPreorder": "Pre-order on Instant Gaming",
+    "affiliateLink": "Affiliate link"
   },
   "refreshButton": {
     "error": "Refresh failed. Try again.",
@@ -364,12 +367,14 @@
     "adsGooglePolicy": "How Google uses data from sites that show its ads",
     "adsGoogleSettings": "Manage ad personalization in your Google settings",
     "adsTitle": "Advertising",
-    "analyticsBody": "We measure page views and page speed with Vercel Analytics and Speed Insights. These tools do not use cookies and only produce aggregate statistics.",
+    "analyticsBody": "We measure page views, page speed and clicks on store links with Vercel Analytics and Speed Insights. These tools do not use cookies and only produce aggregate statistics.",
     "analyticsTitle": "Audience measurement",
     "contactBody": "For any question about this page or your data:",
     "contactTitle": "Contact",
     "intro": "This page explains what data is processed when you visit this site. There is no user account here.",
-    "title": "Privacy"
+    "title": "Privacy",
+    "affiliateTitle": "Store links",
+    "affiliateBody": "Some game pages link to the Instant Gaming store. These are affiliate links: if you buy after clicking one, we may earn a commission, at no extra cost to you. We count clicks on these links with Vercel Analytics, without cookies."
   },
   "methodology": {
     "title": "How we estimate sales",

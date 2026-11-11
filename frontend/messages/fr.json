@@ -249,7 +249,10 @@
     "pricePreorder": "en précommande",
     "updatedUpcoming": "Les chiffres seront publiés après la sortie.",
     "upcomingChartsTitle": "Les courbes démarrent le {date}",
-    "upcomingChartsNote": "Dès la sortie, nous suivons chaque jour les signaux du jeu pour estimer ses ventes."
+    "upcomingChartsNote": "Dès la sortie, nous suivons chaque jour les signaux du jeu pour estimer ses ventes.",
+    "instantGamingBuy": "Acheter sur Instant Gaming",
+    "instantGamingPreorder": "Précommander sur Instant Gaming",
+    "affiliateLink": "Lien affilié"
   },
   "refreshButton": {
     "error": "L'actualisation a échoué. Réessayez.",
@@ -364,12 +367,14 @@
     "adsGooglePolicy": "Comment Google utilise les données des sites qui affichent ses publicités",
     "adsGoogleSettings": "Gérer la personnalisation des annonces dans vos paramètres Google",
     "adsTitle": "Publicité",
-    "analyticsBody": "Nous mesurons les pages vues et la vitesse des pages avec Vercel Analytics et Speed Insights. Ces outils n'utilisent pas de cookies et ne produisent que des statistiques globales.",
+    "analyticsBody": "Nous mesurons les pages vues, la vitesse des pages et les clics vers les boutiques avec Vercel Analytics et Speed Insights. Ces outils n'utilisent pas de cookies et ne produisent que des statistiques agrégées.",
     "analyticsTitle": "Mesure d'audience",
     "contactBody": "Pour toute question sur cette page ou sur vos données :",
     "contactTitle": "Contact",
     "intro": "Cette page explique quelles données sont traitées lorsque vous visitez ce site. Il n'y a pas de compte utilisateur ici.",
-    "title": "Confidentialité"
+    "title": "Confidentialité",
+    "affiliateTitle": "Liens vers les boutiques",
+    "affiliateBody": "Certaines fiches de jeux renvoient vers la boutique Instant Gaming. Ce sont des liens affiliés : si vous achetez après avoir cliqué, nous pouvons toucher une commission, sans surcoût pour vous. Nous comptons les clics sur ces liens avec Vercel Analytics, sans cookies."
   },
   "methodology": {
     "title": "Comment nous estimons les ventes",

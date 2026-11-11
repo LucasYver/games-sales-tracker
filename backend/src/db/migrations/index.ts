@@ -76,6 +76,7 @@ import { AddGameIgdbStoreIds1788930000000 } from './1788930000000-AddGameIgdbSto
 import { AddGameIgdbFacts1788940000000 } from './1788940000000-AddGameIgdbFacts';
 import { AddStoreRatingsIndex1788950000000 } from './1788950000000-AddStoreRatingsIndex';
 import { AddGameEstimateHidden1788960000000 } from './1788960000000-AddGameEstimateHidden';
+import { AddInstantGamingSource1788970000000 } from './1788970000000-AddInstantGamingSource';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -163,4 +164,5 @@ export const migrations: MixedList<Function | string> = [
   AddGameIgdbFacts1788940000000,
   AddStoreRatingsIndex1788950000000,
   AddGameEstimateHidden1788960000000,
+  AddInstantGamingSource1788970000000,
 ];

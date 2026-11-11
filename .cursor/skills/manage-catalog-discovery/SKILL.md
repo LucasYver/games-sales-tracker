@@ -54,6 +54,27 @@ ago (`IgdbRefreshService.refreshFromIgdb`, batches of 500 ids):
   request per 500 games). See `games/igdb-facts.ts`. Display only: nothing
   here feeds the matcher or the ML.
 
+Last, the cron links games to their Instant Gaming page
+(`InstantGamingLinksService.sync`, rules in `ingestion/instant-gaming-match.ts`).
+It reads the store's public product sitemap (about 23,000 products, three
+GETs) and keeps one `game_source` INSTANT_GAMING row per matched game, whole
+catalog each night, so a game discovered tonight gets its link the same run:
+
+- exact title only, after stripping the platform, store and region words of
+  the product slug: an edition, DLC or sequel never links;
+- a year in the store's title (`resident-evil-4-2023`) is matched against the
+  release year; without one, two catalog games with the same name get none;
+- region-locked keys (US, Latin America, Turkey, one country) and products on
+  a platform the game lacks are dropped; free games get no link;
+- Steam key first, then other PC launchers, Xbox, PlayStation, Switch;
+- a sitemap under 10,000 products aborts the sync, so a broken page never
+  deletes good links.
+
+The front adds the affiliate code and the visitor's language
+(`frontend/src/lib/affiliate.ts`) and sends each click to Vercel Analytics as
+`instant_gaming_click` (`components/InstantGamingLink.tsx`). The same pass runs
+by hand with `npm run sync:instant-gaming` (backend/).
+
 Free-to-play is rejected later, on Steam ingest (`isFree`), not by the
 IGDB rating bar.
 
