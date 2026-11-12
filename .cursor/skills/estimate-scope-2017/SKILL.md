@@ -76,6 +76,14 @@ Duty must be hidden by hand. `estimateNotPublic` / `estimatePublicSql` apply
 both rules; the API sets `estimateOutOfScope` and `estimateHidden`, and the game
 page shows `hiddenEstimateNote` instead of the 2017 note.
 
+A hidden game can still get a page that shows what is measurable. Modern
+Warfare 4 has `/[locale]/mw4-sales` (2026-11-12, `frontend/src/lib/mw4.ts`): it
+compares the Steam reviews of each game's own page by days since PC launch,
+against BO7 and BO6, from `GET /games/:slug/steam-review-curve`. That route
+moves backfilled month rows to the end of their month and cuts a series when
+its page stops counting (MW III, BO6 in 2026). It is never an estimate: no
+reviews-to-units ratio is applied there.
+
 ## What stays
 
 - Game pages, signals, prices and the sitemap.

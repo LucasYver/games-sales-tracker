@@ -13,27 +13,38 @@ import {
 export interface LaunchCurve {
   key: string;
   label: string;
-  /** Days since launch → units; starts at day 0 with 0 units. */
+  /** Days since launch → value (copies, reviews…); starts at day 0. */
   points: { day: number; units: number }[];
 }
 
-const COLORS: Record<string, string> = {
-  gta6: 'var(--primary)',
-  gta5: 'var(--chart-2)',
-  rdr2: 'var(--chart-4)',
-};
+/** The tracked game first, in the primary colour; benchmarks after it. */
+const PALETTE = ['var(--primary)', 'var(--chart-2)', 'var(--chart-4)'];
 
-/** Copies shipped against days since launch, one line per game. */
-export function LaunchCurvesChart({ curves }: { curves: LaunchCurve[] }) {
-  const t = useTranslations('gta6Sales');
+/**
+ * One line per game against days since launch. The messages (`chartAria`,
+ * `dayTick`, `tooltip` with `{units}` and `{day}`) come from `namespace`,
+ * so each tracker page names its own unit. Points past `maxDay` are cut.
+ */
+export function LaunchCurvesChart({
+  curves,
+  namespace = 'gta6Sales',
+  maxDay: maxDayProp,
+}: {
+  curves: LaunchCurve[];
+  namespace?: 'gta6Sales' | 'mw4Sales';
+  maxDay?: number;
+}) {
+  const t = useTranslations(namespace);
   const format = useFormatter();
   const config: ChartConfig = Object.fromEntries(
-    curves.map((c) => [c.key, { label: c.label, color: COLORS[c.key] }]),
+    curves.map((c, i) => [
+      c.key,
+      { label: c.label, color: PALETTE[i % PALETTE.length] },
+    ]),
   );
-  const maxDay = Math.max(
-    30,
-    ...curves.flatMap((c) => c.points.map((p) => p.day)),
-  );
+  const maxDay =
+    maxDayProp ??
+    Math.max(30, ...curves.flatMap((c) => c.points.map((p) => p.day)));
   const units = (v: number) =>
     format.number(v, { notation: 'compact', maximumFractionDigits: 1 });
 
@@ -82,15 +93,17 @@ export function LaunchCurvesChart({ curves }: { curves: LaunchCurve[] }) {
           }}
         />
         <ChartLegend content={<ChartLegendContent />} />
-        {curves.map((c) => (
+        {curves.map((c, i) => (
           <Line
             key={c.key}
             // One dataKey per game, so the legend and tooltip find its label.
-            data={c.points.map((p) => ({ day: p.day, [c.key]: p.units }))}
+            data={c.points
+              .filter((p) => p.day <= maxDay)
+              .map((p) => ({ day: p.day, [c.key]: p.units }))}
             dataKey={c.key}
             type="linear"
             stroke={`var(--color-${c.key})`}
-            strokeWidth={c.key === 'gta6' ? 2.5 : 1.5}
+            strokeWidth={i === 0 ? 2.5 : 1.5}
             dot={{ r: 3 }}
             isAnimationActive={false}
           />

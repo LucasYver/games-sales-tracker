@@ -107,6 +107,16 @@ async function pagesSitemap(
     });
   }
 
+  // The MW4 tracker follows a daily review count.
+  for (const locale of routing.locales) {
+    entries.push({
+      url: `${SITE_URL}/${locale}/mw4-sales`,
+      changeFrequency: 'daily',
+      priority: 0.8,
+      alternates: localeAlternates('/mw4-sales'),
+    });
+  }
+
   // Hubs change with the games they list, so no lastmod of their own.
   const hubPaths = [
     '/studios',

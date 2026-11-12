@@ -1419,11 +1419,6 @@ export class GamesService {
   }
 
   /**
-   * Where the URL of a game merged into another now leads: an edition game
-   * folded into its base keeps its IGDB id once soft-deleted, and that id is
-   * one of the base game's editions. Null when the slug is not such a game.
-   */
-  /**
    * Every sourced sales figure of one game, oldest first, for a page that
    * tracks a launch figure by figure. Rejected rows, player counts and
    * third-party model estimates are left out; notes are internal and never
@@ -1460,6 +1455,80 @@ export class GamesService {
     };
   }
 
+  /**
+   * Cumulative Steam reviews of one game by days since its PC launch, for a
+   * page that compares launches of the same series when no sales figure
+   * exists (the Call of Duty HQ games). Day 0 is the PC release date, else
+   * the game's release date.
+   *
+   * Reconstructed history (`appreviewhistogram` backfill) is stored as one
+   * row per month at the month's first midnight, holding the total at the END
+   * of that month: those rows are moved to the next month's first day, so
+   * each point sits at the age it really measured. Cron rows keep their day.
+   * One point per day (the highest), pre-launch days dropped, two years max.
+   * Cached by the page for an hour; only the comparison page calls it.
+   */
+  async getSteamReviewCurve(slug: string) {
+    const games: { id: string; name: string; launch: string | null }[] =
+      await this.games.query(
+        `SELECT g.id, g.name,
+                COALESCE(pc."releaseDate", g."releaseDate")::date::text AS launch
+           FROM game g
+           LEFT JOIN game_platform_release_date pc
+             ON pc."gameId" = g.id AND pc.platform = 'PC'
+          WHERE g.slug = $1 AND g."deletedAt" IS NULL`,
+        [slug],
+      );
+    const game = games[0];
+    if (!game) throw new NotFoundException(`Game "${slug}" not found`);
+    if (!game.launch) return { name: game.name, launch: null, points: [] };
+    // A backfilled month row is written at local midnight of the 1st, which
+    // reads as 00:00-02:00 depending on the writer's time zone; cron rows
+    // carry seconds and fractions, so they never match.
+    const points: { day: number; reviews: number }[] = await this.signals
+      .query(
+        `SELECT (d.day - $2::date) AS day, MAX(d.value)::int AS reviews
+           FROM (
+             SELECT CASE
+                      WHEN date_part('day', "capturedAt") = 1
+                       AND "capturedAt"::time IN ('00:00', '01:00', '02:00')
+                      THEN (date_trunc('month', "capturedAt") + interval '1 month')::date
+                      ELSE "capturedAt"::date
+                    END AS day,
+                    value
+               FROM signal_snapshot
+              WHERE "gameId" = $1 AND metric = 'STEAM_REVIEWS'
+                AND NOT synthetic
+           ) d
+          WHERE d.day >= $2::date AND d.day <= $2::date + 730
+          GROUP BY d.day
+          ORDER BY d.day`,
+        [game.id, game.launch],
+      )
+      .then((rows: { day: number; reviews: number }[]) =>
+        rows.map((r) => ({ day: Number(r.day), reviews: Number(r.reviews) })),
+      );
+    // When Activision folds a game into the HQ app, its own page stops
+    // counting and the total falls to ~0 (MW III, then BO6 in 2026): the
+    // series ends at the last point before that fall.
+    let peak = 0;
+    const end = points.findIndex((p) => {
+      const fell = p.reviews < peak / 2;
+      peak = Math.max(peak, p.reviews);
+      return fell;
+    });
+    return {
+      name: game.name,
+      launch: game.launch,
+      points: end === -1 ? points : points.slice(0, end),
+    };
+  }
+
+  /**
+   * Where the URL of a game merged into another now leads: an edition game
+   * folded into its base keeps its IGDB id once soft-deleted, and that id is
+   * one of the base game's editions. Null when the slug is not such a game.
+   */
   async findRedirectSlug(slug: string): Promise<{ slug: string } | null> {
     const rows: { slug: string }[] = await this.games.query(
       `SELECT base.slug

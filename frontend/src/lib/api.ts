@@ -553,6 +553,31 @@ export async function getSalesTimeline(
   }
 }
 
+export interface SteamReviewCurve {
+  name: string;
+  /** Day 0: PC release date (YYYY-MM-DD). */
+  launch: string | null;
+  /** Cumulative Steam reviews of the game's own page, by days since launch. */
+  points: { day: number; reviews: number }[];
+}
+
+/** Steam reviews by days since launch. A failure shows no curve. */
+export async function getSteamReviewCurve(
+  slug: string,
+): Promise<SteamReviewCurve | null> {
+  try {
+    const res = await fetch(
+      `${API_URL}/games/${encodeURIComponent(slug)}/steam-review-curve`,
+      // The review cron runs about once a day: an hour is fresh enough.
+      { next: { revalidate: 3600 } },
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as SteamReviewCurve;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The slug a game merged into another now lives at (an edition folded into
  * its base game), or null. A failure means no redirect: the page 404s.

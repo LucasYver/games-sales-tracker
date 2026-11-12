@@ -118,6 +118,11 @@ export class GamesController {
     return this.games.getSalesTimeline(slug);
   }
 
+  @Get(':slug/steam-review-curve')
+  steamReviewCurve(@Param('slug') slug: string) {
+    return this.games.getSteamReviewCurve(slug);
+  }
+
   @Get(':slug/related')
   related(@Param('slug') slug: string) {
     return this.games.listRelated(slug);

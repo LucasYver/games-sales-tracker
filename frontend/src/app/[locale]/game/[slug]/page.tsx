@@ -40,6 +40,7 @@ import {
 } from '@/components/chart-room/PriceCountrySelect';
 import { Suspense } from 'react';
 import { GTA6_PATH, GTA6_SLUG } from '@/lib/gta6';
+import { MW4_PATH, MW4_SLUG } from '@/lib/mw4';
 
 function compactUnits(units: number, locale: string) {
   return new Intl.NumberFormat(locale, {
@@ -173,12 +174,20 @@ function defaultPriceCountry(locale: string): string {
   return locale === 'en' ? 'us' : locale;
 }
 
-/** GTA 6 gets a dedicated tracker; its game page points there. */
-function Gta6TrackerLink() {
-  const t = useTranslations('gta6Sales');
+/** GTA 6 and MW4 get a dedicated tracker; their game page points there. */
+const TRACKERS: Record<string, { path: string; ns: 'gta6Sales' | 'mw4Sales' }> =
+  {
+    [GTA6_SLUG]: { path: GTA6_PATH, ns: 'gta6Sales' },
+    [MW4_SLUG]: { path: MW4_PATH, ns: 'mw4Sales' },
+  };
+
+function TrackerLink({ slug }: { slug: string }) {
+  const tracker = TRACKERS[slug];
+  const t = useTranslations(tracker?.ns ?? 'gta6Sales');
+  if (!tracker) return null;
   return (
     <Link
-      href={GTA6_PATH}
+      href={tracker.path}
       className="mx-4 mt-3 flex items-center gap-2 rounded-[3px] border border-primary/40 bg-accent px-3 py-2 text-sm font-medium text-accent-foreground hover:underline"
     >
       <ChartLine className="size-4 shrink-0" aria-hidden />
@@ -1458,7 +1467,7 @@ function GamePageContent({
         </nav>
 
         <GameHeader game={game} studioHub={related.studioHub} />
-        {game.slug === GTA6_SLUG && <Gta6TrackerLink />}
+        <TrackerLink slug={game.slug} />
         <SalesHeadline game={game} />
         <OfficialSalesRecap game={game} />
         <TabNav
