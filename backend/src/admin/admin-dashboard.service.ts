@@ -7,6 +7,7 @@ import { ESTIMATE_MIN_RELEASE } from '../games/estimate-scope';
 const WEEKS_SHOWN = 12;
 const DAYS_SHOWN = 30;
 const YEARS_SHOWN = 5;
+const FIRST_FIGURES_SHOWN = 20;
 
 // Platforms whose coverage is shown. GLOBAL is measured against every paid
 // game; the others against the games that list that platform.
@@ -44,6 +45,28 @@ export interface AdminDashboardOverview {
     day: string;
     bySource: Record<SalesSource, number>;
   }>;
+  /**
+   * Same weeks as `weeklyMilestones`, counting only the first sales
+   * milestone each game ever got.
+   */
+  weeklyFirstMilestones: Array<{
+    weekStart: string;
+    bySource: Record<SalesSource, number>;
+  }>;
+  /** Same days as `dailyMilestones`, first sales milestone per game only. */
+  dailyFirstMilestones: Array<{
+    day: string;
+    bySource: Record<SalesSource, number>;
+  }>;
+  /** Games whose first sales milestone is the most recent, newest first. */
+  latestFirstMilestones: Array<{
+    gameId: string;
+    gameName: string;
+    units: number;
+    platform: Platform;
+    source: SalesSource;
+    capturedAt: string;
+  }>;
   /** Released, paid CORE games with at least one sales milestone. */
   coreCoverageByYear: Array<{
     label: string;
@@ -77,6 +100,18 @@ function weekStartUtc(date: Date): Date {
 // engagement count (players reached, subscriptions).
 const SALES_MILESTONE = `m."rejectedAt" IS NULL AND m."isEngagement" = false`;
 
+// The first sales milestone each live game got, by date added.
+const FIRST_SALES_MILESTONE = `
+  SELECT DISTINCT ON (m."gameId")
+         m."gameId", m."capturedAt", m.source, m.units, m.platform,
+         g.name AS "gameName"
+  FROM milestone m
+  JOIN game g ON g.id = m."gameId" AND g."deletedAt" IS NULL
+  WHERE ${SALES_MILESTONE}
+  ORDER BY m."gameId", m."capturedAt", m.id`;
+
+type DailyRow = { day: string; source: SalesSource; c: string };
+
 /**
  * Read-only figures for the admin dashboard: how much data we hold and how
  * it grows. Cron progress lives on the crons page (`AdminService.stats`).
@@ -96,6 +131,8 @@ export class AdminDashboardService {
       bySource,
       estimated,
       daily,
+      dailyFirst,
+      latestFirst,
       years,
       platforms,
     ] = await Promise.all([
@@ -151,13 +188,36 @@ export class AdminDashboardService {
       ),
       // Per day over the whole weekly window; weeks are summed from it.
       // capturedAt is a UTC timestamp without time zone.
-      this.db.query<Array<{ day: string; source: SalesSource; c: string }>>(
+      this.db.query<DailyRow[]>(
         `SELECT to_char("capturedAt", 'YYYY-MM-DD') AS day,
                   source, COUNT(*) AS c
            FROM milestone
            WHERE "rejectedAt" IS NULL AND "capturedAt" >= $1
            GROUP BY 1, 2`,
         [firstWeek],
+      ),
+      this.db.query<DailyRow[]>(
+        `SELECT to_char(f."capturedAt", 'YYYY-MM-DD') AS day,
+                  f.source, COUNT(*) AS c
+           FROM (${FIRST_SALES_MILESTONE}) f
+           WHERE f."capturedAt" >= $1
+           GROUP BY 1, 2`,
+        [firstWeek],
+      ),
+      this.db.query<
+        Array<{
+          gameId: string;
+          gameName: string;
+          units: number;
+          platform: Platform;
+          source: SalesSource;
+          capturedAt: Date;
+        }>
+      >(
+        `SELECT f.* FROM (${FIRST_SALES_MILESTONE}) f
+           ORDER BY f."capturedAt" DESC, f."gameName"
+           LIMIT $1`,
+        [FIRST_FIGURES_SHOWN],
       ),
       this.db.query<Array<{ year: number; games: string; covered: string }>>(
         `SELECT EXTRACT(YEAR FROM g."releaseDate")::int AS year,
@@ -198,37 +258,42 @@ export class AdminDashboardService {
     const sourceTotals = emptyBySource();
     for (const row of bySource) sourceTotals[row.source] = Number(row.c);
 
-    const weeks = Array.from({ length: WEEKS_SHOWN }, (_, i) => {
-      const start = new Date(firstWeek);
-      start.setUTCDate(start.getUTCDate() + 7 * i);
-      return { weekStart: start.toISOString(), bySource: emptyBySource() };
-    });
-    const weekIndex = new Map(
-      weeks.map((w, i) => [w.weekStart.slice(0, 10), i]),
-    );
     const today = new Date();
-    const days = Array.from({ length: DAYS_SHOWN }, (_, i) => {
-      const d = new Date(
-        Date.UTC(
-          today.getUTCFullYear(),
-          today.getUTCMonth(),
-          today.getUTCDate() - (DAYS_SHOWN - 1 - i),
-        ),
+    const bucket = (rows: DailyRow[]) => {
+      const weeks = Array.from({ length: WEEKS_SHOWN }, (_, i) => {
+        const start = new Date(firstWeek);
+        start.setUTCDate(start.getUTCDate() + 7 * i);
+        return { weekStart: start.toISOString(), bySource: emptyBySource() };
+      });
+      const weekIndex = new Map(
+        weeks.map((w, i) => [w.weekStart.slice(0, 10), i]),
       );
-      return { day: d.toISOString().slice(0, 10), bySource: emptyBySource() };
-    });
-    const dayIndex = new Map(days.map((d, i) => [d.day, i]));
-    for (const row of daily) {
-      const count = Number(row.c);
-      const week = weekIndex.get(
-        weekStartUtc(new Date(`${row.day}T00:00:00Z`))
-          .toISOString()
-          .slice(0, 10),
-      );
-      if (week !== undefined) weeks[week].bySource[row.source] += count;
-      const day = dayIndex.get(row.day);
-      if (day !== undefined) days[day].bySource[row.source] += count;
-    }
+      const days = Array.from({ length: DAYS_SHOWN }, (_, i) => {
+        const d = new Date(
+          Date.UTC(
+            today.getUTCFullYear(),
+            today.getUTCMonth(),
+            today.getUTCDate() - (DAYS_SHOWN - 1 - i),
+          ),
+        );
+        return { day: d.toISOString().slice(0, 10), bySource: emptyBySource() };
+      });
+      const dayIndex = new Map(days.map((d, i) => [d.day, i]));
+      for (const row of rows) {
+        const count = Number(row.c);
+        const week = weekIndex.get(
+          weekStartUtc(new Date(`${row.day}T00:00:00Z`))
+            .toISOString()
+            .slice(0, 10),
+        );
+        if (week !== undefined) weeks[week].bySource[row.source] += count;
+        const day = dayIndex.get(row.day);
+        if (day !== undefined) days[day].bySource[row.source] += count;
+      }
+      return { weeks, days };
+    };
+    const all = bucket(daily);
+    const first = bucket(dailyFirst);
 
     const currentYear = new Date().getUTCFullYear();
     const yearBuckets = Array.from({ length: YEARS_SHOWN }, (_, i) => ({
@@ -263,8 +328,18 @@ export class AdminDashboardService {
         rejected: Number(milestones[0]?.rejected ?? 0),
         bySource: sourceTotals,
       },
-      weeklyMilestones: weeks,
-      dailyMilestones: days,
+      weeklyMilestones: all.weeks,
+      dailyMilestones: all.days,
+      weeklyFirstMilestones: first.weeks,
+      dailyFirstMilestones: first.days,
+      latestFirstMilestones: latestFirst.map((r) => ({
+        gameId: r.gameId,
+        gameName: r.gameName,
+        units: Number(r.units),
+        platform: r.platform,
+        source: r.source,
+        capturedAt: new Date(r.capturedAt).toISOString(),
+      })),
       coreCoverageByYear: [...yearBuckets, earlier],
       platformCoverage: COVERAGE_PLATFORMS.map((platform) => ({
         platform,

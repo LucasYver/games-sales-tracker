@@ -3,9 +3,18 @@ import {
   adminFetch,
   requireAdminSession,
   type AdminDashboardOverview,
+  type SalesSource,
 } from '@/lib/admin';
 import type { Platform } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { compactNumber } from './_components/format';
 import { MilestonesAddedChart } from './_components/MilestonesAddedChart';
 import {
@@ -22,6 +31,65 @@ const PLATFORM_LABELS: Partial<Record<Platform, string>> = {
   XBOX: 'Xbox',
   SWITCH: 'Switch',
 };
+
+function sourceLabel(source: SalesSource): string {
+  return (
+    SOURCE_GROUPS.find((g) => g.sources.includes(source))?.label ?? source
+  );
+}
+
+function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+function FirstFigures({
+  rows,
+}: {
+  rows: AdminDashboardOverview['latestFirstMilestones'];
+}) {
+  if (rows.length === 0) {
+    return <p className="text-muted-foreground text-sm">None yet.</p>;
+  }
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Added</TableHead>
+          <TableHead>Game</TableHead>
+          <TableHead className="text-right">Figure</TableHead>
+          <TableHead>Platform</TableHead>
+          <TableHead>Source</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((r) => (
+          <TableRow key={r.gameId}>
+            <TableCell className="text-muted-foreground whitespace-nowrap">
+              {shortDate(r.capturedAt)}
+            </TableCell>
+            <TableCell>
+              <Link
+                href={`/admin/games/${r.gameId}`}
+                className="underline-offset-2 hover:underline"
+              >
+                {r.gameName}
+              </Link>
+            </TableCell>
+            <TableCell className="text-right tabular-nums">
+              {compactNumber(r.units)}
+            </TableCell>
+            <TableCell>{PLATFORM_LABELS[r.platform] ?? r.platform}</TableCell>
+            <TableCell>{sourceLabel(r.source)}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
 
 function percent(part: number, total: number): number {
   return total > 0 ? Math.round((part / total) * 100) : 0;
@@ -228,11 +296,13 @@ export default async function AdminDashboard() {
         <div className="grid gap-4 lg:grid-cols-2">
           <SectionCard
             title="Milestones added"
-            description="By date added: last 30 days or last 12 weeks. Bulk imports show up as spikes."
+            description="By date added: last 30 days or last 12 weeks. Bulk imports show up as spikes. “First for a game” counts only the first sales figure each game got."
           >
             <MilestonesAddedChart
               days={overview.dailyMilestones}
               weeks={overview.weeklyMilestones}
+              firstDays={overview.dailyFirstMilestones}
+              firstWeeks={overview.weeklyFirstMilestones}
             />
           </SectionCard>
           <SectionCard
@@ -270,6 +340,13 @@ export default async function AdminDashboard() {
             description={`${milestones.total.toLocaleString()} milestones kept.`}
           >
             <SourceMix bySource={milestones.bySource} />
+          </SectionCard>
+          <SectionCard
+            title="Games with a first sales figure"
+            description={`The ${overview.latestFirstMilestones.length} games that most recently got their first sales figure, by date added.`}
+            className="lg:col-span-2"
+          >
+            <FirstFigures rows={overview.latestFirstMilestones} />
           </SectionCard>
         </div>
       </section>

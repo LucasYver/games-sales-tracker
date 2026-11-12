@@ -136,6 +136,19 @@ export interface AdminDashboardOverview {
     day: string;
     bySource: Record<SalesSource, number>;
   }>;
+  /** As `weeklyMilestones`, first sales milestone per game only. */
+  weeklyFirstMilestones: AdminDashboardOverview['weeklyMilestones'];
+  /** As `dailyMilestones`, first sales milestone per game only. */
+  dailyFirstMilestones: AdminDashboardOverview['dailyMilestones'];
+  /** Games whose first sales milestone is the most recent, newest first. */
+  latestFirstMilestones: Array<{
+    gameId: string;
+    gameName: string;
+    units: number;
+    platform: Platform;
+    source: SalesSource;
+    capturedAt: string;
+  }>;
   coreCoverageByYear: Array<{
     label: string;
     games: number;
