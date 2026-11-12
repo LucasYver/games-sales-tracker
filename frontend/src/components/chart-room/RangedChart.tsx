@@ -9,6 +9,7 @@ import {
 } from '@/components/chart-room/SeriesChart';
 import {
   CHART_RANGES,
+  DEFAULT_CHART_RANGE,
   type ChartRangeKey,
   prepareRangePoints,
   rangeHasEnoughPoints,
@@ -67,6 +68,8 @@ export function RangedChart({
   onRangeChange,
   /** When true and uncontrolled, read/write ?range= on the URL. */
   syncRangeUrl = false,
+  /** Period shown when neither the prop nor ?range= sets one. */
+  defaultRange = DEFAULT_CHART_RANGE,
 }: {
   points: ReviewPoint[];
   label: string;
@@ -78,11 +81,12 @@ export function RangedChart({
   range?: ChartRangeKey;
   onRangeChange?: (range: ChartRangeKey) => void;
   syncRangeUrl?: boolean;
+  defaultRange?: ChartRangeKey;
 }) {
   const t = useTranslations('gamePage');
   const format = useFormatter();
-  const chartQuery = useChartSearchParams();
-  const [localRange, setLocalRange] = useState<ChartRangeKey>('1y');
+  const chartQuery = useChartSearchParams(defaultRange);
+  const [localRange, setLocalRange] = useState<ChartRangeKey>(defaultRange);
 
   const range =
     rangeProp ?? (syncRangeUrl ? chartQuery.range : localRange);

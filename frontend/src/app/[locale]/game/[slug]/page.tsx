@@ -28,6 +28,7 @@ import { InstantGamingLink } from '@/components/InstantGamingLink';
 import { instantGamingUrl } from '@/lib/affiliate';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
 import { RangedChart } from '@/components/chart-room/RangedChart';
+import { defaultRangeForRelease } from '@/components/chart-room/chart-range';
 import {
   PlatformCharts,
   type PlatformChartGroup,
@@ -1329,6 +1330,8 @@ function GamePageContent({
   ].filter((group): group is PlatformChartGroup => Boolean(group));
   // No data shown before launch: the page says when it arrives instead.
   const upcoming = isUpcoming(game.releaseDate);
+  // Charts open on the smallest period covering the game's life since launch.
+  const chartDefaultRange = defaultRangeForRelease(game.releaseDate);
   const hasPlatformCharts =
     !upcoming &&
     platformGroups.some((group) =>
@@ -1481,7 +1484,10 @@ function GamePageContent({
                 {hasPlatformCharts && (
                   <section className="border-b border-border px-4 py-5">
                     <Suspense>
-                      <PlatformCharts groups={platformGroups} />
+                      <PlatformCharts
+                        groups={platformGroups}
+                        defaultRange={chartDefaultRange}
+                      />
                     </Suspense>
                   </section>
                 )}
@@ -1494,6 +1500,7 @@ function GamePageContent({
                         label={t('twitchViewersSeries')}
                         description={t('chartsSource', { store: 'Twitch' })}
                         syncRangeUrl
+                        defaultRange={chartDefaultRange}
                         ariaLabel={t('chartAlt', {
                           series: t('twitchViewersSeries'),
                         })}

@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { usePathname, useRouter } from '@/i18n/navigation';
 import {
   CHART_RANGES,
+  DEFAULT_CHART_RANGE,
   type ChartRangeKey,
 } from '@/components/chart-room/chart-range';
 
@@ -14,15 +15,20 @@ export function isChartRangeKey(value: string | null): value is ChartRangeKey {
   return value != null && RANGE_KEYS.has(value);
 }
 
-/** Read/write `platform` + `range` on the game page query string. */
-export function useChartSearchParams() {
+/**
+ * Read/write `platform` + `range` on the game page query string. `range` is
+ * left out of the URL when it equals the game's default period.
+ */
+export function useChartSearchParams(
+  defaultRange: ChartRangeKey = DEFAULT_CHART_RANGE,
+) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const platform = searchParams.get('platform');
   const rangeParam = searchParams.get('range');
-  const range: ChartRangeKey = isChartRangeKey(rangeParam) ? rangeParam : '1y';
+  const range: ChartRangeKey = isChartRangeKey(rangeParam) ? rangeParam : defaultRange;
 
   const replaceParams = useCallback(
     (patch: { platform?: string | null; range?: ChartRangeKey | null }) => {
@@ -33,7 +39,7 @@ export function useChartSearchParams() {
         else params.delete('platform');
       }
       if (patch.range !== undefined) {
-        if (patch.range && patch.range !== '1y') params.set('range', patch.range);
+        if (patch.range && patch.range !== defaultRange) params.set('range', patch.range);
         else params.delete('range');
       }
 
@@ -42,7 +48,7 @@ export function useChartSearchParams() {
         scroll: false,
       });
     },
-    [pathname, router, searchParams],
+    [defaultRange, pathname, router, searchParams],
   );
 
   return { platform, range, replaceParams };

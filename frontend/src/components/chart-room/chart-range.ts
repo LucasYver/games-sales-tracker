@@ -16,6 +16,35 @@ export type ChartAggregation = 'none' | 'week' | 'month';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+export const DEFAULT_CHART_RANGE: ChartRangeKey = '1y';
+
+/** Release-age cut-offs (days) for the default period; older games get 1y. */
+const DEFAULT_RANGE_BY_AGE: { maxDays: number; key: ChartRangeKey }[] = [
+  { maxDays: 2, key: '48h' },
+  { maxDays: 7, key: '1w' },
+  { maxDays: 30, key: '1m' },
+  { maxDays: 90, key: '3m' },
+];
+
+/**
+ * Smallest period that covers the game's whole life since release, so a
+ * two-month-old game opens on 3m (raw points) instead of 1y (weekly buckets).
+ * Unknown or future release dates and games past 90 days keep 1y.
+ */
+export function defaultRangeForRelease(
+  releaseDate: string | null | undefined,
+  now: number = Date.now(),
+): ChartRangeKey {
+  if (!releaseDate) return DEFAULT_CHART_RANGE;
+  const released = new Date(releaseDate).getTime();
+  if (!Number.isFinite(released) || released > now) return DEFAULT_CHART_RANGE;
+  const ageDays = (now - released) / DAY_MS;
+  return (
+    DEFAULT_RANGE_BY_AGE.find((r) => ageDays <= r.maxDays)?.key ??
+    DEFAULT_CHART_RANGE
+  );
+}
+
 /**
  * Window measured back from the series' own last point, not wall-clock time,
  * so a stale series still has a readable "last week".

@@ -5,6 +5,10 @@ import type { ReviewPoint } from '@/lib/api';
 import { RangedChart } from '@/components/chart-room/RangedChart';
 import { useChartSearchParams } from '@/components/chart-room/useChartSearchParams';
 import {
+  DEFAULT_CHART_RANGE,
+  type ChartRangeKey,
+} from '@/components/chart-room/chart-range';
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -33,10 +37,17 @@ function hasChartData(group: PlatformChartGroup): boolean {
  * Platform tabs on top (synced to ?platform=), then one ranged chart per
  * metric for the active storefront. Chart period is synced via ?range=.
  */
-export function PlatformCharts({ groups }: { groups: PlatformChartGroup[] }) {
+export function PlatformCharts({
+  groups,
+  defaultRange = DEFAULT_CHART_RANGE,
+}: {
+  groups: PlatformChartGroup[];
+  /** Period shown when ?range= is absent (from the release date). */
+  defaultRange?: ChartRangeKey;
+}) {
   const t = useTranslations('gamePage');
   const { platform: platformParam, range, replaceParams } =
-    useChartSearchParams();
+    useChartSearchParams(defaultRange);
 
   const firstWithData = groups.find(hasChartData);
   const fromUrl = groups.find(
