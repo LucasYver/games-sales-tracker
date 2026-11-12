@@ -5,8 +5,7 @@ import { localeLanguages, routing } from '@/i18n/routing';
 import { SITE_URL } from '@/lib/site-url';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
 import { defaultOgImages } from '@/lib/og-meta';
-
-const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim() || null;
+import { CONTACT_EMAIL } from '@/lib/contact';
 
 export async function generateMetadata({
   params,
@@ -100,16 +99,14 @@ export default function PrivacyPage() {
           <p>{t('affiliateBody')}</p>
         </Section>
 
-        {CONTACT_EMAIL && (
-          <Section title={t('contactTitle')}>
-            <p>
-              {t('contactBody')}{' '}
-              <a href={`mailto:${CONTACT_EMAIL}`} className={LINK_CLASS}>
-                {CONTACT_EMAIL}
-              </a>
-            </p>
-          </Section>
-        )}
+        <Section title={t('contactTitle')}>
+          <p>
+            {t('contactBody')}{' '}
+            <a href={`mailto:${CONTACT_EMAIL}`} className={LINK_CLASS}>
+              {CONTACT_EMAIL}
+            </a>
+          </p>
+        </Section>
       </article>
     </main>
   );

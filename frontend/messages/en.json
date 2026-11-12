@@ -30,7 +30,9 @@
     "privacy": "Privacy",
     "methodology": "How we estimate",
     "themeDark": "Switch to dark theme",
-    "themeLight": "Switch to light theme"
+    "themeLight": "Switch to light theme",
+    "about": "About",
+    "contact": "Contact"
   },
   "siteMeta": {
     "description": "How many copies did that game sell? Video game sales figures for PC, PlayStation, Xbox and Switch, updated daily.",
@@ -456,5 +458,33 @@
     "linkGame": "GTA 6 game page",
     "linkMethodology": "How we estimate other games",
     "gamePageLink": "Follow GTA 6 sales figure by figure, against GTA V and RDR2"
+  },
+  "about": {
+    "title": "About Game Sales Tracker",
+    "intro": "Game Sales Tracker answers a simple question: how many copies has this game sold? Publishers rarely share their sales. So every day we estimate the sales of more than 6,000 games on PC, PlayStation and Xbox, from public data.",
+    "offerTitle": "What you'll find here",
+    "offerGames": "A page for every game, with its sales estimate, the split by platform and the known official figures, dated and sourced",
+    "offerHubs": "Rankings by studio, publisher, franchise and release year",
+    "offerBlog": "A blog that looks back at the official sales announced by publishers",
+    "sourcesTitle": "Where our figures come from",
+    "sourcesBody": "We follow the public traces every game leaves: Steam reviews, concurrent players, PlayStation Store and Xbox Store ratings, Steam followers. We compare them with a base of more than 5,000 published sales figures for more than 2,000 games.",
+    "sourcesLink": "Read how we estimate sales",
+    "whoTitle": "Who runs the site",
+    "whoBody": "Game Sales Tracker is an independent project, built and maintained by {name}. It is not affiliated with any publisher, studio or console maker.",
+    "fundingTitle": "Independence and funding",
+    "fundingBody": "The site is free and needs no account. It is funded by advertising and by affiliate links to the Instant Gaming store. Neither has any influence on our estimates, and no publisher can pay to appear on the site or to have a figure changed.",
+    "contactTitle": "Get in touch",
+    "contactLink": "Write to us from the Contact page"
+  },
+  "contact": {
+    "title": "Contact",
+    "intro": "A question, a correction or a proposal? Write to us:",
+    "correctionsTitle": "Report an error or an official figure",
+    "correctionsBody": "Tell us which game it is about and include a link to the source: a publisher announcement, a financial report or a press article. We check every source before adding it. An official figure is added as reference data, with its date, but it does not replace the estimate.",
+    "studiosTitle": "Publishers and studios",
+    "studiosBody": "Have you announced a sales figure that is missing from your game's page? Send us the link to the announcement.",
+    "pressTitle": "Press and partnerships",
+    "pressBody": "You can quote our figures by crediting Game Sales Tracker with a link to the game page. For a partnership or a sponsored placement, write to the same address.",
+    "responseTime": "We usually reply within a few days."
   }
 }

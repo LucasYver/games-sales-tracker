@@ -86,6 +86,17 @@ async function pagesSitemap(
     });
   }
 
+  for (const path of ['/about', '/contact']) {
+    for (const locale of routing.locales) {
+      entries.push({
+        url: `${SITE_URL}/${locale}${path}`,
+        changeFrequency: 'yearly',
+        priority: 0.3,
+        alternates: localeAlternates(path),
+      });
+    }
+  }
+
   // The GTA 6 tracker moves daily around launch.
   for (const locale of routing.locales) {
     entries.push({

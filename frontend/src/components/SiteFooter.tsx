@@ -40,7 +40,19 @@ export function SiteFooter() {
             </Link>
           ))}
       </div>
-      <div className="mx-auto flex w-full max-w-6xl gap-4 px-4 pt-1 pb-3 font-mono text-[0.7rem]">
+      <div className="mx-auto flex w-full max-w-6xl flex-wrap gap-x-4 gap-y-1 px-4 pt-1 pb-3 font-mono text-[0.7rem]">
+        <Link
+          href="/about"
+          className="text-muted-foreground hover:text-foreground"
+        >
+          {tNav('about')}
+        </Link>
+        <Link
+          href="/contact"
+          className="text-muted-foreground hover:text-foreground"
+        >
+          {tNav('contact')}
+        </Link>
         <Link
           href="/methodology"
           className="text-muted-foreground hover:text-foreground"

@@ -30,7 +30,9 @@
     "privacy": "Confidentialité",
     "methodology": "Notre méthode",
     "themeDark": "Passer en thème sombre",
-    "themeLight": "Passer en thème clair"
+    "themeLight": "Passer en thème clair",
+    "about": "À propos",
+    "contact": "Contact"
   },
   "siteMeta": {
     "description": "Combien d'exemplaires ce jeu a-t-il vendus ? Chiffres de ventes jeu vidéo sur PC, PlayStation, Xbox et Switch, mis à jour chaque jour.",
@@ -456,5 +458,33 @@
     "linkGame": "Fiche du jeu GTA 6",
     "linkMethodology": "Comment nous estimons les autres jeux",
     "gamePageLink": "Suivez les ventes de GTA 6 chiffre par chiffre, face à GTA V et RDR2"
+  },
+  "about": {
+    "title": "À propos de Game Sales Tracker",
+    "intro": "Game Sales Tracker répond à une question simple : combien d'exemplaires ce jeu a-t-il vendus ? Les éditeurs publient rarement leurs ventes. Nous estimons donc chaque jour les ventes de plus de 6 000 jeux sur PC, PlayStation et Xbox, à partir de données publiques.",
+    "offerTitle": "Ce que vous trouverez ici",
+    "offerGames": "Une fiche par jeu, avec l'estimation des ventes, leur répartition par plateforme et les chiffres officiels connus, datés et sourcés",
+    "offerHubs": "Des classements par studio, éditeur, franchise et année de sortie",
+    "offerBlog": "Un blog qui revient sur les ventes officielles annoncées par les éditeurs",
+    "sourcesTitle": "D'où viennent nos chiffres",
+    "sourcesBody": "Nous suivons les traces publiques que laisse chaque jeu : avis Steam, joueurs connectés, notes du PlayStation Store et du Xbox Store, abonnés Steam. Nous les comparons à une base de plus de 5 000 chiffres de ventes publiés sur plus de 2 000 jeux.",
+    "sourcesLink": "Lire le détail de notre méthode",
+    "whoTitle": "Qui est derrière le site",
+    "whoBody": "Game Sales Tracker est un projet indépendant, conçu et maintenu par {name}. Il n'est affilié à aucun éditeur, studio ou constructeur de console.",
+    "fundingTitle": "Indépendance et financement",
+    "fundingBody": "Le site est gratuit et sans compte. Il se finance par de la publicité et par des liens affiliés vers la boutique Instant Gaming. Ni l'un ni l'autre n'influence nos estimations, et aucun éditeur ne peut payer pour apparaître sur le site ou faire modifier un chiffre.",
+    "contactTitle": "Nous contacter",
+    "contactLink": "Écrivez-nous depuis la page Contact"
+  },
+  "contact": {
+    "title": "Contact",
+    "intro": "Une question, une correction ou une proposition ? Écrivez-nous :",
+    "correctionsTitle": "Signaler une erreur ou un chiffre officiel",
+    "correctionsBody": "Indiquez le jeu concerné et joignez un lien vers la source : annonce de l'éditeur, rapport financier ou article de presse. Nous vérifions chaque source avant de l'ajouter. Un chiffre officiel est ajouté comme donnée de référence, avec sa date, mais il ne remplace pas l'estimation.",
+    "studiosTitle": "Éditeurs et studios",
+    "studiosBody": "Vous avez annoncé un chiffre de ventes qui manque sur la fiche de votre jeu ? Envoyez-nous le lien de l'annonce.",
+    "pressTitle": "Presse et partenariats",
+    "pressBody": "Vous pouvez citer nos chiffres en mentionnant Game Sales Tracker avec un lien vers la page du jeu. Pour un partenariat ou un emplacement sponsorisé, écrivez-nous à la même adresse.",
+    "responseTime": "Nous répondons généralement sous quelques jours."
   }
 }

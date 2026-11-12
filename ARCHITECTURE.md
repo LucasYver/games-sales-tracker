@@ -195,6 +195,8 @@ are 404s, left out of the header and the sitemap.
 | `/[locale]/blog` | Published official-sales articles (human-reviewed) |
 | `/[locale]/blog/[slug]` | One article, FR/EN, no model estimates |
 | `/[locale]/privacy` | Privacy page: audience measurement, ads, contact |
+| `/[locale]/about` | About page: what the site is, sources, who runs it, funding (static, no backend call) |
+| `/[locale]/contact` | Contact page: `mailto:` link to the address in `frontend/src/lib/contact.ts` (static, no backend call) |
 | `/[locale]/methodology` | Public explanation of the estimates (all locales, no backend call), linked from the game headline and the footer |
 | `/admin/*` | Back-office |
 
@@ -211,7 +213,7 @@ not shown on the public page.
 Default API base: `NEXT_PUBLIC_API_URL` or `http://localhost:3001/api`
 (`frontend/src/lib/api.ts`). The sitemap is split (`app/sitemap/[file]/route.ts`, served at `/sitemap/{id}.xml`: 0 = home, blog and posts, then 1,000 games per file) behind an index at `/sitemap.xml` (`app/sitemap.xml/route.ts`); it reads `GET /games/sitemap` and `GET /blog/sitemap`. New game pages (nightly, after the `game-discovery` cron) and newly published posts go to IndexNow for Bing and other participating engines, not Google (`backend/src/common/indexnow.ts`, key file in `frontend/public/`). Game pages link to Instant Gaming with our affiliate code when the nightly discovery cron matched a product (skill `manage-catalog-discovery`); clicks are the Vercel Analytics custom event `instant_gaming_click`. Fonts are DM Sans and IBM Plex Mono, with IBM Plex Sans on `/ru` because DM Sans has no Cyrillic.
 
-Ads are off unless `NEXT_PUBLIC_ADSENSE_CLIENT` is set (`frontend/src/lib/ads.ts`): it loads the AdSense script on public pages and serves `/ads.txt`. `NEXT_PUBLIC_ADSENSE_GAME_SLOT` adds the unit at the bottom of game pages. `NEXT_PUBLIC_CONTACT_EMAIL` adds the contact section of the privacy page. All three are read at build time, so changing one needs a redeploy.
+Ads are off unless `NEXT_PUBLIC_ADSENSE_CLIENT` is set (`frontend/src/lib/ads.ts`): it loads the AdSense script on public pages and serves `/ads.txt`. `NEXT_PUBLIC_ADSENSE_GAME_SLOT` adds the unit at the bottom of game pages. `NEXT_PUBLIC_CONTACT_EMAIL` overrides the contact address shown on the about, contact and privacy pages (default in `frontend/src/lib/contact.ts`). All three are read at build time, so changing one needs a redeploy.
 
 ## Environment
 
