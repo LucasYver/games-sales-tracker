@@ -39,7 +39,7 @@ export function FiltersSidebar(props: Props) {
         <DialogPrimitive.Trigger asChild>
           <button
             type="button"
-            className="bg-primary text-primary-foreground hover:bg-primary/90 ring-primary/20 focus-visible:ring-ring fixed right-4 bottom-4 z-40 inline-flex items-center gap-2 rounded-full px-4 py-3 text-sm font-medium shadow-lg ring-4 transition focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none lg:hidden"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 ring-primary/20 focus-visible:ring-ring fixed end-4 bottom-4 z-40 inline-flex items-center gap-2 rounded-full px-4 py-3 text-sm font-medium shadow-lg ring-4 transition focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none lg:hidden"
             aria-label={t('openFilters')}
           >
             <SlidersHorizontal aria-hidden className="size-4" />
@@ -54,7 +54,7 @@ export function FiltersSidebar(props: Props) {
         <DialogPrimitive.Portal>
           <DialogPrimitive.Overlay className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in data-[state=closed]:fade-out fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
           <DialogPrimitive.Content
-            className="bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:slide-in-from-right data-[state=closed]:slide-out-to-right fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col gap-4 border-l border-border p-5 shadow-2xl"
+            className="bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:slide-in-from-end data-[state=closed]:slide-out-to-end fixed inset-y-0 end-0 z-50 flex w-full max-w-sm flex-col gap-4 border-s border-border p-5 shadow-2xl"
             aria-describedby={undefined}
           >
             <div className="flex items-center justify-between">
@@ -68,7 +68,7 @@ export function FiltersSidebar(props: Props) {
                 <X aria-hidden className="size-5" />
               </DialogPrimitive.Close>
             </div>
-            <div className="flex-1 overflow-y-auto pr-1">
+            <div className="flex-1 overflow-y-auto pe-1">
               <GamesFilter {...props} onApply={() => setOpen(false)} />
             </div>
           </DialogPrimitive.Content>

@@ -239,7 +239,7 @@ export default async function Mw4SalesPage({
         </Section>
 
         <Section title={t('caveatsTitle')}>
-          <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-muted-foreground">
+          <ul className="list-disc space-y-1.5 ps-5 text-sm leading-relaxed text-muted-foreground">
             {CAVEATS.map((key) => (
               <li key={key}>{t(key)}</li>
             ))}
@@ -253,9 +253,9 @@ export default async function Mw4SalesPage({
             <div className="overflow-x-auto rounded-[3px] border border-border bg-card">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-border text-left font-mono text-[0.7rem] tracking-wider text-muted-foreground uppercase">
+                  <tr className="border-b border-border text-start font-mono text-[0.7rem] tracking-wider text-muted-foreground uppercase">
                     <th className="px-3 py-2 font-medium">{t('colDate')}</th>
-                    <th className="px-3 py-2 text-right font-medium">
+                    <th className="px-3 py-2 text-end font-medium">
                       {t('colUnits')}
                     </th>
                     <th className="px-3 py-2 font-medium">{t('colScope')}</th>
@@ -273,7 +273,7 @@ export default async function Mw4SalesPage({
                         <td className="px-3 py-2 whitespace-nowrap">
                           {f.reportedAt ? longDate(f.reportedAt) : '—'}
                         </td>
-                        <td className="px-3 py-2 text-right font-semibold tabular-nums whitespace-nowrap">
+                        <td className="px-3 py-2 text-end font-semibold tabular-nums whitespace-nowrap">
                           {format.number(f.units)}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">

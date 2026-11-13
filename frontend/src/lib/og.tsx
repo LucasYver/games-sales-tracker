@@ -76,6 +76,14 @@ export async function coverDataUrl(url: string | null): Promise<string | null> {
   }
 }
 
+/**
+ * The locale a share card is written in. Satori neither joins Arabic letters
+ * nor lays text out right to left, so Arabic pages get the English card.
+ */
+export function ogLocale(locale: string): string {
+  return locale === 'ar' ? 'en' : locale;
+}
+
 /** Same rounding and notation as the game page headline ("4.2M", "4,2 M"). */
 export function ogCompactUnits(units: number, locale: string): string {
   return new Intl.NumberFormat(locale, {

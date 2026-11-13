@@ -1,12 +1,19 @@
 import { defineRouting } from 'next-intl/routing';
 
 export const routing = defineRouting({
-  locales: ['en', 'fr', 'es', 'ru'],
+  locales: ['en', 'fr', 'es', 'ru', 'ar'],
   defaultLocale: 'en',
   // Pages declare hreflang in their metadata. The middleware's automatic Link
   // header would also advertise translated blog URLs that do not exist.
   alternateLinks: false,
 });
+
+/** Locales written right to left: the layout sets `dir="rtl"` for them. */
+const RTL_LOCALES: readonly string[] = ['ar'];
+
+export function isRtl(locale: string): boolean {
+  return RTL_LOCALES.includes(locale);
+}
 
 /** Articles are written per language, at one paid AI call each. */
 const BLOG_LOCALES: readonly string[] = ['en', 'fr'];

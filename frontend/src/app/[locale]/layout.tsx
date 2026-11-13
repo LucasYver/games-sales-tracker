@@ -1,11 +1,17 @@
 import type { Metadata } from 'next';
-import { DM_Sans, IBM_Plex_Mono, IBM_Plex_Sans } from 'next/font/google';
+import {
+  DM_Sans,
+  IBM_Plex_Mono,
+  IBM_Plex_Sans,
+  IBM_Plex_Sans_Arabic,
+} from 'next/font/google';
 import { NextIntlClientProvider, hasLocale } from 'next-intl';
 import { getMessages, getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
+import { Direction } from 'radix-ui';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Analytics } from '@vercel/analytics/next';
-import { routing } from '@/i18n/routing';
+import { isRtl, routing } from '@/i18n/routing';
 import { ADSENSE_CLIENT } from '@/lib/ads';
 import { SITE_URL } from '@/lib/site-url';
 import { SiteFooter } from '@/components/SiteFooter';
@@ -35,6 +41,15 @@ const sansCyrillic = IBM_Plex_Sans({
 const monoCyrillic = IBM_Plex_Mono({
   variable: '--font-mono',
   subsets: ['cyrillic', 'latin'],
+  weight: ['400', '500', '600', '700'],
+  display: 'swap',
+  preload: false,
+});
+
+// Neither DM Sans nor Plex Mono has Arabic. Loads on /ar only.
+const sansArabic = IBM_Plex_Sans_Arabic({
+  variable: '--font-sans',
+  subsets: ['arabic', 'latin'],
   weight: ['400', '500', '600', '700'],
   display: 'swap',
   preload: false,
@@ -90,18 +105,32 @@ export default async function LocaleLayout({
   const fonts =
     locale === 'ru'
       ? `${sansCyrillic.variable} ${monoCyrillic.variable}`
-      : `${sans.variable} ${mono.variable}`;
+      : locale === 'ar'
+        ? `${sansArabic.variable} ${mono.variable}`
+        : `${sans.variable} ${mono.variable}`;
+  const dir = isRtl(locale) ? 'rtl' : 'ltr';
 
   return (
     <html
       lang={locale}
+      dir={dir}
       className={`${fonts} chart-scope dark h-full antialiased`}
       suppressHydrationWarning
+      // Arabic words in mono text (figures, labels) fall back to the Arabic sans.
+      style={
+        locale === 'ar'
+          ? ({
+              '--font-mono': `${mono.style.fontFamily}, ${sansArabic.style.fontFamily}`,
+            } as React.CSSProperties)
+          : undefined
+      }
     >
       <body className="flex min-h-full flex-col">
         <ThemeScript />
         <NextIntlClientProvider messages={messages}>
-          <TooltipProvider>{children}</TooltipProvider>
+          <Direction.Provider dir={dir}>
+            <TooltipProvider>{children}</TooltipProvider>
+          </Direction.Provider>
           <SiteFooter />
         </NextIntlClientProvider>
         <Analytics />

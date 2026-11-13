@@ -37,6 +37,11 @@ estimate. Do not pad reports with one.
 
 ## Vercel
 
+The project runs on the **Vercel Pro** plan. Use Pro limits, retention and
+pricing in every estimate, and do not ask the owner which plan they are on.
+Web Analytics keeps about 12 months of data on Pro; Analytics Drains (export of
+analytics events) are available but billed by exported volume.
+
 - Prefer cached or static pages. Each `force-dynamic` public page, and each
   request that reaches the backend, is paid compute. Add one only when the data
   must be live.

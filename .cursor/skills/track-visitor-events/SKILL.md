@@ -27,7 +27,7 @@ Before reporting done, go through this:
 - [ ] If yes: event added to the `Events` type, at most 2 properties
 - [ ] Sent with trackEvent(), from the click/choice handler only
 - [ ] Links to another site use <OutboundLink from="...">
-- [ ] Privacy text (messages/*.json, privacy.analyticsBody) still true in 4 languages
+- [ ] Privacy text (messages/*.json, privacy.analyticsBody) still true in 5 languages
 - [ ] Event checked in the local browser (see "Verify")
 - [ ] Said in the report which event was added, or why none was
 ```
@@ -70,7 +70,7 @@ Track a deliberate visitor action when its count would change a decision:
    before inventing a near-duplicate.
 2. At most **2 properties** (Vercel Pro limit), string or number, each value
    cut at 255 characters by the wrapper. Use untranslated ids (slug, enum,
-   key), never translated labels, so the four locales group together.
+   key), never translated labels, so the five locales group together.
 3. Call `trackEvent('name', { ... })` in the handler that performs the
    action, in a client component. Never import `track` from
    `@vercel/analytics` directly.
@@ -81,7 +81,7 @@ Track a deliberate visitor action when its count would change a decision:
    lowercased and cut to 50 characters, and only when it is the point of the
    event.
 6. If the event tracks a new kind of behaviour, update
-   `privacy.analyticsBody` in `frontend/messages/{en,fr,es,ru}.json`.
+   `privacy.analyticsBody` in `frontend/messages/{en,fr,es,ru,ar}.json`.
 7. If the list of tracked areas changes, update the analytics sentence in
    `ARCHITECTURE.md` (frontend section).
 

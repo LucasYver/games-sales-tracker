@@ -304,6 +304,35 @@ export function headlineUnits(game: GameDetail): number | null {
   return roundedUnits(game.headline.units);
 }
 
+/** Price country a page uses when the URL names none (also the fetch cache key). */
+export function defaultPriceCountry(locale: string): string {
+  return LOCALE_PRICE_COUNTRY[locale] ?? locale;
+}
+
+// Site locales whose store country is not the locale code ('ar' is Argentina).
+const LOCALE_PRICE_COUNTRY: Record<string, string> = { en: 'us', ar: 'sa' };
+
+/** Same rounding as the headline, for a range bound or a compact figure. */
+export function roundUnits(units: number | null): number | null {
+  return roundedUnits(units);
+}
+
+/**
+ * Steam only sees the players of a game started from Steam. Call of Duty and
+ * a few others are played in a publisher launcher: the Steam app collects
+ * thousands of reviews while Steam reports 0-2 concurrent players. A CCU that
+ * low next to that many reviews is the launcher, not the audience, so it is
+ * not shown.
+ */
+const LAUNCHER_MIN_REVIEWS = 1000;
+const LAUNCHER_MAX_PEAK_CCU = 50;
+
+export function steamCcuIsMeaningful(game: GameDetail): boolean {
+  const reviews = game.reviewHistory.at(-1)?.value ?? 0;
+  const peak = game.peakCcu?.value ?? 0;
+  return !(reviews >= LAUNCHER_MIN_REVIEWS && peak < LAUNCHER_MAX_PEAK_CCU);
+}
+
 export async function searchGames(
   query: string,
   limit = 20,

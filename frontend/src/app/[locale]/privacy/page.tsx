@@ -71,7 +71,7 @@ export default function PrivacyPage() {
         <Section title={t('adsTitle')}>
           <p>{t('adsBody')}</p>
           <p className="mt-2">{t('adsConsent')}</p>
-          <ul className="mt-2 list-disc pl-5">
+          <ul className="mt-2 list-disc ps-5">
             <li>
               <a
                 href="https://policies.google.com/technologies/partner-sites"

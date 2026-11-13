@@ -183,10 +183,20 @@ estimate rebuild, and matcher inspection.
 
 ## Frontend
 
-`frontend/src/app/`. Locales `en`, `fr`, `es` and `ru` via `next-intl`. Admin is
+`frontend/src/app/`. Locales `en`, `fr`, `es`, `ru` and `ar` via `next-intl`. Admin is
 outside the locale prefix. The blog exists in `en` and `fr` only (`hasBlog` in
-`i18n/routing.ts`): one paid AI write per language, so `/es/blog` and `/ru/blog`
-are 404s, left out of the header and the sitemap.
+`i18n/routing.ts`): one paid AI write per language, so `/es/blog`, `/ru/blog`
+and `/ar/blog` are 404s, left out of the header and the sitemap.
+
+Arabic is right to left: the layout sets `dir="rtl"` (`isRtl` in
+`i18n/routing.ts`) and wraps the page in Radix's direction provider. Public
+components use logical classes (`ms-`, `pe-`, `start-`, `end-`, `text-start`,
+`border-e`…), never `ml-`/`pr-`/`left-`/`text-right`, so they mirror on `/ar`;
+icons that point a direction get `rtl:-scale-x-100`. Time axes of charts stay
+left to right. Share images (Satori) cannot join Arabic letters, so `/ar` pages
+get the English card (`ogLocale` in `lib/og.tsx`). The default price country on
+`/ar` is Saudi Arabia (`defaultPriceCountry` in `lib/api.ts`), since `ar` as a
+country code is Argentina.
 
 | Route | Role |
 | ----- | ---- |
@@ -211,7 +221,7 @@ the reported milestone when one exists. Source URLs and verbatim quotes are
 not shown on the public page.
 
 Default API base: `NEXT_PUBLIC_API_URL` or `http://localhost:3001/api`
-(`frontend/src/lib/api.ts`). The sitemap is split (`app/sitemap/[file]/route.ts`, served at `/sitemap/{id}.xml`: 0 = home, blog and posts, then 1,000 games per file) behind an index at `/sitemap.xml` (`app/sitemap.xml/route.ts`); it reads `GET /games/sitemap` and `GET /blog/sitemap`. New game pages (nightly, after the `game-discovery` cron) and newly published posts go to IndexNow for Bing and other participating engines, not Google (`backend/src/common/indexnow.ts`, key file in `frontend/public/`). Game pages link to Instant Gaming with our affiliate code when the nightly discovery cron matched a product (skill `manage-catalog-discovery`); clicks are the Vercel Analytics custom event `instant_gaming_click`. Every custom event the public site sends (search, filters, pagination, outbound links, chart range and platform, price country and store, language, theme) is listed and typed in `frontend/src/lib/analytics.ts`; send them through `trackEvent()`, never `track()` directly, and keep each one to 2 properties (Vercel Pro limit). Links to other sites use `components/OutboundLink.tsx` (`outbound_click`). Fonts are DM Sans and IBM Plex Mono, with IBM Plex Sans on `/ru` because DM Sans has no Cyrillic.
+(`frontend/src/lib/api.ts`). The sitemap is split (`app/sitemap/[file]/route.ts`, served at `/sitemap/{id}.xml`: 0 = home, blog and posts, then 1,000 games per file) behind an index at `/sitemap.xml` (`app/sitemap.xml/route.ts`); it reads `GET /games/sitemap` and `GET /blog/sitemap`. New game pages (nightly, after the `game-discovery` cron) and newly published posts go to IndexNow for Bing and other participating engines, not Google (`backend/src/common/indexnow.ts`, key file in `frontend/public/`). Game pages link to Instant Gaming with our affiliate code when the nightly discovery cron matched a product (skill `manage-catalog-discovery`); clicks are the Vercel Analytics custom event `instant_gaming_click`. Every custom event the public site sends (search, filters, pagination, outbound links, chart range and platform, price country and store, language, theme) is listed and typed in `frontend/src/lib/analytics.ts`; send them through `trackEvent()`, never `track()` directly, and keep each one to 2 properties (Vercel Pro limit). Links to other sites use `components/OutboundLink.tsx` (`outbound_click`). Fonts are DM Sans and IBM Plex Mono, with IBM Plex Sans on `/ru` because DM Sans has no Cyrillic, and IBM Plex Sans Arabic on `/ar` (also the fallback of the mono stack there).
 
 Ads are off unless `NEXT_PUBLIC_ADSENSE_CLIENT` is set (`frontend/src/lib/ads.ts`): it loads the AdSense script on public pages and serves `/ads.txt`. `NEXT_PUBLIC_ADSENSE_GAME_SLOT` adds the unit at the bottom of game pages. `NEXT_PUBLIC_CONTACT_EMAIL` overrides the contact address shown on the about, contact and privacy pages (default in `frontend/src/lib/contact.ts`). All three are read at build time, so changing one needs a redeploy.
 

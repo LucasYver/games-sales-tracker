@@ -91,7 +91,7 @@ export function InstantGamingLink({
   }
 
   return (
-    <span className="flex flex-col items-start gap-1 sm:ml-auto sm:items-end">
+    <span className="flex flex-col items-start gap-1 sm:ms-auto sm:items-end">
       <a
         href={href}
         rel="sponsored nofollow noopener"

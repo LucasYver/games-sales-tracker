@@ -13,7 +13,7 @@ export default function HomeLoading() {
       <div className="border-b border-border bg-card">
         <div className="mx-auto flex w-full max-w-6xl items-center gap-4 px-4 py-3">
           <div className="h-5 w-40 animate-pulse rounded-[2px] bg-muted" />
-          <div className="ml-auto h-9 w-56 animate-pulse rounded-[2px] bg-muted" />
+          <div className="ms-auto h-9 w-56 animate-pulse rounded-[2px] bg-muted" />
         </div>
       </div>
 

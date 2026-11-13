@@ -224,7 +224,7 @@ export default async function BlogArticlePage({
           <p className="font-mono text-[0.68rem] tracking-wide text-text-faint uppercase">
             {t('tldrTitle')}
           </p>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+          <ul className="mt-2 list-disc space-y-1 ps-5 text-sm">
             {post.tldr.map((line) => (
               <li key={line}>{line}</li>
             ))}
@@ -276,14 +276,14 @@ export default async function BlogArticlePage({
                   <p className="mb-4">{children}</p>
                 ),
               ul: ({ children }) => (
-                <ul className="mb-4 list-disc space-y-1 pl-5">{children}</ul>
+                <ul className="mb-4 list-disc space-y-1 ps-5">{children}</ul>
               ),
               ol: ({ children }) => (
-                <ol className="mb-4 list-decimal space-y-1 pl-5">{children}</ol>
+                <ol className="mb-4 list-decimal space-y-1 ps-5">{children}</ol>
               ),
               table: ({ children }) => (
                 <div className="mb-6 overflow-x-auto">
-                  <table className="w-full border-collapse text-left text-sm">
+                  <table className="w-full border-collapse text-start text-sm">
                     {children}
                   </table>
                 </div>
