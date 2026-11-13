@@ -181,7 +181,7 @@ export function SearchBar() {
       <div ref={triggerRef} className="relative w-full">
         <Search
           aria-hidden="true"
-          className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+          className="pointer-events-none absolute top-1/2 start-2.5 size-4 -translate-y-1/2 text-muted-foreground"
         />
         <input
           type="search"
@@ -222,7 +222,7 @@ export function SearchBar() {
               <div className="relative flex-1">
                 <Search
                   aria-hidden="true"
-                  className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+                  className="pointer-events-none absolute top-1/2 start-2.5 size-4 -translate-y-1/2 text-muted-foreground"
                 />
                 <input
                   ref={panelInputRef}
@@ -244,7 +244,7 @@ export function SearchBar() {
                 {loading && (
                   <span
                     aria-hidden
-                    className="absolute top-1/2 right-2.5 size-3 -translate-y-1/2 animate-pulse rounded-full bg-primary"
+                    className="absolute top-1/2 end-2.5 size-3 -translate-y-1/2 animate-pulse rounded-full bg-primary"
                   />
                 )}
               </div>
@@ -310,7 +310,7 @@ export function SearchBar() {
                               e.preventDefault();
                               openGame(game);
                             }}
-                            className={`flex w-full items-center gap-3 border-b border-border-soft px-2 py-2.5 text-left ${
+                            className={`flex w-full items-center gap-3 border-b border-border-soft px-2 py-2.5 text-start ${
                               idx === active ? 'bg-accent' : ''
                             }`}
                           >
@@ -333,7 +333,7 @@ export function SearchBar() {
                                 {meta}
                               </span>
                             </span>
-                            <span className="hidden shrink-0 text-right font-mono text-xs text-muted-foreground tabular-nums sm:block">
+                            <span className="hidden shrink-0 text-end font-mono text-xs text-muted-foreground tabular-nums sm:block">
                               {game.reviews > 0
                                 ? t('reviewsCount', {
                                     count: format.number(game.reviews, {
@@ -342,7 +342,7 @@ export function SearchBar() {
                                   })
                                 : ''}
                             </span>
-                            <span className="w-20 shrink-0 text-right font-mono text-sm font-semibold tabular-nums">
+                            <span className="w-20 shrink-0 text-end font-mono text-sm font-semibold tabular-nums">
                               {game.isFree ? (
                                 <span className="text-source-official">
                                   {tCommon('freeToPlay')}

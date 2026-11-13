@@ -306,8 +306,11 @@ export function headlineUnits(game: GameDetail): number | null {
 
 /** Price country a page uses when the URL names none (also the fetch cache key). */
 export function defaultPriceCountry(locale: string): string {
-  return locale === 'en' ? 'us' : locale;
+  return LOCALE_PRICE_COUNTRY[locale] ?? locale;
 }
+
+// Site locales whose store country is not the locale code ('ar' is Argentina).
+const LOCALE_PRICE_COUNTRY: Record<string, string> = { en: 'us', ar: 'sa' };
 
 /** Same rounding as the headline, for a range bound or a compact figure. */
 export function roundUnits(units: number | null): number | null {

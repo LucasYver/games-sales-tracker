@@ -67,7 +67,7 @@ export default function AboutPage() {
         </p>
 
         <Section title={t('offerTitle')}>
-          <ul className="list-disc space-y-1 pl-5">
+          <ul className="list-disc space-y-1 ps-5">
             <li>{t('offerGames')}</li>
             <li>{t('offerHubs')}</li>
             {hasBlog(locale) && (

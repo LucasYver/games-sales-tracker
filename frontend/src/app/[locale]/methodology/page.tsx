@@ -96,7 +96,7 @@ export default function MethodologyPage() {
 
         <Section title={t('signalsTitle')}>
           <p>{t('signalsBody')}</p>
-          <ul className="list-disc space-y-1 pl-5">
+          <ul className="list-disc space-y-1 ps-5">
             {SIGNALS.map((key) => (
               <li key={key}>{t.rich(key, { strong })}</li>
             ))}
@@ -118,7 +118,7 @@ export default function MethodologyPage() {
         </Section>
 
         <Section title={t('notEstimatedTitle')}>
-          <ul className="list-disc space-y-1 pl-5">
+          <ul className="list-disc space-y-1 ps-5">
             {NOT_ESTIMATED.map((key) => (
               <li key={key}>{t.rich(key, { strong })}</li>
             ))}
@@ -128,7 +128,7 @@ export default function MethodologyPage() {
 
         <Section title={t('examplesTitle')}>
           <p>{t('examplesBody')}</p>
-          <ul className="list-disc space-y-1 pl-5">
+          <ul className="list-disc space-y-1 ps-5">
             {EXAMPLE_GAMES.map((game) => (
               <li key={game.slug}>
                 <Link

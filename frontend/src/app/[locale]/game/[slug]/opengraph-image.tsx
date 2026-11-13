@@ -10,6 +10,7 @@ import {
   OgTitle,
   coverDataUrl,
   loadOgFonts,
+  ogLocale,
   ogCompactUnits,
 } from '@/lib/og';
 
@@ -27,7 +28,8 @@ export default async function Image({
 }: {
   params: Promise<{ locale: string; slug: string }>;
 }) {
-  const { locale, slug } = await params;
+  const { slug } = await params;
+  const locale = ogLocale((await params).locale);
   const [game, t, tMeta, tPlatform, fonts] = await Promise.all([
     getGame(slug).catch(() => null),
     getTranslations({ locale, namespace: 'og' }),

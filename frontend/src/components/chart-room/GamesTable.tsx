@@ -96,12 +96,12 @@ export function GamesTable({
           <th scope="col" className={`${th} w-11`}>
             <span className="sr-only">{tCommon('noImage')}</span>
           </th>
-          <th scope="col" className={`${th} text-left text-muted-foreground`}>
+          <th scope="col" className={`${th} text-start text-muted-foreground`}>
             {t('game')}
           </th>
           <th
             scope="col"
-            className={`${th} hidden text-left text-muted-foreground sm:table-cell`}
+            className={`${th} hidden text-start text-muted-foreground sm:table-cell`}
           >
             {t('platforms')}
           </th>
@@ -111,12 +111,12 @@ export function GamesTable({
               sortKey="sales"
               current={sort}
               params={params}
-              className={`${th} text-right`}
+              className={`${th} text-end`}
             />
           ) : (
             <th
               scope="col"
-              className={`${th} text-right text-muted-foreground`}
+              className={`${th} text-end text-muted-foreground`}
             >
               {t('sales')}
             </th>
@@ -127,12 +127,12 @@ export function GamesTable({
               sortKey="popular"
               current={sort}
               params={params}
-              className={`${th} hidden text-right md:table-cell`}
+              className={`${th} hidden text-end md:table-cell`}
             />
           ) : (
             <th
               scope="col"
-              className={`${th} hidden text-right text-muted-foreground md:table-cell`}
+              className={`${th} hidden text-end text-muted-foreground md:table-cell`}
             >
               {t('reviews')}
             </th>
@@ -199,7 +199,7 @@ export function GamesTable({
                   ))}
                 </div>
               </td>
-              <td className="px-2 py-2 text-right font-mono font-semibold tabular-nums">
+              <td className="px-2 py-2 text-end font-mono font-semibold tabular-nums">
                 {game.isFree ? (
                   <span className="text-source-official">
                     {tCommon('freeToPlay')}
@@ -214,7 +214,7 @@ export function GamesTable({
                   <span className="text-text-faint">—</span>
                 )}
               </td>
-              <td className="hidden px-2 py-2 text-right font-mono text-muted-foreground tabular-nums md:table-cell">
+              <td className="hidden px-2 py-2 text-end font-mono text-muted-foreground tabular-nums md:table-cell">
                 {game.reviews > 0 ? compact(game.reviews) : '—'}
               </td>
             </tr>

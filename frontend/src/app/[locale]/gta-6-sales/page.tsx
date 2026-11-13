@@ -281,7 +281,7 @@ export default async function Gta6SalesPage({
         </Section>
 
         <Section title={t('sourcesTitle')}>
-          <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-muted-foreground">
+          <ul className="list-disc space-y-1.5 ps-5 text-sm leading-relaxed text-muted-foreground">
             {SOURCES.map((key) => (
               <li key={key}>{t(key)}</li>
             ))}
@@ -342,11 +342,11 @@ function FiguresTable({
     <div className="overflow-x-auto rounded-[3px] border border-border bg-card">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-border text-left font-mono text-[0.7rem] tracking-wider text-muted-foreground uppercase">
+          <tr className="border-b border-border text-start font-mono text-[0.7rem] tracking-wider text-muted-foreground uppercase">
             {headers.map((h, i) => (
               <th
                 key={h}
-                className={`px-3 py-2 font-medium ${i === 1 ? 'text-right' : ''}`}
+                className={`px-3 py-2 font-medium ${i === 1 ? 'text-end' : ''}`}
               >
                 {h}
               </th>
@@ -357,7 +357,7 @@ function FiguresTable({
           {rows.map((r, i) => (
             <tr key={i} className="border-b border-border/60 last:border-0">
               <td className="px-3 py-2 whitespace-nowrap">{r.date}</td>
-              <td className="px-3 py-2 text-right font-semibold tabular-nums whitespace-nowrap">
+              <td className="px-3 py-2 text-end font-semibold tabular-nums whitespace-nowrap">
                 {r.units}
               </td>
               <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">

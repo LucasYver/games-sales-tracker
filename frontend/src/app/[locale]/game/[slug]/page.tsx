@@ -281,7 +281,10 @@ function GameHeader({
           ))}
         </div>
         {game.summary && (
-          <p className="mt-3 max-w-[80ch] text-xs leading-relaxed text-muted-foreground">
+          <p
+            dir="auto"
+            className="mt-3 max-w-[80ch] text-xs leading-relaxed text-muted-foreground"
+          >
             {game.summary}
           </p>
         )}
@@ -397,7 +400,7 @@ function SalesHeadline({ game }: { game: GameDetail }) {
               <p className="mt-1 font-mono text-xl font-bold text-muted-foreground">
                 {t('upcomingTitle')}
                 {daysToRelease != null && daysToRelease > 0 && (
-                  <span className="ml-2 text-base text-primary">
+                  <span className="ms-2 text-base text-primary">
                     · {t('upcomingCountdown', { days: daysToRelease })}
                   </span>
                 )}
@@ -616,13 +619,13 @@ function PlatformBreakdown({ game }: { game: GameDetail }) {
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr>
-            <th className="border-b border-border px-2 py-2 text-left font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
+            <th className="border-b border-border px-2 py-2 text-start font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
               {t('platformColumn')}
             </th>
-            <th className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
+            <th className="border-b border-border px-2 py-2 text-end font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
               {t('salesColumn')}
             </th>
-            <th className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
+            <th className="border-b border-border px-2 py-2 text-end font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
               {t('shareColumn')}
             </th>
           </tr>
@@ -641,13 +644,13 @@ function PlatformBreakdown({ game }: { game: GameDetail }) {
                 />
                 {tPlatform(row.platform)}
               </td>
-              <td className="px-2 py-2 text-right font-mono tabular-nums">
+              <td className="px-2 py-2 text-end font-mono tabular-nums">
                 {format.number(row.units, {
                   notation: 'compact',
                   maximumFractionDigits: 1,
                 })}
               </td>
-              <td className="px-2 py-2 text-right font-mono text-muted-foreground tabular-nums">
+              <td className="px-2 py-2 text-end font-mono text-muted-foreground tabular-nums">
                 {format.number(row.units / total, {
                   style: 'percent',
                   maximumFractionDigits: 0,
@@ -898,16 +901,16 @@ function PriceTab({ game, now }: { game: GameDetail; now: number }) {
                 <table className="w-full border-collapse text-sm">
                   <thead>
                     <tr>
-                      <th className="border-b border-border px-2 py-2 text-left font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                      <th className="border-b border-border px-2 py-2 text-start font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
                         {t('priceDate')}
                       </th>
-                      <th className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                      <th className="border-b border-border px-2 py-2 text-end font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
                         {t('priceList')}
                       </th>
-                      <th className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                      <th className="border-b border-border px-2 py-2 text-end font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
                         {t('pricePaid')}
                       </th>
-                      <th className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                      <th className="border-b border-border px-2 py-2 text-end font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
                         {t('priceDiscount')}
                       </th>
                     </tr>
@@ -925,13 +928,13 @@ function PriceTab({ game, now }: { game: GameDetail; now: number }) {
                             day: '2-digit',
                           })}
                         </td>
-                        <td className="px-2 py-2 text-right font-mono text-muted-foreground tabular-nums">
+                        <td className="px-2 py-2 text-end font-mono text-muted-foreground tabular-nums">
                           {money(p.initial)}
                         </td>
-                        <td className="px-2 py-2 text-right font-mono font-semibold tabular-nums">
+                        <td className="px-2 py-2 text-end font-mono font-semibold tabular-nums">
                           {money(p.final)}
                         </td>
-                        <td className="px-2 py-2 text-right font-mono tabular-nums">
+                        <td className="px-2 py-2 text-end font-mono tabular-nums">
                           {p.discountPercent > 0 ? (
                             `−${p.discountPercent}%`
                           ) : (
@@ -995,15 +998,15 @@ function RegionalPrices({ countries }: { countries: RegionalPrice[] }) {
               {row.currency}
             </span>
           </span>
-          <span className="shrink-0 text-right font-mono tabular-nums">
+          <span className="shrink-0 text-end font-mono tabular-nums">
             {row.discountPercent > 0 && (
-              <span className="mr-2 text-muted-foreground line-through">
+              <span className="me-2 text-muted-foreground line-through">
                 {money(row, row.initial)}
               </span>
             )}
             {money(row, row.final)}
             {row.discountPercent > 0 && (
-              <span className="ml-2">−{row.discountPercent}%</span>
+              <span className="ms-2">−{row.discountPercent}%</span>
             )}
           </span>
         </li>
@@ -1310,7 +1313,7 @@ function TechSheet({
     links.push({ key: 'gog', url: game.otherStores.gogUrl, label: 'GOG' });
 
   return (
-    <aside className="border-b border-border px-4 py-5 lg:col-start-1 lg:row-start-1 lg:border-r lg:border-b-0">
+    <aside className="border-b border-border px-4 py-5 lg:col-start-1 lg:row-start-1 lg:border-e lg:border-b-0">
       <SectionTitle>{t('techTitle')}</SectionTitle>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
         {rows.map(([label, value]) => (

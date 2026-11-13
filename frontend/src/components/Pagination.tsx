@@ -50,13 +50,13 @@ export function Pagination({ page, pageCount }: Props) {
           disabled
           aria-label={t('previous')}
         >
-          <ChevronLeft aria-hidden="true" className="size-4" />
+          <ChevronLeft aria-hidden="true" className="size-4 rtl:-scale-x-100" />
         </Button>
       ) : (
         <Button asChild variant="outline" size="icon">
           <Link href={hrefFor(page - 1)}
             onClick={onGo(page - 1)} aria-label={t('previous')}>
-            <ChevronLeft aria-hidden="true" className="size-4" />
+            <ChevronLeft aria-hidden="true" className="size-4 rtl:-scale-x-100" />
           </Link>
         </Button>
       )}
@@ -109,13 +109,13 @@ export function Pagination({ page, pageCount }: Props) {
 
       {page >= pageCount ? (
         <Button variant="outline" size="icon" disabled aria-label={t('next')}>
-          <ChevronRight aria-hidden="true" className="size-4" />
+          <ChevronRight aria-hidden="true" className="size-4 rtl:-scale-x-100" />
         </Button>
       ) : (
         <Button asChild variant="outline" size="icon">
           <Link href={hrefFor(page + 1)}
             onClick={onGo(page + 1)} aria-label={t('next')}>
-            <ChevronRight aria-hidden="true" className="size-4" />
+            <ChevronRight aria-hidden="true" className="size-4 rtl:-scale-x-100" />
           </Link>
         </Button>
       )}

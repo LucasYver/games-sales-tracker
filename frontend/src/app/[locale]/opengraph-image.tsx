@@ -8,6 +8,7 @@ import {
   OgFrame,
   OgTitle,
   loadOgFonts,
+  ogLocale,
 } from '@/lib/og';
 
 /** Default share card for every public page without its own (home, hubs, methodology…). */
@@ -25,7 +26,7 @@ export default async function Image({
 }: {
   params: Promise<{ locale: string }>;
 }) {
-  const { locale } = await params;
+  const locale = ogLocale((await params).locale);
   const [t, tMeta, fonts] = await Promise.all([
     getTranslations({ locale, namespace: 'og' }),
     getTranslations({ locale, namespace: 'siteMeta' }),
