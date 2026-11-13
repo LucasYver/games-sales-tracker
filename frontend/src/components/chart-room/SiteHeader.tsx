@@ -33,12 +33,12 @@ export function SiteHeader({
             {tNav('blog')}
           </Link>
         )}
-        <div className="order-3 w-full sm:order-none sm:ml-auto sm:w-auto sm:max-w-xs sm:flex-1">
+        <div className="order-3 w-full sm:order-none sm:ms-auto sm:w-auto sm:max-w-xs sm:flex-1">
           <Suspense fallback={<div className="h-9" />}>
             <SearchBar />
           </Suspense>
         </div>
-        <div className="ml-auto flex items-center sm:ml-0">
+        <div className="ms-auto flex items-center sm:ms-0">
           <LanguageSwitcher localePaths={localePaths} />
           <ThemeToggle />
         </div>

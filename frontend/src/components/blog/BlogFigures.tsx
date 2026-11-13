@@ -158,8 +158,8 @@ export function RankingTable({ rows }: { rows: BlogFigures['ranking'] }) {
 
   return (
     <div className="mb-6 overflow-x-auto">
-      <table className="w-full border-collapse text-left text-sm">
-        <caption className="mb-2 text-left text-xs text-muted-foreground">
+      <table className="w-full border-collapse text-start text-sm">
+        <caption className="mb-2 text-start text-xs text-muted-foreground">
           {t('rankingCaption')}
         </caption>
         <thead>
@@ -241,8 +241,8 @@ export function SalesTable({ sales }: { sales: BlogFigures['sales'] }) {
     <div className="mb-6 space-y-6">
       {worldwide.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left text-sm">
-            <caption className="mb-2 text-left text-xs text-muted-foreground">
+          <table className="w-full border-collapse text-start text-sm">
+            <caption className="mb-2 text-start text-xs text-muted-foreground">
               {t('worldwideCaption')}
             </caption>
             <thead>
@@ -271,8 +271,8 @@ export function SalesTable({ sales }: { sales: BlogFigures['sales'] }) {
       )}
       {byPlatform.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left text-sm">
-            <caption className="mb-2 text-left text-xs text-muted-foreground">
+          <table className="w-full border-collapse text-start text-sm">
+            <caption className="mb-2 text-start text-xs text-muted-foreground">
               {t('platformCaption')}
             </caption>
             <thead>

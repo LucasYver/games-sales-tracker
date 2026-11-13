@@ -135,8 +135,8 @@ export function GamePageSkeleton({ preview }: { preview?: GamePreview }) {
             <Bone className="mb-3 h-2 w-full" />
             <div className="grid grid-cols-[1fr_auto_auto] gap-x-6 border-b border-border px-2 py-2 font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
               <span>{t('platformColumn')}</span>
-              <span className="text-right">{t('salesColumn')}</span>
-              <span className="text-right">{t('shareColumn')}</span>
+              <span className="text-end">{t('salesColumn')}</span>
+              <span className="text-end">{t('shareColumn')}</span>
             </div>
             {[0, 1, 2].map((i) => (
               <div
@@ -172,7 +172,7 @@ export function GamePageSkeleton({ preview }: { preview?: GamePreview }) {
         </div>
 
         {/* Tech sheet */}
-        <aside className="border-b border-border px-4 py-5 lg:col-start-1 lg:row-start-1 lg:border-r lg:border-b-0">
+        <aside className="border-b border-border px-4 py-5 lg:col-start-1 lg:row-start-1 lg:border-e lg:border-b-0">
           <h2 className={SECTION_TITLE}>{t('techTitle')}</h2>
           <div className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-3">
             {['developer', 'publisher', 'release', 'platformColumn', 'genres'].map(

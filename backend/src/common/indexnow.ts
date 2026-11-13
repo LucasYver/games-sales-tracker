@@ -13,7 +13,7 @@ const MAX_URLS_PER_REQUEST = 10_000;
 const REQUEST_TIMEOUT_MS = 10_000;
 
 /** Mirrors `routing.locales` in `frontend/src/i18n/routing.ts`. */
-const GAME_PAGE_LOCALES = ['en', 'fr', 'es', 'ru'];
+const GAME_PAGE_LOCALES = ['en', 'fr', 'es', 'ru', 'ar'];
 
 const logger = new Logger('IndexNow');
 

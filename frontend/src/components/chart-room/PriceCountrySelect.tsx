@@ -230,7 +230,7 @@ export function PriceDetails({
       }}
     >
       <summary className="cursor-pointer list-none font-mono text-xs text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
-        <span className="inline-block transition-transform group-open:rotate-90">
+        <span className="inline-block transition-transform group-open:rotate-90 rtl:-scale-x-100 rtl:group-open:-rotate-90">
           ›
         </span>{' '}
         {summary}
