@@ -13,16 +13,10 @@ import {
 import { Input } from '@/components/ui/input';
 import type { PriceStore, RegionalPrice } from '@/lib/api';
 import { trackEvent } from '@/lib/analytics';
+import { flagEmoji } from '@/lib/flag';
 
 const STORAGE_KEY = 'steam-price-country';
 
-export function flagEmoji(country: string): string {
-  const code = country.toUpperCase();
-  if (!/^[A-Z]{2}$/.test(code)) return '';
-  return String.fromCodePoint(
-    ...[...code].map((c) => 127397 + c.charCodeAt(0)),
-  );
-}
 
 export function PriceCountrySelect({
   countries,
@@ -156,7 +150,8 @@ export function PriceStoreSelect({
   stores,
   value,
 }: {
-  stores: PriceStore[];
+  /** Price already formatted by the server, so hydration sees the same text. */
+  stores: Array<{ store: PriceStore; price: string | null }>;
   value: PriceStore;
 }) {
   const t = useTranslations('gamePage');
@@ -164,7 +159,7 @@ export function PriceStoreSelect({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  if (stores.length < 2) return null;
+  if (stores.length === 0) return null;
 
   const apply = (store: PriceStore) => {
     if (store !== value) trackEvent('price_store_change', { store });
@@ -179,9 +174,9 @@ export function PriceStoreSelect({
     <div
       role="group"
       aria-label={t('priceStore')}
-      className="flex gap-1 font-mono text-[0.7rem] tracking-wide uppercase"
+      className="flex flex-wrap gap-1 font-mono text-[0.7rem] tracking-wide"
     >
-      {stores.map((store) => {
+      {stores.map(({ store, price }) => {
         const on = store === value;
         return (
           <button
@@ -189,17 +184,21 @@ export function PriceStoreSelect({
             type="button"
             onClick={() => apply(store)}
             aria-pressed={on}
-            className={`border px-2 py-1.5 ${
+            title={price ? undefined : t('priceStoreNotSold')}
+            className={`flex items-baseline gap-1.5 border px-2 py-1.5 ${
               on
-                ? 'border-primary/40 bg-accent text-primary'
+                ? 'border-border text-foreground'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            {store === 'xbox'
-              ? t('xboxLabel')
-              : store === 'playstation'
-                ? t('playstationLabel')
-                : t('steamLabel')}
+            <span className="uppercase">
+              {store === 'xbox'
+                ? t('xboxLabel')
+                : store === 'playstation'
+                  ? t('playstationLabel')
+                  : t('steamLabel')}
+            </span>
+            <span className="tabular-nums">{price ?? '—'}</span>
           </button>
         );
       })}
@@ -207,85 +206,36 @@ export function PriceStoreSelect({
   );
 }
 
-export function RegionalPricesTable({
-  countries,
+/**
+ * Native <details> that reports its first opening: tells whether visitors
+ * read the price log and the full country list at all.
+ */
+export function PriceDetails({
+  section,
+  summary,
+  children,
 }: {
-  countries: RegionalPrice[];
+  section: 'log' | 'regions';
+  summary: React.ReactNode;
+  children: React.ReactNode;
 }) {
-  const t = useTranslations('gamePage');
-  const locale = useLocale();
-  const names = useMemo(
-    () => new Intl.DisplayNames([locale], { type: 'region' }),
-    [locale],
-  );
-
-  const money = (row: RegionalPrice, cents: number) =>
-    new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: row.currency,
-    }).format(cents / 100);
-
-  const rows = [...countries].sort((a, b) => {
-    const left = names.of(a.country.toUpperCase()) ?? a.country;
-    const right = names.of(b.country.toUpperCase()) ?? b.country;
-    return left.localeCompare(right, locale);
-  });
-
-  if (rows.length === 0) return null;
-
+  const [reported, setReported] = useState(false);
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr>
-            <th className="border-b border-border px-2 py-2 text-left font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
-              {t('priceCountryColumn')}
-            </th>
-            <th className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
-              {t('pricePaid')}
-            </th>
-            <th className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
-              {t('priceDiscount')}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr
-              key={row.country}
-              className="border-b border-border-soft last:border-b-0"
-            >
-              <td className="px-2 py-2">
-                <span className="flex items-center gap-1.5">
-                  <span aria-hidden>{flagEmoji(row.country)}</span>
-                  {names.of(row.country.toUpperCase()) ??
-                    row.country.toUpperCase()}
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {row.currency}
-                  </span>
-                </span>
-              </td>
-              <td className="px-2 py-2 text-right font-mono tabular-nums">
-                {money(row, row.final)}
-                {row.discountPercent > 0 && (
-                  <span className="ml-2 text-muted-foreground line-through">
-                    {money(row, row.initial)}
-                  </span>
-                )}
-              </td>
-              <td className="px-2 py-2 text-right font-mono tabular-nums">
-                {row.discountPercent > 0 ? (
-                  <span className="text-source-official">
-                    −{row.discountPercent}%
-                  </span>
-                ) : (
-                  <span className="text-text-faint">—</span>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <details
+      className="group"
+      onToggle={(e) => {
+        if (!e.currentTarget.open || reported) return;
+        setReported(true);
+        trackEvent('price_section_open', { section });
+      }}
+    >
+      <summary className="cursor-pointer list-none font-mono text-xs text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
+        <span className="inline-block transition-transform group-open:rotate-90">
+          ›
+        </span>{' '}
+        {summary}
+      </summary>
+      <div className="mt-3">{children}</div>
+    </details>
   );
 }

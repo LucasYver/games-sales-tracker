@@ -15,6 +15,7 @@ import {
   listingUnits,
   type GameDetail,
   type Platform,
+  type RegionalPrice,
   type RelatedGame,
   type RelatedGames,
 } from '@/lib/api';
@@ -36,9 +37,11 @@ import {
 } from '@/components/chart-room/PlatformCharts';
 import {
   PriceCountrySelect,
+  PriceDetails,
   PriceStoreSelect,
-  RegionalPricesTable,
 } from '@/components/chart-room/PriceCountrySelect';
+import { flagEmoji } from '@/lib/flag';
+import { SeriesChart } from '@/components/chart-room/SeriesChart';
 import { Suspense } from 'react';
 import { GTA6_PATH, GTA6_SLUG } from '@/lib/gta6';
 import { MW4_PATH, MW4_SLUG } from '@/lib/mw4';
@@ -693,26 +696,123 @@ function UpcomingCharts({ game }: { game: GameDetail }) {
   );
 }
 
-/** Everything about the price, on its own tab: the curve then the raw log. */
-function PriceTab({ game }: { game: GameDetail }) {
+/** A run of consecutive discounted price points. */
+interface SaleRun {
+  start: string;
+  deepest: number;
+}
+
+const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+
+/**
+ * Sales read from the price log (oldest first): one run per stretch of
+ * discounted points, and the ones that started within the last year.
+ */
+function saleRuns(history: GameDetail['priceHistory'], now: number) {
+  const runs: SaleRun[] = [];
+  let open: SaleRun | null = null;
+  for (const p of history) {
+    if (p.discountPercent > 0) {
+      if (!open) {
+        open = { start: p.capturedAt, deepest: p.discountPercent };
+        runs.push(open);
+      } else {
+        open.deepest = Math.max(open.deepest, p.discountPercent);
+      }
+    } else {
+      open = null;
+    }
+  }
+  const lastYear = runs.filter(
+    (r) => now - new Date(r.start).getTime() <= YEAR_MS,
+  );
+  return { last: runs.at(-1) ?? null, lastYear };
+}
+
+/** The price curve runs up to today: the last price still holds. */
+function pricePointsUntil(history: GameDetail['priceHistory'], now: number) {
+  const points = history.map((p) => ({
+    capturedAt: p.capturedAt,
+    value: p.final,
+  }));
+  const last = history.at(-1);
+  if (last && new Date(last.capturedAt).getTime() < now - 60 * 60 * 1000) {
+    points.push({ capturedAt: new Date(now).toISOString(), value: last.final });
+  }
+  return points;
+}
+
+function PriceStat({
+  label,
+  value,
+  note,
+}: {
+  label: string;
+  value: string;
+  note: React.ReactNode;
+}) {
+  return (
+    <div className="bg-background px-3 py-3">
+      <p className="font-mono text-[0.62rem] font-semibold tracking-widest text-muted-foreground uppercase">
+        {label}
+      </p>
+      <p className="mt-1 font-mono text-xl leading-none font-bold tabular-nums">
+        {value}
+      </p>
+      <p className="mt-1.5 font-mono text-[0.7rem] text-muted-foreground">
+        {note}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Everything about the price, on its own tab: the store and country, four
+ * figures a buyer looks for, the curve, then the raw log and the countries
+ * folded away.
+ */
+function PriceTab({ game, now }: { game: GameDetail; now: number }) {
   const t = useTranslations('gamePage');
   const format = useFormatter();
 
-  const currency = game.currentPrice?.currency ?? 'USD';
+  const current = game.currentPrice;
+  const currency = current?.currency ?? 'USD';
   const money = (cents: number) =>
     format.number(cents / 100, { style: 'currency', currency });
+  const day = (iso: string) =>
+    format.dateTime(new Date(iso), {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
   const rows = [...game.priceHistory].reverse();
+  const lowest = game.lowestPrice;
+  const sales = saleRuns(game.priceHistory, now);
+  const onSale = current != null && current.discountPercent > 0;
+  const deepestLastYear = sales.lastYear.reduce(
+    (max, r) => Math.max(max, r.deepest),
+    0,
+  );
+  const curve = pricePointsUntil(game.priceHistory, now);
 
   return (
     <section className="border-b border-border px-4 py-5">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-mono text-[0.8rem] font-bold tracking-wider uppercase">
-          {t('priceTitle')}
+          {t('priceLabel')}
         </h2>
         <div className="flex flex-wrap items-center gap-2">
           <Suspense>
             <PriceStoreSelect
-              stores={game.availablePriceStores}
+              stores={game.storePrices.map(({ store, price }) => ({
+                store,
+                price: price
+                  ? `${format.number(price.final / 100, {
+                      style: 'currency',
+                      currency: price.currency,
+                    })}${price.discountPercent > 0 ? ` −${price.discountPercent}%` : ''}`
+                  : null,
+              }))}
               value={game.priceStore}
             />
           </Suspense>
@@ -724,73 +824,214 @@ function PriceTab({ game }: { game: GameDetail }) {
           </Suspense>
         </div>
       </div>
-      <div className="flex flex-col gap-5">
-        {game.priceHistory.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t('priceNoHistory')}</p>
-        ) : (
-          <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr>
-                    <th className="border-b border-border px-2 py-2 text-left font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
-                      {t('priceDate')}
-                    </th>
-                    <th className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
-                      {t('priceList')}
-                    </th>
-                    <th className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
-                      {t('pricePaid')}
-                    </th>
-                    <th className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
-                      {t('priceDiscount')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((p) => (
-                    <tr
-                      key={p.capturedAt}
-                      className="border-b border-border-soft last:border-b-0"
-                    >
-                      <td className="px-2 py-2 font-mono whitespace-nowrap tabular-nums">
-                        {format.dateTime(new Date(p.capturedAt), {
-                          year: 'numeric',
-                          month: '2-digit',
-                          day: '2-digit',
-                        })}
-                      </td>
-                      <td className="px-2 py-2 text-right font-mono text-muted-foreground tabular-nums">
-                        {money(p.initial)}
-                      </td>
-                      <td className="px-2 py-2 text-right font-mono font-semibold tabular-nums">
-                        {money(p.final)}
-                      </td>
-                      <td className="px-2 py-2 text-right font-mono tabular-nums">
-                        {p.discountPercent > 0 ? (
-                          <span className="text-source-official">
-                            −{p.discountPercent}%
-                          </span>
-                        ) : (
-                          <span className="text-text-faint">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-          </div>
-        )}
 
-        {game.regionalPrices.length > 0 && (
-          <div>
-            <h3 className="mb-3 font-mono text-[0.8rem] font-bold tracking-wider uppercase">
-              {t('priceRegionsTitle')}
-            </h3>
-            <RegionalPricesTable countries={game.regionalPrices} />
+      {!current ? (
+        <p className="text-sm text-muted-foreground">
+          {t('priceStoreNotSold')}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-6">
+          <div className="grid grid-cols-2 gap-px border border-border bg-border sm:grid-cols-4">
+            <PriceStat
+              label={t('priceSummaryCurrent')}
+              value={money(current.final)}
+              note={
+                onSale ? (
+                  <>
+                    −{current.discountPercent}% ·{' '}
+                    <span className="line-through">
+                      {money(current.initial)}
+                    </span>
+                  </>
+                ) : (
+                  t('priceList')
+                )
+              }
+            />
+            <PriceStat
+              label={t('priceSummaryLowest')}
+              value={lowest ? money(lowest.final) : '—'}
+              note={
+                lowest
+                  ? `${lowest.discountPercent > 0 ? `−${lowest.discountPercent}% · ` : ''}${day(lowest.capturedAt)}`
+                  : ''
+              }
+            />
+            <PriceStat
+              label={t('priceSummaryLastSale')}
+              value={sales.last ? `−${sales.last.deepest}%` : '—'}
+              note={
+                sales.last
+                  ? t(onSale ? 'priceSaleOngoing' : 'priceSaleStarted', {
+                      date: day(sales.last.start),
+                    })
+                  : t('priceNoSale')
+              }
+            />
+            <PriceStat
+              label={t('priceSummarySales12m')}
+              value={format.number(sales.lastYear.length)}
+              note={
+                deepestLastYear > 0
+                  ? t('priceSalesDeepest', { pct: deepestLastYear })
+                  : ''
+              }
+            />
           </div>
-        )}
-      </div>
+
+          {curve.length > 1 && (
+            <div>
+              <h3 className="mb-2 font-mono text-[0.7rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                {t('priceChartTitle')}
+              </h3>
+              <SeriesChart
+                series={[
+                  { key: 'value', label: t('pricePaid'), points: curve },
+                ]}
+                kind="money"
+                currency={currency}
+                ariaLabel={t('chartAlt', { series: t('pricePaid') })}
+              />
+            </div>
+          )}
+
+          {rows.length > 0 && (
+            <PriceDetails
+              section="log"
+              summary={t('priceLogToggle', { count: rows.length })}
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr>
+                      <th className="border-b border-border px-2 py-2 text-left font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                        {t('priceDate')}
+                      </th>
+                      <th className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                        {t('priceList')}
+                      </th>
+                      <th className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                        {t('pricePaid')}
+                      </th>
+                      <th className="border-b border-border px-2 py-2 text-right font-mono text-[0.64rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                        {t('priceDiscount')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((p) => (
+                      <tr
+                        key={p.capturedAt}
+                        className="border-b border-border-soft last:border-b-0"
+                      >
+                        <td className="px-2 py-2 font-mono whitespace-nowrap tabular-nums">
+                          {format.dateTime(new Date(p.capturedAt), {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                          })}
+                        </td>
+                        <td className="px-2 py-2 text-right font-mono text-muted-foreground tabular-nums">
+                          {money(p.initial)}
+                        </td>
+                        <td className="px-2 py-2 text-right font-mono font-semibold tabular-nums">
+                          {money(p.final)}
+                        </td>
+                        <td className="px-2 py-2 text-right font-mono tabular-nums">
+                          {p.discountPercent > 0 ? (
+                            `−${p.discountPercent}%`
+                          ) : (
+                            <span className="text-text-faint">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </PriceDetails>
+          )}
+        </div>
+      )}
+
+      {game.regionalPrices.length > 0 && (
+        <div className="mt-8">
+          <h3 className="mb-2 font-mono text-[0.7rem] font-semibold tracking-wider text-muted-foreground uppercase">
+            {t('priceRegionsTitle')}
+          </h3>
+          <RegionalPrices countries={game.regionalPrices} />
+        </div>
+      )}
     </section>
+  );
+}
+
+/** Countries shown before the "show all" fold. */
+const REGIONS_PREVIEW = 8;
+
+/**
+ * Latest price in every country the store sells in, alphabetical, in local
+ * currency. Formatted on the server only, so the client never re-formats it.
+ */
+function RegionalPrices({ countries }: { countries: RegionalPrice[] }) {
+  const t = useTranslations('gamePage');
+  const format = useFormatter();
+  const locale = useLocale();
+  const names = new Intl.DisplayNames([locale], { type: 'region' });
+  const nameOf = (c: string) => names.of(c.toUpperCase()) ?? c.toUpperCase();
+  const money = (row: RegionalPrice, cents: number) =>
+    format.number(cents / 100, { style: 'currency', currency: row.currency });
+
+  const rows = [...countries].sort((a, b) =>
+    nameOf(a.country).localeCompare(nameOf(b.country), locale),
+  );
+  if (rows.length === 0) return null;
+
+  const list = (items: RegionalPrice[]) => (
+    <ul className="grid gap-x-8 sm:grid-cols-2">
+      {items.map((row) => (
+        <li
+          key={row.country}
+          className="flex items-center justify-between gap-3 border-b border-border-soft py-2 text-sm"
+        >
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span aria-hidden>{flagEmoji(row.country)}</span>
+            <span className="truncate">{nameOf(row.country)}</span>
+            <span className="font-mono text-xs text-muted-foreground">
+              {row.currency}
+            </span>
+          </span>
+          <span className="shrink-0 text-right font-mono tabular-nums">
+            {row.discountPercent > 0 && (
+              <span className="mr-2 text-muted-foreground line-through">
+                {money(row, row.initial)}
+              </span>
+            )}
+            {money(row, row.final)}
+            {row.discountPercent > 0 && (
+              <span className="ml-2">−{row.discountPercent}%</span>
+            )}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+
+  const rest = rows.slice(REGIONS_PREVIEW);
+  return (
+    <div>
+      {list(rows.slice(0, REGIONS_PREVIEW))}
+      {rest.length > 0 && (
+        <div className="mt-3">
+          <PriceDetails
+            section="regions"
+            summary={t('priceRegionsShowAll', { count: rows.length })}
+          >
+            {list(rest)}
+          </PriceDetails>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1266,12 +1507,15 @@ function GamePageContent({
   tab,
   related,
   requestedCountry,
+  now,
 }: {
   game: GameDetail;
   tab: TabKey;
   related: RelatedGames;
   /** `cc` from the URL only: the default country stays out of the tab links. */
   requestedCountry?: string;
+  /** Request time, so the price tab dates its "last 12 months" once. */
+  now: number;
 }) {
   const t = useTranslations('gamePage');
   const tPlatform = useTranslations('platform');
@@ -1493,7 +1737,7 @@ function GamePageContent({
         <div className="grid lg:grid-cols-[264px_minmax(0,1fr)]">
           <div className="lg:col-start-2 lg:row-start-1">
             {activeTab === 'price' ? (
-              <PriceTab game={game} />
+              <PriceTab game={game} now={now} />
             ) : (
               <>
                 <PlatformBreakdown game={game} />
@@ -1580,6 +1824,10 @@ function GamePageContent({
   );
 }
 
+function requestTime(): number {
+  return Date.now();
+}
+
 export default async function GamePage({
   params,
   searchParams,
@@ -1610,6 +1858,7 @@ export default async function GamePage({
       tab={tab === 'price' ? 'price' : 'overview'}
       related={related}
       requestedCountry={cc?.trim() || undefined}
+      now={requestTime()}
     />
   );
 }

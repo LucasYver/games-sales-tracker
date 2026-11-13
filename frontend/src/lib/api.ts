@@ -146,6 +146,12 @@ export interface StoreRatings {
 
 export type PriceStore = 'steam' | 'xbox' | 'playstation';
 
+/** A store's latest price in the page's country; null if not sold there. */
+export interface StorePrice {
+  store: PriceStore;
+  price: PricePoint | null;
+}
+
 export interface GameDetail {
   id: string;
   name: string;
@@ -186,6 +192,7 @@ export interface GameDetail {
   priceCountry: string;
   priceStore: PriceStore;
   availablePriceStores: PriceStore[];
+  storePrices: StorePrice[];
   regionalPrices: RegionalPrice[];
   rank: RankInfo | null;
   storeRatings: StoreRatings;
@@ -498,6 +505,12 @@ export async function getGame(
     priceHistory: game.priceHistory ?? [],
     regionalPrices: game.regionalPrices ?? [],
     availablePriceStores: game.availablePriceStores ?? [],
+    storePrices:
+      game.storePrices ??
+      (game.availablePriceStores ?? []).map((store) => ({
+        store,
+        price: null,
+      })),
     priceCountry: game.priceCountry ?? 'us',
     priceStore:
       game.priceStore === 'xbox' || game.priceStore === 'playstation'

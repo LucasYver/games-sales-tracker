@@ -238,6 +238,12 @@ export interface PublicRegionalPrice {
 
 export type PublicPriceStore = 'steam' | 'xbox' | 'playstation';
 
+/** A store's latest price in the page's country; null if not sold there. */
+export interface PublicStorePrice {
+  store: PublicPriceStore;
+  price: PublicPricePoint | null;
+}
+
 function sourceForPriceStore(store: PublicPriceStore): SourceType {
   if (store === 'xbox') return SourceType.XBOX_STORE;
   if (store === 'playstation') return SourceType.PS_STORE;
@@ -1137,13 +1143,14 @@ export class GamesService {
     const loadPrices = async () => {
       if (game.isFree) {
         return {
-          availablePriceStores: [] as PublicPriceStore[],
+          storePrices: [] as PublicStorePrice[],
           priceStore: this.resolvePriceStore(store, []),
           priceRows: [] as PriceSnapshot[],
           regionalPrices: [] as PublicRegionalPrice[],
         };
       }
-      const availablePriceStores = await this.availablePriceStores(game.id);
+      const storePrices = await this.storePrices(game.id, priceCountry);
+      const availablePriceStores = storePrices.map((s) => s.store);
       const priceStore = this.resolvePriceStore(store, availablePriceStores);
       const priceSource = sourceForPriceStore(priceStore);
       const [priceRows, regionalPrices] = await Promise.all([
@@ -1164,7 +1171,7 @@ export class GamesService {
         }),
         this.latestRegionalPrices(game.id, priceSource),
       ]);
-      return { availablePriceStores, priceStore, priceRows, regionalPrices };
+      return { storePrices, priceStore, priceRows, regionalPrices };
     };
 
     const [
@@ -1180,7 +1187,7 @@ export class GamesService {
       // stored as its own metric (a new row only when the record is beaten,
       // so it is read by value, not by date).
       peakCcuRow,
-      { availablePriceStores, priceStore, priceRows, regionalPrices },
+      { storePrices, priceStore, priceRows, regionalPrices },
       rankRow,
       storeRatings,
       reviewLanguagesRow,
@@ -1358,7 +1365,8 @@ export class GamesService {
       lowestPrice,
       priceCountry,
       priceStore,
-      availablePriceStores,
+      availablePriceStores: storePrices.map((s) => s.store),
+      storePrices,
       regionalPrices,
       rank,
       storeRatings,
@@ -1566,20 +1574,59 @@ export class GamesService {
     return rows;
   }
 
-  private async availablePriceStores(
+  /**
+   * Stores that carry a price for this game, each with its latest price in
+   * `country` (null when that store does not sell it there). One query: the
+   * store list and the per-store price come from the same index.
+   */
+  private async storePrices(
     gameId: string,
-  ): Promise<PublicPriceStore[]> {
-    const rows: Array<{ source: SourceType }> = await this.prices.query(
-      `SELECT DISTINCT source FROM price_snapshot WHERE "gameId" = $1`,
-      [gameId],
+    country: string,
+  ): Promise<PublicStorePrice[]> {
+    const rows: Array<{
+      source: SourceType;
+      capturedAt: Date | null;
+      currency: string | null;
+      initial: number | null;
+      final: number | null;
+      discountPercent: number | null;
+    }> = await this.prices.query(
+      `SELECT s.source, p."capturedAt", p.currency, p.initial, p.final,
+              p."discountPercent"
+       FROM (SELECT DISTINCT source FROM price_snapshot WHERE "gameId" = $1) s
+       LEFT JOIN LATERAL (
+         SELECT "capturedAt", currency, initial, final, "discountPercent"
+         FROM price_snapshot
+         WHERE "gameId" = $1 AND source = s.source AND country = $2
+         ORDER BY "capturedAt" DESC
+         LIMIT 1
+       ) p ON true`,
+      [gameId, country],
     );
-    const stores: PublicPriceStore[] = [];
-    if (rows.some((r) => r.source === SourceType.STEAM)) stores.push('steam');
-    if (rows.some((r) => r.source === SourceType.XBOX_STORE))
-      stores.push('xbox');
-    if (rows.some((r) => r.source === SourceType.PS_STORE))
-      stores.push('playstation');
-    return stores;
+    const order: Array<[PublicPriceStore, SourceType]> = [
+      ['steam', SourceType.STEAM],
+      ['xbox', SourceType.XBOX_STORE],
+      ['playstation', SourceType.PS_STORE],
+    ];
+    const result: PublicStorePrice[] = [];
+    for (const [store, source] of order) {
+      const row = rows.find((r) => r.source === source);
+      if (!row) continue;
+      result.push({
+        store,
+        price:
+          row.capturedAt && row.currency && row.final != null
+            ? {
+                capturedAt: row.capturedAt,
+                currency: row.currency,
+                initial: row.initial ?? row.final,
+                final: row.final,
+                discountPercent: row.discountPercent ?? 0,
+              }
+            : null,
+      });
+    }
+    return result;
   }
 
   private resolvePriceStore(

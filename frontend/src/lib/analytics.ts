@@ -27,6 +27,7 @@ type Events = {
   platform_chart_select: { platform: string };
   price_country_change: { country: string };
   price_store_change: { store: string };
+  price_section_open: { section: string };
   // Site preferences
   language_change: { to: string };
   theme_toggle: { theme: string };
