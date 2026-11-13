@@ -91,28 +91,30 @@ To try a hypothesis: add a small subclass of `BEST` in `learned.py` (see
 
 ## Where it stands (2026-11-12)
 
-**Resume here (2026-11-13):** the owner skipped the parallel run (step 5) and asked
-to switch the public site to the V2 directly, with "Not estimated" for the games it
-does not estimate. The switch is CODED, NOT COMMITTED, NOT DEPLOYED; v1.5 is still
-what production serves. What it is: `ESTIMATION.md` §6 and step 14 of `ml2/README.md`.
-- Checked: backend and frontend type-check, lint and backend build; the three
-  `check-ml2-*` scripts; `preview-ml2-switch.ts` (read-only: 4,235 estimates, 244
-  "not estimated", no invalid range on 7,422 games).
-- NOT checked: the write path (`persistV2Estimate`, the migration) and the public
-  page on a V2 row never ran: no local database (Docker off, no dump). Do not run a
-  rebuild against production to test. After the deploy, check one game rebuilt from
-  the admin (an anchored one, a "not estimated" one) before trusting the rest.
-- Deploy = commit and push (the migration must run before the new code serves: check
-  how migrations are applied on deploy in the skill database-connection). The owner
-  decides when; he has not asked for a commit.
-- After the deploy, games move to the V2 at their next rebuild (270 to 400 a day):
-  no backfill (let-crons-catch-up).
+**Resume here (2026-11-13, deployed):** the V2 switch is live since 2026-11-13
+(commits `f1376c5` lab freeze, `00bc3f9` switch, pushed to `master`; branch
+`ml-v2-switch` holds the same commits). The owner skipped the parallel run and chose
+"Not estimated" for the games the V2 does not estimate. What the switch is:
+`ESTIMATION.md` §6 and step 14 of `ml2/README.md`.
+- Checked after the deploy: the migration `AddMlV2Estimate1788980000000` ran (method
+  `ml-v2`, column `sales_estimate.estimatedUnits`), the home page and game pages
+  answer and still show their current figure.
+- NOT checked yet: no game has been rebuilt since the deploy, so no `ml-v2` row
+  exists and the write path (`persistV2Estimate`) and the public page on a V2 row
+  have never run. First real test: the owner rebuilds two games from the admin (asked
+  on 2026-11-13: Assassin's Creed Odyssey, anchored, and Maxon Petting Simulator, not
+  estimated), or the daily cron at 04:45 UTC does it. Then read the `ml-v2` rows
+  (`SELECT method, count(*) FROM sales_estimate WHERE platform = 'GLOBAL' GROUP BY 1`)
+  and the public pages.
+- Asked by the owner, NOT done, to do only after that test passes and with his go:
+  set the rebuild cron "back to 0", i.e. clear `lastAttemptAt` of the
+  `ESTIMATE_REBUILD` rows of `game_ingestion_state` so every game is due again and
+  the admin crons page shows the V2 rollout from 0. It is a production write (7,586
+  rows); the cron still does about 300 games per run (11 min, once a day), so a full
+  pass takes about 25 runs unless he reruns it by hand from `/admin/crons`.
 - Left for later: the v1.5 code (`estimation/ml/`, `backfill-ml-estimates.ts`) is
   still there for the admin explanation; the methodology page text was not reviewed;
   the lab UI was not restarted.
-Everything since 2026-11-12 is uncommitted: `ml2/`, `backend/src/estimation/ml2/`,
-the migration, the `check-ml2-*` and `preview-ml2-switch` scripts, the frontend
-changes, the docs and skills.
 
 **The model is frozen (owner's decision, 2026-11-12): H27, snapshot
 `2026-11-09T1952`.** No new hypothesis on the model; the next step is the backend
