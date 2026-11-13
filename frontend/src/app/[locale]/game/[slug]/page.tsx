@@ -9,10 +9,12 @@ import {
   getGameRedirect,
   getRelatedGames,
   daysUntilRelease,
+  defaultPriceCountry,
   ESTIMATE_PENDING_DAYS,
   headlineUnits,
   isUpcoming,
   listingUnits,
+  steamCcuIsMeaningful,
   type GameDetail,
   type Platform,
   type RegionalPrice,
@@ -43,6 +45,8 @@ import {
 import { flagEmoji } from '@/lib/flag';
 import { SeriesChart } from '@/components/chart-room/SeriesChart';
 import { Suspense } from 'react';
+import { CompareButton, CompareLink } from '@/components/compare/CompareEntry';
+import { pickerSuggestions, type PickerGame } from '@/lib/compare';
 import { GTA6_PATH, GTA6_SLUG } from '@/lib/gta6';
 import { MW4_PATH, MW4_SLUG } from '@/lib/mw4';
 
@@ -174,10 +178,6 @@ function gamePageHref(
   return qs ? `/game/${slug}?${qs}` : `/game/${slug}`;
 }
 
-function defaultPriceCountry(locale: string): string {
-  return locale === 'en' ? 'us' : locale;
-}
-
 /** GTA 6 and MW4 get a dedicated tracker; their game page points there. */
 const TRACKERS: Record<string, { path: string; ns: 'gta6Sales' | 'mw4Sales' }> =
   {
@@ -211,9 +211,11 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 function GameHeader({
   game,
   studioHub,
+  compareSuggestions,
 }: {
   game: GameDetail;
   studioHub: RelatedGames['studioHub'];
+  compareSuggestions: PickerGame[];
 }) {
   const t = useTranslations('gamePage');
   const tPlatform = useTranslations('platform');
@@ -223,7 +225,7 @@ function GameHeader({
   const unitsLabel = units ? compactUnits(units, locale) : null;
 
   return (
-    <header className="flex items-start gap-4 border-b border-border px-4 py-4">
+    <header className="flex flex-wrap items-start gap-x-4 gap-y-3 border-b border-border px-4 py-4">
       {game.coverUrl && (
         <div className="relative size-14 shrink-0 overflow-hidden rounded-[3px] bg-muted sm:size-16">
           <Image
@@ -284,24 +286,16 @@ function GameHeader({
           </p>
         )}
       </div>
+      {/* Beside the title on a wide screen; under it, aligned with the text,
+          on a phone. */}
+      <div className="basis-full ps-[4.5rem] sm:basis-auto sm:ps-0">
+        <CompareButton
+          game={{ slug: game.slug, name: game.name }}
+          suggestions={compareSuggestions}
+        />
+      </div>
     </header>
   );
-}
-
-/**
- * Steam only sees the players of a game started from Steam. Call of Duty and
- * a few others are played in a publisher launcher: the Steam app collects
- * thousands of reviews while Steam reports 0-2 concurrent players. A CCU that
- * low next to that many reviews is the launcher, not the audience, so it is
- * not shown.
- */
-const LAUNCHER_MIN_REVIEWS = 1000;
-const LAUNCHER_MAX_PEAK_CCU = 50;
-
-function steamCcuIsMeaningful(game: GameDetail): boolean {
-  const reviews = game.reviewHistory.at(-1)?.value ?? 0;
-  const peak = game.peakCcu?.value ?? 0;
-  return !(reviews >= LAUNCHER_MIN_REVIEWS && peak < LAUNCHER_MAX_PEAK_CCU);
 }
 
 /** The answer the visitor came for, before anything else on the page. */
@@ -1420,10 +1414,13 @@ function TabNav({
 }
 
 function RelatedList({
+  base,
   title,
   games,
   more,
 }: {
+  /** The game whose page this is: each row offers to compare with it. */
+  base: string;
   title: string;
   games: RelatedGame[];
   /** Link to the hub page, when the franchise or studio has one. */
@@ -1494,6 +1491,7 @@ function RelatedList({
                   <span className="text-text-faint">—</span>
                 )}
               </div>
+              <CompareLink base={base} other={{ slug: game.slug, name: game.name }} />
             </li>
           );
         })}
@@ -1720,7 +1718,11 @@ function GamePageContent({
           {game.name}
         </nav>
 
-        <GameHeader game={game} studioHub={related.studioHub} />
+        <GameHeader
+          game={game}
+          studioHub={related.studioHub}
+          compareSuggestions={pickerSuggestions(related, [game.slug])}
+        />
         <TrackerLink slug={game.slug} />
         <SalesHeadline game={game} />
         <OfficialSalesRecap game={game} />
@@ -1789,6 +1791,7 @@ function GamePageContent({
             {relatedLists.map((list) => (
               <RelatedList
                 key={list.title}
+                base={game.slug}
                 title={list.title}
                 games={list.games}
                 more={list.more}
