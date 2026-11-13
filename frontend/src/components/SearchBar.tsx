@@ -11,7 +11,7 @@ import {
   listingUnits,
   type PopularGame,
 } from '@/lib/api';
-import { useRouter } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
 import { trackEvent } from '@/lib/analytics';
 import {
   GamePageSkeleton,
@@ -127,8 +127,13 @@ export function SearchBar() {
     setActive(-1);
   };
 
-  const goToGame = (game: PopularGame, position: number) => {
+  const trackResult = (game: PopularGame, position: number) =>
     trackEvent('search_result_click', { game: game.slug, position: position + 1 });
+
+  // Same-tab opening only: a Cmd/Ctrl/Shift or middle click is left to the
+  // browser, which opens the link elsewhere and keeps the panel up so several
+  // games can be opened from one search.
+  const openGame = (game: PopularGame) => {
     close();
     const header = triggerRef.current?.closest('header');
     setSkeletonTop(Math.max(0, header?.getBoundingClientRect().bottom ?? 0));
@@ -143,7 +148,8 @@ export function SearchBar() {
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (active >= 0 && visible[active]) {
-      goToGame(visible[active], active);
+      trackResult(visible[active], active);
+      openGame(visible[active]);
       return;
     }
     close();
@@ -289,10 +295,21 @@ export function SearchBar() {
                           role="option"
                           aria-selected={idx === active}
                         >
-                          <button
-                            type="button"
+                          {/* A real link, so Cmd/Ctrl/middle click opens the
+                              game in a new tab. No prefetch: twenty results
+                              per keystroke would each hit the server. */}
+                          <Link
+                            href={`/game/${game.slug}`}
+                            prefetch={false}
                             onMouseEnter={() => setActive(idx)}
-                            onClick={() => goToGame(game, idx)}
+                            onClick={() => trackResult(game, idx)}
+                            onAuxClick={(e) => {
+                              if (e.button === 1) trackResult(game, idx);
+                            }}
+                            onNavigate={(e) => {
+                              e.preventDefault();
+                              openGame(game);
+                            }}
                             className={`flex w-full items-center gap-3 border-b border-border-soft px-2 py-2.5 text-left ${
                               idx === active ? 'bg-accent' : ''
                             }`}
@@ -343,7 +360,7 @@ export function SearchBar() {
                                 <span className="text-text-faint">—</span>
                               )}
                             </span>
-                          </button>
+                          </Link>
                         </li>
                       );
                     })}
