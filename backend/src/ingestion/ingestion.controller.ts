@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import {
   IsEnum,
   IsInt,
@@ -10,6 +10,7 @@ import {
 } from 'class-validator';
 import { Platform, SalesSource } from '../entities';
 import { IngestionService } from './ingestion.service';
+import { AdminAuthGuard } from '../admin/admin-auth.guard';
 
 class AddSalesDto {
   @IsUUID()
@@ -47,6 +48,8 @@ class IngestArticleDto {
   gameId: string;
 }
 
+// Writes to the catalog and spends API credits: admin session only.
+@UseGuards(AdminAuthGuard)
 @Controller('ingestion')
 export class IngestionController {
   constructor(private readonly ingestion: IngestionService) {}

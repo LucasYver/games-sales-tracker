@@ -23,6 +23,7 @@ import { AdminAuthService } from './admin-auth.service';
 import { AdminAuthGuard } from './admin-auth.guard';
 import { AdminMailService } from './admin-mail.service';
 import { IngestionModule } from '../ingestion/ingestion.module';
+import { IngestionController } from '../ingestion/ingestion.controller';
 import { GamesModule } from '../games/games.module';
 import { PublishersModule } from '../publishers/publishers.module';
 import { DevelopersModule } from '../developers/developers.module';
@@ -57,7 +58,9 @@ import { BlogModule } from '../blog/blog.module';
     ReferenceProfilesModule,
     BlogModule,
   ],
-  controllers: [AdminController, AdminAuthController],
+  // IngestionController lives here so it sits behind AdminAuthGuard
+  // (IngestionModule cannot import this module: this module imports it).
+  controllers: [AdminController, AdminAuthController, IngestionController],
   providers: [
     AdminService,
     AdminDashboardService,
