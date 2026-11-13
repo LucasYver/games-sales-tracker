@@ -1,18 +1,34 @@
 import { API_URL } from '@/lib/api';
+import { hubYears } from '@/lib/hub-years';
+import { routing } from '@/i18n/routing';
 
 export interface SitemapGame {
   slug: string;
   lastModified: string | null;
 }
 
+export interface SitemapHubs {
+  studios: string[];
+  publishers: string[];
+  franchises: string[];
+}
+
 /**
- * Games per sitemap file. Each game yields one URL per locale, each listing
- * every locale as an hreflang alternate (~0.7 KB per URL at 4 locales), so
- * 1,000 games stay near 3 MB — well under the 4.5 MB a Vercel function may
- * return when ISR regenerates the file. The former single 7.8 MB sitemap
- * stopped refreshing after its build.
+ * URLs per sitemap file. Each URL lists every locale as an hreflang alternate,
+ * so it weighs ~0.75 KB at 5 locales: 2,500 URLs stay near 1.9 MB, well under
+ * the 4.5 MB a Vercel function may return when ISR regenerates the file. The
+ * former single 7.8 MB sitemap stopped refreshing after its build, and 1,000
+ * games per file reached 3.75 MB once Arabic was added.
  */
-export const GAMES_PER_SITEMAP = 1000;
+const URLS_PER_SITEMAP = 2500;
+
+/**
+ * Pages (a game, a hub) per file. Each page yields one URL per locale, so a
+ * new locale shrinks the files' page count instead of growing their size.
+ */
+export const PAGES_PER_SITEMAP = Math.floor(
+  URLS_PER_SITEMAP / routing.locales.length,
+);
 
 /**
  * Throws when the API fails or answers with no games, so an ISR regeneration
@@ -34,11 +50,7 @@ export async function fetchSitemapGames(): Promise<SitemapGame[]> {
   return data.items;
 }
 
-export async function fetchSitemapHubs(): Promise<{
-  studios: string[];
-  publishers: string[];
-  franchises: string[];
-}> {
+export async function fetchSitemapHubs(): Promise<SitemapHubs> {
   try {
     const res = await fetch(`${API_URL}/games/hubs`, {
       next: { revalidate: 3600 },
@@ -54,8 +66,37 @@ export async function fetchSitemapHubs(): Promise<{
   return { studios: [], publishers: [], franchises: [] };
 }
 
-/** Sitemap ids: 0 holds the home, blog and posts; 1..n hold the games. */
-export function sitemapIds(gameCount: number): number[] {
-  const gameSitemaps = Math.ceil(gameCount / GAMES_PER_SITEMAP);
-  return Array.from({ length: gameSitemaps + 1 }, (_, id) => id);
+/** Hub pages (lists, years, studios, publishers, franchises), locale-free. */
+export function hubPaths(hubs: SitemapHubs): string[] {
+  return [
+    '/studios',
+    '/publishers',
+    '/franchises',
+    ...hubYears().map((year) => `/year/${year}`),
+    ...hubs.franchises.map((slug) => `/franchise/${slug}`),
+    ...hubs.studios.map((slug) => `/studio/${slug}`),
+    ...hubs.publishers.map((slug) => `/publisher/${slug}`),
+  ];
+}
+
+/** The `page`-th (1-based) slice of PAGES_PER_SITEMAP items. */
+export function sitemapPage<T>(items: T[], page: number): T[] {
+  return items.slice((page - 1) * PAGES_PER_SITEMAP, page * PAGES_PER_SITEMAP);
+}
+
+function pageCount(itemCount: number): number {
+  return Math.ceil(itemCount / PAGES_PER_SITEMAP);
+}
+
+/**
+ * Sitemap files under /sitemap/: `0.xml` holds the home, fixed pages, blog and
+ * posts; `1.xml`…`n.xml` the games; `hubs-1.xml`… the hub pages. Games keep
+ * the bare numbers they always had, so their file URLs do not change kind.
+ */
+export function sitemapFiles(gameCount: number, hubCount: number): string[] {
+  return [
+    '0.xml',
+    ...Array.from({ length: pageCount(gameCount) }, (_, i) => `${i + 1}.xml`),
+    ...Array.from({ length: pageCount(hubCount) }, (_, i) => `hubs-${i + 1}.xml`),
+  ];
 }

@@ -1,17 +1,17 @@
 import type { MetadataRoute } from 'next';
 import { hasBlog, routing } from '@/i18n/routing';
-import { hubYears } from '@/lib/hub-years';
 import { SITE_URL } from '@/lib/site-url';
 import { getBlogSitemap } from '@/lib/api';
 import {
-  GAMES_PER_SITEMAP,
   fetchSitemapGames,
   fetchSitemapHubs,
-  sitemapIds,
+  hubPaths,
+  sitemapFiles,
+  sitemapPage,
   type SitemapGame,
 } from '@/lib/sitemap';
 
-// Serves /sitemap/{id}.xml, listed by the index at /sitemap.xml. A plain
+// Serves /sitemap/{file}, listed by the index at /sitemap.xml. A plain
 // route handler rather than app/sitemap.ts + generateSitemaps: Next refuses
 // a split metadata sitemap next to a /sitemap.xml route.
 export const revalidate = 3600;
@@ -19,8 +19,13 @@ export const revalidate = 3600;
 export async function generateStaticParams() {
   // An unreachable API must not fail the build: the files then render on
   // their first request instead.
-  const games = await fetchSitemapGames().catch(() => []);
-  return sitemapIds(games.length).map((id) => ({ file: `${id}.xml` }));
+  const [games, hubs] = await Promise.all([
+    fetchSitemapGames().catch(() => []),
+    fetchSitemapHubs(),
+  ]);
+  return sitemapFiles(games.length, hubPaths(hubs).length).map((file) => ({
+    file,
+  }));
 }
 
 /** A future date is not a modification time — leave lastmod out instead. */
@@ -58,10 +63,7 @@ function localeAlternates(
 async function pagesSitemap(
   games: SitemapGame[],
 ): Promise<MetadataRoute.Sitemap> {
-  const [posts, hubs] = await Promise.all([
-    getBlogSitemap(),
-    fetchSitemapHubs(),
-  ]);
+  const posts = await getBlogSitemap();
   const entries: MetadataRoute.Sitemap = [];
 
   // Home pages — one per locale (page 1 only; no filter/search URLs). The
@@ -117,27 +119,6 @@ async function pagesSitemap(
     });
   }
 
-  // Hubs change with the games they list, so no lastmod of their own.
-  const hubPaths = [
-    '/studios',
-    '/publishers',
-    '/franchises',
-    ...hubYears().map((year) => `/year/${year}`),
-    ...hubs.franchises.map((slug) => `/franchise/${slug}`),
-    ...hubs.studios.map((slug) => `/studio/${slug}`),
-    ...hubs.publishers.map((slug) => `/publisher/${slug}`),
-  ];
-  for (const path of hubPaths) {
-    for (const locale of routing.locales) {
-      entries.push({
-        url: `${SITE_URL}/${locale}${path}`,
-        changeFrequency: 'weekly',
-        priority: 0.6,
-        alternates: localeAlternates(path),
-      });
-    }
-  }
-
   const blogModified = latest(posts.map((p) => p.updatedAt ?? p.publishedAt));
   const blogLocales = routing.locales.filter(hasBlog);
   for (const locale of blogLocales) {
@@ -175,6 +156,19 @@ async function pagesSitemap(
   }
 
   return entries;
+}
+
+/** Hub pages, one entry per locale variant. They change with the games they
+ * list, so no lastmod of their own. */
+function hubsSitemap(paths: string[]): MetadataRoute.Sitemap {
+  return paths.flatMap((path) =>
+    routing.locales.map((locale) => ({
+      url: `${SITE_URL}/${locale}${path}`,
+      changeFrequency: 'weekly' as const,
+      priority: 0.6,
+      alternates: localeAlternates(path),
+    })),
+  );
 }
 
 /** Per-game pages, one entry per locale variant. */
@@ -240,19 +234,22 @@ export async function GET(
   ctx: RouteContext<'/sitemap/[file]'>,
 ) {
   const { file } = await ctx.params;
-  const match = /^(\d+)\.xml$/.exec(file);
-  const games = await fetchSitemapGames();
-  const id = match ? Number(match[1]) : -1;
-  if (!sitemapIds(games.length).includes(id)) {
+  const [games, hubs] = await Promise.all([
+    fetchSitemapGames(),
+    fetchSitemapHubs(),
+  ]);
+  const paths = hubPaths(hubs);
+  if (!sitemapFiles(games.length, paths.length).includes(file)) {
     return new Response('Not found', { status: 404 });
   }
 
-  const entries =
-    id === 0
+  const hubPage = /^hubs-(\d+)\.xml$/.exec(file);
+  const page = Number(/^(\d+)\.xml$/.exec(file)?.[1] ?? 0);
+  const entries = hubPage
+    ? hubsSitemap(sitemapPage(paths, Number(hubPage[1])))
+    : page === 0
       ? await pagesSitemap(games)
-      : gamesSitemap(
-          games.slice((id - 1) * GAMES_PER_SITEMAP, id * GAMES_PER_SITEMAP),
-        );
+      : gamesSitemap(sitemapPage(games, page));
   return new Response(renderSitemap(entries), {
     headers: { 'Content-Type': 'application/xml' },
   });
