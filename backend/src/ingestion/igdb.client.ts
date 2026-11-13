@@ -167,7 +167,7 @@ const IGDB_FIELDS = [
 // Steam apps that accompany a game rather than being the game itself. Matched
 // against the store name IGDB reports for an `external_games` entry.
 const STEAM_COMPANION_APP_PATTERN =
-  /\b(playtest|demo|beta|alpha|test(ing)? server|dedicated server|soundtrack|ost|art ?book|trailer|benchmark|closed test|open test|public test)\b/i;
+  /\b(playtest|demo|beta|alpha|test(ing)? server|dedicated server|soundtrack|ost|art ?book|trailer|benchmark|closed test|open test|public test|stress test|technical test)\b/i;
 
 // IGDB platform name (lowercased) → our internal Platform enum.
 // Substring match: any IGDB platform whose name contains one of these tokens
