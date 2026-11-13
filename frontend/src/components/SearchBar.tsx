@@ -12,6 +12,7 @@ import {
   type PopularGame,
 } from '@/lib/api';
 import { useRouter } from '@/i18n/navigation';
+import { trackEvent } from '@/lib/analytics';
 import {
   GamePageSkeleton,
   type GamePreview,
@@ -20,6 +21,9 @@ import {
 const MIN_QUERY = 2;
 const DEBOUNCE_MS = 180;
 const RESULT_LIMIT = 20;
+/** How long an empty result must stay on screen before it counts as a miss,
+ *  so half-typed queries ("zel" on the way to "zelda") are not reported. */
+const NO_RESULT_DELAY_MS = 1500;
 
 /**
  * Live search. Focusing the field opens a full-page panel and results stream
@@ -39,6 +43,10 @@ export function SearchBar() {
 
   const [value, setValue] = useState(params.get('q') ?? '');
   const [results, setResults] = useState<PopularGame[]>([]);
+  // The query the current results answer, so an empty list is only reported
+  // once it belongs to what is typed now.
+  const [resultsQuery, setResultsQuery] = useState('');
+  const reportedMisses = useRef(new Set<string>());
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState(-1);
@@ -69,6 +77,7 @@ export function SearchBar() {
         .then((res) => (res.ok ? res.json() : []))
         .then((games: PopularGame[]) => {
           setResults(games);
+          setResultsQuery(query);
           setActive(-1);
         })
         .catch(() => {
@@ -82,6 +91,20 @@ export function SearchBar() {
       clearTimeout(timer);
     };
   }, [query]);
+
+  // A query that settles on no result points at a game missing from the
+  // catalog: report it once per session.
+  useEffect(() => {
+    if (query.length < MIN_QUERY || resultsQuery !== query) return;
+    if (results.length > 0) return;
+    const key = query.toLowerCase();
+    if (reportedMisses.current.has(key)) return;
+    const timer = setTimeout(() => {
+      reportedMisses.current.add(key);
+      trackEvent('search_no_result', { query: key.slice(0, 50) });
+    }, NO_RESULT_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [query, results, resultsQuery]);
 
   // The panel owns the viewport while open: focus its field, and stop the page
   // behind it from scrolling.
@@ -104,7 +127,8 @@ export function SearchBar() {
     setActive(-1);
   };
 
-  const goToGame = (game: PopularGame) => {
+  const goToGame = (game: PopularGame, position: number) => {
+    trackEvent('search_result_click', { game: game.slug, position: position + 1 });
     close();
     const header = triggerRef.current?.closest('header');
     setSkeletonTop(Math.max(0, header?.getBoundingClientRect().bottom ?? 0));
@@ -119,7 +143,7 @@ export function SearchBar() {
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (active >= 0 && visible[active]) {
-      goToGame(visible[active]);
+      goToGame(visible[active], active);
       return;
     }
     close();
@@ -268,7 +292,7 @@ export function SearchBar() {
                           <button
                             type="button"
                             onMouseEnter={() => setActive(idx)}
-                            onClick={() => goToGame(game)}
+                            onClick={() => goToGame(game, idx)}
                             className={`flex w-full items-center gap-3 border-b border-border-soft px-2 py-2.5 text-left ${
                               idx === active ? 'bg-accent' : ''
                             }`}

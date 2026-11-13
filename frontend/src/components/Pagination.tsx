@@ -5,6 +5,7 @@ import { Link, usePathname } from '@/i18n/navigation';
 import { useTranslations } from 'next-intl';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { trackEvent } from '@/lib/analytics';
 
 interface Props {
   page: number;
@@ -26,6 +27,9 @@ export function Pagination({ page, pageCount }: Props) {
     const query = Object.fromEntries(params.entries());
     return { pathname, query };
   }
+
+  const onGo = (target: number) => () =>
+    trackEvent('pagination', { page: target });
 
   if (pageCount <= 1) return null;
 
@@ -50,7 +54,8 @@ export function Pagination({ page, pageCount }: Props) {
         </Button>
       ) : (
         <Button asChild variant="outline" size="icon">
-          <Link href={hrefFor(page - 1)} aria-label={t('previous')}>
+          <Link href={hrefFor(page - 1)}
+            onClick={onGo(page - 1)} aria-label={t('previous')}>
             <ChevronLeft aria-hidden="true" className="size-4" />
           </Link>
         </Button>
@@ -59,7 +64,8 @@ export function Pagination({ page, pageCount }: Props) {
       {pages[0] > 1 && (
         <>
           <Button asChild variant="outline" size="sm">
-            <Link href={hrefFor(1)}>1</Link>
+            <Link href={hrefFor(1)}
+            onClick={onGo(1)}>1</Link>
           </Button>
           {pages[0] > 2 && (
             <span className="text-muted-foreground px-1" aria-hidden>
@@ -78,6 +84,7 @@ export function Pagination({ page, pageCount }: Props) {
         >
           <Link
             href={hrefFor(p)}
+            onClick={onGo(p)}
             aria-current={p === page ? 'page' : undefined}
             aria-label={`Page ${p}`}
           >
@@ -94,7 +101,8 @@ export function Pagination({ page, pageCount }: Props) {
             </span>
           )}
           <Button asChild variant="outline" size="sm">
-            <Link href={hrefFor(pageCount)}>{pageCount}</Link>
+            <Link href={hrefFor(pageCount)}
+            onClick={onGo(pageCount)}>{pageCount}</Link>
           </Button>
         </>
       )}
@@ -105,7 +113,8 @@ export function Pagination({ page, pageCount }: Props) {
         </Button>
       ) : (
         <Button asChild variant="outline" size="icon">
-          <Link href={hrefFor(page + 1)} aria-label={t('next')}>
+          <Link href={hrefFor(page + 1)}
+            onClick={onGo(page + 1)} aria-label={t('next')}>
             <ChevronRight aria-hidden="true" className="size-4" />
           </Link>
         </Button>

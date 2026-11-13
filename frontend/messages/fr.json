@@ -365,7 +365,7 @@
     "adsGooglePolicy": "Comment Google utilise les données des sites qui affichent ses publicités",
     "adsGoogleSettings": "Gérer la personnalisation des annonces dans vos paramètres Google",
     "adsTitle": "Publicité",
-    "analyticsBody": "Nous mesurons les pages vues, la vitesse des pages et les clics vers les boutiques avec Vercel Analytics et Speed Insights. Ces outils n'utilisent pas de cookies et ne produisent que des statistiques agrégées.",
+    "analyticsBody": "Nous mesurons les pages vues, la vitesse des pages et l'usage du site (recherches, y compris celles sans résultat, filtres, graphiques, clics vers d'autres sites) avec Vercel Analytics et Speed Insights. Ces outils n'utilisent pas de cookies et ne produisent que des statistiques agrégées.",
     "analyticsTitle": "Mesure d'audience",
     "contactBody": "Pour toute question sur cette page ou sur vos données :",
     "contactTitle": "Contact",

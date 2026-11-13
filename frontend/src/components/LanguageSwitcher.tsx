@@ -5,6 +5,7 @@ import { usePathname, useRouter } from '@/i18n/navigation';
 import { hasBlog, routing } from '@/i18n/routing';
 import { useTransition } from 'react';
 import { Languages } from 'lucide-react';
+import { trackEvent } from '@/lib/analytics';
 import {
   Select,
   SelectContent,
@@ -32,6 +33,7 @@ export function LanguageSwitcher({
   const [isPending, startTransition] = useTransition();
 
   const change = (next: string) => {
+    trackEvent('language_change', { to: next });
     // Articles exist in some languages only: leave the blog for the others.
     const fallback =
       pathname.startsWith('/blog') && !hasBlog(next) ? '/' : pathname;

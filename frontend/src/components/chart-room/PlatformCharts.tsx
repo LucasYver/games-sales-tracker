@@ -14,6 +14,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { trackEvent } from '@/lib/analytics';
 
 export interface PlatformChartGroup {
   platform: string;
@@ -78,9 +79,13 @@ export function PlatformCharts({
                 aria-selected={on}
                 aria-disabled={!hasData}
                 tabIndex={hasData ? 0 : -1}
-                onClick={() =>
-                  hasData && replaceParams({ platform: group.platform })
-                }
+                onClick={() => {
+                  if (!hasData || on) return;
+                  trackEvent('platform_chart_select', {
+                    platform: group.platform,
+                  });
+                  replaceParams({ platform: group.platform });
+                }}
                 className={cn(
                   'border px-3 py-1.5 font-mono text-[0.7rem] tracking-wide whitespace-nowrap uppercase',
                   on
@@ -121,6 +126,7 @@ export function PlatformCharts({
             key={`${active.platform}-${chart.key}`}
             points={chart.points}
             label={chart.label}
+            chartId={`${active.platform.toLowerCase()}:${chart.key}`}
             cumulative={chart.cumulative}
             range={range}
             onRangeChange={(next) => replaceParams({ range: next })}

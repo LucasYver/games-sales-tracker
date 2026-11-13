@@ -1,7 +1,7 @@
 'use client';
 
 import { useId } from 'react';
-import { track } from '@vercel/analytics';
+import { trackEvent } from '@/lib/analytics';
 
 type Placement = 'price' | 'links';
 
@@ -73,7 +73,7 @@ export function InstantGamingLink({
   /** Affiliate disclosure shown under the button. */
   note?: string;
 }) {
-  const onClick = () => track('instant_gaming_click', { game, placement });
+  const onClick = () => trackEvent('instant_gaming_click', { game, placement });
 
   if (placement === 'links') {
     return (

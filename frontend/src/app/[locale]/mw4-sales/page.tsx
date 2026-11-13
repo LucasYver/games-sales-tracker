@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getFormatter, getTranslations } from 'next-intl/server';
 import { Link } from '@/i18n/navigation';
+import { OutboundLink } from '@/components/OutboundLink';
 import { localeLanguages, routing } from '@/i18n/routing';
 import { SITE_URL } from '@/lib/site-url';
 import { defaultOgImages } from '@/lib/og-meta';
@@ -280,14 +281,15 @@ export default async function Mw4SalesPage({
                         </td>
                         <td className="px-3 py-2">
                           {f.sourceUrl ? (
-                            <a
+                            <OutboundLink
+                              from="mw4-sales"
                               href={f.sourceUrl}
                               target="_blank"
                               rel="noopener nofollow"
                               className="text-primary hover:underline"
                             >
                               {who}
-                            </a>
+                            </OutboundLink>
                           ) : (
                             who
                           )}

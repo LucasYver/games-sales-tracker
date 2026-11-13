@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import type { PriceStore, RegionalPrice } from '@/lib/api';
+import { trackEvent } from '@/lib/analytics';
 
 const STORAGE_KEY = 'steam-price-country';
 
@@ -97,6 +98,7 @@ export function PriceCountrySelect({
     options.find((c) => c.country === value) ?? options[0];
 
   const apply = (country: string) => {
+    trackEvent('price_country_change', { country });
     try {
       localStorage.setItem(STORAGE_KEY, country);
     } catch {
@@ -165,6 +167,7 @@ export function PriceStoreSelect({
   if (stores.length < 2) return null;
 
   const apply = (store: PriceStore) => {
+    if (store !== value) trackEvent('price_store_change', { store });
     const params = new URLSearchParams(searchParams.toString());
     params.set('store', store);
     router.replace(`${pathname}?${params.toString()}` as never, {

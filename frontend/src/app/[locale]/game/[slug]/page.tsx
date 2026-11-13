@@ -25,6 +25,7 @@ import { SITE_URL } from '@/lib/site-url';
 import { Link } from '@/i18n/navigation';
 import { AdSlot } from '@/components/AdSlot';
 import { InstantGamingLink } from '@/components/InstantGamingLink';
+import { OutboundLink } from '@/components/OutboundLink';
 import { instantGamingUrl } from '@/lib/affiliate';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
 import { RangedChart } from '@/components/chart-room/RangedChart';
@@ -1094,15 +1095,16 @@ function TechSheet({
       {(links.length > 0 || instantGaming) && (
         <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 border-t border-border-soft pt-3 font-mono text-[0.7rem]">
           {links.map((link) => (
-            <a
+            <OutboundLink
               key={link.key}
+              from={game.slug}
               href={link.url}
               rel="nofollow noopener"
               target="_blank"
               className="text-source-media hover:underline"
             >
               {link.label}
-            </a>
+            </OutboundLink>
           ))}
           {instantGaming && (
             <InstantGamingLink
@@ -1515,6 +1517,7 @@ function GamePageContent({
                       <RangedChart
                         points={twitchChart}
                         label={t('twitchViewersSeries')}
+                        chartId="twitch"
                         description={t('chartsSource', { store: 'Twitch' })}
                         syncRangeUrl
                         defaultRange={chartDefaultRange}

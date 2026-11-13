@@ -1,6 +1,7 @@
 import { useFormatter, useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
 import type { BlogFigures } from '@/lib/api';
+import { OutboundLink } from '@/components/OutboundLink';
 
 // Sales table and popularity cards for blog articles. The numbers come from
 // the article's fact pack, not from the text, so they are exact and never
@@ -116,21 +117,25 @@ export function PopularityCards({
 /** News items only: the page, not the writer, links the article relayed. */
 export function FigureSource({
   source,
+  from,
 }: {
   source: NonNullable<BlogFigures['source']>;
+  /** Analytics origin of the click, e.g. "blog/<slug>". */
+  from: string;
 }) {
   const t = useTranslations('blog.figures');
   return (
     <p className="my-4 text-sm text-muted-foreground">
       {t('sourceLine')}{' '}
-      <a
+      <OutboundLink
+        from={from}
         href={source.url}
         target="_blank"
         rel="noopener noreferrer nofollow"
         className="text-primary hover:underline"
       >
         {source.label}
-      </a>
+      </OutboundLink>
     </p>
   );
 }

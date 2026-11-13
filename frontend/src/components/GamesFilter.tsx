@@ -5,6 +5,7 @@ import { usePathname, useRouter } from '@/i18n/navigation';
 import { useTranslations } from 'next-intl';
 import { useCallback, useMemo } from 'react';
 import { RotateCcw } from 'lucide-react';
+import { trackEvent } from '@/lib/analytics';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -57,6 +58,7 @@ export function GamesFilter({
       for (const [key, value] of entries) {
         if (value) params.set(key, value);
         else params.delete(key);
+        trackEvent('filter_change', { filter: key, value: value || 'default' });
       }
       params.delete('page');
       router.push(`${pathname}?${params.toString()}` as never);
@@ -81,6 +83,7 @@ export function GamesFilter({
   );
 
   const handleReset = () => {
+    trackEvent('filter_reset');
     const params = new URLSearchParams(searchParams.toString());
     for (const key of [
       'sort',

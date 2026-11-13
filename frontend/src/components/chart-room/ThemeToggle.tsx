@@ -4,6 +4,7 @@ import { useLayoutEffect, useSyncExternalStore } from 'react';
 import { useTranslations } from 'next-intl';
 import { Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { trackEvent } from '@/lib/analytics';
 
 /**
  * Public light/dark theme: the visitor's stored choice, otherwise the system
@@ -83,6 +84,7 @@ export function ThemeToggle() {
   const toggle = () => {
     const next = !isDark();
     document.documentElement.classList.toggle('dark', next);
+    trackEvent('theme_toggle', { theme: next ? 'dark' : 'light' });
     try {
       localStorage.setItem(STORAGE_KEY, next ? 'dark' : 'light');
     } catch {

@@ -30,6 +30,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { trackEvent } from '@/lib/analytics';
 
 function lastValue(points: ReviewPoint[]): number | null {
   for (let i = points.length - 1; i >= 0; i--) {
@@ -57,6 +58,7 @@ function rangeExtrema(points: ReviewPoint[]): { min: number; max: number } | nul
 export function RangedChart({
   points,
   label,
+  chartId,
   description,
   ariaLabel,
   kind,
@@ -73,6 +75,8 @@ export function RangedChart({
 }: {
   points: ReviewPoint[];
   label: string;
+  /** Untranslated chart name sent with `chart_range_change`. */
+  chartId: string;
   description?: string;
   ariaLabel: string;
   kind?: SeriesKind;
@@ -91,6 +95,7 @@ export function RangedChart({
   const range =
     rangeProp ?? (syncRangeUrl ? chartQuery.range : localRange);
   const setRange = (next: ChartRangeKey) => {
+    trackEvent('chart_range_change', { chart: chartId, range: next });
     if (onRangeChange) onRangeChange(next);
     else if (syncRangeUrl) chartQuery.replaceParams({ range: next });
     else setLocalRange(next);

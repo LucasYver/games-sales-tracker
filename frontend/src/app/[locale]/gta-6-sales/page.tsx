@@ -5,6 +5,7 @@ import { localeLanguages, routing } from '@/i18n/routing';
 import { SITE_URL } from '@/lib/site-url';
 import { defaultOgImages } from '@/lib/og-meta';
 import { getSalesTimeline, type SalesTimelineFigure } from '@/lib/api';
+import { OutboundLink } from '@/components/OutboundLink';
 import {
   BENCHMARKS,
   GTA6_LAUNCH,
@@ -364,14 +365,15 @@ function FiguresTable({
               </td>
               <td className="px-3 py-2">
                 {r.url ? (
-                  <a
+                  <OutboundLink
+                    from="gta-6-sales"
                     href={r.url}
                     target="_blank"
                     rel="noopener nofollow"
                     className="text-primary hover:underline"
                   >
                     {r.who}
-                  </a>
+                  </OutboundLink>
                 ) : (
                   r.who
                 )}

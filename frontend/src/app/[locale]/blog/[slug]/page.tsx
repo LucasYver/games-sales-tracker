@@ -9,6 +9,7 @@ import { SALES_TABLE_MARKER, getBlogIndex, getBlogPost } from '@/lib/api';
 import { displayCover } from '@/lib/cover';
 import { SITE_URL } from '@/lib/site-url';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
+import { OutboundLink } from '@/components/OutboundLink';
 import {
   FigureSource,
   PopularityCards,
@@ -230,7 +231,7 @@ export default async function BlogArticlePage({
           </ul>
         </aside>
 
-        {post.figures?.source && <FigureSource source={post.figures.source} />}
+        {post.figures?.source && <FigureSource source={post.figures.source} from={`blog/${slug}`} />}
 
         {post.figures && <PopularityCards signals={post.figures.signals} />}
 
@@ -244,13 +245,14 @@ export default async function BlogArticlePage({
                     {children}
                   </Link>
                 ) : (
-                  <a
-                    href={href}
+                  <OutboundLink
+                    from={`blog/${slug}`}
+                    href={href ?? ''}
                     rel="noopener noreferrer"
                     className="text-primary hover:underline"
                   >
                     {children}
-                  </a>
+                  </OutboundLink>
                 ),
               h1: ({ children }) => (
                 <h2 className="mt-8 mb-3 text-xl font-semibold">{children}</h2>
