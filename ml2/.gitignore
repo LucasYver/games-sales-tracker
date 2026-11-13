@@ -2,3 +2,5 @@
 __pycache__/
 # Copy of production data: never commit.
 data/
+# Reference catalog of a frozen model: built from production data, rebuilt by freeze.py.
+models/*/*.parquet

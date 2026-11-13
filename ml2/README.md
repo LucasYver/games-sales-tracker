@@ -343,3 +343,287 @@ outside what the published figures cover, so they cannot say which level is righ
 (known marks for PC-only games: about 65 sales per review in the 2018 leak and the
 published totals, 34 to 47 for totals published since 2020). The owner kept H24
 knowing this (2026-11-11).
+
+
+### H27 — a range width per game (2026-11-12, adopted by the owner, now `BEST`)
+
+The estimate is unchanged; only `low` and `high` move. Until now the width of the range
+was one value per type of figure (×2.22 for totals). H27 (`width_by_signals`) multiplies
+it by a factor measured per group of games, on the same unseen-game errors: Steam reviews
+at the date (none, under 10,000, 10,000 and more), then peak players known or not, then
+console ratings known or not. A group gets its own factor only with 50 games
+(`WIDTH_MIN_GAMES`); otherwise the coarser group is used. Each error is first divided by
+the width of its type of figure, so a group is not called uncertain because it holds
+more console figures.
+
+Share of published totals inside the range (target 80 %), H24 → H27:
+
+| Group (reviews as the model sees them) | Games | Width needed | Cross-validation | Test in time |
+| --- | --- | --- | --- | --- |
+| Under 10,000 reviews | 168 | ×2.28 | 77 % → 81 % | 80 % → 82 % |
+| 10,000 reviews and more | 269 | ×1.93 | 86 % → 83 % | 89 % → 84 % |
+| No review | 55 | ×3.37 | 56 % → 62 % | 57 % → 57 % |
+| All totals | 433 | ×2.18 | 80 % → 80 % | 80 % → 79 % |
+
+Widths learned on every development game: ×2.32 under 10,000 reviews, ×2.07 above
+(×2.04 with peak players and console ratings), ×3.28 with no review. Games with no
+review stay badly covered on the bench: about 48 of them are in each training split,
+under the 50-game floor, so the factor is rarely learned there; it is with all games.
+Peak players and console ratings add little once the review count is known.
+
+On the catalog no estimate changes. Range (÷ and × around the estimate) of games
+estimated by the model: multi-platform ×2.22 → ×2.32 under 10,000 reviews, ×2.04 above;
+PC-only ×2.08 → ×2.17 and ×1.98. 2,909 games get a wider range, 624 a narrower one;
+anchored games and games on console ratings alone are untouched. Under 1,000 reviews only 6
+games published a total, so the width there is not checked by sales figures.
+
+### H28 — games released from 2014 to 2016 as training-only rows (2026-11-12, rejected)
+
+Asked by the owner. Same plumbing as H25, limited to games released from 2014 on
+(`old_games_since = 2014`, read by `bench._extra`): 1,101 figures on 924 games (184
+totals of 104 games, 17 platform figures, 900 leak players). Never judged, never
+estimated.
+
+| | Totals CV | Totals in time | PC CV / time | Small PC games | Range in time | Resamples won (CV / time) |
+| --- | --- | --- | --- | --- | --- | --- |
+| H27 | ×1.48 | ×1.53 | ×1.42 / ×1.50 | ×1.35 | 79 % | |
+| H28 | ×1.48 | ×1.50 | ×1.43 / ×1.47 | ×1.33 | 75 % | 55 % / 56 % |
+
+No gain that holds, so rejected. It does less harm than H25 (every game before 2017:
+×1.49 / ×1.61). Aside: the reference model, which never saw these games, estimates
+their 184 published totals within ×1.67 and 27 % too low (2014 ×1.74, 2015 ×1.83,
+2016 ×1.49; bias ×0.71 to ×0.73 every year; range holds 67 %). Old games sold more per
+review than the model has learned from games released since 2017.
+
+### EA Sports yearly series are excluded by hand (2026-11-12, owner's decision)
+
+Seven series join Call of Duty in `exclusions.csv`: ea-sports-fc, fifa, madden-nfl,
+ea-sports-nhl, ncaa-football, nba-live, ufc: 33 catalog games, 15 kept figures on 9
+games (none in the locked test). Reason: sold mostly on consoles and through the EA
+app; the model answered ×0.14 to ×0.71 of their published figures. They neither teach
+nor judge the model and get no estimate. F1, WRC and Super Mega Baseball stay.
+
+| | Before | After |
+| --- | --- | --- |
+| Totals, CV / in time | ×1.48 / ×1.53 | ×1.49 / ×1.47 |
+| PC, CV / in time | ×1.42 / ×1.50 | ×1.44 / ×1.59 |
+| Whole system on all totals | ×1.45 → ×1.36 | ×1.47 → ×1.38 |
+| PlayStation sales per rating | 37.0 | 35.5 |
+| Catalog: estimated games | 4,428 | 4,395 |
+| Catalog: anchored / model / raised by console ratings / console ratings alone | 543 / 3,258 / 298 / 126 | 537 / 3,346 / 205 / 116 |
+
+Tried first, then dropped by the owner: keeping these games estimated from their own
+figures. Anchoring prolonged by Steam reviews is absurd on them (EA SPORTS FC 24 6.8 M
+→ 136 M, FC 26 12 M → 75 M, FIFA 22 9 M → 56 M): their Steam reviews at the figure's
+date were tiny and grew many times since. The plumbing stays for another case: a column
+`anchor` in `exclusions.csv`; with `yes` the game is out of the model but the catalog
+anchors it on its total, floors it by a platform figure, and does not estimate it
+otherwise (`anchorOnly` in `figures.parquet` and `catalog.parquet`). No row uses it.
+
+Side effect, open: removing these 9 games moves the catalog much more than the bench.
+The model's answer for multi-platform catalog games rises by 18 % in the median
+(PC-only ×0.95), the sum of estimates of the same games goes from 6.07 to 6.55 billion,
+and 93 games are no longer raised by their console ratings. Bias on published figures
+is unchanged (×0.96 CV, ×1.14 in time). Like the H24 side effect, the level of catalog
+games with few reviews is not pinned by the published figures.
+
+## Step 7 — the locked test (2026-11-12, run once, on the owner's go)
+
+`bench.py --final h27_width_by_signals`: the model learns from every development game
+and answers for the 1 game in 5 set aside since step 2, never looked at before.
+
+| Figures | Locked test | Development (CV) | Bias | Within ±20 % / ×2 | Range holds | Figures / games |
+| --- | --- | --- | --- | --- | --- | --- |
+| Totals | ×1.47 (×1.41 to ×1.55 over game resamples) | ×1.49 | ×0.97 | 25 % / 75 % | 80 % | 225 / 110 |
+| PC | ×1.35 | ×1.44 | ×1.11 | 41 % / 77 % | 87 % | 43 / 26 |
+| PlayStation | ×1.59 | ×2.19 | ×1.19 | 18 % / 60 % | 71 % | 24 / 15 |
+| Xbox | ×2.42 | ×1.99 | ×0.69 | 0 % / 43 % | 43 % | 7 / 7 |
+| Small PC games (leak players) | ×1.24 | ×1.36 | ×1.09 | 51 % / 87 % | 88 % | 76 / 76 |
+
+The model does on unseen games what the development bench said: no overfitting to the
+bench. Totals by group: under 10,000 reviews ×1.51, bias ×1.17, range 77 % (45 games);
+10,000 and more ×1.46, bias ×0.93, range 80 % (79 games); no review ×1.79, bias ×0.58,
+range 77 % (10 games). Largest misses: OCTOPATH TRAVELER ×0.10, Red Dead Redemption 2
+×0.12, Timberborn ×0.17, DRAGON QUEST XI ×0.19, Celeste ×4.25, Super Battle Golf ×3.69.
+
+The test is spent: a later change to the model can no longer be judged on these games
+without bias. Anchoring and the console rule were not scored on them (no `--final` mode
+there). It says nothing of the level of small multi-platform catalog games.
+
+## Step 8 — the model is frozen (2026-11-12, owner's decision)
+
+The V2 model is H27 (`learned.BEST`), on snapshot `2026-11-09T1952` with
+`exclusions.csv` as of 2026-11-12. No further hypothesis is tried on it: the locked
+test is spent. Still to do: the backend port (v1.5 stays in production until then).
+
+### Against v1.5, once, at the owner's request
+
+An exception to the rule of step 6, asked by the owner when freezing. Both are scored
+on published totals only, on the 575 development totals (327 games) that v1.5's
+out-of-fold estimates cover (`compare.py h27_width_by_signals v1_5`). Two caveats in
+v1.5's favour, as in step 3: it read monthly Steam history by its stamp (up to a month
+of future), and it only kept figures the site formula could estimate.
+
+| | Typical error | Within ±20 % | Within ×2 | Bias |
+| --- | --- | --- | --- | --- |
+| v1.5 | ×1.41 | 30 % | 81 % | ×1.02 |
+| V2, model alone | ×1.45 | 31 % | 79 % | ×0.95 |
+| V2, model + anchoring | ×1.32 | 43 % | 85 % | |
+
+- Model against model, no difference that holds: v1.5 is ahead in 71 % of game
+  resamples. V2 is better under 1 M (×1.48 vs ×1.62) and from day 8 to 30 (×1.39 vs
+  ×1.62); v1.5 is better at 5 M and more (×1.34 vs ×1.48).
+- With anchoring, V2 wins in 100 % of resamples: on the 296 totals of games that had
+  published an earlier total, ×1.13 against ×1.37; on the 279 first totals of a game,
+  ×1.43 against ×1.47.
+- V2 also answers for 312 development totals (203 games) v1.5 has no estimate for,
+  at ×1.60.
+
+So the gain of the V2 is the anchoring, the wider coverage, the honest reading of
+history and a range that holds; the learned model itself is not more accurate than v1.5.
+
+## Step 9 — the frozen file, for the backend (2026-11-12)
+
+```bash
+../ml/.venv/bin/python freeze.py     # refuses to overwrite an existing freeze
+```
+
+| File | Role |
+| ---- | ---- |
+| `freeze.py` | Trains `learned.BEST` once on every kept figure of the snapshot, the locked games included (the locked test is spent), and writes `models/<snapshot>/`. |
+| `frozen.py` | Reads the file back with numpy only. This is the reference the backend port must reproduce. `FrozenBest` gives it the interface of a lab model. |
+| `models/<snapshot>/v2.json` | In git, never edited. The two boosted models tree by tree (`direct`: log sales; `perReview`: log sales per Steam review, used whenever the game has reviews), the range widths and their scale per group of games, the anchoring settings, the console coefficients, the hand exclusions, and what the input columns are made of. |
+| `models/<snapshot>/catalog_reference.parquet`, `catalog_features.parquet` | Not in git (production data). Every catalog game estimated by the frozen file, and the 94 input values it was given: what the backend must return, and from what. |
+
+A tree node asks `x[f] <= t`; a missing value goes left when `m` is 1; `f` is -1 on a
+leaf, whose value is in `t`. An estimate is the baseline plus one leaf per tree. Numbers
+are written as full float64, so the backend can reproduce them to the last bit.
+
+v2.0, snapshot `2026-11-09T1952`: 1,863 figures of 879 games (1,494 sales figures of
+570 games; 184 locked games now included), 300 + 300 trees, 94 columns, 0.53 MB.
+Read back identical to scikit-learn on the 1,863 figures and on the 4,395 catalog
+games, for totals and for PC (largest gap 0).
+
+Learning also from the locked games moves the catalog again, as every change of the
+training games does: the model's answer rises by 9 % in the median (×0.81 to ×1.56 for
+8 games in 10; ×1.57 from 1 to 100 reviews, ×1.17 from 1,000 to 10,000, ×0.91 above
+100,000), the final estimates by 6 %, their sum from 6.55 to 6.63 billion. Console
+coefficients: 35.8 PlayStation, 58.0 Xbox, 17.8 Game Pass (35.5 / 53.4 / 21.2 on the
+development games). Range of a total: ×2.14, × 1.17 in log under 10,000 reviews, × 0.93
+above, × 1.56 with no review. The anchoring settings are those of `anchor.json`
+(measured on the development games).
+
+## Step 10 — the backend reads the frozen file (2026-11-12, first half of the port's step 2)
+
+```bash
+../ml/.venv/bin/python freeze.py --install      # copies v2.json into the backend, writes data/<snapshot>/v2_parity.json
+cd ../backend && npx ts-node src/scripts/check-ml2-parity.ts ../ml2/data/<snapshot>/v2_parity.json
+```
+
+| File | Role |
+| ---- | ---- |
+| `backend/src/estimation/ml2/v2-frozen.json` | Copy of `models/<snapshot>/v2.json` (`freeze.py --install`). |
+| `backend/src/estimation/ml2/v2-model.ts` | Mirror of `frozen.py`: walks the trees, gives estimate and range (`V2Model.predict`, `v2SignalGroups`). Pure. |
+| `backend/src/estimation/ml2/v2-features.ts` | Mirror of `features.py` (families signals, time, platforms, target, traits, track_record) and of `Learned._prep`: `buildV2Features` turns what the base holds on a game into the 94 input columns. Pure: no database access. |
+| `backend/src/scripts/check-ml2-parity.ts` | For every catalog game, as a total and as a PC figure: (1) the lab's columns through the TypeScript reader, (2) the game's raw values through `buildV2Features` then the reader, both against the lab's estimate and range. |
+| `data/<snapshot>/v2_parity.json` | Written by `freeze.py --install`, not in git: the 8,790 rows (columns, expected estimate and range) and the raw values of each game. |
+
+Result on the 8,790 rows: reader 0 estimate differs (largest gap 4e-15 in log), inputs
+0 row with a different column and 0 estimate differs. Nothing in the backend calls
+these files yet. Still to do in step 2: the database lookups that fill `V2FeatureInput`
+(signals as `dataset.signals_at` reads them, first release, release date per platform,
+price, published totals of the series and the studio as `Context.best_before`).
+
+## Step 11 — the backend reads the inputs in the base (2026-11-12, second half of the port's step 2)
+
+```bash
+cd ../backend && npx ts-node src/scripts/check-ml2-inputs.ts ../ml2/data/<snapshot>/v2_parity.json
+```
+
+| File | Role |
+| ---- | ---- |
+| `backend/src/estimation/ml2/v2-inputs.ts` | `loadV2Inputs(query, model, gameIds, asOf)`: six queries for any number of games, giving the `V2FeatureInput` of each. Mirrors `dataset.signals_at` (a monthly row is known at the end of its month; latest reviews, ratings, followers, playtime; highest concurrent players; best top-seller rank; median Twitch viewers over 30 days), the first release, the release date per platform, the current US Steam price, and the track record of the series and of the studio from the totals the lab keeps (`dataset.build`, `total_reason`, the hand exclusions of the frozen file, `Context.best_before`). |
+| `backend/src/scripts/check-ml2-inputs.ts` | Read-only. Runs it on every catalog game at the snapshot's date and compares each value with the lab's (`v2_parity.json`). |
+
+Result at the date of snapshot `2026-11-09T1952`, on the base of 2026-11-12: 4,207 of
+4,395 games identical on every value. The 188 others moved in the base since the
+snapshot: `twitchViewers30d` 166 games and `steamPeakPlayers` 2 (the day's row is
+updated in place until the day ends: the snapshot was taken during 9 November),
+`steamFollowers` 10 (rows dated before the snapshot, written after it),
+`timeToBeatSeconds` 10 and `inSeries` 1 (game sheets edited). No difference of reading
+was found. Every other value, the track record included, is identical on all games.
+
+Cost: no table, no cron, no stored row. 11 s for the whole catalog in batches of 200
+(2 ms per game); nothing calls it yet. The Nest service around it comes with the
+parallel run (step 5 of the port).
+
+## Step 12 — the rules after the model, in the backend (2026-11-13, step 3 of the port)
+
+| File | Role |
+| ---- | ---- |
+| `backend/src/estimation/ml2/v2-estimate.ts` | `estimateV2`: mirror of `estimate_catalog.py` and of `consoles.console_units` / `combine`. Anchoring on the last published total (growth of the Steam reviews, launch correction, the model's growth when there are no reviews to follow, never below the figure), the console rule, the floor of a published platform figure, "not estimated" without a signal, and the range of each case. Pure. Its `basis` is a code: `anchored`, `platform-floor`, `model`, `model-raised-by-consoles`, `consoles`, `not-estimated`. |
+| `estimate_catalog.py` | Now also writes what the rules were given (`modelPcRaw`, `gamePass`, the ratings, the anchor's review count, its model answer, whether the count was read that day). |
+| `freeze.py --install` | Reruns the catalog with the frozen file, checks it equals `catalog_reference.parquet`, and adds to `v2_parity.json`, per game, what the rules are given and the estimate kept. |
+
+`check-ml2-parity.ts` has a third part: for each of the 4,395 catalog games, the raw
+values go through `buildV2Features`, the reader (total and PC) and `estimateV2`. Result:
+0 game with a different basis, 0 estimate, low or high that differs (largest gap 1e-12
+in log). So, given the same values, the backend returns the lab's whole catalog.
+
+Left before the parallel run: reading in the base what the rules are given (the game's
+own kept figures: its last total and its best figure; the Steam reviews rebuilt at the
+total's date, `dataset.reviews_at_date`; the model's answer at that date; the Game Pass
+flag; which games are excluded by hand or not released), then the same check on the base.
+
+## Step 13 — the whole chain on the base, in the backend (2026-11-13, step 4 of the port)
+
+```bash
+cd ../backend && npx ts-node src/scripts/check-ml2-estimates.ts ../ml2/data/<snapshot>/v2_parity.json
+```
+
+| File | Role |
+| ---- | ---- |
+| `backend/src/estimation/ml2/v2-inputs.ts` | Rewritten around `V2World` (the games asked, their series and studio peers, release dates, price, and the published figures the lab keeps, with "the same figure repeated" dropped) and `loadV2Signals` (readings of each game at its own date). `v2ReviewsAtDate` mirrors `dataset.reviews_at_date`. `loadV2Inputs` is unchanged for its callers. Figures and prices entered after the date asked are not read. |
+| `backend/src/estimation/ml2/v2-catalog.ts` | `estimateV2Games(query, model, gameIds, asOf)`: status of each game (out of scope, excluded by hand, not released, estimated), the model today (total and PC), the game's last published total with the reviews rebuilt and the model asked at that total's date, its best figure, then `estimateV2`. About nine queries for any number of games. |
+| `backend/src/scripts/check-ml2-estimates.ts` | Read-only. The whole chain at the snapshot's date against the lab's catalog: basis, estimate, range, and what the rules were given. |
+
+Result at the date of snapshot `2026-11-09T1952`, on the base of 2026-11-13: of 4,395
+games, 4,367 have the lab's basis, estimate and range exactly, 4,371 within 1 %, 4,389
+within 10 %. The 28 others:
+
+- 3 games have two kept totals on the same day (Megabonk 909,746 and 2,000,000; PRAGMATA
+  2.70 M and 2.73 M; one more 8 M and 9 M). The lab anchors on whichever comes last in
+  its table; the backend takes the higher one, on purpose. Same rule for two review
+  counts known at the same instant. To align in the lab at the next freeze.
+- 1 anchor figure is gone from the base (Ace Combat 8), 2 games were deleted, 3 answers
+  of the model at the anchor's date moved (checked on Horizon Forbidden West: its time to
+  beat was filled in since), the rest are the inputs that moved (step 11).
+
+Seen on the way, and reproduced as the lab does it: daily rows stamped at 02:00 on the
+first of a month (a review-history import) count as monthly rows, so they are known a
+month late (MECCHA CHAMELEON, 1 July 2026).
+
+Cost: no table, no cron, no stored row. 26 s for the whole catalog in batches of 200
+(6 ms per game). Nothing calls it yet.
+
+## Step 14 — the site switches to the V2 (2026-11-13, coded, not deployed)
+
+The owner skipped the parallel run and asked for the switch; games the V2 does not
+estimate show "Not estimated". How the backend stores and shows it is owned by
+`ESTIMATION.md` §6. In short: `V2EstimateService` (method `ml-v2`) is computed at each
+rebuild of a game and stored as its worldwide row (`sales_estimate.estimatedUnits`, new
+column, migration `1788980000000-AddMlV2Estimate`; 0 = not estimated); the public page
+reads it; a game not rebuilt yet keeps its current figure; the admin game page shows the
+V2 computed live.
+
+`backend/src/scripts/preview-ml2-switch.ts` (read-only) lists what a rebuild would store
+for every game on the base as it is. On 2026-11-13, 7,422 games: 4,235 estimates (3,376
+model, 543 anchored, 195 raised by console ratings, 117 console ratings alone, 4
+platform floors), 244 "not estimated" (193 no signal, 51 excluded by hand), 2,943
+without a row (2,582 free or released before 2017, 361 not released). Sum of the
+estimates 6.62 billion, no invalid range.
+
+Not verified: the write path never ran (no local database). Cost: one more row per
+estimated game (about 4,500 rows, a few MB) and about ten more queries per rebuild; no
+cron, no backfill. Games move to the V2 at their next rebuild (270 to 400 a day, at most
+once a week each), so the site mixes v1.5 and V2 for two to three weeks after the deploy.

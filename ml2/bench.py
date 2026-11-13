@@ -72,7 +72,9 @@ def judged(figures: pd.DataFrame) -> pd.DataFrame:
 
 def _extra(model_class, figures: pd.DataFrame) -> pd.DataFrame:
     """Training-only figures (games released before 2017), for a model that asks for them."""
-    return figures[figures.trainOnly & bool(getattr(model_class, "old_games", False))]
+    extra = figures[figures.trainOnly & bool(getattr(model_class, "old_games", False))]
+    since = getattr(model_class, "old_games_since", None)  # only the old games released from that year on
+    return extra if since is None else extra[extra.releaseDate >= pd.Timestamp(f"{since}-01-01", tz="UTC")]
 
 
 def _with(train: pd.DataFrame, extra: pd.DataFrame) -> pd.DataFrame:

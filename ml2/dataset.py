@@ -55,14 +55,26 @@ def excluded_games(games: pd.DataFrame) -> pd.Series:
 
     Their signals do not follow their sales, so they neither teach nor judge a model.
     """
-    reasons = pd.Series("", index=games.index)
+    return _exclusions(games)[0]
+
+
+def anchor_only_games(games: pd.DataFrame) -> pd.Series:
+    """Excluded games (`anchor` = yes in `exclusions.csv`) that are still estimated from
+    their own published figures: anchored on a total, floored by a platform figure, and
+    not estimated at all without one. The model never answers for them."""
+    return _exclusions(games)[1]
+
+
+def _exclusions(games: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    reasons, anchor = pd.Series("", index=games.index), pd.Series(False, index=games.index)
     if "estimateHidden" in games:  # the admin's own switch: signals that do not measure the game alone
         reasons[games.estimateHidden.fillna(False).to_numpy(bool)] = "Estimate hidden in the admin"
     for rule in pd.read_csv(EXCLUSIONS).itertuples():
         hit = (games.seriesSlug == rule.value) | (games.franchiseSlug == rule.value) if rule.kind == "series" \
             else games.index == rule.value
         reasons[hit] = rule.reason
-    return reasons
+        anchor[hit] = str(rule.anchor).strip().lower() == "yes"
+    return reasons, anchor
 
 
 def latest_snapshot() -> Path:
@@ -298,6 +310,7 @@ def build(snapshot: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
                         & (games.firstRelease.isna() | (games.firstRelease >= SCOPE_START)))
 
     games["excluded"] = excluded_games(games)
+    games["anchorOnly"] = anchor_only_games(games)
 
     # ---- figures -------------------------------------------------------------
     f = figures.rename(columns={"id": "figureId"}).copy()
@@ -342,6 +355,13 @@ def build(snapshot: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     old = f[f.trainOnly].sort_values("reportedAt")
     f.loc[old[old.duplicated(["gameId", "target", "measure", "units"], keep="first")].index, "trainOnly"] = False
 
+    # Figures of games excluded from the model but still anchored on their own figures
+    # (`anchorOnly`): same idea, they never teach nor judge, the catalog alone reads them.
+    f["anchorOnly"] = ((f.status == "jeu exclu à la main") & g.anchorOnly.to_numpy()
+                       & ~np.logical_or.reduce([np.asarray(c, bool) for c, r in reasons if r == OUT_OF_SCOPE] + [np.asarray(c, bool) for c in later]))
+    own = f[f.anchorOnly].sort_values("reportedAt")
+    f.loc[own[own.duplicated(["gameId", "target", "measure", "units"], keep="first")].index, "anchorOnly"] = False
+
     # PC release, or the game's first release when the PC date is missing but Steam reads it.
     pc_release = {gid: d.to_datetime64() for gid, d in games.firstRelease.dropna().items() if gid in store.series.get("STEAM_REVIEWS", {})}
     pc_release.update({gid: d.to_datetime64() for gid, d in by_platform["PC"].dropna().items()})
@@ -384,6 +404,9 @@ def main() -> None:
     old = figures[figures.trainOnly]
     print(f"training only (games released before 2017): {len(old):,} figures on {old.gameId.nunique():,} games")
     print(old.groupby(["target", "measure"]).agg(figures=("units", "size"), games=("gameId", "nunique")).to_string())
+    own = figures[figures.anchorOnly]
+    print(f"anchor only (games excluded from the model, estimated from their own figures): {len(own):,} figures on "
+          f"{own.gameId.nunique():,} games, of {int(catalog.anchorOnly.sum()):,} such games in the catalog")
 
 
 if __name__ == "__main__":

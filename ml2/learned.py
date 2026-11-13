@@ -21,6 +21,20 @@ from stats import game_weights, weighted_quantile
 
 INNER_FOLDS = 5
 COVERAGE = 0.80
+WIDTH_MIN_GAMES = 50        # a group of games gets its own range width only with this many games
+MANY_REVIEWS = 10_000       # from this many Steam reviews a game counts as well described
+
+
+def signal_groups(rows: pd.DataFrame) -> list[np.ndarray]:
+    """What is known of each row's game, from the finest description to the coarsest:
+    Steam reviews (none, few, many), then peak players known or not, then console ratings."""
+    reviews = rows.steamReviews.fillna(0).to_numpy(float)
+    coarse = np.select([reviews <= 0, reviews < MANY_REVIEWS], ["no reviews", "few reviews"], "many reviews")
+    peak = np.where(rows.steamPeakPlayers.fillna(0).to_numpy(float) > 0, "peak", "no peak")
+    consoles = rows.psRatings.fillna(0).to_numpy(float) + rows.xboxRatings.fillna(0).to_numpy(float)
+    middle = np.char.add(np.char.add(coarse, " / "), peak)
+    fine = np.char.add(np.char.add(middle, " / "), np.where(consoles > 0, "console ratings", "no console ratings"))
+    return [fine, middle, coarse]
 
 
 def _inner_fold(game_id: str) -> int:
@@ -105,6 +119,8 @@ class Learned:
     recency_half_life_years = None  # a figure's training weight is halved every so many years of age
     monotone = False       # the estimate may never go down when a signal of `MONOTONE_UP` goes up
     old_games = False      # also learn from the figures of games released before 2017 (never judged)
+    old_games_since = None  # with `old_games`: only those released from this year on
+    width_by_signals = False  # the range is wider for a game little is known of, narrower otherwise
 
     def _prep(self, rows: pd.DataFrame) -> pd.DataFrame:
         if self.reviews != "steamReviews":
@@ -172,6 +188,7 @@ class Learned:
                 if has.any():
                     out[has] = per_review.predict(nx[has]) + np.log(new.steamReviews.to_numpy(float)[has])
             return out
+        predict.direct, predict.per_review, predict.columns = direct, per_review, columns  # read by `freeze.py`
         return predict
 
     # -- fit with honest intervals ---------------------------------------------
@@ -205,6 +222,17 @@ class Learned:
             mask = sales & (rows.target == t).to_numpy()
             if rows.gameId[mask].nunique() >= 100:
                 self.widths[t] = weighted_quantile(miss[mask], game_weights(rows.gameId[mask]), COVERAGE)
+        # Per group of games: how much wider or narrower than the common width the range must be.
+        # Each miss is first divided by the width of its type of figure, so that a group
+        # is not called uncertain only because it holds more console figures.
+        self.width_scales = {}
+        if self.width_by_signals:
+            share = miss / rows.target.map(lambda t: self.widths.get(t, self.widths["*"])).to_numpy()
+            for level in signal_groups(rows):
+                for name in np.unique(level[sales]):
+                    mask = sales & (level == name)
+                    if rows.gameId[mask].nunique() >= WIDTH_MIN_GAMES:
+                        self.width_scales[name] = weighted_quantile(share[mask], game_weights(rows.gameId[mask]), COVERAGE)
         self.predict_log = self._core(rows)
 
     def predict(self, rows: pd.DataFrame) -> pd.DataFrame:
@@ -215,6 +243,12 @@ class Learned:
         if self.neighbours == "residual":
             mid = mid + RESIDUAL_SHARE * np.nan_to_num(neighbour_mean(self.game_gap, rows.gameId))
         width = rows.target.map(lambda t: self.widths.get(t, self.widths["*"])).to_numpy()
+        if self.width_scales:  # the finest group of the game that had enough games to be measured
+            scale = np.full(len(rows), np.nan)
+            for level in signal_groups(rows):
+                found = pd.Series(level).map(self.width_scales).to_numpy(float)
+                scale = np.where(np.isnan(scale), found, scale)
+            width = width * np.nan_to_num(scale, nan=1.0)
         return pd.DataFrame({"estimate": np.exp(mid), "low": np.exp(mid - width), "high": np.exp(mid + width)}, index=rows.index)
 
 
@@ -421,6 +455,17 @@ class H26GameKind(H8PcOnly):
     families = (*H8PcOnly.families, "traits_detail")
 
 
+class H27WidthBySignals(H24Monotone):
+    label = "H27 · H24 + fourchette plus ou moins large selon ce qu'on sait du jeu"
+    width_by_signals = True
+
+
+class H28Since2014(H27WidthBySignals):
+    label = "H28 · H27 + jeux sortis de 2014 à 2016 à l'apprentissage"
+    old_games = True
+    old_games_since = 2014
+
+
 def _with_algorithm(name: str, title: str):
     return type(f"H7{name.title().replace('+', '')}", (H7ReviewsAtDate,), {"algorithm": name, "label": f"H7 · {title}"})
 
@@ -437,9 +482,11 @@ ALGORITHM_VARIANTS = {
 # H7 on the bench and, unlike it, gives a PC-only game the same PC and total estimates.
 # H24 is H8 with monotonic constraints: it scores the same, and its estimate never drops
 # when peak players, console ratings or followers rise (owner's decision, 2026-11-11).
-BEST_KEY, BEST = "h24_monotone", H24Monotone
+# H27 is H24 with the same estimates and a range whose width depends on what is known of
+# the game (owner's decision, 2026-11-12).
+BEST_KEY, BEST = "h27_width_by_signals", H27WidthBySignals
 
-VARIANTS = {"h21_median_loss": H21MedianLoss, "h22_recency_3": H22Recency3, "h23_recency_5": H23Recency5, "h24_monotone": H24Monotone,
+VARIANTS = {"h28_since_2014": H28Since2014, "h27_width_by_signals": H27WidthBySignals, "h21_median_loss": H21MedianLoss, "h22_recency_3": H22Recency3, "h23_recency_5": H23Recency5, "h24_monotone": H24Monotone,
             "h25_old_games": H25OldGames, "h26_game_kind": H26GameKind,
             "h20_review_era": H20ReviewEra, "h19_launch_peak": H19LaunchPeak, "h17_age_cap_1": H17AgeCap1, "h18_age_cap_2": H18AgeCap2, "h15_publisher_offset": H15PublisherOffset, "h16_big_and_small": H16BigAndSmall, "h14_group_coefficients": H14GroupCoefficients, "h12_publisher": H12Publisher, "h13_stores": H13Stores, "h10_neighbour_ratio": H10NeighbourRatio, "h11_neighbour_residual": H11NeighbourResidual,
             **ALGORITHM_VARIANTS, "h9_two_stage": H9TwoStage, "h8_pc_only": H8PcOnly, "h7_reviews_at_date": H7ReviewsAtDate, "h6_combined": H6Combined, "h1_signals": H1Signals, "h2_per_review": H2PerReview, "h3_leak": H3Leak, "h3_leak_flag": H3LeakFlag,

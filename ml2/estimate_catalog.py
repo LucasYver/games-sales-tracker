@@ -32,6 +32,7 @@ SIGNALS = ["steamReviews", "steamPositiveShare", "steamReviewsAgeDays", "steamPe
 # estimated from its console ratings when it has some, and not at all otherwise.
 MIN_REVIEWS = consoles.MIN_REVIEWS
 NOT_ESTIMATED = f"non estimé : moins de {MIN_REVIEWS} reviews Steam, aucune note console"
+NOT_ESTIMATED_EXCLUDED = "non estimé : exclu du modèle, aucun chiffre publié"
 CONSOLE_RANGE = 2.0  # console ratings alone: published sales per rating spread about this much
 REVIEW_BINS = ([-1, 0, 100, 1_000, 10_000, 100_000, float("inf")],
                ["aucune review Steam", "1–100", "100–1 000", "1 000–10 000", "10 000–100 000", "100 000 +"])
@@ -48,23 +49,40 @@ def rows_today(catalog: pd.DataFrame, now: pd.Timestamp, target: str) -> pd.Data
     return rows
 
 
-def main() -> None:
+def export_time(snapshot) -> pd.Timestamp:
+    return pd.Timestamp(json.loads((snapshot / "manifest.json").read_text())["exportedAt"])
+
+
+def game_status(catalog: pd.DataFrame, snapshot) -> np.ndarray:
+    first, now = pd.to_datetime(catalog.firstRelease, utc=True), export_time(snapshot)
+    # Games excluded from the model stay out, except those estimated from their own figures.
+    return np.select([(catalog.excluded != "") & ~catalog.anchorOnly, first.isna() | (first > now)], ["exclu à la main", "pas encore sorti"], "estimé")
+
+
+def released(catalog: pd.DataFrame, snapshot) -> pd.DataFrame:
+    """The games that get an estimate: released, and not excluded by hand."""
+    return catalog[game_status(catalog, snapshot) == "estimé"].reset_index(drop=True)
+
+
+def main(frozen: dict | None = None, model=None, out_path=None, quiet: bool = False) -> pd.DataFrame:
+    """Without arguments: the lab's model, learned on the development games. With a
+    frozen file (`freeze.py`): its model, its console coefficients and its anchoring
+    settings, learned on every game."""
     snapshot = latest_snapshot()
     figures = bench.load_figures(snapshot)
     catalog = pd.read_parquet(snapshot / "catalog.parquet")
-    now = pd.Timestamp(json.loads((snapshot / "manifest.json").read_text())["exportedAt"])
-    settings = json.loads((snapshot / "anchor.json").read_text())["settings"]
+    now = export_time(snapshot)
+    settings = frozen["anchor"] if frozen else json.loads((snapshot / "anchor.json").read_text())["settings"]
+    status = game_status(catalog, snapshot)
+    c = released(catalog, snapshot)
 
-    first = pd.to_datetime(catalog.firstRelease, utc=True)
-    status = np.select([catalog.excluded != "", first.isna() | (first > now)], ["exclu à la main", "pas encore sorti"], "estimé")
-    c = catalog[status == "estimé"].reset_index(drop=True)
-
-    model = BEST()
-    model.fit(figures[~figures.locked])
+    if model is None:
+        model = BEST()
+        model.fit(figures[~figures.locked])
     total = model.predict(rows_today(c, now, "TOTAL"))
     pc = model.predict(rows_today(c, now, "PC"))
     c["gamePass"] = c.gameId.map(pd.read_parquet(snapshot / "raw" / "games.parquet").set_index("id").gamePass).fillna(False).to_numpy(bool)
-    ratios = consoles.fit_ratios(consoles.platform_figures(figures[~figures.locked], c))
+    ratios = frozen["consoles"]["ratios"] if frozen else consoles.fit_ratios(consoles.platform_figures(figures[~figures.locked], c))
     mixed = consoles.combine(pd.Series(total.estimate.to_numpy()), pd.Series(pc.estimate.to_numpy()), consoles.console_units(c, ratios), c)
     out = pd.DataFrame({"gameId": c.gameId, "game": c.name, "slug": c.slug, "releaseDate": pd.to_datetime(c.firstRelease, utc=True),
                         "steamReviews": c.steamReviews, "onPc": c.onPc, "onPlaystation": c.onPlaystation, "onXbox": c.onXbox,
@@ -73,7 +91,15 @@ def main() -> None:
                         "modelPc": np.where(c.onPc, np.minimum(pc.estimate.to_numpy(), total.estimate.to_numpy()), np.nan),
                         "playersLeak": c.playersLeak,
                         "consoleUnits": mixed.consoleUnits.to_numpy(), "unanchored": mixed.estimate.to_numpy(),
-                        "unanchoredBasis": mixed.basis.to_numpy()})
+                        "unanchoredBasis": mixed.basis.to_numpy(),
+                        # What the rules after the model were given (read by `freeze.py --install`).
+                        "modelPcRaw": pc.estimate.to_numpy(), "gamePass": c.gamePass.to_numpy(bool),
+                        "psRatings": c.psRatings.to_numpy(float), "xboxRatings": c.xboxRatings.to_numpy(float)})
+    # A game excluded from the model has no estimate of its own: only its figures speak.
+    own = c.anchorOnly.to_numpy(bool)
+    out.loc[own, "unanchored"], out.loc[own, "unanchoredBasis"] = np.nan, ""
+    all_figures = pd.read_parquet(snapshot / "figures.parquet")
+    figures = pd.concat([figures, all_figures[all_figures.anchorOnly]], ignore_index=True)
 
     # Anchor: the game's last published total, prolonged to today.
     totals = figures[(figures.target == "TOTAL") & (figures.measure == "ventes")].sort_values("reportedAt")
@@ -92,7 +118,9 @@ def main() -> None:
     width = gap.map(settings["widths"]).astype(float)
     anchored = pd.DataFrame({"anchored": np.exp(mid), "anchoredLow": np.maximum(np.exp(mid - width), last.units),
                              "anchoredHigh": np.exp(mid + width), "anchorUnits": last.units, "anchorDate": last.reportedAt,
-                             "anchorBy": np.where(by_reviews, "reviews", "modèle")}, index=last.index)
+                             "anchorBy": np.where(by_reviews, "reviews", "modèle"),
+                             "anchorReviewsAtDate": last.steamReviewsAtDate, "anchorModelLog": at_anchor,
+                             "anchorReviewsReadThatDay": (last.steamReviewsBasis == anchor.REAL_READING)}, index=last.index)
     out = out.join(anchored, on="gameId")
 
     # Without a total, a platform figure is still a floor: a game sold at least that.
@@ -110,10 +138,12 @@ def main() -> None:
     out["low"] = np.where(has_anchor, out.anchoredLow, np.where(floored, out.bestPublished, low))
     out["high"] = np.where(has_anchor, out.anchoredHigh, np.where(floored, np.fmax(high, out.bestPublished), high))
     out["basis"] = np.where(has_anchor, "ancré sur un chiffre publié", np.where(floored, "plancher : chiffre de plateforme",
-                                                                               np.where(out.unanchoredBasis == "", NOT_ESTIMATED, out.unanchoredBasis)))
+                                                                               np.where(own, NOT_ESTIMATED_EXCLUDED, np.where(out.unanchoredBasis == "", NOT_ESTIMATED, out.unanchoredBasis))))
     out["perReview"] = (out.estimate / out.steamReviews).where(out.steamReviews > 0)
     out["bucket"] = pd.cut(out.steamReviews.fillna(0), REVIEW_BINS[0], labels=REVIEW_BINS[1])
-    out.to_parquet(snapshot / "catalog_estimates.parquet", index=False)
+    out.to_parquet(out_path or snapshot / "catalog_estimates.parquet", index=False)
+    if quiet:
+        return out
 
     pd.set_option("display.width", 220)
     print(pd.Series(status).value_counts().to_string(), "\n")
@@ -138,6 +168,7 @@ def main() -> None:
     print(f"anchored games: {len(anchored_games)}; anchored / model median ×{(anchored_games.anchored / anchored_games.model).median():.2f} "
           f"(p10 ×{(anchored_games.anchored / anchored_games.model).quantile(.1):.2f}, p90 ×{(anchored_games.anchored / anchored_games.model).quantile(.9):.2f}); "
           f"today / last published median ×{(anchored_games.anchored / anchored_games.anchorUnits).median():.2f}")
+    return out
 
 
 if __name__ == "__main__":
