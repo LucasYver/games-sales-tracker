@@ -881,6 +881,25 @@ export interface AdminEstimateBreakdown {
   total: { low: number; high: number } | null;
   /** Worldwide ML estimate; `shown` when the public site displays it. */
   ml: { low: number; high: number; units: number; shown: boolean } | null;
+  /**
+   * Worldwide V2 estimate, computed live: what the public site displays from
+   * the game's next rebuild on. `units` null = "Not estimated" on the site.
+   */
+  v2: {
+    version: string;
+    status: string;
+    basis: string | null;
+    units: number | null;
+    low: number | null;
+    high: number | null;
+    modelUnits: number | null;
+    modelPc: number | null;
+    consoleUnits: number | null;
+    steamReviews: number | null;
+    anchorUnits: number | null;
+    anchorDate: string | null;
+    bestPublished: number | null;
+  } | null;
   /** How the ML estimate was computed. */
   mlExplanation: AdminMlExplanation | null;
   /** Released before 2017: the public site shows no estimate. */

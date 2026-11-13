@@ -58,6 +58,21 @@ function compact(n: number | null | undefined): string {
   return `${n}`;
 }
 
+// How the V2 model reached its estimate, and why it gives none.
+const V2_BASIS: Record<string, string> = {
+  anchored: 'anchored on the last published total',
+  'platform-floor': 'floor: a published platform figure',
+  model: 'model',
+  'model-raised-by-consoles': 'model, raised by the console ratings',
+  consoles: 'console ratings alone',
+  'not-estimated': 'not estimated',
+};
+const V2_STATUS: Record<string, string> = {
+  excluded: 'excluded by hand in the frozen model',
+  'out-of-scope': 'out of scope (free, deleted or released before 2017)',
+  unreleased: 'not released yet',
+};
+
 // The headline number for an estimate is always the midpoint of its [low, high]
 // band — a single number == the range's high would systematically overstate.
 function midpoint(low: number, high: number): number {
@@ -600,7 +615,20 @@ async function EstimatesTab({
   // What the public site displays: the ML estimate where it applies (platform
   // sum at 300k+ and 1,000+ Steam reviews), the platform sum otherwise.
   const ml = b?.ml ?? null;
-  const shown = ml?.shown
+  // The V2 model decides as soon as it answers for the game (estimated, or
+  // excluded by hand). Its figure goes public at the game's next rebuild.
+  const v2 = b?.v2 ?? null;
+  const v2Decides = v2?.status === 'estimated' || v2?.status === 'excluded';
+  const shown = v2Decides
+    ? v2?.units && v2.low !== null && v2.high !== null
+      ? {
+          low: v2.low,
+          high: v2.high,
+          units: v2.units,
+          label: `V2 model (${V2_BASIS[v2.basis ?? ''] ?? v2.basis})`,
+        }
+      : null
+    : ml?.shown
     ? { low: ml.low, high: ml.high, units: ml.units, label: 'ML model' }
     : algo
       ? { ...algo, units: midpoint(algo.low, algo.high), label: 'corpus model' }
@@ -772,6 +800,48 @@ async function EstimatesTab({
           <CardContent className="text-muted-foreground p-6 text-sm">
             No estimate computed yet — hit <strong>Rebuild</strong> in the
             header.
+          </CardContent>
+        </Card>
+      )}
+
+      {v2 && (
+        <Card>
+          <CardContent className="flex flex-col gap-1 p-6 text-sm">
+            <p className="font-semibold">
+              V2 model ({v2.version}) — computed live, public at the next
+              rebuild
+            </p>
+            {v2Decides && v2.units ? (
+              <p>
+                <strong>{compact(v2.units)}</strong>
+                {v2.low !== null && v2.high !== null
+                  ? ` (${fmtRange(v2.low, v2.high)})`
+                  : ''}{' '}
+                · {V2_BASIS[v2.basis ?? ''] ?? v2.basis}
+              </p>
+            ) : (
+              <p>
+                <strong>Not estimated</strong> ·{' '}
+                {v2.status === 'estimated'
+                  ? 'no signal: under 10 Steam reviews, no console rating, no published figure'
+                  : (V2_STATUS[v2.status] ?? v2.status)}
+              </p>
+            )}
+            <p className="text-muted-foreground">
+              Model alone: {v2.modelUnits !== null ? compact(v2.modelUnits) : '—'}{' '}
+              total, {v2.modelPc !== null ? compact(v2.modelPc) : '—'} on PC ·
+              consoles from store ratings:{' '}
+              {v2.consoleUnits ? compact(v2.consoleUnits) : '—'} · Steam
+              reviews: {v2.steamReviews ?? '—'}
+            </p>
+            <p className="text-muted-foreground">
+              Last published total:{' '}
+              {v2.anchorUnits !== null
+                ? `${compact(v2.anchorUnits)} on ${v2.anchorDate?.slice(0, 10)}`
+                : '—'}{' '}
+              · best published figure:{' '}
+              {v2.bestPublished !== null ? compact(v2.bestPublished) : '—'}
+            </p>
           </CardContent>
         </Card>
       )}

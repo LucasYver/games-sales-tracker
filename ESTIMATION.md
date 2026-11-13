@@ -191,8 +191,8 @@ splits are kept beside it.
 
 `GamesService.latestEstimates` prefers the latest `aggregated` row per
 platform, then any other latest row if no aggregate exists. It returns the
-GLOBAL `ml-ensemble` row apart (§6), and only when it belongs to the same
-batch as the platform rows.
+GLOBAL worldwide row apart (`ml-v2`, or `ml-ensemble` on a batch from before
+the V2; §6), and only when it belongs to the same batch as the platform rows.
 
 Adding a method means a migration that inserts `estimation_method` **and**
 a producer in `EstimationService`. A row with `isEnabled = false` is ignored
@@ -200,39 +200,47 @@ even if the code emits the tag.
 
 ## 6. Headline vs declared figure
 
-> `GamesService.aggregateSales` / `reconcile` / `buildTotal`; ML estimate in
-> `backend/src/estimation/ml/`.
+> `GamesService.aggregateSales` / `reconcile` / `buildTotal`; worldwide V2
+> estimate in `backend/src/estimation/ml2/`.
 
 `milestonesAsOf` loads **GLOBAL**, non-engagement milestones only.
 
 - **Platform sum** = sum of per-platform aggregate ranges. Its displayed
   figure is the midpoint.
-- **Worldwide ML estimate** (`MlEstimateService`, method `ml-ensemble`,
-  platform GLOBAL): the model chosen in `ml/` (random forest + ridge, mean
-  in log space), frozen by `ml/freeze.py` into
-  `estimation/ml/ensemble-model.json` (v1.5: the v1.1 inputs, trained on the
-  cleaned figures of games released since 2017, with neighbour features from
-  the weighted-tag matcher; a platform figure of a game sold on that platform
-  only counts as worldwide, except the Steam leak). Its inputs mirror
-  `ml/features.py`: signals at the date, game fields, the matcher profile
-  with the game itself held out (as in training), and the series / developer
-  track record — the best real worldwide figure published by the date for
-  an earlier game of the same `franchiseSlug` / developer (same
-  single-platform rule, mirrored in `ml/snapshot.py` `as_worldwide`). Range =
-  `estimate ÷ k → estimate × k` with `k = halfWidthFactor` from the JSON.
-  `persistEstimates` stores it, in the same batch, only where
-  `mlEstimateApplies`: platform-sum midpoint ≥ `ML_MIN_SITE_UNITS` (300k)
-  **and** ≥ `ML_MIN_STEAM_REVIEWS` (1,000) Steam reviews at the date. The
-  model only saw games that publish their sales; outside that zone it
-  overshoots by ×10 or more (`ml/README.md`).
-- The ML estimate starts `ML_MIN_DAYS_AFTER_RELEASE` (3) days after the PC
-  release; before, the platform sum stays. It is the model at the date, so it
-  may go down when new data corrects it. A switch between the platform sum and
-  the ML estimate can also move the figure either way.
-- The admin estimate tab explains it (`MlEstimateService.explain`): why it
-  is shown or not, the inputs, the exact split of the estimate by family of
-  inputs (forest: value moves along each tree's path; ridge: coefficient ×
-  standardised input).
+- **Worldwide V2 estimate** (`V2EstimateService`, method `ml-v2`, platform
+  GLOBAL): the model frozen in `ml2/` by `ml2/freeze.py` into
+  `estimation/ml2/v2-frozen.json` (v2.0: two gradient-boosted models, sales
+  and sales per Steam review, trained on the kept figures of games released
+  since 2017), then the rules of `estimation/ml2/v2-estimate.ts`:
+  1. a game that published a worldwide total is **anchored** on its last one:
+     that figure × the growth of its Steam reviews since (the growth of the
+     model's answer when it has no reviews to follow), never below the
+     figure;
+  2. otherwise the model's total stands, raised to console sales (store
+     ratings × a coefficient) + the model's PC sales when that is higher;
+     under 10 Steam reviews the console sales stand alone;
+  3. a published platform figure is a floor;
+  4. with no signal, or for a game excluded by hand in the frozen file
+     (`exclusions`: Call of Duty, EA Sports yearly series…), there is no
+     estimate.
+  Inputs, rules and numbers are owned by `ml2/README.md`; the backend mirrors
+  them (`v2-inputs.ts`, `v2-features.ts`, `v2-model.ts`, `v2-estimate.ts`,
+  `v2-catalog.ts`) and three scripts check the mirror against the lab
+  (`scripts/check-ml2-*.ts`). `persistV2Estimate` stores it at every rebuild,
+  in the same batch, for every released game in scope:
+  `sales_estimate.estimatedUnits` is the estimate, `estimatedLow/High` its
+  range, and `estimatedUnits = 0` marks a game the V2 does not estimate.
+- This is the one place where a declared figure moves the headline: the V2
+  anchors on the game's own last published total. The platform methods still
+  ignore declared figures.
+- A batch computed before the V2 keeps its `ml-ensemble` row (the v1.5 model
+  of `ml/`, stored only where the platform-sum midpoint was ≥ 300k with
+  ≥ 1,000 Steam reviews) until the game's next rebuild; no backfill (skill
+  `let-crons-catch-up`). `MlEstimateService` is no longer called by a
+  rebuild; the admin still shows its explanation.
+- The admin estimate tab shows the V2 computed live (`v2` of the breakdown
+  endpoint): how the estimate is reached, the model alone, the console
+  sales, the anchor.
 - **Scope:** the public API publishes no estimate for games released before
   2017 (`estimateOutOfScope` on `game.releaseDate`, `games/estimate-scope.ts`):
   no headline, platform lines or history, and they rank last when sorting by
@@ -246,17 +254,20 @@ even if the code emits the tag.
   so the first figure appears at the next weekly rebuild following the
   release. The game page says "not out yet", then "estimate in progress" for
   up to 30 days. Pre-launch estimates stay visible in the admin.
-- `estimatedToday` = the ML range when the batch has an `ml-ensemble` row,
-  else the platform sum. It carries `units`, the figure to display: the ML
-  estimate itself (never the midpoint of its range, which would overstate
-  it by ~40 %) or the platform-sum midpoint. It is `headline` on the public
+- `estimatedToday` = the V2 range when the batch has an `ml-v2` row, with
+  or without platform rows; nothing when that row says "not estimated"
+  (`estimateUnavailable` on the public game payload: the page shows "Not
+  estimated", with no platform line); the platform sum only when the batch
+  has no worldwide row. It carries `units`, the figure to display: the V2
+  estimate itself (`estimatedUnits`, never the midpoint of its range) or the
+  platform-sum midpoint. It is `headline` on the public
   game payload; `estimate_snapshot` stores the range and
   `estimatedTodayUnits`, which listing cards and the sales ranking use.
-- With the ML headline, every platform line of the breakdown is scaled by
+- With a worldwide headline, every platform line of the breakdown is scaled by
   the same factor so that the platform midpoints add up to `units`.
 - `reconciliation` adds one GLOBAL entry comparing `estimatedToday` to the
   **largest** declared units (`isMoreAuthoritative`); `estimateMethod` is
-  `ml-ensemble` or `platform-sum`, `ratio = units / declared`. Agreement
+  `ml-v2`, `ml-ensemble` or `platform-sum`, `ratio = units / declared`. Agreement
   does not change the estimate.
 - `totalSales` is different: when any GLOBAL milestone exists it is the
   **latest-dated** figure (`isLater`), with confidence derived from
@@ -298,7 +309,7 @@ on Xbox, and the ratio grows with the game's size. There is no `BACKLOG.md`.
 | ------ | --------- | ------------- |
 | `SignalSnapshot` | `capturedAt` | Raw public counts. `synthetic = true` rows are display-only and never feed an estimate. |
 | `AchievementSnapshot` | `capturedAt` | Unlock sample. Not an estimate input today. |
-| `SalesEstimate` | `computedAt` | Per-method ranges, one `aggregated` row per platform, and one GLOBAL `ml-ensemble` row where §6 applies. Append-only. |
+| `SalesEstimate` | `computedAt` | Per-method ranges, one `aggregated` row per platform, and one GLOBAL worldwide row (`ml-v2`, with `estimatedUnits`; §6). Append-only. |
 | `EstimationMethod` | registry | Code, family, `defaultWeight`, `isEnabled`. |
 | `EstimateSnapshot` | `computedAt` | Frozen `estimatedToday` range, its displayed figure (`estimatedTodayUnits`) and reconciliation JSON. |
 | `Milestone` | `reportedAt` | Dated declared figure. Engagement rows are excluded from the headline. Undated rows are rejected at ingest. |

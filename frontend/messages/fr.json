@@ -141,6 +141,7 @@
     "interestTitle": "Signaux d’audience",
     "officialRecap": "Combien d'exemplaires {name} a-t-il vendus ?",
     "hiddenEstimateNote": "Ce jeu partage ses joueurs et ses notes avec d’autres titres de sa série (launcher et page de store communs) : nos signaux ne le mesurent pas seul, donc nous ne publions pas d’estimation.",
+    "unavailableEstimateNote": "Nous n’avons pas de signaux assez fiables pour estimer les ventes de ce jeu, donc nous ne publions pas d’estimation.",
     "outOfScopeNote": "Notre modèle n’est pas assez fiable pour donner une estimation précise sur les jeux sortis avant 2017.",
     "outOfScopeTitle": "Non estimé",
     "officialRecapLead": "Ce que l'on sait officiellement",

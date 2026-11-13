@@ -3,8 +3,8 @@ name: diagnose-estimate-divergence
 description: >-
   Diagnose why a game's sales estimate diverges from its declared worldwide
   milestone in game-sales-tracker. The headline (estimatedToday) is the
-  matcher-driven model sum (or, for established games, the worldwide ML
-  estimate) and is never adjusted by that milestone. Given one
+  worldwide V2 estimate, anchored on the game's last published total when it
+  has one (the matcher-driven model sum only on a batch from before the V2). Given one
   or more games, recompute Boxleiter, first-week PC, console splits, and the
   aggregate, locate the shared parameter or anchor at fault, and propose a
   fix. Use when the user says an estimate is wrong / "on diverge" / "on est
@@ -22,16 +22,23 @@ Read `ESTIMATION.md` first. It is the contract. This skill is the workflow.
 **aggregated** estimates. Declared milestones do **not** floor, cap, or
 calibrate it.
 
-Exception: where `mlEstimateApplies` (platform-sum midpoint ≥ 300k and
-≥ 1,000 Steam reviews), the headline is the GLOBAL `ml-ensemble` row, and
-`estimatedTodayUnits` is the ML estimate (`ESTIMATION.md` §6). The breakdown
-endpoint returns both: `total` (platform sum) and `ml` (`shown` says which
-one the site displays). The ML figure is absent before J+3, and it can go down
-when new data corrects it. Games released before 2017 show no public estimate
-(skill `estimate-scope-2017`), so a divergence there does not reach the site. A divergence of the ML figure is fixed in `ml/`
-(new snapshot, bench, `freeze.py`, `freeze.py --install`), never by a
-constant; the platform recompute below still explains the split and the
-gate.
+Since the V2 switch (2026-11-13) the headline is the GLOBAL `ml-v2` row of
+the batch (`ESTIMATION.md` §6): `estimatedTodayUnits` is the V2 estimate, and
+the platform sum above only gives the split between platforms (scaled to the
+headline). The V2 **does** use the game's last published worldwide total: it
+anchors on it and never goes below it. So a headline far from a declared
+figure now means the figure is not kept as a total (rejected, third-party
+estimate, a platform figure of a multi-platform game, dated before release),
+or the anchor was prolonged by a large growth of the Steam reviews. The
+breakdown endpoint returns `v2` (computed live: basis, model alone, console
+sales, anchor), `total` (platform sum) and `ml` (the v1.5 model, shown only
+on a game not rebuilt since the switch). A V2 row with `estimatedUnits = 0`
+means "not estimated". The V2 is fixed in `ml2/` (skill `continue-ml-v2`),
+never by a per-game override.
+Games released before 2017 show no public estimate
+(skill `estimate-scope-2017`), so a divergence there does not reach the site.
+The platform recompute below still explains the split between platforms, and
+the whole figure on a game not rebuilt since the switch.
 
 There is no `pureEstimatedToday*`, no `calibratedMultiplier*`, and no
 `genreProfileId`. Those columns were dropped. Do not query them and do not

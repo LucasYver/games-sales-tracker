@@ -339,6 +339,7 @@ function SalesHeadline({ game }: { game: GameDetail }) {
     !upcoming &&
     !game.isFree &&
     !game.estimateOutOfScope &&
+    !game.estimateUnavailable &&
     !units &&
     daysToRelease != null &&
     -daysToRelease <= ESTIMATE_PENDING_DAYS;
@@ -422,13 +423,19 @@ function SalesHeadline({ game }: { game: GameDetail }) {
                 {t('estimatePendingNote', { date: releaseLabel ?? '' })}
               </p>
             </>
-          ) : game.estimateOutOfScope ? (
+          ) : game.estimateOutOfScope || game.estimateUnavailable ? (
             <>
               <p className="mt-1 font-mono text-xl font-bold text-muted-foreground">
                 {t('outOfScopeTitle')}
               </p>
               <p className="mt-1 max-w-[42ch] text-sm text-muted-foreground">
-                {t(game.estimateHidden ? 'hiddenEstimateNote' : 'outOfScopeNote')}
+                {t(
+                  game.estimateHidden
+                    ? 'hiddenEstimateNote'
+                    : game.estimateUnavailable
+                      ? 'unavailableEstimateNote'
+                      : 'outOfScopeNote',
+                )}
               </p>
               <Link
                 href="/methodology"

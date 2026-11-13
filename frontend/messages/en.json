@@ -141,6 +141,7 @@
     "interestTitle": "Audience signals",
     "officialRecap": "How many copies has {name} sold?",
     "hiddenEstimateNote": "This game shares its players and ratings with other titles of its series (a common launcher and store page): our signals cannot measure it alone, so we publish no estimate.",
+    "unavailableEstimateNote": "We do not have signals reliable enough to estimate this game's sales, so we publish no estimate.",
     "outOfScopeNote": "Our model is not reliable enough to give a precise estimate for games released before 2017.",
     "outOfScopeTitle": "Not estimated",
     "officialRecapLead": "Official sales recap",

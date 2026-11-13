@@ -37,6 +37,7 @@ import {
 } from '../estimation/estimation-method.service';
 import { EstimationService } from '../estimation/estimation.service';
 import { ML_METHOD_CODE } from '../estimation/ml/ml-estimate.service';
+import { ML_V2_METHOD_CODE } from '../estimation/ml2/v2-estimate.service';
 import {
   AGREEMENT_GROWTH_PER_YEAR,
   AGREEMENT_OVERSHOOT_RATIO,
@@ -711,7 +712,10 @@ export class GamesService {
     const publisher = game.publisherRecord?.name ?? null;
     const slugOfPublisher = publisher ? studioSlug(publisher) : '';
 
-    const load = (where: FindOptionsWhere<Game>, take: number) =>
+    const load = (
+      where: FindOptionsWhere<Game>,
+      take: number,
+    ): Promise<Game[]> =>
       this.games.find({
         where: { ...where, id: Not(game.id) },
         select: {
@@ -739,14 +743,14 @@ export class GamesService {
             },
             RELATED_GAMES_LIMIT,
           )
-        : [],
+        : ([] as Game[]),
       slugOfStudio && game.developerId
         ? load(
             { developerId: game.developerId },
             // Enough to still fill the list once franchise games are removed.
             RELATED_GAMES_LIMIT * 2,
           )
-        : [],
+        : ([] as Game[]),
       // The publisher has no list on the page, only its hub link, so a count
       // is enough. Counted on its own row, as the studio link is.
       slugOfPublisher && game.publisherId
@@ -1251,18 +1255,20 @@ export class GamesService {
       this.igdbLineage(game),
     ]);
 
-    const { breakdown, total, reconciliation, estimatedToday } = game.isFree
-      ? {
-          breakdown: [],
-          total: null,
-          reconciliation: [],
-          estimatedToday: null,
-        }
-      : this.aggregateSales(
-          visibleMilestones,
-          latestEstimates,
-          game.releaseDate,
-        );
+    const { breakdown, total, reconciliation, estimatedToday, notEstimated } =
+      game.isFree
+        ? {
+            breakdown: [],
+            total: null,
+            reconciliation: [],
+            estimatedToday: null,
+            notEstimated: false,
+          }
+        : this.aggregateSales(
+            visibleMilestones,
+            latestEstimates,
+            game.releaseDate,
+          );
 
     const priceHistory: PublicPricePoint[] = priceRows.map((p) => ({
       capturedAt: p.capturedAt,
@@ -1332,6 +1338,9 @@ export class GamesService {
       estimateOutOfScope: outOfScope,
       // Hidden by hand rather than by the 2017 floor: the page explains why.
       estimateHidden,
+      // In scope and released, but the model gives no estimate (no reliable
+      // signal, or excluded by hand in the frozen model): "Not estimated".
+      estimateUnavailable: notEstimated && !noEstimate,
       awaitingRelease: unreleased,
       estimateSnapshots,
       reviewHistory,
@@ -1733,14 +1742,14 @@ export class GamesService {
         lastMoment,
       );
       estimates += inserted.length;
-      if (inserted.length > 0) {
-        const before = await this.estimateSnapshots.count({
-          where: { gameId },
-        });
-        await this.snapshotReconcile(gameId, lastMoment);
-        const after = await this.estimateSnapshots.count({ where: { gameId } });
-        snapshots += after - before;
-      }
+      // Always: the worldwide V2 estimate may exist without a platform method
+      // (`snapshotReconcile` writes nothing when there is no estimate).
+      const before = await this.estimateSnapshots.count({
+        where: { gameId },
+      });
+      await this.snapshotReconcile(gameId, lastMoment);
+      const after = await this.estimateSnapshots.count({ where: { gameId } });
+      snapshots += after - before;
     }
 
     // --- Full historical replay: recompute EVERY capture moment to rebuild the
@@ -1910,6 +1919,8 @@ export class GamesService {
     total: TotalSales | null;
     reconciliation: ReconciliationEntry[];
     estimatedToday: EstimatedToday | null;
+    /** The V2 model ran and gives no estimate for this game. */
+    notEstimated: boolean;
   } {
     // Milestones are worldwide totals only — there is no per-platform
     // declared figure anymore, so every milestone is a global milestone and
@@ -1931,13 +1942,8 @@ export class GamesService {
       null,
     );
 
-    const { reconciliation, estimatedToday, usesMl } = this.reconcile(
-      bestByPlatform,
-      estimates,
-      bestGlobal,
-      releaseDate,
-      asOf,
-    );
+    const { reconciliation, estimatedToday, usesMl, notEstimated } =
+      this.reconcile(bestByPlatform, estimates, bestGlobal, releaseDate, asOf);
     // Headline-level cross-check: how the Boxleiter-derived "today" estimate
     // sits relative to the most reliable global declared figure. Used to
     // adjust the headline confidence (boost when corroborated, drop on
@@ -1954,7 +1960,8 @@ export class GamesService {
     // When the headline is the ML estimate, the platform methods still give
     // the split: every platform range is scaled by the same factor, so the
     // platform figures (midpoints) add up to the headline.
-    const platformRows = [...estimates.byPlatform].filter(
+    // A game the V2 does not estimate shows no platform line either.
+    const platformRows = (notEstimated ? [] : [...estimates.byPlatform]).filter(
       ([platform]) => !bestByPlatform.has(platform),
     );
     const platformUnits = platformRows.reduce(
@@ -1985,6 +1992,7 @@ export class GamesService {
       total: this.buildTotal(breakdown, globalMilestones, globalAgreement),
       reconciliation,
       estimatedToday,
+      notEstimated,
     };
   }
 
@@ -2004,6 +2012,7 @@ export class GamesService {
     reconciliation: ReconciliationEntry[];
     estimatedToday: EstimatedToday | null;
     usesMl: boolean;
+    notEstimated: boolean;
   } {
     const reconciliation: ReconciliationEntry[] = [];
     let todayLow = 0;
@@ -2092,18 +2101,26 @@ export class GamesService {
       }
     }
 
-    // The worldwide ML estimate, when the batch has one, replaces the platform
-    // sum: it is only stored where the model was validated (see
-    // `mlEstimateApplies`). Its single figure is the geometric midpoint of
-    // estimate ÷/× factor, i.e. the estimate itself.
-    const usesMl = hasToday && ml !== null;
-    const today =
-      usesMl && ml
+    // The worldwide estimate of the batch, when it has one, replaces the
+    // platform sum. A V2 row (`ml-v2`) is the displayed figure for every game
+    // it estimates, with or without a platform method; its `estimatedUnits`
+    // is the estimate, and 0 there means the V2 gives none: nothing is shown.
+    // A batch computed before the V2 still carries the v1.5 row
+    // (`ml-ensemble`), stored only where it applied; its figure is the
+    // geometric midpoint of estimate ÷/× factor, i.e. the estimate itself.
+    const isV2 = ml !== null && ml.method === ML_V2_METHOD_CODE;
+    const notEstimated = isV2 && !((ml?.estimatedUnits ?? 0) > 0);
+    const usesMl = ml !== null && !notEstimated && (isV2 || hasToday);
+    const today = notEstimated
+      ? null
+      : usesMl && ml
         ? {
             low: ml.estimatedLow,
             high: ml.estimatedHigh,
-            units: Math.sqrt(ml.estimatedLow * ml.estimatedHigh),
-            method: ML_METHOD_CODE,
+            units: isV2
+              ? (ml.estimatedUnits as number)
+              : Math.sqrt(ml.estimatedLow * ml.estimatedHigh),
+            method: isV2 ? ML_V2_METHOD_CODE : ML_METHOD_CODE,
           }
         : hasToday
           ? {
@@ -2114,11 +2131,12 @@ export class GamesService {
             }
           : null;
 
-    // A worldwide declared figure (e.g. "30M copies sold worldwide") no longer
-    // adjusts the headline estimate: the estimate reflects the corpus model
-    // alone. The declared figure is surfaced purely as a reconciliation entry
-    // (informational cross-check) and still drives `buildTotal`'s reported
-    // headline, but it never floors or caps `estimatedToday`.
+    // A worldwide declared figure (e.g. "30M copies sold worldwide") is not
+    // applied here: the V2 estimate already anchors on the game's last
+    // published total (`estimation/ml2/v2-estimate.ts`), and the platform sum
+    // ignores declared figures. The declared figure is surfaced as a
+    // reconciliation entry (informational cross-check) and still drives
+    // `buildTotal`'s reported headline.
     if (globalDeclared && today) {
       const cls = this.classifyAgreement(
         globalDeclared.units,
@@ -2152,6 +2170,7 @@ export class GamesService {
         units: today.units,
       },
       usesMl,
+      notEstimated,
     };
   }
 
@@ -2415,6 +2434,7 @@ export class GamesService {
       AGGREGATED_METHOD_CODE,
     );
     const mlMethod = this.estimationMethods.findByCode(ML_METHOD_CODE);
+    const v2Method = this.estimationMethods.findByCode(ML_V2_METHOD_CODE);
 
     const estimates = await this.estimates.find({
       where: {
@@ -2434,7 +2454,11 @@ export class GamesService {
     const fallbackByPlatform = new Map<Platform, SalesEstimate>();
     let ml: SalesEstimate | null = null;
     for (const estimate of estimates) {
-      if (mlMethod && estimate.methodId === mlMethod.id) {
+      // The worldwide row of the batch: V2, or v1.5 on a batch from before it.
+      if (
+        (mlMethod && estimate.methodId === mlMethod.id) ||
+        (v2Method && estimate.methodId === v2Method.id)
+      ) {
         ml ??= estimate;
         continue;
       }
@@ -2487,10 +2511,9 @@ export class GamesService {
       .addSelect('s.estimatedTodayUnits', 'units')
       .innerJoin(Game, 'g', 'g.id = s.gameId')
       .where('s.gameId IN (:...gameIds)', { gameIds })
-      .andWhere(
-        estimatePublicSql('g'),
-        { estimateMinRelease: ESTIMATE_MIN_RELEASE },
-      )
+      .andWhere(estimatePublicSql('g'), {
+        estimateMinRelease: ESTIMATE_MIN_RELEASE,
+      })
       .andWhere(computedAfterReleaseSql('g', 's."computedAt"'))
       .orderBy('s.gameId')
       .addOrderBy('s.computedAt', 'DESC')

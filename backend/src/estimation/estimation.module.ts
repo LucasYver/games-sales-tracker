@@ -11,6 +11,7 @@ import {
 import { EstimationMethodService } from './estimation-method.service';
 import { EstimationService } from './estimation.service';
 import { MlEstimateService } from './ml/ml-estimate.service';
+import { V2EstimateService } from './ml2/v2-estimate.service';
 import { ReferenceProfilesModule } from '../reference-profiles/reference-profiles.module';
 
 @Module({
@@ -27,7 +28,17 @@ import { ReferenceProfilesModule } from '../reference-profiles/reference-profile
     // GenresModule for the baseline path.
     ReferenceProfilesModule,
   ],
-  providers: [EstimationService, EstimationMethodService, MlEstimateService],
-  exports: [EstimationService, EstimationMethodService, MlEstimateService],
+  providers: [
+    EstimationService,
+    EstimationMethodService,
+    MlEstimateService,
+    V2EstimateService,
+  ],
+  exports: [
+    EstimationService,
+    EstimationMethodService,
+    MlEstimateService,
+    V2EstimateService,
+  ],
 })
 export class EstimationModule {}

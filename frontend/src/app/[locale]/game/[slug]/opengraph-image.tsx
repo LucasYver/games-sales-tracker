@@ -45,7 +45,8 @@ export default async function Image({
       ? t('free')
       : isUpcoming(game.releaseDate)
         ? t('upcoming')
-        : units == null && game.estimateOutOfScope
+        : units == null &&
+            (game.estimateOutOfScope || game.estimateUnavailable)
         ? t('notEstimated')
         : null;
   const platforms = (game?.platforms ?? [])

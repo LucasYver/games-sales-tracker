@@ -29,6 +29,11 @@ export class SalesEstimate {
   @Column('int')
   estimatedHigh: number;
 
+  // The estimate itself, on the worldwide V2 row only (`ml-v2`): its range is
+  // not always symmetric around it. 0 there means "not estimated".
+  @Column('int', { nullable: true })
+  estimatedUnits: number | null;
+
   // Canonical method this estimate was produced by, looked up by `code`
   // in `estimation_method`. The legacy free-form `method` string below
   // remains for backward compatibility and carries dynamic modifier

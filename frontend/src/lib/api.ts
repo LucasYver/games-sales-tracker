@@ -167,6 +167,8 @@ export interface GameDetail {
   estimateOutOfScope: boolean;
   /** Hidden by hand: its public signals do not measure the game alone. */
   estimateHidden?: boolean;
+  /** In scope and released, but the model gives no estimate for this game. */
+  estimateUnavailable?: boolean;
   /** Release date still ahead: no sales figure until launch. */
   awaitingRelease?: boolean;
   estimateSnapshots: PublicEstimateSnapshot[];

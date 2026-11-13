@@ -20,7 +20,10 @@ import { type ResolvedGenreProfile } from '../reference-profiles/sales-profile-r
 import { SalesProfileResolverService } from '../reference-profiles/sales-profile-resolver.service';
 import { reconstructPsCurveMonthly } from './ps-curve-reconstruction';
 import {
-  ML_METHOD_CODE,
+  ML_V2_METHOD_CODE,
+  V2EstimateService,
+} from './ml2/v2-estimate.service';
+import {
   mlEstimateApplies,
   MlEstimateService,
   type MlExplanation,
@@ -148,6 +151,26 @@ export interface EstimateBreakdownResult {
    * when it is the figure the site displays (`mlEstimateApplies`).
    */
   ml: { low: number; high: number; units: number; shown: boolean } | null;
+  /**
+   * Worldwide V2 estimate (`V2EstimateService`), computed live: the figure
+   * the site displays from the game's next rebuild on. `units` is null when
+   * the V2 gives no estimate (the site then shows "Not estimated").
+   */
+  v2: {
+    version: string;
+    status: string;
+    basis: string | null;
+    units: number | null;
+    low: number | null;
+    high: number | null;
+    modelUnits: number | null;
+    modelPc: number | null;
+    consoleUnits: number | null;
+    steamReviews: number | null;
+    anchorUnits: number | null;
+    anchorDate: string | null;
+    bestPublished: number | null;
+  } | null;
   /** How the ML estimate was computed (inputs, split by family). */
   mlExplanation: MlExplanation | null;
   /** Released before the estimate scope: the public site shows no estimate. */
@@ -224,6 +247,7 @@ export class EstimationService {
     private readonly methods: EstimationMethodService,
     private readonly salesProfile: SalesProfileResolverService,
     private readonly mlEstimate: MlEstimateService,
+    private readonly v2Estimate: V2EstimateService,
   ) {
     this.platforms = [
       {
@@ -309,9 +333,10 @@ export class EstimationService {
     asOf: Date,
   ): Promise<EstimateResult[]> {
     const results = await this.estimateAllPlatforms(gameId, asOf);
-    if (results.length === 0) return [];
-
-    await this.persistEstimates(gameId, results, asOf);
+    // The worldwide V2 estimate does not need a platform method to answer
+    // (a game anchored on its published total, console ratings alone).
+    if (results.length === 0) await this.persistV2Estimate(gameId, asOf);
+    else await this.persistEstimates(gameId, results, asOf);
     return results;
   }
 
@@ -362,43 +387,42 @@ export class EstimationService {
 
     if (aggregateRows.length > 0) {
       await this.estimates.save(aggregateRows);
-      await this.persistMlEstimate(gameId, aggregateRows, asOf);
     }
+    await this.persistV2Estimate(gameId, asOf);
   }
 
   /**
-   * Worldwide ML estimate (`MlEstimateService`), stored as a GLOBAL row at the
-   * same `computedAt` as the per-platform batch, and only where
-   * `mlEstimateApplies` to this batch's platform sum: the row's presence is
-   * what makes it the displayed figure. A failure is logged and leaves the
-   * site on the platform sum.
+   * Worldwide V2 estimate (`V2EstimateService`), stored as a GLOBAL row at the
+   * same `computedAt` as the per-platform batch: the row's presence is what
+   * makes it the displayed figure. `estimatedUnits` = 0 marks a game the V2
+   * does not estimate (no signal, or excluded by hand): the site then shows
+   * "Not estimated". No row for a game out of scope or not released: the
+   * site already handles those. A failure is logged and leaves the site on
+   * the platform sum.
    */
-  private async persistMlEstimate(
-    gameId: string,
-    aggregateRows: SalesEstimate[],
-    asOf?: Date,
-  ): Promise<void> {
-    const siteUnits = aggregateRows.reduce(
-      (sum, r) => sum + (r.estimatedLow + r.estimatedHigh) / 2,
-      0,
-    );
+  private async persistV2Estimate(gameId: string, asOf?: Date): Promise<void> {
     try {
-      const ml = await this.mlEstimate.estimate(gameId, asOf);
-      if (!ml || !mlEstimateApplies(siteUnits, ml.steamReviews)) return;
+      const v2 = await this.v2Estimate.estimate(gameId, asOf);
+      if (!v2 || (v2.status !== 'estimated' && v2.status !== 'excluded')) {
+        return;
+      }
+      const units = v2.estimate?.units ?? null;
+      const answered = units !== null && Math.round(units) > 0;
       await this.estimates.save(
         this.estimates.create({
           gameId,
           platform: Platform.GLOBAL,
-          estimatedLow: Math.round(ml.low),
-          estimatedHigh: Math.round(ml.high),
-          method: ML_METHOD_CODE,
-          methodId: this.methods.requireByCode(ML_METHOD_CODE).id,
+          estimatedLow: answered ? Math.round(v2.estimate!.low!) : 0,
+          estimatedHigh: answered ? Math.round(v2.estimate!.high!) : 0,
+          estimatedUnits: answered ? Math.round(units) : 0,
+          method: ML_V2_METHOD_CODE,
+          methodId: this.methods.requireByCode(ML_V2_METHOD_CODE).id,
           ...(asOf ? { computedAt: asOf } : {}),
         }),
       );
     } catch (err) {
       this.logger.error(
-        `ML estimate failed for game ${gameId}: ${(err as Error).message}`,
+        `V2 estimate failed for game ${gameId}: ${(err as Error).message}`,
       );
     }
   }
@@ -1189,6 +1213,11 @@ export class EstimationService {
       select: { id: true, releaseDate: true, estimateHidden: true },
     });
     const hiddenOnSite = game ? estimateNotPublic(game) : false;
+    const v2 = await this.v2Estimate.estimate(gameId).catch(() => null);
+    // The V2 decides what the site shows as soon as it answers for the game.
+    const v2Decides = v2?.status === 'estimated' || v2?.status === 'excluded';
+    const round = (n: number | null | undefined) =>
+      n === null || n === undefined ? null : Math.round(n);
 
     return {
       computedAt,
@@ -1202,12 +1231,28 @@ export class EstimationService {
               units: Math.round(ml.units),
               shown:
                 !hiddenOnSite &&
+                !v2Decides &&
                 mlEstimateApplies(
                   (total.low + total.high) / 2,
                   mlExplanation?.steamReviews ?? null,
                 ),
             }
           : null,
+      v2: v2 && {
+        version: this.v2Estimate.version,
+        status: v2.status,
+        basis: v2.estimate?.basis ?? null,
+        units: round(v2.estimate?.units),
+        low: round(v2.estimate?.low),
+        high: round(v2.estimate?.high),
+        modelUnits: round(v2.model?.units),
+        modelPc: round(v2.modelPc),
+        consoleUnits: round(v2.estimate?.consoleUnits),
+        steamReviews: round(v2.steamReviews),
+        anchorUnits: v2.anchor?.units ?? null,
+        anchorDate: v2.anchor?.reportedAt.toISOString() ?? null,
+        bestPublished: v2.bestPublished,
+      },
       mlExplanation,
       hiddenOnSite,
       declared: bestDeclared
