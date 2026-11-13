@@ -1160,6 +1160,7 @@ function TabNav({
               cc,
               store,
             })}
+            scroll={false}
             aria-current={on ? 'page' : undefined}
             className={`border px-2 py-1.5 font-mono text-[0.7rem] tracking-wide whitespace-nowrap uppercase ${
               on

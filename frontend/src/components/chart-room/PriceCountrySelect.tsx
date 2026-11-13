@@ -53,7 +53,9 @@ export function PriceCountrySelect({
       if (!countries.some((c) => c.country === stored)) return;
       const params = new URLSearchParams(searchParams.toString());
       params.set('cc', stored);
-      router.replace(`${pathname}?${params.toString()}` as never);
+      router.replace(`${pathname}?${params.toString()}` as never, {
+        scroll: false,
+      });
     } catch {
       /* private mode */
     }
@@ -102,7 +104,9 @@ export function PriceCountrySelect({
     }
     const params = new URLSearchParams(searchParams.toString());
     params.set('cc', country);
-    router.replace(`${pathname}?${params.toString()}` as never);
+    router.replace(`${pathname}?${params.toString()}` as never, {
+      scroll: false,
+    });
   };
 
   return (
@@ -163,7 +167,9 @@ export function PriceStoreSelect({
   const apply = (store: PriceStore) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set('store', store);
-    router.replace(`${pathname}?${params.toString()}` as never);
+    router.replace(`${pathname}?${params.toString()}` as never, {
+      scroll: false,
+    });
   };
 
   return (
