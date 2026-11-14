@@ -33,20 +33,27 @@ export default async function AdminSocialPage({
   await requireAdminSession();
   const { status: raw } = await searchParams;
   const status = TABS.find((t) => t.id === raw)?.id ?? 'DRAFT';
-  const { posts, threadsReady } = await adminFetch<AdminSocialList>(
+  const { posts, threadsReady, xReady } = await adminFetch<AdminSocialList>(
     `/social?status=${status}`,
   );
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-5 px-6 py-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Threads</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Threads &amp; X</h1>
         <p className="text-muted-foreground mt-1 text-sm">
           The daily <code>social-drafts</code> cron drafts English posts from
           new blog articles and new GTA 6 figures, and on Mondays from the
-          week&apos;s trends and the MW4 comparison. Nothing is posted until
-          you click Publish.
+          week&apos;s trends and the MW4 comparison. Publish posts on Threads
+          (with a link preview) and on X (short version, no link: a link costs
+          about 13 times more on the X API). Nothing is posted until you click
+          Publish.
         </p>
+        {!xReady && (
+          <p className="text-muted-foreground mt-2 text-sm">
+            X API keys are not set: posts go to Threads only.
+          </p>
+        )}
         {!threadsReady && (
           <p className="text-destructive mt-2 text-sm">
             THREADS_ACCESS_TOKEN is not set: drafts are written, but nothing
@@ -94,11 +101,32 @@ export default async function AdminSocialPage({
                   View on Threads
                 </a>
               )}
+              {post.xExternalUrl && (
+                <a
+                  href={post.xExternalUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline"
+                >
+                  View on X
+                </a>
+              )}
             </div>
             {post.status === 'DRAFT' ? (
-              <SocialPostEditor post={post} threadsReady={threadsReady} />
+              <SocialPostEditor
+                post={post}
+                threadsReady={threadsReady}
+                xReady={xReady}
+              />
             ) : (
-              <p className="whitespace-pre-wrap text-sm">{post.text}</p>
+              <>
+                <p className="whitespace-pre-wrap text-sm">{post.text}</p>
+                {post.xText && (
+                  <p className="text-muted-foreground whitespace-pre-wrap text-sm">
+                    X: {post.xText}
+                  </p>
+                )}
+              </>
             )}
             <p className="text-sm">
               Link preview:{' '}

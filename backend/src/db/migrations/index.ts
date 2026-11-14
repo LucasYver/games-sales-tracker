@@ -79,6 +79,7 @@ import { AddGameEstimateHidden1788960000000 } from './1788960000000-AddGameEstim
 import { AddInstantGamingSource1788970000000 } from './1788970000000-AddInstantGamingSource';
 import { AddMlV2Estimate1788980000000 } from './1788980000000-AddMlV2Estimate';
 import { AddSocialPost1789000000000 } from './1789000000000-AddSocialPost';
+import { AddSocialPostX1789010000000 } from './1789010000000-AddSocialPostX';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -169,4 +170,5 @@ export const migrations: MixedList<Function | string> = [
   AddInstantGamingSource1788970000000,
   AddMlV2Estimate1788980000000,
   AddSocialPost1789000000000,
+  AddSocialPostX1789010000000,
 ];

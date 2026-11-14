@@ -457,11 +457,11 @@ export async function updateBlogTranslation(
 
 export async function updateSocialPost(
   id: string,
-  text: string,
+  edit: { text?: string; xText?: string },
 ): Promise<AdminSocialPost> {
   const result = await adminFetch<AdminSocialPost>(`/social/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ text }),
+    body: JSON.stringify(edit),
   });
   revalidatePath('/admin/social');
   return result;

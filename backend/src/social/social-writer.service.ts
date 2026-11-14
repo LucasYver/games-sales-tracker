@@ -5,6 +5,8 @@ import type { SocialPostKind } from '../entities';
 
 /** Threads allows 500 characters; the rest is headroom for admin edits. */
 export const SOCIAL_MAX_CHARS = 480;
+/** X allows 280; emojis and some characters count double there. */
+export const X_MAX_CHARS = 260;
 
 const ANGLE: Record<SocialPostKind, string> = {
   BLOG_ARTICLE:
@@ -20,12 +22,13 @@ const ANGLE: Record<SocialPostKind, string> = {
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['text'],
-  properties: { text: { type: 'string' } },
+  required: ['text', 'xText'],
+  properties: { text: { type: 'string' }, xText: { type: 'string' } },
 };
 
 /**
- * Writes one English Threads post from code-written facts. The cheapest model
+ * Writes one English post from code-written facts, in two lengths: Threads
+ * (`text`) and X (`xText`). The cheapest model
  * that holds the rules (`SOCIAL_WRITER_MODEL`); every number it writes is
  * checked against the facts, with one revision pass when one is not.
  */
@@ -49,32 +52,29 @@ export class SocialWriterService {
   async write(
     kind: SocialPostKind,
     facts: string[],
-  ): Promise<{ text: string; unverifiedNumbers: string[] }> {
-    let text = await this.call(userPrompt(kind, facts));
-    let unverified = unverifiedNumbers(text, facts);
-    if (unverified.length > 0 || text.length > SOCIAL_MAX_CHARS) {
+  ): Promise<{ text: string; xText: string; unverifiedNumbers: string[] }> {
+    let post = await this.call(userPrompt(kind, facts));
+    let problems = postProblems(post, facts);
+    if (problems.length > 0) {
       try {
-        text = await this.call(
-          `${userPrompt(kind, facts)}\n\nYour previous post:\n${text}\n\nFix it: ${[
-            unverified.length
-              ? `these numbers are not in the facts: ${unverified.join(', ')}`
-              : '',
-            text.length > SOCIAL_MAX_CHARS
-              ? `it has ${text.length} characters, the limit is ${SOCIAL_MAX_CHARS}`
-              : '',
-          ]
-            .filter(Boolean)
-            .join('; ')}.`,
+        post = await this.call(
+          `${userPrompt(kind, facts)}\n\nYour previous answer:\n${JSON.stringify(post)}\n\nFix it: ${problems.join('; ')}.`,
         );
-        unverified = unverifiedNumbers(text, facts);
+        problems = postProblems(post, facts);
       } catch (error) {
         this.logger.warn(`Social revision pass failed: ${error}`);
       }
     }
-    return { text, unverifiedNumbers: unverified };
+    return {
+      ...post,
+      unverifiedNumbers: unverifiedNumbers(
+        `${post.text}\n${post.xText}`,
+        facts,
+      ),
+    };
   }
 
-  private async call(user: string): Promise<string> {
+  private async call(user: string): Promise<{ text: string; xText: string }> {
     if (!this.openai) throw new Error('OPENAI_API_KEY is not set');
     const response = await this.openai.responses.create({
       model: this.model,
@@ -97,21 +97,25 @@ export class SocialWriterService {
     );
     const parsed = JSON.parse(response.output_text || '{}') as {
       text?: string;
+      xText?: string;
     };
-    return (parsed.text ?? '').trim();
+    return {
+      text: (parsed.text ?? '').trim(),
+      xText: (parsed.xText ?? '').trim(),
+    };
   }
 }
 
-const SYSTEM = `You write posts for the Threads account of Game Sales Tracker, a site that estimates video game sales from public data.
+const SYSTEM = `You write posts for the Threads and X accounts of Game Sales Tracker, a site that estimates video game sales from public data.
 
-Rules:
 Write like a person who follows game sales closely and shares what they found, not like a press release.
 
 Shape:
 - The first line is the hook and must stand alone in a feed: a short question ("How many copies has Hades II sold?") or the striking figure itself. Never open with "Our new article", "Check out", "We" or the site's name.
 - Then 1 to 3 short lines with the facts, each on its own line. Short sentences, active voice.
 - You may end with one short question to the reader when it fits naturally (e.g. "Did you expect that?"). Not every time.
-- English, at most ${SOCIAL_MAX_CHARS} characters in total, usually 150 to 300.
+- English. \`text\` (Threads): at most ${SOCIAL_MAX_CHARS} characters, usually 150 to 300.
+- \`xText\` (X): the same post, shorter: at most ${X_MAX_CHARS} characters, same hook, same facts, no emoji.
 
 Truth:
 - Use only the facts given. No outside knowledge, no guesses, no arithmetic (no sums, differences, percentages or growth you compute yourself).
@@ -119,12 +123,36 @@ Truth:
 - Say who reported a figure. A figure labelled as an estimate must be called an estimate. Steam reviews and players are popularity, never sales.
 
 Never:
-- a URL (the link preview is attached under the post), hashtags, hype words ("insane", "massive", "huge"), more than one emoji;
+- a URL (Threads shows a link preview under the post; the X profile carries the link), hashtags, hype words ("insane", "massive", "huge"), more than one emoji;
 - describe the article or the page ("covers", "looks at", "read more", "link below");
 - mention AI or how the post was written.`;
 
 function userPrompt(kind: SocialPostKind, facts: string[]): string {
-  return `${ANGLE[kind]}\n\nFacts:\n${facts.map((f) => `- ${f}`).join('\n')}\n\nReturn {"text": "..."}.`;
+  return `${ANGLE[kind]}\n\nFacts:\n${facts.map((f) => `- ${f}`).join('\n')}\n\nReturn {"text": "...", "xText": "..."}.`;
+}
+
+function postProblems(
+  post: { text: string; xText: string },
+  facts: string[],
+): string[] {
+  const problems: string[] = [];
+  const unverified = unverifiedNumbers(`${post.text}\n${post.xText}`, facts);
+  if (unverified.length) {
+    problems.push(
+      `these numbers are not in the facts: ${unverified.join(', ')}`,
+    );
+  }
+  if (post.text.length > SOCIAL_MAX_CHARS) {
+    problems.push(
+      `text has ${post.text.length} characters, the limit is ${SOCIAL_MAX_CHARS}`,
+    );
+  }
+  if (!post.xText || post.xText.length > X_MAX_CHARS) {
+    problems.push(
+      `xText has ${post.xText.length} characters, it must be 1 to ${X_MAX_CHARS}`,
+    );
+  }
+  return problems;
 }
 
 const NUMBER = /\d[\d,.]*/g;

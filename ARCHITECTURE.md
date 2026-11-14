@@ -165,7 +165,7 @@ if one is already waiting. Daily `blog-news` writes at most one news item and
 one launch report. Neither publishes.
 
 Daily `social-drafts` refreshes the Threads token weekly and drafts English
-Threads posts (new blog articles, new GTA 6 figures; Mondays also the week's
+posts for Threads and X (new blog articles, new GTA 6 figures; Mondays also the week's
 trends and the MW4 comparison), at most 3 per run. An admin publishes each one
 from `/admin/social`. See the `manage-social-posts` skill.
 

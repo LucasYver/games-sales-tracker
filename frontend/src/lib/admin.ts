@@ -741,11 +741,16 @@ export interface AdminSocialPost {
   topicKey: string;
   status: BlogPostStatus;
   text: string;
+  /** Short, link-free version for X. */
+  xText: string;
   linkUrl: string;
   facts: string[];
   unverifiedNumbers: string[];
   model: string | null;
+  externalId: string | null;
   externalUrl: string | null;
+  xExternalId: string | null;
+  xExternalUrl: string | null;
   publishedAt: string | null;
   lastError: string | null;
   reviewedBy: string | null;
@@ -756,6 +761,8 @@ export interface AdminSocialList {
   posts: AdminSocialPost[];
   /** False until THREADS_ACCESS_TOKEN is set. */
   threadsReady: boolean;
+  /** False until the four X API keys are set. */
+  xReady: boolean;
 }
 
 export interface AdminBlogFreshness {

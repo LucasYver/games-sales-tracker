@@ -57,20 +57,35 @@ export class SocialPost {
   @Column({ type: 'jsonb', default: () => "'[]'" })
   facts: string[];
 
-  // Numbers in `text` that are not in `facts`; recounted on every edit.
+  // The same post for X: at most 280 characters and no link (a post with a
+  // URL costs about 13 times more on the X API). Empty on drafts written
+  // before X was added; Regenerate fills it.
+  @Column({ type: 'text', default: '' })
+  xText: string;
+
+  // Numbers in `text` or `xText` that are not in `facts`; recounted on every
+  // edit.
   @Column({ type: 'jsonb', default: () => "'[]'" })
   unverifiedNumbers: string[];
 
   @Column({ type: 'varchar', nullable: true })
   model: string | null;
 
-  // The network's id and URL once published.
+  // Threads id and URL once posted there.
   @Column({ type: 'varchar', nullable: true })
   externalId: string | null;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
   externalUrl: string | null;
 
+  // X id and URL once posted there.
+  @Column({ type: 'varchar', nullable: true })
+  xExternalId: string | null;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  xExternalUrl: string | null;
+
+  // Set when the post is out on every configured network.
   @Column({ type: 'timestamptz', nullable: true })
   publishedAt: Date | null;
 

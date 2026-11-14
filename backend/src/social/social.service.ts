@@ -19,9 +19,11 @@ import {
   unverifiedNumbers,
 } from './social-writer.service';
 import { ThreadsClient } from './threads.client';
+import { XClient } from './x.client';
 
-/** Threads' own limit on a text post. */
+/** Each network's own limit on a text post. */
 const THREADS_MAX_CHARS = 500;
+const X_LIMIT_CHARS = 280;
 // Drafts written per cron run, and drafts left waiting before the cron stops
 // writing new ones: posts lose their point in a few days.
 const MAX_DRAFTS_PER_RUN = 3;
@@ -68,6 +70,7 @@ export class SocialService {
     private readonly games: GamesService,
     private readonly writer: SocialWriterService,
     private readonly threads: ThreadsClient,
+    private readonly x: XClient,
   ) {}
 
   async list(status: SocialPostStatus, limit = 50) {
@@ -82,43 +85,91 @@ export class SocialService {
       }),
       this.threads.configured(),
     ]);
-    return { posts: rows, threadsReady };
+    return { posts: rows, threadsReady, xReady: this.x.configured };
   }
 
-  async updateText(id: string, text: string) {
+  async updateText(id: string, edit: { text?: string; xText?: string }) {
     const post = await this.requireDraft(id);
-    post.text = text.trim();
-    post.unverifiedNumbers = unverifiedNumbers(post.text, post.facts);
+    if (edit.text !== undefined) post.text = edit.text.trim();
+    if (edit.xText !== undefined) post.xText = edit.xText.trim();
+    post.unverifiedNumbers = unverifiedNumbers(
+      `${post.text}\n${post.xText}`,
+      post.facts,
+    );
     return this.posts.save(post);
   }
 
+  /**
+   * Posts the draft on every configured network it is not on yet (Threads,
+   * then X). A network that fails keeps the post in DRAFT with the error, so
+   * the next Publish retries only what is missing.
+   */
   async publish(id: string, reviewedBy?: string, force = false) {
     const post = await this.requireDraft(id);
-    if (!post.text.trim()) throw new BadRequestException('The post is empty.');
-    if (post.text.length > THREADS_MAX_CHARS) {
-      throw new BadRequestException(
-        `${post.text.length} characters; Threads allows ${THREADS_MAX_CHARS}.`,
-      );
+    const toThreads = !post.externalId;
+    const toX = this.x.configured && !post.xExternalId;
+    if (!toThreads && !toX) {
+      throw new BadRequestException('No network left to post on.');
+    }
+    if (toThreads) {
+      if (!post.text.trim())
+        throw new BadRequestException('The post is empty.');
+      if (post.text.length > THREADS_MAX_CHARS) {
+        throw new BadRequestException(
+          `Threads text: ${post.text.length} characters, the limit is ${THREADS_MAX_CHARS}.`,
+        );
+      }
+    }
+    if (toX) {
+      if (!post.xText.trim()) {
+        throw new BadRequestException(
+          'The X version is empty. Write it, or click Regenerate.',
+        );
+      }
+      if (post.xText.length > X_LIMIT_CHARS) {
+        throw new BadRequestException(
+          `X text: ${post.xText.length} characters, the limit is ${X_LIMIT_CHARS}.`,
+        );
+      }
     }
     if (post.unverifiedNumbers.length > 0 && !force) {
       throw new ConflictException(
         `Numbers not found in the facts: ${post.unverifiedNumbers.join(', ')}. Fix them, or confirm to publish anyway.`,
       );
     }
-    try {
-      const published = await this.threads.publishText(post.text, post.linkUrl);
-      post.status = 'PUBLISHED';
-      post.externalId = published.id;
-      post.externalUrl = published.url;
-      post.publishedAt = new Date();
-      post.reviewedBy = reviewedBy ?? null;
-      post.lastError = null;
-      return await this.posts.save(post);
-    } catch (error) {
-      post.lastError = String(error instanceof Error ? error.message : error);
-      await this.posts.save(post);
-      throw new BadRequestException(post.lastError);
+
+    const errors: string[] = [];
+    if (toThreads) {
+      try {
+        const out = await this.threads.publishText(post.text, post.linkUrl);
+        post.externalId = out.id;
+        post.externalUrl = out.url;
+      } catch (error) {
+        errors.push(
+          `Threads: ${error instanceof Error ? error.message : error}`,
+        );
+      }
     }
+    if (toX) {
+      try {
+        const out = await this.x.publishText(post.xText);
+        post.xExternalId = out.id;
+        post.xExternalUrl = out.url;
+      } catch (error) {
+        errors.push(`X: ${error instanceof Error ? error.message : error}`);
+      }
+    }
+    post.reviewedBy = reviewedBy ?? post.reviewedBy;
+    post.lastError = errors.length ? errors.join(' | ') : null;
+    const done =
+      !!post.externalId && (!this.x.configured || !!post.xExternalId);
+    if (done) {
+      post.status = 'PUBLISHED';
+      post.publishedAt = new Date();
+    }
+    await this.posts.save(post);
+    if (errors.length) throw new BadRequestException(post.lastError);
+    return post;
   }
 
   /** Rewrites a draft from its stored facts (one paid call, two at most). */
@@ -127,11 +178,12 @@ export class SocialService {
     if (!this.writer.enabled) {
       throw new BadRequestException('OPENAI_API_KEY is not set.');
     }
-    const { text, unverifiedNumbers } = await this.writer.write(
+    const { text, xText, unverifiedNumbers } = await this.writer.write(
       post.kind,
       post.facts,
     );
     post.text = text;
+    post.xText = xText;
     post.unverifiedNumbers = unverifiedNumbers;
     post.model = this.writer.model;
     return this.posts.save(post);
@@ -188,7 +240,7 @@ export class SocialService {
   }
 
   private async draft(candidate: Candidate): Promise<SocialPost> {
-    const { text, unverifiedNumbers } = await this.writer.write(
+    const { text, xText, unverifiedNumbers } = await this.writer.write(
       candidate.kind,
       candidate.facts,
     );
@@ -199,6 +251,7 @@ export class SocialService {
         topicKey: candidate.topicKey,
         status: 'DRAFT',
         text,
+        xText,
         linkUrl: candidate.linkUrl,
         facts: candidate.facts,
         unverifiedNumbers,

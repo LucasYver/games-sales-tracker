@@ -448,7 +448,7 @@ export class AdminController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: UpdateSocialPostDto,
   ) {
-    return this.social.updateText(id, body.text);
+    return this.social.updateText(id, body);
   }
 
   @Post('social/:id/publish')

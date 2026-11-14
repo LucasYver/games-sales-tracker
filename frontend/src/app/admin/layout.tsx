@@ -95,7 +95,7 @@ const NAV_ITEMS = [
   },
   {
     href: '/admin/social',
-    label: 'Threads',
+    label: 'Threads & X',
     icon: MessageSquare,
     exact: false,
   },
