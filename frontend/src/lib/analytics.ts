@@ -28,6 +28,11 @@ type Events = {
   price_country_change: { country: string };
   price_store_change: { store: string };
   price_section_open: { section: string };
+  // Game comparison: where a comparison starts, which chart and table
+  // options are used, and how often a comparison is shared.
+  compare_pick: { from: string; game: string };
+  compare_option: { option: string; value: string };
+  link_copy: { page: string };
   // Site preferences
   language_change: { to: string };
   theme_toggle: { theme: string };

@@ -45,6 +45,8 @@ import {
 import { flagEmoji } from '@/lib/flag';
 import { SeriesChart } from '@/components/chart-room/SeriesChart';
 import { Suspense } from 'react';
+import { CompareButton, CompareLink } from '@/components/compare/CompareEntry';
+import { pickerSuggestions, type PickerGame } from '@/lib/compare';
 import { GTA6_PATH, GTA6_SLUG } from '@/lib/gta6';
 import { MW4_PATH, MW4_SLUG } from '@/lib/mw4';
 
@@ -209,9 +211,11 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 function GameHeader({
   game,
   studioHub,
+  compareSuggestions,
 }: {
   game: GameDetail;
   studioHub: RelatedGames['studioHub'];
+  compareSuggestions: PickerGame[];
 }) {
   const t = useTranslations('gamePage');
   const tPlatform = useTranslations('platform');
@@ -221,7 +225,7 @@ function GameHeader({
   const unitsLabel = units ? compactUnits(units, locale) : null;
 
   return (
-    <header className="flex items-start gap-4 border-b border-border px-4 py-4">
+    <header className="flex flex-wrap items-start gap-x-4 gap-y-3 border-b border-border px-4 py-4">
       {game.coverUrl && (
         <div className="relative size-14 shrink-0 overflow-hidden rounded-[3px] bg-muted sm:size-16">
           <Image
@@ -284,6 +288,14 @@ function GameHeader({
             {game.summary}
           </p>
         )}
+      </div>
+      {/* Beside the title on a wide screen; under it, aligned with the text,
+          on a phone. */}
+      <div className="basis-full ps-[4.5rem] sm:basis-auto sm:ps-0">
+        <CompareButton
+          game={{ slug: game.slug, name: game.name }}
+          suggestions={compareSuggestions}
+        />
       </div>
     </header>
   );
@@ -1405,10 +1417,13 @@ function TabNav({
 }
 
 function RelatedList({
+  base,
   title,
   games,
   more,
 }: {
+  /** The game whose page this is: each row offers to compare with it. */
+  base: string;
   title: string;
   games: RelatedGame[];
   /** Link to the hub page, when the franchise or studio has one. */
@@ -1479,6 +1494,7 @@ function RelatedList({
                   <span className="text-text-faint">—</span>
                 )}
               </div>
+              <CompareLink base={base} other={{ slug: game.slug, name: game.name }} />
             </li>
           );
         })}
@@ -1705,7 +1721,11 @@ function GamePageContent({
           {game.name}
         </nav>
 
-        <GameHeader game={game} studioHub={related.studioHub} />
+        <GameHeader
+          game={game}
+          studioHub={related.studioHub}
+          compareSuggestions={pickerSuggestions(related, [game.slug])}
+        />
         <TrackerLink slug={game.slug} />
         <SalesHeadline game={game} />
         <OfficialSalesRecap game={game} />
@@ -1774,6 +1794,7 @@ function GamePageContent({
             {relatedLists.map((list) => (
               <RelatedList
                 key={list.title}
+                base={game.slug}
                 title={list.title}
                 games={list.games}
                 more={list.more}

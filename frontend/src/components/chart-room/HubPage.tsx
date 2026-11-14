@@ -9,6 +9,8 @@ import {
 import { SITE_URL } from '@/lib/site-url';
 import { GamesTable } from '@/components/chart-room/GamesTable';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
+import { CompareTopLink } from '@/components/compare/CompareEntry';
+import { MAX_COMPARED } from '@/lib/compare';
 
 /** BreadcrumbList and ItemList shared by the studio, franchise and year pages. */
 export function HubJsonLd({
@@ -175,6 +177,8 @@ export function GameHubPage({
     return units ? [{ game, units }] : [];
   });
   const total = withFigure.reduce((sum, { units }) => sum + units, 0);
+  // Best sellers with an estimate (the list is best first), to compare them.
+  const top = withFigure.slice(0, MAX_COMPARED).map(({ game }) => game.slug);
   const best = withFigure[0] ?? null;
   const latest = hub.games
     .filter((game) => game.releaseDate)
@@ -211,6 +215,7 @@ export function GameHubPage({
             {best &&
               ` ${t('bestLine', { game: best.game.name, units: compact(best.units) })}`}
           </p>
+          {top.length >= 2 && <CompareTopLink slugs={top} from={`${kind}_page`} />}
         </header>
 
         {best && (
