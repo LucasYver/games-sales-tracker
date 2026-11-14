@@ -144,6 +144,45 @@ export class AdminMailService {
     await this.sendToAdmins(subject, html, text);
   }
 
+  async sendSocialDraftsReady(
+    posts: {
+      kind: string;
+      text: string;
+      linkUrl: string;
+      unverifiedNumbers: string[];
+    }[],
+  ): Promise<void> {
+    if (posts.length === 0) return;
+    const reviewUrl = `${publicAppUrl()}/admin/social`;
+    const subject = `Threads ${posts.length === 1 ? 'post' : 'posts'} to review — ${posts.length}`;
+    const blocks = posts.map((post) => ({
+      head: `${post.kind}${post.unverifiedNumbers.length ? ` · ${post.unverifiedNumbers.length} unverified number(s)` : ''}`,
+      text: post.text,
+      link: post.linkUrl,
+    }));
+    const text = [
+      ...blocks.flatMap((b) => [b.head, b.text, `Link: ${b.link}`, '']),
+      `Review: ${reviewUrl}`,
+      '',
+      'Nothing is posted until you publish.',
+    ].join('\n');
+    const html = `<div style="font-family:system-ui,sans-serif;max-width:560px">
+<h2 style="font-size:18px">Threads posts to review</h2>
+${blocks
+  .map(
+    (
+      b,
+    ) => `<p style="font-size:12px;color:#666;margin:16px 0 4px">${escapeHtml(b.head)}</p>
+<p style="white-space:pre-wrap;margin:0 0 4px">${escapeHtml(b.text)}</p>
+<p style="font-size:12px;margin:0"><a href="${escapeAttr(b.link)}">${escapeHtml(b.link)}</a></p>`,
+  )
+  .join('\n')}
+<p style="margin-top:24px"><a href="${escapeAttr(reviewUrl)}">Review in the admin</a></p>
+<p style="font-size:12px;color:#666">Nothing is posted until you publish.</p>
+</div>`;
+    await this.sendToAdmins(subject, html, text);
+  }
+
   async sendSteamReviewsAlert(health: {
     trackedGames: number;
     staleGames: number;

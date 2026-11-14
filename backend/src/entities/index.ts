@@ -22,3 +22,4 @@ export * from './admin-user.entity';
 export * from './provider-cooldown.entity';
 export * from './blog-post.entity';
 export * from './blog-post-translation.entity';
+export * from './social-post.entity';

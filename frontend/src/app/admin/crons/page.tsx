@@ -42,6 +42,7 @@ const OTHER_JOB_DESCRIPTIONS: Record<string, string> = {
   'game-rank': 'Recomputes the home-grown rank',
   'blog-draft': 'Writes the weekly blog draft (AI call, never publishes)',
   'blog-news': 'Writes the daily blog news drafts (AI calls, never publishes)',
+  'social-drafts': 'Drafts Threads posts and refreshes the Threads token (AI calls, never posts)',
 };
 
 type Status = 'Complete' | 'Issues' | 'In progress' | 'Not started';

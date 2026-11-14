@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Library,
   LogOut,
+  MessageSquare,
   Newspaper,
   Receipt,
   Tags,
@@ -90,6 +91,12 @@ const NAV_ITEMS = [
     href: '/admin/blog',
     label: 'Blog',
     icon: Newspaper,
+    exact: false,
+  },
+  {
+    href: '/admin/social',
+    label: 'Threads',
+    icon: MessageSquare,
     exact: false,
   },
 ];

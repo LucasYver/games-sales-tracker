@@ -31,6 +31,7 @@ import { GenresModule } from '../genres/genres.module';
 import { EstimationModule } from '../estimation/estimation.module';
 import { ReferenceProfilesModule } from '../reference-profiles/reference-profiles.module';
 import { BlogModule } from '../blog/blog.module';
+import { SocialModule } from '../social/social.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { BlogModule } from '../blog/blog.module';
     EstimationModule,
     ReferenceProfilesModule,
     BlogModule,
+    SocialModule,
   ],
   // IngestionController lives here so it sits behind AdminAuthGuard
   // (IngestionModule cannot import this module: this module imports it).
