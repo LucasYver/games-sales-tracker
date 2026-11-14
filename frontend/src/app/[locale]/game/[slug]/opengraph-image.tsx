@@ -64,7 +64,7 @@ export default async function Image({
         >
           <div
             style={{
-              fontFamily: 'Plex Mono',
+              fontFamily: 'Mono',
               fontWeight: 700,
               fontSize: 96,
               lineHeight: 1,
@@ -81,7 +81,7 @@ export default async function Image({
           <div
             style={{
               marginTop: 8,
-              fontFamily: 'Plex Mono',
+              fontFamily: 'Mono',
               fontSize: 22,
               textTransform: 'uppercase',
               letterSpacing: 2,
@@ -106,7 +106,7 @@ export default async function Image({
         <div
           style={{
             marginTop: 22,
-            fontFamily: 'Plex Mono',
+            fontFamily: 'Mono',
             fontSize: 24,
             color: OG_COLORS.foreground,
           }}

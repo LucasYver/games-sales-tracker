@@ -62,7 +62,7 @@ export default async function Image({
         <div
           style={{
             marginTop: 26,
-            fontFamily: 'Plex Mono',
+            fontFamily: 'Mono',
             fontSize: 28,
             color: OG_COLORS.primary,
           }}
