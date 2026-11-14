@@ -35,27 +35,27 @@
     "contact": "Contact"
   },
   "siteMeta": {
-    "description": "How many copies did that game sell? Video game sales figures for PC, PlayStation, Xbox and Switch, updated daily.",
+    "description": "How many copies did that game sell? Daily sales estimates for more than 6,000 video games on PC, PlayStation and Xbox, built from public data.",
     "keywords": "video game sales, sales tracker, copies sold, PC, PlayStation, Xbox, Switch",
     "siteName": "Game Sales Tracker",
     "title": "Game Sales Tracker — How many copies did that game sell?",
     "titleTemplate": "%s · Game Sales Tracker"
   },
   "homeMeta": {
-    "description": "Video game sales, figure by figure: PC, PlayStation, Xbox and Switch, ranked and updated daily.",
+    "description": "How many copies did each game sell? Sales estimates for more than 6,000 games on PC, PlayStation and Xbox, ranked, filterable and updated every day.",
     "title": "Video game sales",
     "titlePage": "Video game sales — Page {page}"
   },
   "gamePageMeta": {
-    "description": "Sales for {name}: current figure, per-platform split and store review trends.",
-    "descriptionFree": "{name} is free-to-play, so it has no copies-sold estimate. Player and review trends are updated daily.",
+    "description": "{name} sales tracker: copies-sold estimate when available, Steam reviews, concurrent players and PlayStation and Xbox store ratings, updated daily.",
+    "descriptionFree": "{name} is free-to-play, so there is no copies-sold estimate. Follow its Steam reviews, concurrent players and store ratings, updated every day.",
     "descriptionUnits": "Estimated {units} copies of {name} sold ({platforms}) as of {date}. Per-platform split and store review trends.",
-    "descriptionUnitsNoDate": "Estimated {units} copies of {name} sold ({platforms}). Per-platform split and store review trends.",
+    "descriptionUnitsNoDate": "Estimated {units} copies of {name} sold ({platforms}). Per-platform split, Steam reviews and store rating trends, updated daily.",
     "title": "{name} ({year}) — Sales",
     "titleFree": "{name} — Free-to-play",
     "titleNoYear": "{name} — Sales",
     "titleUnits": "{name} sales — {units} copies",
-    "descriptionUpcoming": "{name} releases on {date}. Sales data will arrive at launch, and the first estimate a few days later."
+    "descriptionUpcoming": "{name} releases on {date}. Sales tracking starts at launch, with a first copies-sold estimate a few days later, then daily updates."
   },
   "home": {
     "gamesCount": "{count, number} games",
@@ -274,11 +274,11 @@
   "hubs": {
     "home": "Home",
     "studioTitle": "Sales of {name} games",
-    "studioDescription": "Estimated and reported sales of {count, plural, one {# game} other {# games}} by {name}, game by game.",
+    "studioDescription": "Estimated and reported sales of {count, plural, one {# game} other {# games}} by {name}, game by game, with total sales, best seller and latest release, updated daily.",
     "publisherTitle": "Sales of games published by {name}",
-    "publisherDescription": "Estimated and reported sales of {count, plural, one {# game} other {# games}} published by {name}, game by game.",
+    "publisherDescription": "Estimated and reported sales of {count, plural, one {# game} other {# games}} published by {name}, game by game, with total sales and best seller, updated daily.",
     "franchiseTitle": "{name} franchise sales",
-    "franchiseDescription": "Estimated and reported sales of {count, plural, one {# game} other {# games}} in the {name} franchise, game by game.",
+    "franchiseDescription": "Estimated and reported sales of {count, plural, one {# game} other {# games}} in the {name} franchise, game by game, with total sales and best seller, updated daily.",
     "gamesTracked": "{count, plural, one {# game} other {# games}} tracked.",
     "bestLine": "The best seller is {game}, with {units} copies.",
     "totalSales": "Total sales",
@@ -287,14 +287,14 @@
     "latestRelease": "Latest release",
     "allGames": "All games",
     "studiosTitle": "Game sales by studio",
-    "studiosIntro": "{count} studios tracked, each with all its games and their estimated or reported sales.",
+    "studiosIntro": "{count} studios tracked, each with all its games and their estimated or reported sales. Compare developers by total sales and best seller.",
     "publishersTitle": "Game sales by publisher",
-    "publishersIntro": "{count} publishers tracked, each with all its games and their estimated or reported sales.",
+    "publishersIntro": "{count} publishers tracked, each with all its games and their estimated or reported sales. Compare publishers by total sales and best seller.",
     "franchisesTitle": "Game sales by franchise",
-    "franchisesIntro": "{count} franchises tracked, each with all its games and their estimated or reported sales.",
+    "franchisesIntro": "{count} franchises tracked, each with all its games and their estimated or reported sales. Compare series by total sales and best seller.",
     "yearTitle": "Best-selling games released in {year}",
     "yearTitlePage": "Best-selling games released in {year}, page {page}",
-    "yearDescription": "The best-selling games released in {year}: estimated and reported sales across all platforms.",
+    "yearDescription": "The best-selling video games released in {year}, ranked by copies sold: estimated and reported sales on PC, PlayStation and Xbox, updated daily.",
     "yearIntro": "{count, plural, one {# game} other {# games}} released in {year} and tracked, ranked by estimated or reported sales across all platforms. Each game page explains its figure.",
     "otherYears": "Other years"
   },
@@ -358,7 +358,7 @@
       "worldwideCaption": "Worldwide, all platforms"
     },
     "figuresAsOf": "Latest figure on record: {date}",
-    "indexDescription": "Official video-game sales figures: publisher statements, Wikipedia, and analyst notes, game by game.",
+    "indexDescription": "Official video game sales figures, game by game: publisher statements, financial reports, Wikipedia and analyst notes, each one dated and sourced.",
     "indexIntro": "Publisher statements, Wikipedia, and the analyst notes we keep on file — the official sales story for each game, dated and attributed.",
     "indexTitle": "Official sales, on the record",
     "kinds": {
@@ -384,7 +384,8 @@
     "intro": "This page explains what data is processed when you visit this site. There is no user account here.",
     "title": "Privacy",
     "affiliateTitle": "Store links",
-    "affiliateBody": "Some game pages link to the Instant Gaming store. These are affiliate links: if you buy after clicking one, we may earn a commission, at no extra cost to you. We count clicks on these links with Vercel Analytics, without cookies."
+    "affiliateBody": "Some game pages link to the Instant Gaming store. These are affiliate links: if you buy after clicking one, we may earn a commission, at no extra cost to you. We count clicks on these links with Vercel Analytics, without cookies.",
+    "metaDescription": "What data Game Sales Tracker processes when you visit: cookie-free audience measurement, Google AdSense ads and affiliate store links. No user account."
   },
   "methodology": {
     "title": "How we estimate sales",
@@ -416,7 +417,8 @@
     "examplesBody": "Each game page shows the figure, its split by platform and the signals we track:",
     "examplesBlog": "Read our articles on official sales",
     "notEstimatedBody": "We would rather show \"not estimated\" than a figure we don't believe in.",
-    "notEstimatedUnreleased": "<strong>Games not out yet</strong>: with no sales, there is nothing to estimate. Data arrives at launch, and the first estimate a few days later."
+    "notEstimatedUnreleased": "<strong>Games not out yet</strong>: with no sales, there is nothing to estimate. Data arrives at launch, and the first estimate a few days later.",
+    "metaDescription": "How we estimate video game sales: Steam reviews, players and store ratings, compared with more than 5,000 published figures for over 2,000 similar games."
   },
   "og": {
     "tagline": "How many copies did that game sell?",
@@ -487,7 +489,8 @@
     "fundingTitle": "Independence and funding",
     "fundingBody": "The site is free and needs no account. It is funded by advertising and by affiliate links to the Instant Gaming store. Neither has any influence on our estimates, and no publisher can pay to appear on the site or to have a figure changed.",
     "contactTitle": "Get in touch",
-    "contactLink": "Write to us from the Contact page"
+    "contactLink": "Write to us from the Contact page",
+    "metaDescription": "Game Sales Tracker estimates the sales of more than 6,000 games on PC, PlayStation and Xbox every day, from public data. Who runs it and how it is funded."
   },
   "contact": {
     "title": "Contact",
@@ -498,7 +501,8 @@
     "studiosBody": "Have you announced a sales figure that is missing from your game's page? Send us the link to the announcement.",
     "pressTitle": "Press and partnerships",
     "pressBody": "You can quote our figures by crediting Game Sales Tracker with a link to the game page. For a partnership or a sponsored placement, write to the same address.",
-    "responseTime": "We usually reply within a few days."
+    "responseTime": "We usually reply within a few days.",
+    "metaDescription": "Contact Game Sales Tracker to report an error, send an official sales figure with its source, or ask about quoting our figures and partnerships."
   },
   "mw4Sales": {
     "title": "Modern Warfare 4 sales tracker",
