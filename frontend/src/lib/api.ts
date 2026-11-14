@@ -623,8 +623,9 @@ export async function getSteamReviewCurve(
 }
 
 /**
- * The slug a game merged into another now lives at (an edition folded into
- * its base game), or null. A failure means no redirect: the page 404s.
+ * The slug an old game URL now leads to (an edition folded into its base
+ * game, or a renamed game), or null. A failure means no redirect: the page
+ * 404s.
  */
 export async function getGameRedirect(slug: string): Promise<string | null> {
   try {

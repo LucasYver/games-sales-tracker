@@ -95,7 +95,13 @@ The nightly IGDB refresh (`IgdbRefreshService.syncEditions`, one request per
 500 games) lists each game's editions in `game_edition`. The game page lists
 them in an "Editions" row of its tech sheet, noted as included in the sales, and `GET /games/:slug/redirect` sends the
 URL of a soft-deleted edition game to its base game, matched on the edition's
-IGDB id.
+IGDB id, and the old slug of a renamed game (`game_slug_redirect`) to its
+current one.
+
+A game created from a Steam app keeps Steam's name, even when IGDB matched the
+base record and Steam later renamed the app to an edition ("Sekiro™: Shadows
+Die Twice - GOTY Edition"). Fix such a name from the admin: the rename locks
+it and records the old slug as a redirect.
 
 Remasters (`game_type = 9`) and expanded games (`10`) are separate products and
 stay separate. The 2026-11-07 cleanup (`scripts/merge-igdb-editions.ts`) folded

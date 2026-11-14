@@ -1496,6 +1496,16 @@ export class AdminService {
 
     game.manualFields = MANUAL_GAME_FIELDS.filter((f) => locked.has(f));
     const saved = await this.games.save(game);
+    if (saved.slug !== previousSlug) {
+      // The old URL may be indexed: the game page sends it on to the new one.
+      // The new slug is live again, so it leaves the redirects if it was one.
+      await this.games.query(
+        `WITH gone AS (DELETE FROM game_slug_redirect WHERE slug = $3)
+         INSERT INTO game_slug_redirect (slug, "gameId") VALUES ($1, $2)
+         ON CONFLICT (slug) DO UPDATE SET "gameId" = EXCLUDED."gameId"`,
+        [previousSlug, saved.id, saved.slug],
+      );
+    }
     if (publisherChanged) {
       await this.publishers.resolveAndLink(saved.id, saved.publisher);
     }
