@@ -34,7 +34,8 @@ export const OG_COLORS = {
 const FONT_DIR = join(process.cwd(), 'assets/og-fonts');
 
 /**
- * IBM Plex Sans and Mono, Latin and Cyrillic (the /ru pages). Satori picks,
+ * IBM Plex Sans, Latin and Cyrillic (the /ru pages). Mono is Chivo Mono for
+ * Latin (a plain zero, no dot) and IBM Plex Mono for Cyrillic. Satori picks,
  * glyph by glyph, the first listed font of a family that has it.
  */
 export async function loadOgFonts() {
@@ -43,10 +44,10 @@ export async function loadOgFonts() {
     ['Plex Sans', 700, 'ibm-plex-sans-latin-700-normal.woff'],
     ['Plex Sans', 400, 'ibm-plex-sans-cyrillic-400-normal.woff'],
     ['Plex Sans', 700, 'ibm-plex-sans-cyrillic-700-normal.woff'],
-    ['Plex Mono', 400, 'ibm-plex-mono-latin-400-normal.woff'],
-    ['Plex Mono', 700, 'ibm-plex-mono-latin-700-normal.woff'],
-    ['Plex Mono', 400, 'ibm-plex-mono-cyrillic-400-normal.woff'],
-    ['Plex Mono', 700, 'ibm-plex-mono-cyrillic-700-normal.woff'],
+    ['Mono', 400, 'chivo-mono-latin-400-normal.woff'],
+    ['Mono', 700, 'chivo-mono-latin-700-normal.woff'],
+    ['Mono', 400, 'ibm-plex-mono-cyrillic-400-normal.woff'],
+    ['Mono', 700, 'ibm-plex-mono-cyrillic-700-normal.woff'],
   ] as const;
   return Promise.all(
     files.map(async ([name, weight, file]) => ({
@@ -184,7 +185,7 @@ export function OgFrame({
           <Logo />
           <div
             style={{
-              fontFamily: 'Plex Mono',
+              fontFamily: 'Mono',
               fontWeight: 700,
               fontSize: 26,
               letterSpacing: 3,
@@ -200,7 +201,7 @@ export function OgFrame({
         </div>
         <div
           style={{
-            fontFamily: 'Plex Mono',
+            fontFamily: 'Mono',
             fontSize: 24,
             color: OG_COLORS.muted,
           }}

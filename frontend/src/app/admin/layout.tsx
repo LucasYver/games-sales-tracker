@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { DM_Sans, IBM_Plex_Mono } from 'next/font/google';
+import { Chivo_Mono, DM_Sans } from 'next/font/google';
 import Link from 'next/link';
 import {
   Boxes,
@@ -28,10 +28,9 @@ const sans = DM_Sans({
   subsets: ['latin'],
   display: 'swap',
 });
-const mono = IBM_Plex_Mono({
+const mono = Chivo_Mono({
   variable: '--font-mono',
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
   display: 'swap',
 });
 

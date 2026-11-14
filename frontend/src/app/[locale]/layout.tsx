@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import {
+  Chivo_Mono,
   DM_Sans,
   IBM_Plex_Mono,
   IBM_Plex_Sans,
@@ -24,10 +25,11 @@ const sans = DM_Sans({
   subsets: ['latin'],
   display: 'swap',
 });
-const mono = IBM_Plex_Mono({
+// Chivo Mono: a plain zero (Plex Mono only has dotted or slashed ones), same
+// 0.6 em digit width, so tables keep their layout.
+const mono = Chivo_Mono({
   variable: '--font-mono',
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
   display: 'swap',
 });
 
@@ -38,15 +40,16 @@ const sansCyrillic = IBM_Plex_Sans({
   display: 'swap',
   preload: false,
 });
+// Chivo Mono has no Cyrillic: on /ru, Plex Mono draws only the Cyrillic letters.
 const monoCyrillic = IBM_Plex_Mono({
-  variable: '--font-mono',
-  subsets: ['cyrillic', 'latin'],
+  variable: '--font-mono-cyrillic',
+  subsets: ['cyrillic'],
   weight: ['400', '500', '600', '700'],
   display: 'swap',
   preload: false,
 });
 
-// Neither DM Sans nor Plex Mono has Arabic. Loads on /ar only.
+// Neither DM Sans nor Chivo Mono has Arabic. Loads on /ar only.
 const sansArabic = IBM_Plex_Sans_Arabic({
   variable: '--font-sans',
   subsets: ['arabic', 'latin'],
@@ -54,6 +57,12 @@ const sansArabic = IBM_Plex_Sans_Arabic({
   display: 'swap',
   preload: false,
 });
+
+/** Chivo Mono, then `extra`, then Chivo Mono's metric fallback. */
+function monoStack(extra: string) {
+  const [face, ...fallbacks] = mono.style.fontFamily.split(', ');
+  return [face, extra, ...fallbacks].join(', ');
+}
 
 export async function generateMetadata({
   params,
@@ -104,7 +113,7 @@ export default async function LocaleLayout({
   const messages = await getMessages();
   const fonts =
     locale === 'ru'
-      ? `${sansCyrillic.variable} ${monoCyrillic.variable}`
+      ? `${sansCyrillic.variable} ${mono.variable} ${monoCyrillic.variable}`
       : locale === 'ar'
         ? `${sansArabic.variable} ${mono.variable}`
         : `${sans.variable} ${mono.variable}`;
@@ -116,11 +125,17 @@ export default async function LocaleLayout({
       dir={dir}
       className={`${fonts} chart-scope dark h-full antialiased`}
       suppressHydrationWarning
-      // Arabic words in mono text (figures, labels) fall back to the Arabic sans.
+      // Cyrillic or Arabic words in mono text (figures, labels) fall back to
+      // Plex Mono Cyrillic or the Arabic sans, placed before next/font's
+      // metric fallback, which covers every code point and would win.
       style={
-        locale === 'ar'
+        locale === 'ru' || locale === 'ar'
           ? ({
-              '--font-mono': `${mono.style.fontFamily}, ${sansArabic.style.fontFamily}`,
+              '--font-mono': monoStack(
+                locale === 'ru'
+                  ? monoCyrillic.style.fontFamily
+                  : sansArabic.style.fontFamily,
+              ),
             } as React.CSSProperties)
           : undefined
       }
