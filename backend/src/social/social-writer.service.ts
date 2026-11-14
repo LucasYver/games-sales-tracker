@@ -5,8 +5,11 @@ import type { SocialPostKind } from '../entities';
 
 /** Threads allows 500 characters; the rest is headroom for admin edits. */
 export const SOCIAL_MAX_CHARS = 480;
-/** X allows 280; emojis and some characters count double there. */
-export const X_MAX_CHARS = 260;
+/**
+ * X allows 280; emojis count double there, and an optional link takes 24
+ * (line break + 23 for t.co), so drafts stay under 250.
+ */
+export const X_MAX_CHARS = 250;
 
 const ANGLE: Record<SocialPostKind, string> = {
   BLOG_ARTICLE:

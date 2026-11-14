@@ -457,7 +457,7 @@ export async function updateBlogTranslation(
 
 export async function updateSocialPost(
   id: string,
-  edit: { text?: string; xText?: string },
+  edit: { text?: string; xText?: string; xWithLink?: boolean },
 ): Promise<AdminSocialPost> {
   const result = await adminFetch<AdminSocialPost>(`/social/${id}`, {
     method: 'PATCH',

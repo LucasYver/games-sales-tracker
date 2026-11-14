@@ -63,6 +63,12 @@ export class SocialPost {
   @Column({ type: 'text', default: '' })
   xText: string;
 
+  // Admin's choice per post: append `linkUrl` to the X post. X then shows the
+  // page's card itself, so no image is uploaded; costs ~$0.20 instead of
+  // ~$0.03.
+  @Column({ type: 'boolean', default: false })
+  xWithLink: boolean;
+
   // Numbers in `text` or `xText` that are not in `facts`; recounted on every
   // edit.
   @Column({ type: 'jsonb', default: () => "'[]'" })

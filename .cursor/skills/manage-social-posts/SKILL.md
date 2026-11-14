@@ -67,18 +67,22 @@ length). Drafts are mailed to admins (`AdminMailService.sendSocialDraftsReady`).
 ## X
 
 - One draft, two texts: `text` (Threads, 500 max, link preview) and `xText`
-  (X, written at 260 max for a 280 limit, **no link**). The owner chose no
-  link on X: on its pay-per-use API a post costs about $0.015, and about
-  $0.20 with a URL. The site link lives in the X profile.
+  (X, written at 250 max for a 280 limit). On the pay-per-use X API a post
+  costs about $0.015, about $0.20 with a URL, so the link is the admin's
+  choice per post: the `xWithLink` checkbox (off by default) appends
+  `linkUrl` to the X post at publish time. Its 24 characters (line break +
+  23 for t.co) count against the 280. The site link also lives in the X
+  profile.
 - Publish posts on every configured network not done yet (Threads, then X).
   A failure keeps the post in `DRAFT` with `lastError`, and the next Publish
   retries only the missing network. `PUBLISHED` once all are out.
-- Image: X has no link preview, so `XClient.publishText` attaches the share
-  card of `linkUrl` (its `og:image`: for a blog article, the game cover with
+- Image: without the link, `XClient.publishText` attaches the share card of
+  `linkUrl` (its `og:image`: for a blog article, the game cover with
   the title and the site name; other pages use the site's generic card),
   uploaded through `POST /2/media/upload`. A failed image never blocks the
   post (logged as "X image skipped"). The upload is reportedly billed as one
-  more post (~$0.015).
+  more post (~$0.015). With the link, no image is uploaded: X builds the
+  card from the page itself.
 - Env: `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_TOKEN_SECRET`
   (do not expire). Without all four, posts go to Threads only. The account
   must carry X's "Automated" label.

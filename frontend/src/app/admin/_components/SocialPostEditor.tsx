@@ -14,6 +14,8 @@ import {
 /** Each network's limit on a text post. */
 const THREADS_MAX = 500;
 const X_MAX = 280;
+/** X counts a link as 23 characters, plus the line break before it. */
+const X_LINK_CHARS = 24;
 
 export function SocialPostEditor({
   post,
@@ -26,12 +28,17 @@ export function SocialPostEditor({
 }) {
   const [text, setText] = useState(post.text);
   const [xText, setXText] = useState(post.xText);
+  const [xWithLink, setXWithLink] = useState(post.xWithLink);
   const [pending, start] = useTransition();
-  const dirty = text !== post.text || xText !== post.xText;
+  const dirty =
+    text !== post.text ||
+    xText !== post.xText ||
+    xWithLink !== post.xWithLink;
+  const xMax = X_MAX - (xWithLink ? X_LINK_CHARS : 0);
   const onThreads = !!post.externalId;
   const onX = !!post.xExternalId;
   const threadsTooLong = text.length > THREADS_MAX;
-  const xTooLong = xText.length > X_MAX;
+  const xTooLong = xText.length > xMax;
   const targets = [
     !onThreads && 'Threads',
     xReady && !onX && 'X',
@@ -79,15 +86,29 @@ export function SocialPostEditor({
           onX
             ? 'X (posted)'
             : xReady
-              ? 'X — no link, 280 max'
+              ? xWithLink
+                ? 'X — with link (~$0.20)'
+                : 'X — no link, share card attached (~$0.03)'
               : 'X — API keys not set, not posted'
         }
         value={xText}
-        max={X_MAX}
+        max={xMax}
         rows={4}
         disabled={pending || onX}
         onChange={setXText}
       />
+      {xReady && !onX && (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={xWithLink}
+            disabled={pending}
+            onChange={(e) => setXWithLink(e.target.checked)}
+          />
+          Add link on X (about $0.20 instead of $0.03; X then shows the
+          page&apos;s card)
+        </label>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
@@ -97,7 +118,10 @@ export function SocialPostEditor({
             pending || !dirty || threadsTooLong || xTooLong || !text.trim()
           }
           onClick={() =>
-            run(() => updateSocialPost(post.id, { text, xText }), 'Saved.')
+            run(
+              () => updateSocialPost(post.id, { text, xText, xWithLink }),
+              'Saved.',
+            )
           }
         >
           Save
@@ -135,6 +159,7 @@ export function SocialPostEditor({
                 const next = await regenerateSocialPost(post.id);
                 setText(next.text);
                 setXText(next.xText);
+                setXWithLink(next.xWithLink);
               },
               'Rewritten.',
               dirty

@@ -24,6 +24,8 @@ import { XClient } from './x.client';
 /** Each network's own limit on a text post. */
 const THREADS_MAX_CHARS = 500;
 const X_LIMIT_CHARS = 280;
+// X counts any link as 23 characters (t.co), plus the line break before it.
+const X_LINK_CHARS = 24;
 // Drafts written per cron run, and drafts left waiting before the cron stops
 // writing new ones: posts lose their point in a few days.
 const MAX_DRAFTS_PER_RUN = 3;
@@ -88,10 +90,14 @@ export class SocialService {
     return { posts: rows, threadsReady, xReady: this.x.configured };
   }
 
-  async updateText(id: string, edit: { text?: string; xText?: string }) {
+  async updateText(
+    id: string,
+    edit: { text?: string; xText?: string; xWithLink?: boolean },
+  ) {
     const post = await this.requireDraft(id);
     if (edit.text !== undefined) post.text = edit.text.trim();
     if (edit.xText !== undefined) post.xText = edit.xText.trim();
+    if (edit.xWithLink !== undefined) post.xWithLink = edit.xWithLink;
     post.unverifiedNumbers = unverifiedNumbers(
       `${post.text}\n${post.xText}`,
       post.facts,
@@ -126,9 +132,10 @@ export class SocialService {
           'The X version is empty. Write it, or click Regenerate.',
         );
       }
-      if (post.xText.length > X_LIMIT_CHARS) {
+      const xLimit = X_LIMIT_CHARS - (post.xWithLink ? X_LINK_CHARS : 0);
+      if (post.xText.length > xLimit) {
         throw new BadRequestException(
-          `X text: ${post.xText.length} characters, the limit is ${X_LIMIT_CHARS}.`,
+          `X text: ${post.xText.length} characters, the limit is ${xLimit}${post.xWithLink ? ' with the link' : ''}.`,
         );
       }
     }
@@ -152,7 +159,11 @@ export class SocialService {
     }
     if (toX) {
       try {
-        const out = await this.x.publishText(post.xText, post.linkUrl);
+        // With the link, X shows the page's card itself; without it, the
+        // card is uploaded as an image.
+        const out = post.xWithLink
+          ? await this.x.publishText(`${post.xText}\n${post.linkUrl}`)
+          : await this.x.publishText(post.xText, post.linkUrl);
         post.xExternalId = out.id;
         post.xExternalUrl = out.url;
       } catch (error) {

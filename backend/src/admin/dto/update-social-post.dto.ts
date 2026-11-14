@@ -1,4 +1,10 @@
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class UpdateSocialPostDto {
   @IsOptional()
@@ -11,4 +17,8 @@ export class UpdateSocialPostDto {
   @IsString()
   @MaxLength(1000)
   xText?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  xWithLink?: boolean;
 }

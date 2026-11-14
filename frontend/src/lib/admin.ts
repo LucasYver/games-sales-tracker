@@ -741,8 +741,10 @@ export interface AdminSocialPost {
   topicKey: string;
   status: BlogPostStatus;
   text: string;
-  /** Short, link-free version for X. */
+  /** Short version for X. */
   xText: string;
+  /** Append the link to the X post (~$0.20 instead of ~$0.03). */
+  xWithLink: boolean;
   linkUrl: string;
   facts: string[];
   unverifiedNumbers: string[];
