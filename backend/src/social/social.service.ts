@@ -152,7 +152,7 @@ export class SocialService {
     }
     if (toX) {
       try {
-        const out = await this.x.publishText(post.xText);
+        const out = await this.x.publishText(post.xText, post.linkUrl);
         post.xExternalId = out.id;
         post.xExternalUrl = out.url;
       } catch (error) {

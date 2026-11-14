@@ -19,9 +19,12 @@ Owner files: `backend/src/social/social.service.ts` (candidates, lifecycle),
   page that shows it (the blog article, the GTA 6 page), not the game page,
   which shows only our estimate: a reader checking the figure would land on
   another number.
-- Tone (writer `SYSTEM` prompt): a hook first line (question or the figure),
-  short lines, about the game rather than the article, never "our new article
-  covers". Admin **Regenerate** rewrites a draft from its stored facts.
+- Tone (writer `SYSTEM` prompt): a hook first line that stops the scroll
+  (a question, or a punchy line on the figure), one story with at most two
+  numbers, an earlier figure only when clearly older and lower (a same-period
+  press figure reads like a contradiction), a reader question about one post
+  in two, never "our new article covers". The prompt's example game is
+  invented; keep it invented. Admin **Regenerate** rewrites a draft from its stored facts.
 - Facts are code-written lines (`facts`). The writer may only copy their
   numbers; `unverifiedNumbers` lists any other number, is recounted on every
   edit, and blocks Publish unless the admin confirms (`force`).
@@ -70,14 +73,20 @@ length). Drafts are mailed to admins (`AdminMailService.sendSocialDraftsReady`).
 - Publish posts on every configured network not done yet (Threads, then X).
   A failure keeps the post in `DRAFT` with `lastError`, and the next Publish
   retries only the missing network. `PUBLISHED` once all are out.
+- Image: X has no link preview, so `XClient.publishText` attaches the share
+  card of `linkUrl` (its `og:image`: for a blog article, the game cover with
+  the title and the site name; other pages use the site's generic card),
+  uploaded through `POST /2/media/upload`. A failed image never blocks the
+  post (logged as "X image skipped"). The upload is reportedly billed as one
+  more post (~$0.015).
 - Env: `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_TOKEN_SECRET`
   (do not expire). Without all four, posts go to Threads only. The account
   must carry X's "Automated" label.
 
 ## Cost
 
-A few posts a week: under $1/month of OpenAI, under $1/month of X API at
-1–2 posts a day without links, one short cron a day, a few rows a week in
+A few posts a week: under $1/month of OpenAI, under $2/month of X API at
+1–2 posts a day without links (image included), one short cron a day, a few rows a week in
 Neon.
 
 ## Adding a network
