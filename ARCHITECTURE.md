@@ -59,6 +59,7 @@ on `DATABASE_URL_DIRECT`, then `DATABASE_URL`.
 | `Game` | `game` | Catalog row: identity, platforms, genres, Steam tags, franchise / live-service flags, IGDB series and companies, free-to-play, catalog tier. |
 | `GameSource` | `game_source` | External id (Steam app, IGDB, store, Twitch, Instant Gaming affiliate product). |
 | `GamePlatformReleaseDate` | `game_platform_release_date` | Per-platform launch date used by estimation. |
+| `GameSlugRedirect` | `game_slug_redirect` | Slug a renamed game left behind (admin rename), pointing at the game: `GET /games/:slug/redirect` sends its URL to the current one. |
 | `GameIngestionState` | `game_ingestion_state` | Per-pipeline attempt / success, so budgeted crons resume stalest-first. |
 | `GameRank` | `game_rank` | Home-grown review-velocity rank. |
 | `Publisher` | `publisher` | One row per publishing company a game names, created on first sight (`game.publisherId`): public publisher pages, matcher publisher axis, blog rankings. |

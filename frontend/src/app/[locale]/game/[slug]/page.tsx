@@ -1831,7 +1831,8 @@ export default async function GamePage({
   ]);
 
   if (!game) {
-    // An edition game merged into its base keeps its old URL alive.
+    // An edition game merged into its base, or a renamed game, keeps its old
+    // URL alive.
     const target = await getGameRedirect(slug);
     if (target) permanentRedirect(`/${locale}/game/${target}`);
     notFound();

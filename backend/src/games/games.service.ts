@@ -1542,18 +1542,28 @@ export class GamesService {
   }
 
   /**
-   * Where the URL of a game merged into another now leads: an edition game
-   * folded into its base keeps its IGDB id once soft-deleted, and that id is
-   * one of the base game's editions. Null when the slug is not such a game.
+   * Where an old game URL now leads, or null. Two cases, in one query: a slug
+   * a renamed game left behind (`game_slug_redirect`), and an edition game
+   * folded into its base, which keeps its IGDB id once soft-deleted, that id
+   * being one of the base game's editions.
    */
   async findRedirectSlug(slug: string): Promise<{ slug: string } | null> {
     const rows: { slug: string }[] = await this.games.query(
-      `SELECT base.slug
-         FROM game old
-         JOIN game_edition e ON e."igdbId" = old."igdbId"
-         JOIN game base ON base.id = e."gameId" AND base."deletedAt" IS NULL
-        WHERE old.slug = $1 AND old."deletedAt" IS NOT NULL
-        LIMIT 1`,
+      `SELECT slug FROM (
+         SELECT g.slug, 0 AS rank
+           FROM game_slug_redirect r
+           JOIN game g ON g.id = r."gameId" AND g."deletedAt" IS NULL
+          WHERE r.slug = $1
+         UNION ALL
+         SELECT base.slug, 1
+           FROM game old
+           JOIN game_edition e ON e."igdbId" = old."igdbId"
+           JOIN game base ON base.id = e."gameId" AND base."deletedAt" IS NULL
+          WHERE old.slug = $1 AND old."deletedAt" IS NOT NULL
+       ) t
+       WHERE slug <> $1
+       ORDER BY rank
+       LIMIT 1`,
       [slug],
     );
     return rows[0] ? { slug: rows[0].slug } : null;
