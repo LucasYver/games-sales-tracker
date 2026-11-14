@@ -94,14 +94,14 @@ export class SocialService {
     id: string,
     edit: { text?: string; xText?: string; xWithLink?: boolean },
   ) {
-    const post = await this.requireDraft(id);
-    if (edit.text !== undefined) post.text = edit.text.trim();
+    const post = await this.requireOpen(id);
+    // Text already on Threads stays as posted.
+    if (edit.text !== undefined && !post.externalId) {
+      post.text = edit.text.trim();
+    }
     if (edit.xText !== undefined) post.xText = edit.xText.trim();
     if (edit.xWithLink !== undefined) post.xWithLink = edit.xWithLink;
-    post.unverifiedNumbers = unverifiedNumbers(
-      `${post.text}\n${post.xText}`,
-      post.facts,
-    );
+    post.unverifiedNumbers = recount(post);
     return this.posts.save(post);
   }
 
@@ -111,7 +111,7 @@ export class SocialService {
    * the next Publish retries only what is missing.
    */
   async publish(id: string, reviewedBy?: string, force = false) {
-    const post = await this.requireDraft(id);
+    const post = await this.requireOpen(id);
     const toThreads = !post.externalId;
     const toX = this.x.configured && !post.xExternalId;
     if (!toThreads && !toX) {
@@ -176,16 +176,19 @@ export class SocialService {
       !!post.externalId && (!this.x.configured || !!post.xExternalId);
     if (done) {
       post.status = 'PUBLISHED';
-      post.publishedAt = new Date();
+      post.publishedAt = post.publishedAt ?? new Date();
     }
     await this.posts.save(post);
     if (errors.length) throw new BadRequestException(post.lastError);
     return post;
   }
 
-  /** Rewrites a draft from its stored facts (one paid call, two at most). */
+  /**
+   * Rewrites a post from its stored facts (one paid call, two at most). A
+   * text already posted on Threads is kept; only the X version changes.
+   */
   async regenerate(id: string) {
-    const post = await this.requireDraft(id);
+    const post = await this.requireOpen(id);
     if (!this.writer.enabled) {
       throw new BadRequestException('OPENAI_API_KEY is not set.');
     }
@@ -193,9 +196,11 @@ export class SocialService {
       post.kind,
       post.facts,
     );
-    post.text = text;
+    if (!post.externalId) post.text = text;
     post.xText = xText;
-    post.unverifiedNumbers = unverifiedNumbers;
+    post.unverifiedNumbers = post.externalId
+      ? recount(post)
+      : unverifiedNumbers;
     post.model = this.writer.model;
     return this.posts.save(post);
   }
@@ -424,6 +429,21 @@ export class SocialService {
     };
   }
 
+  /**
+   * A draft, or a post already out on Threads but not yet on X (published
+   * before X was set up), which can still get its X version.
+   */
+  private async requireOpen(id: string): Promise<SocialPost> {
+    const post = await this.posts.findOne({ where: { id } });
+    if (!post) throw new NotFoundException('Social post not found');
+    const missingX =
+      post.status === 'PUBLISHED' && this.x.configured && !post.xExternalId;
+    if (post.status !== 'DRAFT' && !missingX) {
+      throw new BadRequestException(`This post is ${post.status}.`);
+    }
+    return post;
+  }
+
   private async requireDraft(id: string): Promise<SocialPost> {
     const post = await this.posts.findOne({ where: { id } });
     if (!post) throw new NotFoundException('Social post not found');
@@ -432,6 +452,10 @@ export class SocialService {
     }
     return post;
   }
+}
+
+function recount(post: SocialPost): string[] {
+  return unverifiedNumbers(`${post.text}\n${post.xText}`, post.facts);
 }
 
 type Point = { day: number; reviews: number };

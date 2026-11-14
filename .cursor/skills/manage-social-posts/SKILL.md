@@ -76,6 +76,10 @@ length). Drafts are mailed to admins (`AdminMailService.sendSocialDraftsReady`).
 - Publish posts on every configured network not done yet (Threads, then X).
   A failure keeps the post in `DRAFT` with `lastError`, and the next Publish
   retries only the missing network. `PUBLISHED` once all are out.
+- A post already `PUBLISHED` on Threads but not on X (posted before X was set
+  up) stays open for X (`requireOpen`): the admin page shows its editor in the
+  Published tab, Regenerate rewrites only `xText`, and Publish posts on X
+  only. Its Threads text is never changed again.
 - Image: without the link, `XClient.publishText` attaches the share card of
   `linkUrl` (its `og:image`: for a blog article, the game cover with
   the title and the site name; other pages use the site's generic card),

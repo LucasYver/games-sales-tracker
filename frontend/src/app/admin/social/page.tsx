@@ -45,9 +45,10 @@ export default async function AdminSocialPage({
           The daily <code>social-drafts</code> cron drafts English posts from
           new blog articles and new GTA 6 figures, and on Mondays from the
           week&apos;s trends and the MW4 comparison. Publish posts on Threads
-          (with a link preview) and on X (short version, no link: a link costs
-          about 13 times more on the X API). Nothing is posted until you click
-          Publish.
+          (with a link preview) and on X (short version with the game&apos;s
+          share card; tick &quot;Add link on X&quot; to add the link, about
+          $0.20 instead of $0.03). A post already on Threads but not on X can
+          still get its X version. Nothing is posted until you click Publish.
         </p>
         {!xReady && (
           <p className="text-muted-foreground mt-2 text-sm">
@@ -112,7 +113,7 @@ export default async function AdminSocialPage({
                 </a>
               )}
             </div>
-            {post.status === 'DRAFT' ? (
+            {post.status === 'DRAFT' || (xReady && !post.xExternalId) ? (
               <SocialPostEditor
                 post={post}
                 threadsReady={threadsReady}

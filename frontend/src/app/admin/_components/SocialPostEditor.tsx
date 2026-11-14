@@ -152,7 +152,7 @@ export function SocialPostEditor({
           type="button"
           size="sm"
           variant="outline"
-          disabled={pending || onThreads || onX}
+          disabled={pending || onX}
           onClick={() =>
             run(
               async () => {
@@ -170,21 +170,23 @@ export function SocialPostEditor({
         >
           Regenerate
         </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="destructive"
-          disabled={pending}
-          onClick={() =>
-            run(
-              () => rejectSocialPost(post.id),
-              'Rejected.',
-              'Reject this post?',
-            )
-          }
-        >
-          Reject
-        </Button>
+        {post.status === 'DRAFT' && (
+          <Button
+            type="button"
+            size="sm"
+            variant="destructive"
+            disabled={pending}
+            onClick={() =>
+              run(
+                () => rejectSocialPost(post.id),
+                'Rejected.',
+                'Reject this post?',
+              )
+            }
+          >
+            Reject
+          </Button>
+        )}
       </div>
     </div>
   );
