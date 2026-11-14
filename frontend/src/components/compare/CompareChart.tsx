@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useUrlOption } from './useUrlOption';
 import { useFormatter, useTranslations } from 'next-intl';
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'recharts';
 import { ChartContainer, ChartTooltip, type ChartConfig } from '@/components/ui/chart';
@@ -40,16 +41,18 @@ export function CompareChart({
   games,
   colors,
 }: {
-  games: readonly [CompareGame, CompareGame];
-  colors: readonly [string, string];
+  /** Two or three games; series key `g{index}`. */
+  games: CompareGame[];
+  colors: string[];
 }) {
   const t = useTranslations('compare');
   const format = useFormatter();
   const ageText = useAgeText();
-  const [mode, setMode] = useState<Mode>('aligned');
-  const [metricChoice, setMetric] = useState<ChartMetric>('reviews');
-  const [rangeChoice, setRange] = useState<Range>('all');
-  const [scale, setScale] = useState<Scale>('linear');
+  // Kept in the URL, so a shared link opens on the same chart.
+  const [mode, setMode] = useUrlOption<Mode>('axis', 'aligned', ['aligned', 'calendar']);
+  const [metricChoice, setMetric] = useUrlOption<ChartMetric>('metric', 'reviews', CHART_METRICS);
+  const [rangeChoice, setRange] = useUrlOption<Range>('period', 'all', ['y1', 'y3', 'all']);
+  const [scale, setScale] = useUrlOption<Scale>('scale', 'linear', ['linear', 'log']);
   const [hover, setHover] = useState<number | null>(null);
 
   const available = CHART_METRICS.filter((m) =>
@@ -80,19 +83,20 @@ export function CompareChart({
     xmax = Math.max(xmin + 1, ...months);
   }
 
-  const rows = new Map<number, { x: number; a?: number; b?: number }>();
+  const keys = games.map((_, i) => `g${i}`);
+  const rows = new Map<number, Record<string, number>>();
   games.forEach((g, i) => {
     for (const [x, v] of pointsOf(g)) {
       if (x < xmin || x > xmax) continue;
       const row = rows.get(x) ?? { x };
-      row[i === 0 ? 'a' : 'b'] = v;
+      row[keys[i]] = v;
       rows.set(x, row);
     }
   });
   const data = [...rows.values()].sort((p, q) => p.x - q.x);
 
   const values = data
-    .flatMap((r) => [r.a, r.b])
+    .flatMap((r) => keys.map((k) => r[k]))
     .filter((v): v is number => v != null && v > 0);
   const log = scale === 'log' && values.length > 0;
   let yDomain: [number, number] | undefined;
@@ -205,10 +209,9 @@ export function CompareChart({
     ...(hover == null ? latest(g) : describe(g, hover)),
   }));
 
-  const config: ChartConfig = {
-    a: { label: games[0].name, color: colors[0] },
-    b: { label: games[1].name, color: colors[1] },
-  };
+  const config: ChartConfig = Object.fromEntries(
+    games.map((g, i) => [keys[i], { label: g.name, color: colors[i] }]),
+  );
 
   const pick = <V extends string>(option: string, set: (v: V) => void) => (v: V) => {
     set(v);
@@ -299,8 +302,11 @@ export function CompareChart({
         className="aspect-auto h-72 w-full"
         aria-label={t('chartAria', {
           metric: t(`metric.${metric}`),
-          a: games[0].name,
-          b: games[1].name,
+          a: games
+            .slice(0, -1)
+            .map((g) => g.name)
+            .join(', '),
+          b: games[games.length - 1].name,
         })}
       >
         <LineChart
@@ -356,26 +362,20 @@ export function CompareChart({
               }}
             />
           ))}
-          <Line
-            dataKey="b"
-            type="linear"
-            stroke="var(--color-b)"
-            strokeWidth={2.5}
-            dot={false}
-            activeDot={{ r: 4 }}
-            connectNulls
-            isAnimationActive={false}
-          />
-          <Line
-            dataKey="a"
-            type="linear"
-            stroke="var(--color-a)"
-            strokeWidth={2.5}
-            dot={false}
-            activeDot={{ r: 4 }}
-            connectNulls
-            isAnimationActive={false}
-          />
+          {/* Last game drawn first, so the first game's line stays on top. */}
+          {[...keys].reverse().map((key) => (
+            <Line
+              key={key}
+              dataKey={key}
+              type="linear"
+              stroke={`var(--color-${key})`}
+              strokeWidth={2.5}
+              dot={false}
+              activeDot={{ r: 4 }}
+              connectNulls
+              isAnimationActive={false}
+            />
+          ))}
         </LineChart>
       </ChartContainer>
 

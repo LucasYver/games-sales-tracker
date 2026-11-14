@@ -658,6 +658,18 @@
     "compareButton": "Comparer",
     "compareWith": "Comparer avec {name}",
     "compareShort": "Comparer",
-    "otherComparisons": "Autres comparaisons"
+    "otherComparisons": "Autres comparaisons",
+    "heading3": "{a} vs {b} vs {c}",
+    "metaTitle3": "{a} vs {b} vs {c} : ventes, joueurs et avis",
+    "metaDescription3": "Ventes estimées, joueurs Steam, avis et notes console de {a}, {b} et {c}, côte à côte, aujourd'hui et au même âge.",
+    "addGame": "Ajouter un jeu",
+    "removeGame": "Retirer",
+    "removeLabel": "Retirer {name} de la comparaison",
+    "pickerTitleTwo": "Comparer {a} et {b} avec…",
+    "todayNoteMany": "Chiffres du jour. {oldest} est le plus ancien (sorti il y a {age}) : les cumuls l'avantagent.",
+    "sameAgeNoteMany": "Chaque jeu {n} mois après sa sortie : {moments}. Les mesures sans historique à cet âge restent vides.",
+    "momentItem": "{name} en {date}",
+    "intro3": "Ventes estimées, joueurs et avis des trois jeux, côte à côte.",
+    "compareTop": "Comparer les {count} plus vendus"
   }
 }

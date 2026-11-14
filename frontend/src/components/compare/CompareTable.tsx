@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useUrlOption } from './useUrlOption';
 import { useFormatter, useTranslations } from 'next-intl';
 import {
   maxUpTo,
@@ -16,7 +16,7 @@ import { useAgeText } from './useAgeText';
 type When = 'today' | 'sameAge';
 
 interface Cell {
-  /** Number used to rank the two games; null when there is nothing to rank. */
+  /** Number used to rank the games; null when there is nothing to rank. */
   value: number | null;
   text: string;
   sub?: string;
@@ -26,8 +26,9 @@ interface Cell {
 interface Row {
   label: string;
   sub?: string;
-  cells: [Cell, Cell];
-  /** Rank the two values (bar, bold leader, ratio). Off for prices and text. */
+  /** One cell per game, in the order of the page. */
+  cells: Cell[];
+  /** Rank the values (bar, bold leader, ratio). Off for prices and text. */
   rank?: boolean;
 }
 
@@ -45,28 +46,28 @@ function atAge(series: CompareSeries, m: number): number | null {
 }
 
 /**
- * Side-by-side figures. "Today" compares the latest figures; "same age"
- * compares both games the same number of months after their launch, which
- * removes the head start of the older game.
+ * Side-by-side figures for two or three games. "Today" compares the latest
+ * figures; "same age" compares every game the same number of months after
+ * its launch, which removes the head start of the older ones.
  */
 export function CompareTable({
   games,
   colors,
 }: {
-  games: readonly [CompareGame, CompareGame];
-  colors: readonly [string, string];
+  games: CompareGame[];
+  colors: string[];
 }) {
   const t = useTranslations('compare');
   const tCommon = useTranslations('common');
   const format = useFormatter();
   const ageText = useAgeText();
-  const [whenChoice, setWhen] = useState<When>('today');
+  const [whenChoice, setWhen] = useUrlOption<When>('table', 'today', ['today', 'sameAge']);
 
-  const [A, B] = games;
   const ages = games.map((g) => g.ageMonths);
-  const same =
-    ages[0] != null && ages[1] != null ? Math.min(ages[0], ages[1]) : null;
+  const same = ages.every((a): a is number => a != null) ? Math.min(...ages) : null;
   const when: When = same != null && same > 0 ? whenChoice : 'today';
+  // A ratio reads clearly between two games only; with three, the bars say it.
+  const showRatio = games.length === 2;
 
   const num = (v: number | null | undefined, sub?: string): Cell =>
     v != null && v > 0
@@ -101,46 +102,56 @@ export function CompareTable({
       format.number(g.price.final / 100, { style: 'currency', currency: g.price.currency }),
     );
   };
-  const pair = (f: (g: CompareGame) => Cell): [Cell, Cell] => [f(A), f(B)];
+  const each = (f: (g: CompareGame) => Cell): Cell[] => games.map(f);
+  const anyOn = (p: 'PLAYSTATION' | 'XBOX') => games.some((g) => onPlatform(g, p));
 
   let groups: Group[];
   let note: string;
   if (when === 'today') {
-    const older = (A.ageMonths ?? -1) >= (B.ageMonths ?? -1) ? A : B;
-    note =
-      A.ageMonths != null && B.ageMonths != null && A.ageMonths !== B.ageMonths
-        ? t('todayNote', {
-            a: A.name,
-            ageA: ageText(A.ageMonths),
-            b: B.name,
-            ageB: ageText(B.ageMonths),
-            older: older.name,
-          })
-        : t('todayNoteEven');
+    const released = games.filter((g) => g.ageMonths != null);
+    const oldest = released.reduce<CompareGame | null>(
+      (o, g) => (o == null || (g.ageMonths ?? 0) > (o.ageMonths ?? 0) ? g : o),
+      null,
+    );
+    const uneven = new Set(ages).size > 1 && released.length === games.length;
+    if (!uneven || !oldest) {
+      note = t('todayNoteEven');
+    } else if (games.length === 2) {
+      const [A, B] = games;
+      note = t('todayNote', {
+        a: A.name,
+        ageA: ageText(A.ageMonths as number),
+        b: B.name,
+        ageB: ageText(B.ageMonths as number),
+        older: oldest.name,
+      });
+    } else {
+      note = t('todayNoteMany', { oldest: oldest.name, age: ageText(oldest.ageMonths as number) });
+    }
     groups = [
       {
         label: t('groupSteam'),
         note: t('groupSteamNote'),
         rows: [
-          { label: t('rowReviews'), sub: t('rowReviewsSub'), rank: true, cells: pair((g) => num(g.steamReviews)) },
+          { label: t('rowReviews'), sub: t('rowReviewsSub'), rank: true, cells: each((g) => num(g.steamReviews)) },
           {
             label: t('rowPeak'),
             sub: t('rowPeakSub'),
             rank: true,
-            cells: pair((g) => num(g.peakCcu?.value, g.peakCcu ? month(g.peakCcu.at) : undefined)),
+            cells: each((g) => num(g.peakCcu?.value, g.peakCcu ? month(g.peakCcu.at) : undefined)),
           },
           {
             label: t('rowRecent'),
             sub: t('rowRecentSub'),
             rank: true,
-            cells: pair((g) => num(g.recentCcu?.value, g.recentCcu ? day(g.recentCcu.at) : undefined)),
+            cells: each((g) => num(g.recentCcu?.value, g.recentCcu ? day(g.recentCcu.at) : undefined)),
           },
-          { label: t('rowFollowers'), rank: true, cells: pair((g) => num(g.followers)) },
+          { label: t('rowFollowers'), rank: true, cells: each((g) => num(g.followers)) },
           {
             label: t('rowPlaytime'),
             sub: t('rowPlaytimeSub'),
             rank: true,
-            cells: pair((g) => {
+            cells: each((g) => {
               const hours = g.playtimeMinutes != null ? Math.round(g.playtimeMinutes / 60) : null;
               return hours ? { value: hours, text: t('hours', { n: hours }) } : num(null);
             }),
@@ -151,26 +162,26 @@ export function CompareTable({
         label: t('groupConsoles'),
         note: t('groupConsolesNote'),
         rows: [
-          ...(games.some((g) => onPlatform(g, 'PLAYSTATION'))
-            ? [{ label: t('rowPs'), rank: true, cells: pair((g) => store(g, 'PLAYSTATION')) }]
+          ...(anyOn('PLAYSTATION')
+            ? [{ label: t('rowPs'), rank: true, cells: each((g) => store(g, 'PLAYSTATION')) }]
             : []),
-          ...(games.some((g) => onPlatform(g, 'XBOX'))
-            ? [{ label: t('rowXbox'), rank: true, cells: pair((g) => store(g, 'XBOX')) }]
+          ...(anyOn('XBOX')
+            ? [{ label: t('rowXbox'), rank: true, cells: each((g) => store(g, 'XBOX')) }]
             : []),
         ],
       },
       {
         label: t('groupSheet'),
         rows: [
-          { label: t('rowPrice'), cells: pair(price) },
+          { label: t('rowPrice'), cells: each(price) },
           {
             label: t('rowAge'),
             sub: t('rowAgeSub'),
-            cells: pair((g) => text(g.ageMonths != null ? ageText(g.ageMonths) : tCommon('upcoming'))),
+            cells: each((g) => text(g.ageMonths != null ? ageText(g.ageMonths) : tCommon('upcoming'))),
           },
-          { label: t('rowRelease'), cells: pair((g) => text(g.releaseDate ? longDate(g.releaseDate) : null)) },
-          { label: t('rowStudio'), cells: pair((g) => text(g.developer)) },
-          { label: t('rowPublisher'), cells: pair((g) => text(g.publisher)) },
+          { label: t('rowRelease'), cells: each((g) => text(g.releaseDate ? longDate(g.releaseDate) : null)) },
+          { label: t('rowStudio'), cells: each((g) => text(g.developer)) },
+          { label: t('rowPublisher'), cells: each((g) => text(g.publisher)) },
         ],
       },
     ];
@@ -184,7 +195,18 @@ export function CompareTable({
       const v = atAge(g.series[key], m);
       return v != null ? num(v) : noHistory;
     };
-    note = t('sameAgeNote', { n: m, a: A.name, dateA: momentOf(A), b: B.name, dateB: momentOf(B) });
+    if (games.length === 2) {
+      const [A, B] = games;
+      note = t('sameAgeNote', { n: m, a: A.name, dateA: momentOf(A), b: B.name, dateB: momentOf(B) });
+    } else {
+      note = t('sameAgeNoteMany', {
+        n: m,
+        moments: format.list(
+          games.map((g) => t('momentItem', { name: g.name, date: momentOf(g) })),
+          { type: 'conjunction' },
+        ),
+      });
+    }
     groups = [
       {
         label: t('groupSteam'),
@@ -194,13 +216,13 @@ export function CompareTable({
             label: t('rowReviews'),
             sub: t('rowReviewsSubAge', { n: m }),
             rank: true,
-            cells: pair((g) => at(g, 'reviews')),
+            cells: each((g) => at(g, 'reviews')),
           },
           {
             label: t('rowPeak'),
             sub: t('rowPeakSubAge', { n: m }),
             rank: true,
-            cells: pair((g) => {
+            cells: each((g) => {
               const first = g.series.ccu.aligned[0]?.[0];
               return first != null && first <= m ? num(maxUpTo(g.series.ccu.aligned, m)) : noHistory;
             }),
@@ -209,29 +231,29 @@ export function CompareTable({
             label: t('rowMonth', { n: m }),
             sub: t('rowMonthSub'),
             rank: true,
-            cells: pair((g) => at(g, 'ccu')),
+            cells: each((g) => at(g, 'ccu')),
           },
-          { label: t('rowFollowers'), rank: true, cells: pair((g) => at(g, 'followers')) },
+          { label: t('rowFollowers'), rank: true, cells: each((g) => at(g, 'followers')) },
         ],
       },
       {
         label: t('groupConsoles'),
         note: t('groupConsolesNote'),
         rows: [
-          ...(games.some((g) => onPlatform(g, 'PLAYSTATION'))
+          ...(anyOn('PLAYSTATION')
             ? [{
                 label: t('rowPs'),
                 rank: true,
-                cells: pair((g) =>
+                cells: each((g) =>
                   onPlatform(g, 'PLAYSTATION') ? at(g, 'psRatings') : store(g, 'PLAYSTATION'),
                 ),
               }]
             : []),
-          ...(games.some((g) => onPlatform(g, 'XBOX'))
+          ...(anyOn('XBOX')
             ? [{
                 label: t('rowXbox'),
                 rank: true,
-                cells: pair((g) => (onPlatform(g, 'XBOX') ? at(g, 'xboxRatings') : store(g, 'XBOX'))),
+                cells: each((g) => (onPlatform(g, 'XBOX') ? at(g, 'xboxRatings') : store(g, 'XBOX'))),
               }]
             : []),
         ],
@@ -239,15 +261,15 @@ export function CompareTable({
       {
         label: t('groupSheet'),
         rows: [
-          { label: t('rowMoment'), cells: pair((g) => text(momentOf(g))) },
-          { label: t('rowRelease'), cells: pair((g) => text(g.releaseDate ? longDate(g.releaseDate) : null)) },
-          { label: t('rowStudio'), cells: pair((g) => text(g.developer)) },
+          { label: t('rowMoment'), cells: each((g) => text(momentOf(g))) },
+          { label: t('rowRelease'), cells: each((g) => text(g.releaseDate ? longDate(g.releaseDate) : null)) },
+          { label: t('rowStudio'), cells: each((g) => text(g.developer)) },
         ],
       },
     ];
   }
 
-  // A row with nothing on either side says nothing: drop it, then empty groups.
+  // A row with nothing on any side says nothing: drop it, then empty groups.
   const shown = groups
     .map((g) => ({
       ...g,
@@ -255,7 +277,10 @@ export function CompareTable({
     }))
     .filter((g) => g.rows.length > 0);
 
-  const columns = 'grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_3.5rem] items-center gap-4';
+  // Static class names, so Tailwind sees them.
+  const columns = showRatio
+    ? 'grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_3.5rem] items-center gap-4'
+    : 'grid grid-cols-3 items-center gap-3';
 
   return (
     <section
@@ -302,9 +327,11 @@ export function CompareTable({
                 <span className="truncate text-[0.82rem] font-semibold">{g.name}</span>
               </div>
             ))}
-            <div className="text-end font-mono text-[0.68rem] font-semibold tracking-widest text-muted-foreground uppercase">
-              {t('colGap')}
-            </div>
+            {showRatio && (
+              <div className="text-end font-mono text-[0.68rem] font-semibold tracking-widest text-muted-foreground uppercase">
+                {t('colGap')}
+              </div>
+            )}
           </div>
         </div>
 
@@ -319,13 +346,15 @@ export function CompareTable({
               )}
             </div>
             {group.rows.map((row) => {
-              const [a, b] = row.cells;
-              const ranked = row.rank && a.value != null && b.value != null;
-              const max = ranked ? Math.max(a.value!, b.value!) : 1;
-              const lead = ranked ? (a.value! >= b.value! ? 0 : 1) : null;
-              const ratio = ranked
-                ? Math.max(a.value!, b.value!) / Math.min(a.value!, b.value!)
-                : null;
+              const ranked = row.rank
+                ? row.cells.filter((c): c is Cell & { value: number } => c.value != null)
+                : [];
+              // Bars and a leader need at least two values to compare.
+              const comparable = ranked.length >= 2;
+              const max = comparable ? Math.max(...ranked.map((c) => c.value)) : 1;
+              const min = comparable ? Math.min(...ranked.map((c) => c.value)) : 1;
+              const lead = comparable ? row.cells.findIndex((c) => c.value === max) : -1;
+              const ratio = comparable && showRatio ? max / min : null;
               return (
                 <div
                   key={row.label}
@@ -352,12 +381,12 @@ export function CompareTable({
                         {cell.sub && (
                           <p className="font-mono text-xs text-muted-foreground">{cell.sub}</p>
                         )}
-                        {ranked && (
+                        {comparable && cell.value != null && (
                           <div className="mt-1.5 h-1 rounded-full bg-border-soft">
                             <div
                               className="h-1 rounded-full"
                               style={{
-                                width: `${((cell.value as number) / max) * 100}%`,
+                                width: `${(cell.value / max) * 100}%`,
                                 background: colors[i],
                               }}
                             />
@@ -365,14 +394,16 @@ export function CompareTable({
                         )}
                       </div>
                     ))}
-                    <div
-                      className="text-end font-mono text-[0.82rem] font-semibold tabular-nums"
-                      style={{ color: lead != null ? colors[lead] : undefined }}
-                    >
-                      {ratio != null
-                        ? `×${format.number(ratio, { maximumFractionDigits: ratio >= 10 ? 0 : 1 })}`
-                        : <span className="text-muted-foreground">—</span>}
-                    </div>
+                    {showRatio && (
+                      <div
+                        className="text-end font-mono text-[0.82rem] font-semibold tabular-nums"
+                        style={{ color: lead >= 0 ? colors[lead] : undefined }}
+                      >
+                        {ratio != null
+                          ? `×${format.number(ratio, { maximumFractionDigits: ratio >= 10 ? 0 : 1 })}`
+                          : <span className="text-muted-foreground">—</span>}
+                      </div>
+                    )}
                   </div>
                 </div>
               );

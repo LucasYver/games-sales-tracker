@@ -207,7 +207,7 @@ country code is Argentina.
 | ----- | ---- |
 | `/[locale]` | Search and filterable catalog |
 | `/[locale]/game/[slug]` | Headline estimate, history, signals, regional prices |
-| `/[locale]/compare/[a]/[b]` | Two games side by side: estimates, Steam and console signals on one chart (aligned on launch or on the calendar) and a table (today or at the same age). Slugs in alphabetical order (the other order redirects); only pairs from the same franchise or studio are indexed. Built from the two cached game details, no backend route (`lib/compare.ts`) |
+| `/[locale]/compare/[...slugs]` | Two games side by side, or three when the visitor adds one: estimates, Steam and console signals on one chart (aligned on launch or on the calendar) and a table (today or at the same age). Slugs in alphabetical order (any other order redirects); only two-game pages from the same franchise or studio are indexed. Entry points: the Compare button and related-game links on game pages, and "compare the top sellers" on franchise, studio and publisher pages. Chart and table choices live in the query string (`metric`, `axis`, `period`, `scale`, `table`), so a shared link opens on the same view. Built from the two cached game details, no backend route (`lib/compare.ts`) |
 | `/[locale]/blog` | Published official-sales articles (human-reviewed) |
 | `/[locale]/blog/[slug]` | One article, FR/EN, no model estimates |
 | `/[locale]/privacy` | Privacy page: audience measurement, ads, contact |
@@ -218,8 +218,10 @@ country code is Argentina.
 
 Share images (`opengraph-image.tsx`, shared code in `lib/og.tsx`): one default
 card per locale built at deploy time, plus on-demand cards for game pages
-(cover, name, headline figure) and blog articles (title, cover), cached a day
-on the CDN. Pages that set their own `openGraph.type` list the default card
+(cover, name, headline figure), blog articles (title, cover) and comparisons
+(`app/[locale]/compare-card/[...slugs]/route.tsx`, a plain route because Next
+refuses a metadata image under a catch-all: covers side by side and each
+estimate), cached a day on the CDN. Pages that set their own `openGraph.type` list the default card
 through `lib/og-meta.ts`, since they lose the inherited one.
 
 The public game page shows `headline` (the model range). `totalSales` is

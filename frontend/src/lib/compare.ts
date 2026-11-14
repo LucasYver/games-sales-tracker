@@ -105,14 +105,21 @@ export function pickerSuggestions(
   return out;
 }
 
-/** One URL per pair: slugs in alphabetical order. */
-export function comparePair(a: string, b: string): [string, string] {
-  return a < b ? [a, b] : [b, a];
+/** A comparison holds two games, or three when the visitor adds one. */
+export const MAX_COMPARED = 3;
+
+/** One URL per set of games: slugs in alphabetical order, each once. */
+export function compareSlugs(slugs: string[]): string[] {
+  return [...new Set(slugs)].sort();
 }
 
-export function compareHref(a: string, b: string): string {
-  const [first, second] = comparePair(a, b);
-  return `/compare/${first}/${second}`;
+export function compareHref(...slugs: string[]): string {
+  return `/compare/${compareSlugs(slugs).join('/')}`;
+}
+
+/** Share card of a comparison (`app/[locale]/compare-card/[...slugs]/route.tsx`). */
+export function compareCardUrl(locale: string, slugs: string[]): string {
+  return `/${locale}/compare-card/${compareSlugs(slugs).join('/')}`;
 }
 
 export function calendarMonth(ms: number): number {

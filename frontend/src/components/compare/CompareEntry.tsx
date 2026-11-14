@@ -32,7 +32,7 @@ export function CompareButton({
       </button>
       {open && (
         <GamePicker
-          base={game}
+          keep={[game]}
           suggestions={suggestions}
           from="game_header"
           onClose={() => setOpen(false)}
@@ -61,6 +61,30 @@ export function CompareLink({
     >
       <ArrowLeftRight aria-hidden className="size-3.5" />
       <span className="hidden sm:inline">{t('compareShort')}</span>
+    </Link>
+  );
+}
+
+/** "Compare the top sellers" link on a franchise, studio or publisher page. */
+export function CompareTopLink({
+  slugs,
+  from,
+}: {
+  /** The best sellers of the page, best first (two or three). */
+  slugs: string[];
+  /** The hub kind, for analytics (`franchise_page`…). */
+  from: string;
+}) {
+  const t = useTranslations('compare');
+  return (
+    <Link
+      href={compareHref(...slugs)}
+      prefetch={false}
+      onClick={() => trackEvent('compare_pick', { from, game: slugs[0] })}
+      className="mt-3 inline-flex h-9 items-center gap-2 rounded-[3px] border border-primary/50 px-3 font-mono text-xs font-semibold text-primary hover:bg-accent"
+    >
+      <ArrowLeftRight aria-hidden className="size-4" />
+      {t('compareTop', { count: slugs.length })}
     </Link>
   );
 }

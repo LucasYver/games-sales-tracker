@@ -6,11 +6,14 @@ import {
   getGame,
   getGameRedirect,
   getRelatedGames,
+  type GameDetail,
   type RelatedGames,
 } from '@/lib/api';
 import {
-  comparePair,
+  MAX_COMPARED,
+  compareCardUrl,
   compareHref,
+  compareSlugs,
   pickerSuggestions,
   toCompareGame,
 } from '@/lib/compare';
@@ -19,27 +22,52 @@ import { Link } from '@/i18n/navigation';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
 import { CompareView } from '@/components/compare/CompareView';
 
-type Params = Promise<{ locale: string; a: string; b: string }>;
+type Params = Promise<{ locale: string; slugs: string[] }>;
 
-const OTHER_PAIRS_PER_GAME = 2;
+/** Chips under the page: about four other comparisons in all. */
+const OTHER_COMPARISONS = 4;
+const SUGGESTIONS = 6;
 
 /**
- * Both games and their related lists. Same arguments as the game page, so a
+ * The games and their related lists. Same arguments as the game page, so a
  * visitor coming from a game page hits the fetch cache it already filled.
  */
-async function loadPair(locale: string, a: string, b: string) {
+async function loadGames(locale: string, slugs: string[]) {
   const country = defaultPriceCountry(locale);
-  const [gameA, gameB, relatedA, relatedB] = await Promise.all([
-    getGame(a, country),
-    getGame(b, country),
-    getRelatedGames(a),
-    getRelatedGames(b),
+  const [games, related] = await Promise.all([
+    Promise.all(slugs.map((slug) => getGame(slug, country))),
+    Promise.all(slugs.map((slug) => getRelatedGames(slug))),
   ]);
-  return { gameA, gameB, relatedA, relatedB };
+  return { games, related };
+}
+
+function allFound(games: (GameDetail | null)[]): games is GameDetail[] {
+  return games.every((g) => g != null);
 }
 
 function isRelated(related: RelatedGames, slug: string): boolean {
   return [...related.franchise, ...related.studio].some((g) => g.slug === slug);
+}
+
+/** The related lists of every game on the page, merged: franchise first. */
+function mergedRelated(related: RelatedGames[]): RelatedGames {
+  return {
+    franchise: related.flatMap((r) => r.franchise),
+    studio: related.flatMap((r) => r.studio),
+    franchiseHub: null,
+    studioHub: null,
+    publisherHub: null,
+  };
+}
+
+/** A two-game message (`metaTitle`) or its three-game twin (`metaTitle3`). */
+function forGames(
+  t: (key: string, values: Record<string, string>) => string,
+  key: 'metaTitle' | 'metaDescription',
+  names: string[],
+): string {
+  const [a, b, c] = names;
+  return names.length === 3 ? t(`${key}3`, { a, b, c }) : t(key, { a, b });
 }
 
 export async function generateMetadata({
@@ -47,20 +75,30 @@ export async function generateMetadata({
 }: {
   params: Params;
 }): Promise<Metadata> {
-  const { locale, a, b } = await params;
-  const [{ gameA, gameB, relatedA, relatedB }, t] = await Promise.all([
-    loadPair(locale, a, b),
+  const { locale, slugs } = await params;
+  if (slugs.length < 2 || slugs.length > MAX_COMPARED) return {};
+  const [{ games, related }, t] = await Promise.all([
+    loadGames(locale, slugs),
     getTranslations({ locale, namespace: 'compare' }),
   ]);
-  if (!gameA || !gameB) return { title: 'Game not found' };
+  if (!allFound(games)) return { title: 'Game not found' };
 
-  const title = t('metaTitle', { a: gameA.name, b: gameB.name });
-  const description = t('metaDescription', { a: gameA.name, b: gameB.name });
-  const path = compareHref(gameA.slug, gameB.slug);
+  const names = games.map((g) => g.name);
+  const title = forGames(t, 'metaTitle', names);
+  const description = forGames(t, 'metaDescription', names);
+  const path = compareHref(...games.map((g) => g.slug));
+  const image = {
+    url: compareCardUrl(locale, games.map((g) => g.slug)),
+    width: 1200,
+    height: 630,
+    alt: title,
+  };
   // Only pairs a reader would look for (same franchise or studio) are
-  // indexed; any other pair still works but stays out of search results, so
-  // crawlers do not walk millions of combinations.
-  const indexable = isRelated(relatedA, gameB.slug) || isRelated(relatedB, gameA.slug);
+  // indexed. Other pairs and every three-game page still work but stay out
+  // of search results, so crawlers do not walk millions of combinations.
+  const indexable =
+    games.length === 2 &&
+    (isRelated(related[0], games[1].slug) || isRelated(related[1], games[0].slug));
 
   return {
     title,
@@ -70,8 +108,15 @@ export async function generateMetadata({
       canonical: `/${locale}${path}`,
       languages: localeLanguages(path),
     },
-    openGraph: { title, description, type: 'article', locale, url: `/${locale}${path}` },
-    twitter: { card: 'summary', title, description },
+    openGraph: {
+      title,
+      description,
+      type: 'article',
+      locale,
+      url: `/${locale}${path}`,
+      images: [{ ...image, type: 'image/png' }],
+    },
+    twitter: { card: 'summary_large_image', title, description, images: [image.url] },
   };
 }
 
@@ -81,22 +126,25 @@ function requestTime(): number {
 }
 
 export default async function ComparePage({ params }: { params: Params }) {
-  const { locale, a, b } = await params;
-  if (a === b) permanentRedirect(`/${locale}/game/${a}`);
-  const [first] = comparePair(a, b);
-  if (first !== a) permanentRedirect(`/${locale}${compareHref(a, b)}`);
+  const { locale, slugs } = await params;
+  const unique = compareSlugs(slugs);
+  if (unique.length === 1) permanentRedirect(`/${locale}/game/${unique[0]}`);
+  if (unique.length > MAX_COMPARED) notFound();
+  if (unique.join('/') !== slugs.join('/')) {
+    permanentRedirect(`/${locale}${compareHref(...unique)}`);
+  }
 
-  const { gameA, gameB, relatedA, relatedB } = await loadPair(locale, a, b);
-  if (!gameA || !gameB) {
+  const { games, related } = await loadGames(locale, unique);
+  if (!allFound(games)) {
     // An edition merged into its base game keeps old comparison links alive.
-    const [targetA, targetB] = await Promise.all([
-      gameA ? null : getGameRedirect(a),
-      gameB ? null : getGameRedirect(b),
-    ]);
-    if ((gameA || targetA) && (gameB || targetB)) {
-      const nextA = targetA ?? a;
-      const nextB = targetB ?? b;
-      if (nextA !== nextB) permanentRedirect(`/${locale}${compareHref(nextA, nextB)}`);
+    const targets = await Promise.all(
+      unique.map((slug, i) => (games[i] ? slug : getGameRedirect(slug))),
+    );
+    if (targets.every((s): s is string => Boolean(s))) {
+      const next = compareSlugs(targets);
+      if (next.length >= 2 && next.join('/') !== unique.join('/')) {
+        permanentRedirect(`/${locale}${compareHref(...next)}`);
+      }
     }
     notFound();
   }
@@ -106,22 +154,21 @@ export default async function ComparePage({ params }: { params: Params }) {
     getTranslations({ locale, namespace: 'gamePage' }),
   ]);
   const now = requestTime();
-  const pair = [toCompareGame(gameA, now), toCompareGame(gameB, now)] as const;
+  const shown = games.map((g) => toCompareGame(g, now));
+  const current = games.map((g) => g.slug);
 
-  // Replacing one game keeps the other: suggest games related to the kept one.
-  const suggestions = {
-    [gameA.slug]: pickerSuggestions(relatedB, [gameA.slug, gameB.slug]),
-    [gameB.slug]: pickerSuggestions(relatedA, [gameA.slug, gameB.slug]),
-  };
+  // One list for the picker: games related to any game on the page, minus
+  // the ones already compared (the picker also hides the games it keeps).
+  const suggestions = pickerSuggestions(mergedRelated(related), current, SUGGESTIONS);
 
-  const otherPairs = [
-    ...pickerSuggestions(relatedA, [gameA.slug, gameB.slug])
-      .slice(0, OTHER_PAIRS_PER_GAME)
-      .map((g) => ({ href: compareHref(gameA.slug, g.slug), a: gameA.name, b: g.name })),
-    ...pickerSuggestions(relatedB, [gameA.slug, gameB.slug])
-      .slice(0, OTHER_PAIRS_PER_GAME)
-      .map((g) => ({ href: compareHref(gameB.slug, g.slug), a: gameB.name, b: g.name })),
-  ];
+  const perGame = Math.max(1, Math.floor(OTHER_COMPARISONS / games.length));
+  const otherPairs = games.flatMap((game, i) =>
+    pickerSuggestions(related[i], current, perGame).map((g) => ({
+      href: compareHref(game.slug, g.slug),
+      a: game.name,
+      b: g.name,
+    })),
+  );
 
   return (
     <main className="flex min-h-screen flex-col">
@@ -135,7 +182,7 @@ export default async function ComparePage({ params }: { params: Params }) {
           {t('breadcrumb')}
         </nav>
 
-        <CompareView games={pair} suggestions={suggestions} />
+        <CompareView games={shown} suggestions={suggestions} />
 
         {otherPairs.length > 0 && (
           <section aria-labelledby="other-pairs" className="px-4 py-6">
