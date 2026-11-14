@@ -35,27 +35,27 @@
     "contact": "Contacto"
   },
   "siteMeta": {
-    "description": "¿Cuántas copias ha vendido ese juego? Cifras de ventas de videojuegos en PC, PlayStation, Xbox y Switch, actualizadas a diario.",
+    "description": "¿Cuántas copias ha vendido ese juego? Estimaciones diarias de ventas de más de 6000 videojuegos en PC, PlayStation y Xbox, a partir de datos públicos.",
     "keywords": "ventas de videojuegos, copias vendidas, cuántas copias ha vendido, PC, PlayStation, Xbox, Switch",
     "siteName": "Game Sales Tracker",
     "title": "Game Sales Tracker — ¿Cuántas copias ha vendido ese juego?",
     "titleTemplate": "%s · Game Sales Tracker"
   },
   "homeMeta": {
-    "description": "Ventas de videojuegos, cifra a cifra: PC, PlayStation, Xbox y Switch, clasificados y actualizados a diario.",
+    "description": "¿Cuántas copias ha vendido cada juego? Ventas estimadas de más de 6000 juegos en PC, PlayStation y Xbox, clasificadas, filtrables y actualizadas a diario.",
     "title": "Ventas de videojuegos",
     "titlePage": "Ventas de videojuegos — Página {page}"
   },
   "gamePageMeta": {
-    "description": "Ventas de {name}: cifra actual, reparto por plataforma y evolución de las reseñas en tiendas.",
-    "descriptionFree": "{name} es gratuito, así que no tiene estimación de copias vendidas. Las tendencias de jugadores y reseñas se actualizan a diario.",
+    "description": "Seguimiento de ventas de {name}: estimación de copias vendidas cuando existe, reseñas de Steam, jugadores simultáneos y valoraciones en PlayStation y Xbox.",
+    "descriptionFree": "{name} es gratuito, así que no tiene estimación de copias vendidas. Sigue sus reseñas de Steam, jugadores simultáneos y valoraciones, actualizados a diario.",
     "descriptionUnits": "Unas {units} copias vendidas de {name} ({platforms}) a fecha de {date}. Reparto por plataforma y evolución de las reseñas en tiendas.",
-    "descriptionUnitsNoDate": "Unas {units} copias vendidas de {name} ({platforms}). Reparto por plataforma y evolución de las reseñas en tiendas.",
+    "descriptionUnitsNoDate": "Unas {units} copias vendidas de {name} ({platforms}). Reparto por plataforma, reseñas de Steam y evolución de las valoraciones en tiendas, a diario.",
     "title": "{name} ({year}) — Ventas",
     "titleFree": "{name} — Gratuito",
     "titleNoYear": "{name} — Ventas",
     "titleUnits": "Ventas de {name} — {units} copias",
-    "descriptionUpcoming": "{name} sale el {date}. Los datos de ventas llegarán con el lanzamiento y la primera estimación unos días después."
+    "descriptionUpcoming": "{name} sale el {date}. El seguimiento de ventas empieza con el lanzamiento, con una primera estimación unos días después y actualizaciones diarias."
   },
   "home": {
     "gamesCount": "{count, number} juegos",
@@ -274,11 +274,11 @@
   "hubs": {
     "home": "Inicio",
     "studioTitle": "Ventas de los juegos de {name}",
-    "studioDescription": "Ventas estimadas o declaradas de {count, plural, one {# juego} other {# juegos}} de {name}, juego a juego.",
+    "studioDescription": "Ventas estimadas o declaradas de {count, plural, one {# juego} other {# juegos}} de {name}, juego a juego, con las ventas totales, el más vendido y el último lanzamiento, actualizado a diario.",
     "publisherTitle": "Ventas de los juegos publicados por {name}",
-    "publisherDescription": "Ventas estimadas o declaradas de {count, plural, one {# juego publicado} other {# juegos publicados}} por {name}, juego a juego.",
+    "publisherDescription": "Ventas estimadas o declaradas de {count, plural, one {# juego publicado} other {# juegos publicados}} por {name}, juego a juego, con las ventas totales y el más vendido, actualizado a diario.",
     "franchiseTitle": "Ventas de la franquicia {name}",
-    "franchiseDescription": "Ventas estimadas o declaradas de {count, plural, one {# juego} other {# juegos}} de la franquicia {name}, juego a juego.",
+    "franchiseDescription": "Ventas estimadas o declaradas de {count, plural, one {# juego} other {# juegos}} de la franquicia {name}, juego a juego, con las ventas totales y el más vendido, actualizado a diario.",
     "gamesTracked": "{count, plural, one {# juego seguido} other {# juegos seguidos}}.",
     "bestLine": "El más vendido es {game}, con {units} de copias.",
     "totalSales": "Ventas acumuladas",
@@ -287,14 +287,14 @@
     "latestRelease": "Último lanzamiento",
     "allGames": "Todos los juegos",
     "studiosTitle": "Ventas de juegos por estudio",
-    "studiosIntro": "{count} estudios seguidos, cada uno con todos sus juegos y sus ventas estimadas o declaradas.",
+    "studiosIntro": "{count} estudios seguidos, cada uno con todos sus juegos y sus ventas estimadas o declaradas. Compara desarrolladores por ventas totales y su mayor éxito.",
     "publishersTitle": "Ventas de juegos por editora",
-    "publishersIntro": "{count} editoras seguidas, cada una con todos sus juegos y sus ventas estimadas o declaradas.",
+    "publishersIntro": "{count} editoras seguidas, cada una con todos sus juegos y sus ventas estimadas o declaradas. Compara editoras por ventas totales y su mayor éxito.",
     "franchisesTitle": "Ventas de juegos por franquicia",
-    "franchisesIntro": "{count} franquicias seguidas, cada una con todos sus juegos y sus ventas estimadas o declaradas.",
+    "franchisesIntro": "{count} franquicias seguidas, cada una con todos sus juegos y sus ventas estimadas o declaradas. Compara sagas por ventas totales y su mayor éxito.",
     "yearTitle": "Juegos más vendidos lanzados en {year}",
     "yearTitlePage": "Juegos más vendidos lanzados en {year}, página {page}",
-    "yearDescription": "Los juegos lanzados en {year} que más se han vendido: ventas estimadas o declaradas, todas las plataformas.",
+    "yearDescription": "Los videojuegos lanzados en {year} que más se han vendido, por copias: ventas estimadas o declaradas en PC, PlayStation y Xbox, actualizadas a diario.",
     "yearIntro": "{count, plural, one {# juego lanzado} other {# juegos lanzados}} en {year}, por ventas estimadas o declaradas en todas las plataformas. La página de cada juego explica su cifra.",
     "otherYears": "Otros años"
   },
@@ -358,7 +358,7 @@
       "worldwideCaption": "En todo el mundo, todas las plataformas"
     },
     "figuresAsOf": "Última cifra registrada: {date}",
-    "indexDescription": "Cifras oficiales de ventas de videojuegos: declaraciones de editores, Wikipedia y notas de analistas, juego a juego.",
+    "indexDescription": "Cifras oficiales de ventas de videojuegos, juego a juego: declaraciones de editoras, informes financieros, Wikipedia y notas de analistas, con fecha y fuente.",
     "indexIntro": "Declaraciones de editores, Wikipedia y las notas de analistas que tenemos archivadas: la historia oficial de ventas de cada juego, con fecha y fuente.",
     "indexTitle": "Ventas oficiales, con fuentes",
     "kinds": {
@@ -384,7 +384,8 @@
     "intro": "Esta página explica qué datos se tratan cuando visitas este sitio. Aquí no hay cuentas de usuario.",
     "title": "Privacidad",
     "affiliateTitle": "Enlaces a tiendas",
-    "affiliateBody": "Algunas fichas de juegos enlazan a la tienda Instant Gaming. Son enlaces de afiliado: si compras después de hacer clic, podemos recibir una comisión, sin coste adicional para ti. Contamos los clics en estos enlaces con Vercel Analytics, sin cookies."
+    "affiliateBody": "Algunas fichas de juegos enlazan a la tienda Instant Gaming. Son enlaces de afiliado: si compras después de hacer clic, podemos recibir una comisión, sin coste adicional para ti. Contamos los clics en estos enlaces con Vercel Analytics, sin cookies.",
+    "metaDescription": "Qué datos trata Game Sales Tracker cuando lo visitas: medición de audiencia sin cookies, anuncios de Google AdSense y enlaces de afiliado. Sin cuentas de usuario."
   },
   "methodology": {
     "title": "Cómo estimamos las ventas",
@@ -416,7 +417,8 @@
     "examplesBody": "Cada ficha muestra la cifra, su reparto por plataforma y las señales que seguimos:",
     "examplesBlog": "Leer nuestros artículos sobre ventas oficiales",
     "notEstimatedBody": "Preferimos mostrar «sin estimación» antes que una cifra en la que no creemos.",
-    "notEstimatedUnreleased": "<strong>Los juegos que aún no han salido</strong>: sin ventas, no hay nada que estimar. Los datos llegan con el lanzamiento y la primera estimación unos días después."
+    "notEstimatedUnreleased": "<strong>Los juegos que aún no han salido</strong>: sin ventas, no hay nada que estimar. Los datos llegan con el lanzamiento y la primera estimación unos días después.",
+    "metaDescription": "Cómo estimamos las ventas de videojuegos: reseñas de Steam, jugadores y valoraciones, comparados con más de 5000 cifras publicadas de más de 2000 juegos."
   },
   "og": {
     "tagline": "¿Cuántas copias vendió ese juego?",
@@ -487,7 +489,8 @@
     "fundingTitle": "Independencia y financiación",
     "fundingBody": "El sitio es gratuito y no requiere cuenta. Se financia con publicidad y con enlaces de afiliado a la tienda Instant Gaming. Ninguno de los dos influye en nuestras estimaciones, y ninguna editora puede pagar para aparecer en el sitio o para que se cambie una cifra.",
     "contactTitle": "Contactar",
-    "contactLink": "Escríbenos desde la página de contacto"
+    "contactLink": "Escríbenos desde la página de contacto",
+    "metaDescription": "Game Sales Tracker estima cada día las ventas de más de 6000 juegos en PC, PlayStation y Xbox a partir de datos públicos. Quién lo gestiona y cómo se financia."
   },
   "contact": {
     "title": "Contacto",
@@ -498,7 +501,8 @@
     "studiosBody": "¿Habéis anunciado una cifra de ventas que falta en la ficha de vuestro juego? Enviadnos el enlace del anuncio.",
     "pressTitle": "Prensa y colaboraciones",
     "pressBody": "Puedes citar nuestras cifras mencionando Game Sales Tracker con un enlace a la página del juego. Para una colaboración o un espacio patrocinado, escríbenos a la misma dirección.",
-    "responseTime": "Solemos responder en pocos días."
+    "responseTime": "Solemos responder en pocos días.",
+    "metaDescription": "Contacta con Game Sales Tracker para señalar un error, enviar una cifra oficial de ventas con su fuente o preguntar por citas de nuestras cifras y colaboraciones."
   },
   "mw4Sales": {
     "title": "Ventas de Modern Warfare 4 en directo",

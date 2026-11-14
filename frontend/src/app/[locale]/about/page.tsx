@@ -18,14 +18,14 @@ export async function generateMetadata({
   const path = `/${locale}/about`;
   return {
     title: t('title'),
-    description: t('intro'),
+    description: t('metaDescription'),
     alternates: {
       canonical: path,
       languages: localeLanguages('/about'),
     },
     openGraph: {
       title: t('title'),
-      description: t('intro'),
+      description: t('metaDescription'),
       type: 'website',
       locale,
       url: `${SITE_URL}${path}`,
