@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import type { AdminSocialPost } from '@/lib/admin';
 import {
   publishSocialPost,
+  regenerateSocialPost,
   rejectSocialPost,
   updateSocialPost,
 } from '../actions';
@@ -89,6 +90,21 @@ export function SocialPostEditor({
           onClick={publish}
         >
           Publish on Threads
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={pending}
+          onClick={() =>
+            run(
+              async () => setText((await regenerateSocialPost(post.id)).text),
+              'Rewritten.',
+              dirty ? 'Rewrite this post? Your unsaved edit will be lost.' : undefined,
+            )
+          }
+        >
+          Regenerate
         </Button>
         <Button
           type="button"

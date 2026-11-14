@@ -461,6 +461,12 @@ export class AdminController {
     return this.social.publish(id, adminEmail(req), body?.force === true);
   }
 
+  @Post('social/:id/regenerate')
+  @HttpCode(200)
+  regenerateSocial(@Param('id', ParseUUIDPipe) id: string) {
+    return this.social.regenerate(id);
+  }
+
   @Post('social/:id/reject')
   @HttpCode(200)
   rejectSocial(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {

@@ -479,6 +479,17 @@ export async function publishSocialPost(
   return result;
 }
 
+export async function regenerateSocialPost(
+  id: string,
+): Promise<AdminSocialPost> {
+  const result = await adminFetch<AdminSocialPost>(
+    `/social/${id}/regenerate`,
+    { method: 'POST' },
+  );
+  revalidatePath('/admin/social');
+  return result;
+}
+
 export async function rejectSocialPost(id: string): Promise<AdminSocialPost> {
   const result = await adminFetch<AdminSocialPost>(`/social/${id}/reject`, {
     method: 'POST',

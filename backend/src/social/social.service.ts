@@ -121,6 +121,22 @@ export class SocialService {
     }
   }
 
+  /** Rewrites a draft from its stored facts (one paid call, two at most). */
+  async regenerate(id: string) {
+    const post = await this.requireDraft(id);
+    if (!this.writer.enabled) {
+      throw new BadRequestException('OPENAI_API_KEY is not set.');
+    }
+    const { text, unverifiedNumbers } = await this.writer.write(
+      post.kind,
+      post.facts,
+    );
+    post.text = text;
+    post.unverifiedNumbers = unverifiedNumbers;
+    post.model = this.writer.model;
+    return this.posts.save(post);
+  }
+
   async reject(id: string, reviewedBy?: string) {
     const post = await this.requireDraft(id);
     post.status = 'REJECTED';

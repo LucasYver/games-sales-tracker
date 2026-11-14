@@ -15,7 +15,13 @@ Owner files: `backend/src/social/social.service.ts` (candidates, lifecycle),
 - Never auto-publish. The cron writes `DRAFT`s; only the admin Publish button
   posts, through `SocialService.publish`.
 - English only, links to `/en/...`. The link goes in `linkUrl` (Threads link
-  preview), never in the text.
+  preview), never in the text. A post that cites an official figure links the
+  page that shows it (the blog article, the GTA 6 page), not the game page,
+  which shows only our estimate: a reader checking the figure would land on
+  another number.
+- Tone (writer `SYSTEM` prompt): a hook first line (question or the figure),
+  short lines, about the game rather than the article, never "our new article
+  covers". Admin **Regenerate** rewrites a draft from its stored facts.
 - Facts are code-written lines (`facts`). The writer may only copy their
   numbers; `unverifiedNumbers` lists any other number, is recounted on every
   edit, and blocks Publish unless the admin confirms (`force`).
