@@ -25,6 +25,7 @@ export const CRON_JOBS = {
   'game-rank': (r) => r.recomputeHomegrownRank(),
   'blog-draft': (r) => r.generateWeeklyBlogDraft(),
   'blog-news': (r) => r.generateDailyBlogDrafts(),
+  'social-drafts': (r) => r.generateSocialDrafts(),
 } satisfies Record<string, (refresh: RefreshService) => Promise<unknown>>;
 
 export type CronJobName = keyof typeof CRON_JOBS;

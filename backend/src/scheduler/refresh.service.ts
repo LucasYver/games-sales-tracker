@@ -11,6 +11,7 @@ import { RankService } from '../reference-profiles/rank.service';
 import { ReferenceProfileService } from '../reference-profiles/reference-profile.service';
 import { cycleWindow } from '../ingestion/ingestion-cadence';
 import { BlogService } from '../blog/blog.service';
+import { SocialService } from '../social/social.service';
 import { AdminMailService } from '../admin/admin-mail.service';
 import { isEligibleForAutomaticHarvest } from './harvest-eligibility';
 import { isDueForRefresh } from './refresh-interval';
@@ -29,6 +30,7 @@ export class RefreshService {
     private readonly rank: RankService,
     private readonly referenceProfiles: ReferenceProfileService,
     private readonly blog: BlogService,
+    private readonly social: SocialService,
     private readonly mail: AdminMailService,
     private readonly igdbRefresh: IgdbRefreshService,
     private readonly instantGaming: InstantGamingLinksService,
@@ -424,6 +426,23 @@ export class RefreshService {
       }
     } catch (error) {
       this.logger.warn(`Daily blog drafts failed: ${error}`);
+    }
+  }
+
+  /**
+   * Daily: refresh the Threads token when due, then draft social posts (blog
+   * articles, GTA 6 figures; Mondays also trends and MW4) and mail them for
+   * review. Never posts.
+   */
+  async generateSocialDrafts() {
+    try {
+      const { notes, written } = await this.social.runDailyDraftJob();
+      this.logger.log(
+        `Social drafts: ${written.length} written${notes.length ? ` (${notes.join('; ')})` : ''}.`,
+      );
+      await this.mail.sendSocialDraftsReady(written);
+    } catch (error) {
+      this.logger.warn(`Social drafts failed: ${error}`);
     }
   }
 

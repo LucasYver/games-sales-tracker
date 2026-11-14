@@ -4,6 +4,7 @@ import { Game, GameRank } from '../entities';
 import { IngestionModule } from '../ingestion/ingestion.module';
 import { ReferenceProfilesModule } from '../reference-profiles/reference-profiles.module';
 import { BlogModule } from '../blog/blog.module';
+import { SocialModule } from '../social/social.module';
 import { AdminModule } from '../admin/admin.module';
 import { RefreshService } from './refresh.service';
 import { CronController } from './cron.controller';
@@ -15,6 +16,7 @@ import { AdminCronController } from './admin-cron.controller';
     IngestionModule,
     ReferenceProfilesModule,
     BlogModule,
+    SocialModule,
     AdminModule,
   ],
   providers: [RefreshService],

@@ -34,6 +34,8 @@ import { RejectBlogDto } from './dto/reject-blog.dto';
 import { PublishBlogDto } from './dto/publish-blog.dto';
 import { GenerateBlogFormatDto } from './dto/generate-blog-format.dto';
 import { BlogService } from '../blog/blog.service';
+import { SocialService } from '../social/social.service';
+import { UpdateSocialPostDto } from './dto/update-social-post.dto';
 import type { GenerateBlogFormatInput } from '../blog/blog.service';
 import { AdminMailService } from './admin-mail.service';
 import type { BlogPostStatus } from '../entities';
@@ -52,6 +54,7 @@ export class AdminController {
     private readonly referenceProfiles: ReferenceProfilesAdminService,
     private readonly rank: RankService,
     private readonly blog: BlogService,
+    private readonly social: SocialService,
     private readonly mail: AdminMailService,
   ) {}
 
@@ -431,6 +434,43 @@ export class AdminController {
   @HttpCode(200)
   unpublishBlog(@Param('id', ParseUUIDPipe) id: string) {
     return this.blog.unpublish(id);
+  }
+
+  @Get('social')
+  listSocial(@Query('status') status?: string) {
+    const allowed = ['DRAFT', 'PUBLISHED', 'REJECTED'] as const;
+    const wanted = allowed.find((s) => s === status) ?? 'DRAFT';
+    return this.social.list(wanted);
+  }
+
+  @Patch('social/:id')
+  updateSocial(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateSocialPostDto,
+  ) {
+    return this.social.updateText(id, body);
+  }
+
+  @Post('social/:id/publish')
+  @HttpCode(200)
+  publishSocial(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: PublishBlogDto,
+    @Req() req: Request,
+  ) {
+    return this.social.publish(id, adminEmail(req), body?.force === true);
+  }
+
+  @Post('social/:id/regenerate')
+  @HttpCode(200)
+  regenerateSocial(@Param('id', ParseUUIDPipe) id: string) {
+    return this.social.regenerate(id);
+  }
+
+  @Post('social/:id/reject')
+  @HttpCode(200)
+  rejectSocial(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
+    return this.social.reject(id, adminEmail(req));
   }
 }
 

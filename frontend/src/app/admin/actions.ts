@@ -7,6 +7,7 @@ import {
   ADMIN_COOKIE,
   adminFetch,
   type AdminBlogDetail,
+  type AdminSocialPost,
   type GenerateBlogFormatInput,
   type AdminGenreIgdbSyncResult,
   type ManualGameField,
@@ -451,5 +452,48 @@ export async function updateBlogTranslation(
   );
   revalidatePath(`/admin/blog/${id}`);
   if (result.status === 'PUBLISHED') revalidatePublicBlog(result);
+  return result;
+}
+
+export async function updateSocialPost(
+  id: string,
+  edit: { text?: string; xText?: string; xWithLink?: boolean },
+): Promise<AdminSocialPost> {
+  const result = await adminFetch<AdminSocialPost>(`/social/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(edit),
+  });
+  revalidatePath('/admin/social');
+  return result;
+}
+
+export async function publishSocialPost(
+  id: string,
+  force = false,
+): Promise<AdminSocialPost> {
+  const result = await adminFetch<AdminSocialPost>(`/social/${id}/publish`, {
+    method: 'POST',
+    body: JSON.stringify({ force }),
+  });
+  revalidatePath('/admin/social');
+  return result;
+}
+
+export async function regenerateSocialPost(
+  id: string,
+): Promise<AdminSocialPost> {
+  const result = await adminFetch<AdminSocialPost>(
+    `/social/${id}/regenerate`,
+    { method: 'POST' },
+  );
+  revalidatePath('/admin/social');
+  return result;
+}
+
+export async function rejectSocialPost(id: string): Promise<AdminSocialPost> {
+  const result = await adminFetch<AdminSocialPost>(`/social/${id}/reject`, {
+    method: 'POST',
+  });
+  revalidatePath('/admin/social');
   return result;
 }

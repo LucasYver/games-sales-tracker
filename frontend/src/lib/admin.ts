@@ -727,6 +727,46 @@ export interface PlatformBreakdownResult {
 
 export type BlogPostStatus = 'DRAFT' | 'PUBLISHED' | 'REJECTED';
 
+export type SocialPostKind =
+  | 'BLOG_ARTICLE'
+  | 'WEEKLY_TRENDS'
+  | 'GTA6_FIGURE'
+  | 'MW4_UPDATE';
+
+/** A Threads post (backend `SocialPost`). */
+export interface AdminSocialPost {
+  id: string;
+  network: 'THREADS';
+  kind: SocialPostKind;
+  topicKey: string;
+  status: BlogPostStatus;
+  text: string;
+  /** Short version for X. */
+  xText: string;
+  /** Append the link to the X post (~$0.20 instead of ~$0.03). */
+  xWithLink: boolean;
+  linkUrl: string;
+  facts: string[];
+  unverifiedNumbers: string[];
+  model: string | null;
+  externalId: string | null;
+  externalUrl: string | null;
+  xExternalId: string | null;
+  xExternalUrl: string | null;
+  publishedAt: string | null;
+  lastError: string | null;
+  reviewedBy: string | null;
+  createdAt: string;
+}
+
+export interface AdminSocialList {
+  posts: AdminSocialPost[];
+  /** False until THREADS_ACCESS_TOKEN is set. */
+  threadsReady: boolean;
+  /** False until the four X API keys are set. */
+  xReady: boolean;
+}
+
 export interface AdminBlogFreshness {
   /** The live article no longer matches the sourced figures on file. */
   stale: boolean;
