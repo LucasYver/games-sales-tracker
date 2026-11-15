@@ -47,7 +47,10 @@ session knows where to resume.
 | `t4-5k-50k-b` | 5,000 to 50,000, retries first | 50 | 5 | 4 | Done, 156 searches, no rate limit; Berry Bury Berry already in base |
 | `t4-5k-50k-c` | 5,000 to 50,000, retries first | 50 | 1 | 0 | Done, 147 searches, no rate limit; the only figure (INDIKA) was already in base |
 | `t4-5k-50k-d` | 5,000 to 50,000, retries first | 30 | 0 | 0 | Done, 98 searches, no rate limit; nothing citable, reduced to 30 games to stop at 80% |
-| `t4-5k-50k-e` | 5,000 to 50,000, retries first | 0 | 0 | 0 | **Next: run `prepare` with `--min-reviews 5000 --max-reviews 50000`. About 395 games left** |
+| `t4-5k-50k-e` | 5,000 to 50,000, retries first | 50 | 6 | 7 | Done, 162 searches, no rate limit; Dragonwilds 1.5M (rejected before), Gorn (weak relay, blocked host) and Dragon Age II (2011, marked done) skipped |
+| `t4-5k-50k-f` | 5,000 to 50,000, retries first | 50 | 2 | 2 | Done, 158 searches, no rate limit; Gorn skipped again and marked done, Unfortunate Spacemen (2016) marked done |
+| `t4-5k-50k-g` | 5,000 to 50,000, retries first | 50 | 4 | 5 | Done, 155 searches, no rate limit; Passpartout 1M skipped (also on iOS and Android) |
+| `t4-5k-50k-h` | 5,000 to 50,000, retries first | 0 | 0 | 0 | **Next: run `prepare` with `--min-reviews 5000 --max-reviews 50000`. About 246 games left** |
 
 After that: the rest of 10,000 to 20,000 reviews, then below 10,000.
 
@@ -161,7 +164,7 @@ All of these happened on real figures:
   figures in `t2-20k-50k-b`, where 39 of 50 games got all their searches. Console
   searches mostly surface Alinea relays or nothing. Polish publishers' ESPI filings
   (PlayWay, Movie Games) are the exception: they give exact Xbox and PS5 units.
-- **Four waves fit in one 5-hour window** on Pro (3% to 85%), not five.
+- **Four waves fit in one 5-hour window** on Pro (3% to 85%), not five. On 2026-11-15 a wave cost 15 to 19% of the 5-hour limit and about 2% of the weekly one.
 - **Paste the full prompt into each agent.** Agents told only to read
   `agent-prompt.md` did shallow passes (`t3-10k-20k-f`: 20 games at 1 search, no
   rate limit). With the full text and the "run the full budget" line, most games
