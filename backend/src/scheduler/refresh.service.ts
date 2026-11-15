@@ -14,7 +14,7 @@ import { BlogService } from '../blog/blog.service';
 import { SocialService } from '../social/social.service';
 import { AdminMailService } from '../admin/admin-mail.service';
 import { isEligibleForAutomaticHarvest } from './harvest-eligibility';
-import { isDueForRefresh } from './refresh-interval';
+import { isDueForRefresh, lastMilestoneCheck } from './refresh-interval';
 
 @Injectable()
 export class RefreshService {
@@ -164,7 +164,7 @@ export class RefreshService {
       );
       return (
         tierEligible &&
-        isDueForRefresh(game.releaseDate, game.lastMilestoneHarvestedAt, now)
+        isDueForRefresh(game.releaseDate, lastMilestoneCheck(game), now)
       );
     });
 

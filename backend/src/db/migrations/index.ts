@@ -82,6 +82,7 @@ import { AddSocialPost1789000000000 } from './1789000000000-AddSocialPost';
 import { AddSocialPostX1789010000000 } from './1789010000000-AddSocialPostX';
 import { AddSocialPostXWithLink1789020000000 } from './1789020000000-AddSocialPostXWithLink';
 import { AddGameSlugRedirect1789030000000 } from './1789030000000-AddGameSlugRedirect';
+import { AddGameMilestoneResearchedAt1789040000000 } from './1789040000000-AddGameMilestoneResearchedAt';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -175,4 +176,5 @@ export const migrations: MixedList<Function | string> = [
   AddSocialPostX1789010000000,
   AddSocialPostXWithLink1789020000000,
   AddGameSlugRedirect1789030000000,
+  AddGameMilestoneResearchedAt1789040000000,
 ];

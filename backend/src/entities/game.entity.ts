@@ -275,6 +275,11 @@ export class Game {
   @Column({ type: 'timestamptz', nullable: true })
   lastMilestoneHarvestedAt: Date | null;
 
+  // Timestamp of the last manual sales-figure research
+  // (ml/research_figures.py apply). The harvest cron counts it like a harvest.
+  @Column({ type: 'timestamptz', nullable: true })
+  lastMilestoneResearchedAt: Date | null;
+
   // Timestamp of the last Steam price capture for this game. Used by the
   // daily price-capture cron to only re-price games once a week (stalest
   // first) instead of every tracked game every night, which was timing out

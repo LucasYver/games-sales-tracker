@@ -50,11 +50,29 @@ export function harvestDueSql(alias: string): {
     `WHEN ${ageDays} <= 1095 THEN 30 ` +
     `WHEN ${ageDays} <= 1825 THEN 90 ` +
     `ELSE 180 END)`;
+  // A manual research pass counts like a harvest; GREATEST ignores NULLs.
+  const lastChecked = `GREATEST(${alias}."lastMilestoneHarvestedAt", ${alias}."lastMilestoneResearchedAt")`;
   const isDue =
     `(${intervalDays} IS NOT NULL AND (` +
-    `${alias}."lastMilestoneHarvestedAt" IS NULL OR ` +
-    `EXTRACT(EPOCH FROM (now() - ${alias}."lastMilestoneHarvestedAt")) / 86400 >= ${intervalDays}))`;
+    `${lastChecked} IS NULL OR ` +
+    `EXTRACT(EPOCH FROM (now() - ${lastChecked})) / 86400 >= ${intervalDays}))`;
   return { intervalDays, isDue };
+}
+
+/**
+ * Latest of the cron harvest and the manual research pass: either one means
+ * the game's figures were just looked for.
+ */
+export function lastMilestoneCheck(game: {
+  lastMilestoneHarvestedAt: Date | null;
+  lastMilestoneResearchedAt: Date | null;
+}): Date | null {
+  const {
+    lastMilestoneHarvestedAt: harvested,
+    lastMilestoneResearchedAt: researched,
+  } = game;
+  if (!harvested || !researched) return harvested ?? researched;
+  return harvested > researched ? harvested : researched;
 }
 
 export function isDueForRefresh(

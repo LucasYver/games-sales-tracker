@@ -61,7 +61,8 @@ newly inserted stub.
 - `STORE_RATINGS`, `PS_PRICE`, `XBOX_PRICE` need a console platform.
 - `MILESTONE_HARVEST` also requires `isEligibleForAutomaticHarvest` and
   `isDueForRefresh`. An extended game with a weak rank is skipped on purpose.
-  Due selection reads `game.lastMilestoneHarvestedAt`, not the state row.
+  Due selection reads the later of `game.lastMilestoneHarvestedAt` and
+  `game.lastMilestoneResearchedAt` (manual research, `research-sales-figures`), not the state row.
   Pre-release and undated games are never harvested.
 - Store ratings throw when a PlayStation game has no concept URL. That
   string in `lastError` is the diagnosis.

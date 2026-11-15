@@ -131,6 +131,13 @@ All of these happened on real figures:
   Elliott count as data (`alinea-milestones`), other estimators are refused.
 - **Blocked hosts stay blocked**: `trusted_source` rows with `active=false`, and
   `TAVILY_EXCLUDED_DOMAINS`. `prepare` writes the list and `apply` refuses them.
+- **The harvest cron skips researched games.** `apply --commit` sets
+  `game.lastMilestoneResearchedAt` to today for every game searched in the
+  tranche, figure or not. The milestone harvest counts it like one of its own
+  harvests (`refresh-interval.ts`), so it waits its normal interval (3 to 180
+  days, by game age) before searching that game again. `stamp --commit` copies
+  the journal's dates into that column; it was run once for the tranches written
+  before the column existed.
 - **Players and downloads are not written** by this workflow. They stay in the
   `engagement` field of the results.
 - **No backfill or rebuild** afterwards: `let-crons-catch-up`. Estimates pick up the
@@ -171,7 +178,7 @@ All of these happened on real figures:
 
 | File | Role |
 |---|---|
-| `ml/research_figures.py` | `prepare`, `check` and `apply` |
+| `ml/research_figures.py` | `prepare`, `check`, `apply` and `stamp` |
 | `agent-prompt.md` | Prompt for the research agents |
 | `searched_games.csv` | One row per game searched, tracked in git |
 | `ml/reports/research/<tranche>/` | Batches, results, review, `applied.csv` (ignored by git) |

@@ -54,6 +54,10 @@ GAMES_WITHOUT_WORLD_FIGURE = '''
       and g."releaseDate">='2017-01-01' and g."releaseDate"<now()
       and not exists (select 1 from milestone m where m."gameId"=g.id and m.platform='GLOBAL'
                       and m."rejectedAt" is null and not m."isEngagement" and m."reportedAt" is not null and m.units>0)'''
+# Le cron de harvest compte cette date comme un harvest (refresh-interval.ts).
+STAMP_RESEARCHED = '''
+    update game set "lastMilestoneResearchedAt" = %(day)s::date
+    where id = any(%(ids)s::uuid[]) and ("lastMilestoneResearchedAt" is null or "lastMilestoneResearchedAt" < %(day)s::date)'''
 KNOWN_FIGURES = '''
     select "gameId"::text, platform::text, units, "reportedAt"::date, left(coalesce("sourceUrl",''),80),
            "rejectedAt" is not null, "isEngagement"
@@ -257,6 +261,9 @@ def apply(args) -> None:
             report.append({**line, "statut": "ajouté", "raison": r.get("stated_by") or ""})
         for line in report:
             print(f"{line['statut']:13} {line['jeu']} | {line['plateforme']} {line['ventes']:,} | {line['date']} {line['raison'] or ''}")
+        searched = [e["id"] for e in batches(folder, "result") if e.get("searches", 0) > 0]
+        cur.execute(STAMP_RESEARCHED, dict(ids=searched, day=date.today().isoformat()))
+        print(f"\n{cur.rowcount} jeux marqués comme cherchés à la main (le cron de harvest les laisse passer).")
         if not args.commit:
             conn.rollback()
             print(f"\nÀ blanc : {written} chiffres seraient écrits. Relancer avec --commit.")
@@ -273,6 +280,21 @@ def apply(args) -> None:
                             searches=e.get("searches", 0), needed=needed_searches(games[e["id"]]), figures=len(e.get("figures", [])))
     write_log(log)
     print(f"Journal mis à jour : {LOG}")
+
+
+def stamp(args) -> None:
+    """Reporte en base la date de chaque jeu du journal, pour les tranches écrites avant la colonne."""
+    rows = [r for r in read_log().values() if int(r.get("searches") or 0) > 0]
+    with psycopg.connect(database_url()) as conn, conn.cursor() as cur:
+        stamped = 0
+        for day in sorted({r["date"] for r in rows}):
+            cur.execute(STAMP_RESEARCHED, dict(ids=[r["gameId"] for r in rows if r["date"] == day], day=day))
+            stamped += cur.rowcount
+        if not args.commit:
+            conn.rollback()
+            print(f"À blanc : {stamped} jeux seraient marqués. Relancer avec --commit.")
+            return
+    print(f"{stamped} jeux marqués.")
 
 
 def main() -> None:
@@ -292,6 +314,9 @@ def main() -> None:
     p.add_argument("tranche")
     p.add_argument("--commit", action="store_true")
     p.set_defaults(run=apply)
+    p = commands.add_parser("stamp", help="reporter les dates du journal dans game.lastMilestoneResearchedAt")
+    p.add_argument("--commit", action="store_true")
+    p.set_defaults(run=stamp)
     args = parser.parse_args()
     args.run(args)
 
