@@ -601,7 +601,19 @@ export class GamesService {
         'trend."gameId" = g.id',
       );
       qb.addSelect('MAX(trend.score)', 'trending_score');
-      qb.orderBy('trending_score', 'DESC', 'NULLS LAST');
+      // "Trending" is the home page: a released game showing "—" at the top
+      // looks broken, so games with no public estimate go last. Free games and
+      // upcoming ones keep their own label in the sales column and stay put.
+      qb.addSelect(
+        `(g."isFree" OR g."releaseDate" > NOW() OR (${estimatePublicSql('g')} AND EXISTS (
+          SELECT 1 FROM estimate_snapshot es
+          WHERE es."gameId" = g.id AND ${computedAfterReleaseSql('g', 'es."computedAt"')}
+        )))`,
+        'has_figure',
+      );
+      qb.setParameter('estimateMinRelease', ESTIMATE_MIN_RELEASE);
+      qb.orderBy('has_figure', 'DESC');
+      qb.addOrderBy('trending_score', 'DESC', 'NULLS LAST');
       qb.addOrderBy('reviews', 'DESC');
     } else if (sort === 'recent') {
       qb.orderBy('g.releaseDate', 'DESC', 'NULLS LAST');
