@@ -48,6 +48,7 @@ import { ExophaseClient } from './exophase.client';
 import {
   GamesPopularityClient,
   GamesPopularityPoint,
+  GamesPopularityRateLimitError,
 } from './games-popularity.client';
 import { TwitchClient } from './twitch.client';
 import { SourcesService } from '../sources/sources.service';
@@ -2784,11 +2785,18 @@ export class IngestionService {
     return summary;
   }
 
+  /** Longest Retry-After the follower fan-out waits for before stopping. */
+  private static readonly POPULARITY_MAX_RATE_LIMIT_WAIT_MS = 2 * 60 * 1000;
+
   /**
-   * Fan-out over every tracked (non-free) Steam game, syncing followers. Games
-   * are processed stalest-followers-first so a run truncated by `budgetMs` (the
-   * Vercel cron wall-clock) still makes forward progress across invocations.
-   * Best-effort per game.
+   * Fan-out over every tracked (non-free) Steam game, syncing followers.
+   * Order is the ingestion state's least-recently-attempted first, so a run
+   * cut short by `budgetMs` or by the provider's rate limit resumes where it
+   * stopped instead of spending the quota on the same head of the queue.
+   *
+   * On a 429 the run waits for Retry-After (when it fits the budget and the
+   * cap) and retries the same game once. A second 429 in a row stops the run:
+   * the remaining games keep their old attempt time and lead the next run.
    */
   async syncAllGamesPopularity(
     options: { fullHistory?: boolean; budgetMs?: number } = {},
@@ -2797,18 +2805,24 @@ export class IngestionService {
     followers: number;
     failed: number;
     leftover: number;
+    rateLimited: boolean;
   }> {
     if (!this.gamesPopularity.enabled) {
       this.logger.warn('[games-popularity] disabled (no API key); skipping.');
-      return { processed: 0, followers: 0, failed: 0, leftover: 0 };
+      return {
+        processed: 0,
+        followers: 0,
+        failed: 0,
+        leftover: 0,
+        rateLimited: false,
+      };
     }
 
     const fullHistory = options.fullHistory ?? false;
     const budgetMs = options.budgetMs ?? Number.POSITIVE_INFINITY;
     const startedAt = Date.now();
+    const remainingMs = () => budgetMs - (Date.now() - startedAt);
 
-    // Stalest-first: games whose latest FOLLOWERS snapshot is oldest (or
-    // missing) sort ahead, guaranteeing forward progress if the run is capped.
     const rows: Array<{ gameId: string; externalId: string }> =
       await this.gameSources.query(
         `SELECT gs."gameId" AS "gameId", gs."externalId" AS "externalId"
@@ -2817,62 +2831,90 @@ export class IngestionService {
              ON g.id = gs."gameId"
             AND g."isFree" = false
             AND g."deletedAt" IS NULL
-           LEFT JOIN LATERAL (
-             SELECT MAX(s."capturedAt") AS last
-               FROM signal_snapshot s
-              WHERE s."gameId" = gs."gameId"
-                AND s.metric = 'STEAM_FOLLOWERS'
-           ) l ON true
-          WHERE gs.source = 'STEAM'
-          ORDER BY l.last ASC NULLS FIRST`,
+          WHERE gs.source = 'STEAM'`,
       );
-    const dueGameIds = new Set(
-      await this.ingestionState.selectDueForCadence(
-        'STEAM_POPULARITY',
-        rows.map((row) => row.gameId),
-        'day',
-      ),
+    const appIdByGame = new Map(
+      rows.map((row) => [row.gameId, Number(row.externalId)]),
     );
-    const dueRows = rows.filter((row) => dueGameIds.has(row.gameId));
+    // Least-recently-attempted first (never-attempted games lead).
+    const dueGameIds = await this.ingestionState.selectDueForCadence(
+      'STEAM_POPULARITY',
+      [...appIdByGame.keys()],
+      'day',
+    );
 
     let processed = 0;
     let followers = 0;
     let failed = 0;
+    let rateLimited = false;
 
-    for (const row of dueRows) {
-      if (Date.now() - startedAt >= budgetMs) break;
-      const appId = Number(row.externalId);
-      if (!Number.isFinite(appId)) continue;
+    for (const gameId of dueGameIds) {
+      if (remainingMs() <= 0) break;
+      const appId = appIdByGame.get(gameId);
+      if (appId === undefined || !Number.isFinite(appId)) continue;
 
       try {
         const f = await this.ingestionState.track(
-          row.gameId,
+          gameId,
           'STEAM_POPULARITY',
-          () =>
-            this.syncFollowersFromApi(row.gameId, {
-              fullHistory,
-              appId,
-              throwIfMissing: false,
-            }),
+          async () => {
+            try {
+              return await this.syncFollowersFromApi(gameId, {
+                fullHistory,
+                appId,
+                throwIfMissing: false,
+              });
+            } catch (error) {
+              if (!(error instanceof GamesPopularityRateLimitError))
+                throw error;
+              const waitMs = error.retryAfterMs;
+              if (
+                waitMs > IngestionService.POPULARITY_MAX_RATE_LIMIT_WAIT_MS ||
+                waitMs >= remainingMs()
+              ) {
+                throw error;
+              }
+              this.logger.log(
+                `[games-popularity] rate limited after ${processed} game(s); ` +
+                  `waiting ${Math.round(waitMs / 1000)}s`,
+              );
+              await new Promise((r) => setTimeout(r, waitMs));
+              // A second 429 right after the wait propagates and stops the run.
+              return this.syncFollowersFromApi(gameId, {
+                fullHistory,
+                appId,
+                throwIfMissing: false,
+              });
+            }
+          },
         );
         if (f.imported > 0) followers += 1;
       } catch (error) {
+        if (error instanceof GamesPopularityRateLimitError) {
+          rateLimited = true;
+          this.logger.warn(
+            `[games-popularity] stopping: ${error.message} ` +
+              `after ${processed} game(s)`,
+          );
+          break;
+        }
         failed += 1;
         this.logger.warn(
-          `[games-popularity] followers failed for ${row.gameId}: ${error}`,
+          `[games-popularity] followers failed for ${gameId}: ${error}`,
         );
       }
 
       processed += 1;
     }
 
-    const leftover = dueRows.length - processed;
+    const leftover = dueGameIds.length - processed;
     this.logger.log(
-      `[games-popularity] sync done: ${processed}/${dueRows.length} game(s), ` +
+      `[games-popularity] sync done: ${processed}/${dueGameIds.length} game(s), ` +
         `${followers} with followers, ${failed} error(s)` +
+        (rateLimited ? ', stopped by rate limit' : '') +
         (leftover > 0 ? `, ${leftover} left for next run` : ''),
     );
-    return { processed, followers, failed, leftover };
+    return { processed, followers, failed, leftover, rateLimited };
   }
 
   /**

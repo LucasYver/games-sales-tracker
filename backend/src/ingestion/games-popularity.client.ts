@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 
@@ -11,6 +11,23 @@ const MAX_PAGES = 60;
 
 // Politeness delay between paginated requests to the same free API.
 const PAGE_THROTTLE_MS = 120;
+
+// Wait used after a 429 when the provider sends no usable Retry-After.
+const DEFAULT_RETRY_AFTER_MS = 60_000;
+
+/**
+ * The provider answered 429. Callers must stop or wait, never treat it as
+ * "no data": swallowing it stamped a success on every game and froze the
+ * follower series from 2026-10-22. `retryAfterMs` comes from Retry-After.
+ */
+export class GamesPopularityRateLimitError extends HttpException {
+  constructor(readonly retryAfterMs: number) {
+    super(
+      `games-popularity rate limit (retry after ${Math.round(retryAfterMs / 1000)}s)`,
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+}
 
 // A single normalized time-series point: an integer value at a UTC instant.
 export interface GamesPopularityPoint {
@@ -36,13 +53,16 @@ interface RawHistoryResponse {
  * recent trajectory, not their launch ramp. Do NOT use it to replace our native
  * review/CCU backfills, which reach launch.
  *
- * Disabled (returns null) when no API key is configured. Every call is
- * best-effort: a network/parse failure logs a warning and returns null.
+ * Disabled (returns null) when no API key is configured. An uncovered app
+ * (404) returns null. A 429 throws GamesPopularityRateLimitError; any other
+ * failure on the first page throws, so the ingestion state records it.
  */
 @Injectable()
 export class GamesPopularityClient {
   private readonly logger = new Logger(GamesPopularityClient.name);
   private readonly apiKey: string | null;
+  // Rate-limit headers are logged once per process to measure the quota.
+  private rateLimitHeadersLogged = false;
 
   constructor(config: ConfigService) {
     this.apiKey = config.get<string>('GAMES_POPULARITY_API_KEY') ?? null;
@@ -83,9 +103,10 @@ export class GamesPopularityClient {
 
   /**
    * Shared cursor-paginated fetch. Returns the accumulated points (possibly
-   * empty when the game is uncovered) on success, or null on the first-page
-   * network/parse failure. Points are returned newest-first (as the API does);
-   * callers bucket/normalize as needed.
+   * empty), or null when the provider does not cover the app (404). Throws on
+   * 429 and on any other first-page failure; a later-page failure keeps what
+   * was fetched. Points are returned newest-first (as the API does); callers
+   * bucket/normalize as needed.
    */
   private async fetchHistory(
     endpoint: string,
@@ -114,12 +135,35 @@ export class GamesPopularityClient {
         );
         data = response.data;
       } catch (error) {
-        // A hard failure on the very first page means we got nothing usable;
-        // signal that to the caller. On a later page, keep what we have.
+        const status = axios.isAxiosError(error)
+          ? error.response?.status
+          : undefined;
+        if (status === 429) {
+          const headers = axios.isAxiosError(error)
+            ? (error.response?.headers ?? {})
+            : {};
+          if (!this.rateLimitHeadersLogged) {
+            this.rateLimitHeadersLogged = true;
+            const rateHeaders = Object.entries(headers)
+              .filter(([k]) => /rate|retry|limit|quota/i.test(k))
+              .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+              .join(', ');
+            this.logger.warn(
+              `429 on ${endpoint} for app ${appId}; headers: ${rateHeaders || 'none'}`,
+            );
+          }
+          throw new GamesPopularityRateLimitError(
+            this.retryAfterMs(headers['retry-after']),
+          );
+        }
+        if (status === 404) return page === 0 ? null : points;
         this.logger.warn(
           `fetch ${endpoint} failed for app ${appId} (page ${page}): ${error}`,
         );
-        return page === 0 ? null : points;
+        // Nothing usable on the first page: let the caller record the error.
+        // On a later page, keep what we have.
+        if (page === 0) throw error;
+        return points;
       }
 
       const history = Array.isArray(data.history) ? data.history : [];
@@ -144,6 +188,18 @@ export class GamesPopularityClient {
     } while (cursor && page < MAX_PAGES);
 
     return points;
+  }
+
+  /** Retry-After is either seconds or an HTTP date. */
+  private retryAfterMs(raw: unknown): number {
+    if (typeof raw !== 'string' && typeof raw !== 'number') {
+      return DEFAULT_RETRY_AFTER_MS;
+    }
+    const seconds = Number(raw);
+    if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+    const at = Date.parse(String(raw));
+    if (Number.isNaN(at)) return DEFAULT_RETRY_AFTER_MS;
+    return Math.max(0, at - Date.now());
   }
 
   private sleep(ms: number): Promise<void> {
