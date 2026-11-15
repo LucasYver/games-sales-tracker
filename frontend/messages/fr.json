@@ -144,7 +144,7 @@
     "unavailableEstimateNote": "Nous n’avons pas de signaux assez fiables pour estimer les ventes de ce jeu, donc nous ne publions pas d’estimation.",
     "outOfScopeNote": "Notre modèle n’est pas assez fiable pour donner une estimation précise sur les jeux sortis avant 2017.",
     "outOfScopeTitle": "Non estimé",
-    "officialRecapLead": "Ce que l'on sait officiellement",
+    "officialRecapLead": "Article du blog sur ce jeu",
     "noData": "Aucun chiffre de vente pour ce jeu.",
     "peakCcuHint": "joueurs simultanés Steam · {date}",
     "peakCcuLabel": "Record Steam",

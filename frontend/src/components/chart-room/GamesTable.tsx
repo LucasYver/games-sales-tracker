@@ -151,7 +151,7 @@ export function GamesTable({
           return (
             <tr
               key={game.id}
-              className="border-b border-border-soft odd:bg-surface-alt hover:bg-accent"
+              className="relative cursor-pointer border-b border-border-soft odd:bg-surface-alt hover:bg-accent"
             >
               <td className="px-2 py-2 text-center font-mono text-muted-foreground tabular-nums">
                 {offset + idx + 1}
@@ -172,7 +172,7 @@ export function GamesTable({
               <td className="min-w-0 px-2 py-2">
                 <Link
                   href={`/game/${game.slug}`}
-                  className="font-semibold text-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  className="font-semibold text-foreground after:absolute after:inset-0 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 >
                   {game.name}
                 </Link>
