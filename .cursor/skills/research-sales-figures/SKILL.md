@@ -50,7 +50,8 @@ session knows where to resume.
 | `t4-5k-50k-e` | 5,000 to 50,000, retries first | 50 | 6 | 7 | Done, 162 searches, no rate limit; Dragonwilds 1.5M (rejected before), Gorn (weak relay, blocked host) and Dragon Age II (2011, marked done) skipped |
 | `t4-5k-50k-f` | 5,000 to 50,000, retries first | 50 | 2 | 2 | Done, 158 searches, no rate limit; Gorn skipped again and marked done, Unfortunate Spacemen (2016) marked done |
 | `t4-5k-50k-g` | 5,000 to 50,000, retries first | 50 | 4 | 5 | Done, 155 searches, no rate limit; Passpartout 1M skipped (also on iOS and Android) |
-| `t4-5k-50k-h` | 5,000 to 50,000, retries first | 0 | 0 | 0 | **Next: run `prepare` with `--min-reviews 5000 --max-reviews 50000`. About 246 games left** |
+| `t4-5k-50k-h` | 5,000 to 50,000, retries first | 50 | 4 | 4 | Done, 157 searches, no rate limit; batches 2, 3 and 5 found nothing; Airships (early access 2015) kept |
+| `t4-5k-50k-i` | 5,000 to 50,000, retries first | 0 | 0 | 0 | **Next: run `prepare` with `--min-reviews 5000 --max-reviews 50000`. About 196 games left** |
 
 After that: the rest of 10,000 to 20,000 reviews, then below 10,000.
 
