@@ -14,8 +14,6 @@ import {
 /** Each network's limit on a text post. */
 const THREADS_MAX = 500;
 const X_MAX = 280;
-/** X counts a link as 23 characters, plus the line break before it. */
-const X_LINK_CHARS = 24;
 
 export function SocialPostEditor({
   post,
@@ -34,11 +32,10 @@ export function SocialPostEditor({
     text !== post.text ||
     xText !== post.xText ||
     xWithLink !== post.xWithLink;
-  const xMax = X_MAX - (xWithLink ? X_LINK_CHARS : 0);
   const onThreads = !!post.externalId;
   const onX = !!post.xExternalId;
   const threadsTooLong = text.length > THREADS_MAX;
-  const xTooLong = xText.length > xMax;
+  const xTooLong = xText.length > X_MAX;
   const targets = [
     !onThreads && 'Threads',
     xReady && !onX && 'X',
@@ -87,12 +84,12 @@ export function SocialPostEditor({
             ? 'X (posted)'
             : xReady
               ? xWithLink
-                ? 'X — with link (~$0.20)'
+                ? 'X — share card attached, link in a reply (~$0.23)'
                 : 'X — no link, share card attached (~$0.03)'
               : 'X — API keys not set, not posted'
         }
         value={xText}
-        max={xMax}
+        max={X_MAX}
         rows={4}
         disabled={pending || onX}
         onChange={setXText}
@@ -105,8 +102,8 @@ export function SocialPostEditor({
             disabled={pending}
             onChange={(e) => setXWithLink(e.target.checked)}
           />
-          Add link on X (about $0.20 instead of $0.03; X then shows the
-          page&apos;s card)
+          Post the link on X as a reply (about $0.20 more; the post itself
+          keeps no link, so X does not cut its reach)
         </label>
       )}
       <div className="flex flex-wrap items-center gap-2">
