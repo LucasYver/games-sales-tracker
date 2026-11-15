@@ -161,9 +161,19 @@ def main() -> None:
                 return r
         return None
 
+    # A game's first figure has nothing to be checked against, so it gets a manual look at its source.
+    since = date.fromisoformat(args.depuis)
+    first_figure = {gid for gid, h in hist.groupby("gameId") if h.cap.min() >= since}
+    single_host = {gid for gid, h in hist.groupby("gameId") if h.host.nunique() <= 1}
+
     buf = StringIO()
     with redirect_stdout(buf):
         print(f"# Audit milestones capturés depuis {args.depuis} — {len(new)} milestones, {new.gameId.nunique()} jeux\n")
+        names = new.drop_duplicates("gameId").set_index("gameId").name
+        print(f"## PREMIER_CHIFFRE : {len(first_figure)} jeux sans aucun milestone avant le {args.depuis} (vérifier la source à la main)")
+        for gid in sorted(first_figure, key=lambda g: names.get(g, "")):
+            print(f"   - {names.get(gid, gid)}{'  [SOURCE_UNIQUE]' if gid in single_host else ''}")
+        print()
         for gid, grp in new.groupby("gameId", sort=False):
             r0 = grp.iloc[0]
             e = est.loc[gid] if gid in est.index else None
@@ -172,7 +182,8 @@ def main() -> None:
             h_game = hist[hist.gameId == gid]
             est_txt = f"{e.lo / 1e6:.2f}M–{e.hi / 1e6:.2f}M" if e is not None else "n/a"
             print("=" * 110)
-            print(f"{r0['name']} | sortie {r0.rel} | plateformes {r0.platforms} | estimation {est_txt}")
+            tags_game = (" | PREMIER_CHIFFRE" if gid in first_figure else "") + (" | SOURCE_UNIQUE" if gid in single_host else "")
+            print(f"{r0['name']} | sortie {r0.rel} | plateformes {r0.platforms} | estimation {est_txt}{tags_game}")
             print("  historique (non rejetés, * = nouveau) :")
             new_ids = set(grp.id)
             for h in h_game.itertuples(index=False):
