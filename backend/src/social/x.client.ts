@@ -8,8 +8,9 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 /**
  * Posts on the site's X account (X API v2, pay-per-use: about $0.015 a post
- * without a link, $0.20 with one — so posts carry no link; the attached share
- * card is reportedly billed as one more post). Signed with
+ * without a link, $0.20 with one — so the main post never carries the link;
+ * the attached share card is reportedly billed as one more post, and the
+ * optional link goes in a reply). Signed with
  * OAuth 1.0a user context. Env: `X_API_KEY`, `X_API_SECRET`,
  * `X_ACCESS_TOKEN`, `X_ACCESS_TOKEN_SECRET` (they do not expire).
  */
@@ -32,12 +33,15 @@ export class XClient {
 
   /**
    * Posts `text`, with the share card of `imagePageUrl` attached when it can
-   * be fetched and uploaded (X carries no link, so the card stands in for the
-   * preview). An image that fails never blocks the post.
+   * be fetched and uploaded (the post itself carries no link, so the card
+   * stands in for the preview). An image that fails never blocks the post.
+   * With `replyToId`, the post is a reply to that post (used for the link
+   * reply).
    */
   async publishText(
     text: string,
     imagePageUrl?: string,
+    replyToId?: string,
   ): Promise<{ id: string; url: string; withImage: boolean }> {
     const keys = this.keys();
     if (!keys) throw new Error('X API keys are not set.');
@@ -55,9 +59,11 @@ export class XClient {
         Authorization: oauthHeader('POST', TWEETS_URL, keys),
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(
-        mediaId ? { text, media: { media_ids: [mediaId] } } : { text },
-      ),
+      body: JSON.stringify({
+        text,
+        ...(mediaId ? { media: { media_ids: [mediaId] } } : {}),
+        ...(replyToId ? { reply: { in_reply_to_tweet_id: replyToId } } : {}),
+      }),
     });
     const body = (await res.json().catch(() => ({}))) as {
       data?: { id: string };

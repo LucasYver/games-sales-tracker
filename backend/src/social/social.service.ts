@@ -24,8 +24,6 @@ import { XClient } from './x.client';
 /** Each network's own limit on a text post. */
 const THREADS_MAX_CHARS = 500;
 const X_LIMIT_CHARS = 280;
-// X counts any link as 23 characters (t.co), plus the line break before it.
-const X_LINK_CHARS = 24;
 // Drafts written per cron run, and drafts left waiting before the cron stops
 // writing new ones: posts lose their point in a few days.
 const MAX_DRAFTS_PER_RUN = 3;
@@ -132,10 +130,9 @@ export class SocialService {
           'The X version is empty. Write it, or click Regenerate.',
         );
       }
-      const xLimit = X_LIMIT_CHARS - (post.xWithLink ? X_LINK_CHARS : 0);
-      if (post.xText.length > xLimit) {
+      if (post.xText.length > X_LIMIT_CHARS) {
         throw new BadRequestException(
-          `X text: ${post.xText.length} characters, the limit is ${xLimit}${post.xWithLink ? ' with the link' : ''}.`,
+          `X text: ${post.xText.length} characters, the limit is ${X_LIMIT_CHARS}.`,
         );
       }
     }
@@ -159,19 +156,33 @@ export class SocialService {
     }
     if (toX) {
       try {
-        // With the link, X shows the page's card itself; without it, the
-        // card is uploaded as an image.
-        const out = post.xWithLink
-          ? await this.x.publishText(`${post.xText}\n${post.linkUrl}`)
-          : await this.x.publishText(post.xText, post.linkUrl);
+        // The main post never carries the link (X cuts the reach of posts
+        // with an outside link): it gets the page's share card as an image,
+        // and the link goes in a reply when the admin asked for it.
+        const out = await this.x.publishText(post.xText, post.linkUrl);
         post.xExternalId = out.id;
         post.xExternalUrl = out.url;
       } catch (error) {
         errors.push(`X: ${error instanceof Error ? error.message : error}`);
       }
     }
+    // A failed link reply never blocks the post: the main post is out, so it
+    // is not retried (that would post it twice); the error is only shown.
+    let replyError: string | null = null;
+    if (toX && post.xExternalId && post.xWithLink) {
+      try {
+        await this.x.publishText(
+          `Full data: ${post.linkUrl}`,
+          undefined,
+          post.xExternalId,
+        );
+      } catch (error) {
+        replyError = `X link reply: ${error instanceof Error ? error.message : error}`;
+      }
+    }
     post.reviewedBy = reviewedBy ?? post.reviewedBy;
-    post.lastError = errors.length ? errors.join(' | ') : null;
+    post.lastError =
+      [...errors, ...(replyError ? [replyError] : [])].join(' | ') || null;
     const done =
       !!post.externalId && (!this.x.configured || !!post.xExternalId);
     if (done) {

@@ -63,9 +63,9 @@ export class SocialPost {
   @Column({ type: 'text', default: '' })
   xText: string;
 
-  // Admin's choice per post: append `linkUrl` to the X post. X then shows the
-  // page's card itself, so no image is uploaded; costs ~$0.20 instead of
-  // ~$0.03.
+  // Admin's choice per post: post `linkUrl` on X as a reply to the post (the
+  // post itself keeps no link, so X does not cut its reach, and keeps its
+  // share card image). The reply costs ~$0.20 on the X API.
   @Column({ type: 'boolean', default: false })
   xWithLink: boolean;
 
