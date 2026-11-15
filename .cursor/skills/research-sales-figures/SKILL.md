@@ -51,7 +51,11 @@ session knows where to resume.
 | `t4-5k-50k-f` | 5,000 to 50,000, retries first | 50 | 2 | 2 | Done, 158 searches, no rate limit; Gorn skipped again and marked done, Unfortunate Spacemen (2016) marked done |
 | `t4-5k-50k-g` | 5,000 to 50,000, retries first | 50 | 4 | 5 | Done, 155 searches, no rate limit; Passpartout 1M skipped (also on iOS and Android) |
 | `t4-5k-50k-h` | 5,000 to 50,000, retries first | 50 | 4 | 4 | Done, 157 searches, no rate limit; batches 2, 3 and 5 found nothing; Airships (early access 2015) kept |
-| `t4-5k-50k-i` | 5,000 to 50,000, retries first | 0 | 0 | 0 | **Next: run `prepare` with `--min-reviews 5000 --max-reviews 50000`. About 196 games left** |
+| `t4-5k-50k-i` | 5,000 to 50,000, retries first | 50 | 1 | 1 | Done, 150 searches, no rate limit; Halo: Reach (2010) marked done |
+| `t4-5k-50k-j` | 5,000 to 50,000, retries first | 50 | 1 | 1 | Done, 160 searches, no rate limit; Unravel (2016) marked done |
+| `t4-5k-50k-k` | 5,000 to 50,000, retries first | 50 | 3 | 4 | Done, 166 searches; Mr. Prepper found in review (PlayWay via spidersweb.pl); Spilled! skipped (only relays on blocked hosts); Battlefield Hardline (2015) marked done |
+| `t4-5k-50k-l` | 5,000 to 50,000, last 46 | 46 | 5 | 5 | Done, 156 searches; the 5,000 to 50,000 tier is exhausted |
+| `t5-2k-5k-a` | 2,000 to 5,000, most reviewed first | 0 | 0 | 0 | **Next, if the owner wants it: run `prepare` with `--min-reviews 2000 --max-reviews 5000`. Expect almost nothing: waves i to l found 11 games in 196** |
 
 After that: the rest of 10,000 to 20,000 reviews, then below 10,000.
 
