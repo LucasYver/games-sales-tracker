@@ -34,6 +34,11 @@
     "about": "Acerca de",
     "contact": "Contacto"
   },
+  "footer": {
+    "explore": "Explorar",
+    "site": "El sitio",
+    "tagline": "Estimaciones diarias de ventas de videojuegos a partir de datos públicos. Sin afiliación con editores ni plataformas."
+  },
   "siteMeta": {
     "description": "¿Cuántas copias ha vendido ese juego? Estimaciones diarias de ventas de más de 6000 videojuegos en PC, PlayStation y Xbox, a partir de datos públicos.",
     "keywords": "ventas de videojuegos, copias vendidas, cuántas copias ha vendido, PC, PlayStation, Xbox, Switch",

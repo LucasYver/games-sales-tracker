@@ -34,6 +34,11 @@
     "about": "À propos",
     "contact": "Contact"
   },
+  "footer": {
+    "explore": "Explorer",
+    "site": "Le site",
+    "tagline": "Estimations quotidiennes des ventes de jeux vidéo, à partir de données publiques. Non affilié aux éditeurs ni aux plateformes."
+  },
   "siteMeta": {
     "description": "Combien d'exemplaires ce jeu a-t-il vendus ? Estimations quotidiennes des ventes de plus de 6 000 jeux vidéo sur PC, PlayStation et Xbox, à partir de données publiques.",
     "keywords": "ventes jeux vidéo, sales tracker, copies vendues, PC, PlayStation, Xbox, Switch",

@@ -34,6 +34,11 @@
     "about": "About",
     "contact": "Contact"
   },
+  "footer": {
+    "explore": "Explore",
+    "site": "About the site",
+    "tagline": "Daily video game sales estimates built from public data. Not affiliated with any publisher or platform."
+  },
   "siteMeta": {
     "description": "How many copies did that game sell? Daily sales estimates for more than 6,000 video games on PC, PlayStation and Xbox, built from public data.",
     "keywords": "video game sales, sales tracker, copies sold, PC, PlayStation, Xbox, Switch",
