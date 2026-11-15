@@ -376,14 +376,88 @@ export class GamesService {
     // Trigram search via word_similarity: compares the query against the
     // best-matching fragment of the title, so short typo-prone queries
     // still rank their full game. ILIKE fallback catches short substrings.
-    return this.games
-      .createQueryBuilder('g')
-      .where('word_similarity(:q, g.name) > 0.3', { q: trimmed })
-      .orWhere('g.name ILIKE :pattern', { pattern: `%${trimmed}%` })
-      .orderBy('word_similarity(:q, g.name)', 'DESC')
-      .addOrderBy('g.releaseDate', 'DESC', 'NULLS LAST')
-      .limit(limit)
-      .getMany();
+    const [acronymIds, byName] = await Promise.all([
+      this.searchAcronymIds(trimmed, limit),
+      this.games
+        .createQueryBuilder('g')
+        .where('word_similarity(:q, g.name) > 0.3', { q: trimmed })
+        .orWhere('g.name ILIKE :pattern', { pattern: `%${trimmed}%` })
+        .orderBy('word_similarity(:q, g.name)', 'DESC')
+        .addOrderBy('g.releaseDate', 'DESC', 'NULLS LAST')
+        .limit(limit)
+        .getMany(),
+    ]);
+    if (acronymIds.length === 0) return byName;
+
+    // Acronym hits ("GTA6", "MW4") come first, then the title matches.
+    const byNameIds = new Set(byName.map((g) => g.id));
+    const missing = acronymIds.filter((id) => !byNameIds.has(id));
+    const fetched = missing.length
+      ? await this.games.findBy({ id: In(missing) })
+      : [];
+    const byId = new Map([...byName, ...fetched].map((g) => [g.id, g]));
+    const first = acronymIds.flatMap((id) => byId.get(id) ?? []);
+    const rest = byName.filter((g) => !acronymIds.includes(g.id));
+    return [...first, ...rest].slice(0, limit);
+  }
+
+  /**
+   * Games whose title acronym matches the query: "gta6" finds Grand Theft
+   * Auto VI, "mw4" Call of Duty: Modern Warfare 4 (the part after the colon
+   * has its own acronym), "rdr2" Red Dead Redemption 2. A word's first letter
+   * stands for it, numbers stay whole, and a Roman numeral after the first
+   * word counts both as itself and as digits ("gtavi" works too). The query
+   * may be the start of an acronym ("gta" lists gta6, gta5...), and the most
+   * reviewed game (all platforms, the figure the search shows) ranks first:
+   * Steam alone put GTA V behind GTA VI; an exact match first put Chaos on Deponia
+   * ahead of every Call of Duty for "cod". Computed at query
+   * time over the catalog, so no column or migration to keep in sync.
+   */
+  private async searchAcronymIds(query: string, limit: number) {
+    const q = query.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+    // Two letters match too much of the catalog to be worth ranking first.
+    if (q.length < 3) return [];
+    const roman = `'^(i|ii|iii|iv|v|vi|vii|viii|ix|x)$'`;
+    const rows = await this.games.query<{ id: string }[]>(
+      `
+      SELECT g.id
+      FROM game g
+      CROSS JOIN LATERAL unnest(ARRAY[
+        g.name,
+        NULLIF(btrim(substring(g.name FROM ':(.*)$')), '')
+      ]) AS s(seg)
+      CROSS JOIN LATERAL (
+        SELECT
+          string_agg(
+            CASE
+              WHEN t ~ '^[0-9]+$' THEN t
+              WHEN n > 1 AND t ~ ${roman} THEN CASE t
+                WHEN 'i' THEN '1' WHEN 'ii' THEN '2' WHEN 'iii' THEN '3'
+                WHEN 'iv' THEN '4' WHEN 'v' THEN '5' WHEN 'vi' THEN '6'
+                WHEN 'vii' THEN '7' WHEN 'viii' THEN '8' WHEN 'ix' THEN '9'
+                ELSE '10' END
+              ELSE left(t, 1)
+            END, '' ORDER BY n) AS digits,
+          string_agg(
+            CASE
+              WHEN t ~ '^[0-9]+$' OR (n > 1 AND t ~ ${roman}) THEN t
+              ELSE left(t, 1)
+            END, '' ORDER BY n) AS letters
+        FROM unnest(regexp_split_to_array(
+          regexp_replace(lower(s.seg), '[''’]', '', 'g'), '[^[:alnum:]]+'
+        )) WITH ORDINALITY AS w(t, n)
+        WHERE t <> ''
+      ) a
+      WHERE g."deletedAt" IS NULL
+        AND s.seg IS NOT NULL
+        AND (a.digits LIKE $1 || '%' OR a.letters LIKE $1 || '%')
+      GROUP BY g.id
+      ORDER BY ${totalReviewsSql('g.id')} DESC, g.id
+      LIMIT $2
+      `,
+      [q, limit],
+    );
+    return rows.map((r) => r.id);
   }
 
   /**
