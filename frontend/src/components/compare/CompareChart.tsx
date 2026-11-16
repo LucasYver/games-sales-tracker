@@ -16,6 +16,7 @@ import {
 import { trackEvent } from '@/lib/analytics';
 import { Segmented } from './Segmented';
 import { useAgeText } from './useAgeText';
+import { cursorLabel } from './cursorLabel';
 
 type Mode = 'aligned' | 'calendar';
 type Range = 'y1' | 'y3' | 'all';
@@ -275,19 +276,24 @@ export function CompareChart({
 
       <div
         aria-live="polite"
-        className="flex min-h-12 flex-wrap items-baseline gap-x-6 gap-y-1.5 rounded-[3px] border border-border-soft bg-surface-alt px-3 py-2.5"
+        // A grid of fixed cells: the panel keeps its height while the
+        // pointer moves, whatever text each game shows at that month.
+        className="grid grid-cols-1 gap-x-6 gap-y-1.5 rounded-[3px] border border-border-soft bg-surface-alt px-3 py-2.5 sm:grid-cols-2"
       >
-        <span className="basis-full font-mono text-xs text-muted-foreground">{readLabel}</span>
+        {/* The month itself is written on the chart, above the hovered column. */}
+        <span className="sr-only">{readLabel}</span>
         {readItems.map((item) => (
-          <span key={item.name} className="inline-flex items-baseline gap-2">
+          <span key={item.name} className="flex min-w-0 items-baseline gap-2">
             <span
               aria-hidden
-              className="inline-block size-2.5 rounded-[2px]"
+              className="inline-block size-2.5 shrink-0 rounded-[2px]"
               style={{ background: item.color }}
             />
-            <span className="text-[0.82rem]">{item.name}</span>
+            <span title={item.name} className="min-w-0 flex-1 truncate text-[0.82rem]">
+              {item.name}
+            </span>
             <span
-              className={`font-mono text-[0.95rem] font-semibold tabular-nums ${
+              className={`shrink-0 font-mono text-[0.95rem] font-semibold tabular-nums ${
                 item.muted ? 'text-muted-foreground' : 'text-foreground'
               }`}
             >
@@ -311,7 +317,7 @@ export function CompareChart({
       >
         <LineChart
           data={data}
-          margin={{ left: 4, right: 16, top: 8, bottom: 0 }}
+          margin={{ left: 4, right: 16, top: 24, bottom: 0 }}
           onMouseMove={(state) => {
             // Recharts gives the hovered point's index; its label is not
             // always set on a numeric axis.
@@ -332,7 +338,9 @@ export function CompareChart({
             tickLine={false}
             axisLine={false}
             tickMargin={8}
-            interval={0}
+            // On a phone ten years of ticks do not fit: skip the ones that would overlap.
+            interval="preserveStartEnd"
+            minTickGap={12}
             allowDataOverflow
           />
           <YAxis
@@ -347,6 +355,14 @@ export function CompareChart({
             width={48}
           />
           <ChartTooltip cursor={{ strokeDasharray: '3 3' }} content={() => null} />
+          <ReferenceLine
+            x={hover ?? xmax}
+            stroke="none"
+            ifOverflow="visible"
+            label={{
+              content: cursorLabel(readLabel, ((hover ?? xmax) - xmin) / (xmax - xmin || 1)),
+            }}
+          />
           {markers.map((m) => (
             <ReferenceLine
               key={`${m.label}-${m.x}`}

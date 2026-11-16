@@ -9,11 +9,13 @@ import {
   ComposedChart,
   Line,
   ReferenceDot,
+  ReferenceLine,
   XAxis,
   YAxis,
 } from 'recharts';
 import { ChartContainer, ChartTooltip, type ChartConfig } from '@/components/ui/chart';
 import { Segmented } from '@/components/compare/Segmented';
+import { cursorLabel } from '@/components/compare/cursorLabel';
 import { trackEvent } from '@/lib/analytics';
 import type { HubKind, HubTimeline, PopularGame } from '@/lib/api';
 import { monthDate } from '@/lib/compare';
@@ -260,16 +262,19 @@ export function StudioTimeline({
           date: format.dateTime(weekDate(readX), { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }),
         })
       : format.dateTime(monthDate(readX), { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  // Each launch curve reads at its own latest month before any hover.
+  const latestOf = (e: Entry) =>
+    launch ? (dense(e.members[0])?.values.at(-1) ?? null) : valueOf(e, xmax);
+  // Every shown game keeps its row, in an order fixed by its latest value, so
+  // the panel keeps its size while the pointer moves: a game with nothing at
+  // the hovered month shows a dash instead of leaving the list.
   const readItems = shown
     .map((e) => {
-      // Before any hover, each launch curve reads at its own latest month.
-      const d = dense(e.members[0]);
-      const v = launch && hover == null ? (d?.values.at(-1) ?? null) : valueOf(e, readX);
-      return { e, v };
+      const v = hover == null ? latestOf(e) : valueOf(e, readX);
+      return { e, v: v != null && v > 0 ? v : null, rank: latestOf(e) ?? 0 };
     })
-    .filter((r): r is { e: Entry; v: number } => r.v != null && r.v > 0)
-    .sort((a, b) => b.v - a.v);
-  const readTotal = sum(readItems.map((r) => r.v));
+    .sort((a, b) => b.rank - a.rank);
+  const readTotal = sum(readItems.map((r) => r.v ?? 0));
   const sign = view === 'bars' ? '+' : '';
 
   const config: ChartConfig = Object.fromEntries(
@@ -400,27 +405,21 @@ export function StudioTimeline({
 
         <div
           aria-live="polite"
-          className="flex min-h-12 flex-wrap items-baseline gap-x-6 gap-y-1.5 rounded-[3px] border border-border-soft bg-surface-alt px-3 py-2.5"
+          className="grid grid-cols-1 gap-x-6 gap-y-1.5 rounded-[3px] border border-border-soft bg-surface-alt px-3 py-2.5 sm:grid-cols-2 lg:grid-cols-3"
         >
-          <span className="basis-full font-mono text-xs text-muted-foreground">{readLabel}</span>
+          {/* The month itself is written on the chart, above the hovered column. */}
+          <span className="sr-only">{readLabel}</span>
           {readItems.map(({ e, v }) => (
-            <span key={e.key} className="inline-flex items-baseline gap-2">
-              <span aria-hidden className="inline-block size-2.5 rounded-[2px]" style={{ background: e.color }} />
-              <span className="text-[0.82rem]">{e.name}</span>
-              <span className="font-mono text-[0.95rem] font-semibold tabular-nums">
-                {sign}
-                {n(v)}
-              </span>
-            </span>
+            <ReadoutRow
+              key={e.key}
+              color={e.color}
+              name={e.name}
+              value={v == null ? '—' : `${sign}${n(v)}`}
+              muted={v == null}
+            />
           ))}
           {stacked && readItems.length > 1 && (
-            <span className="inline-flex items-baseline gap-2">
-              <span className="text-[0.82rem] text-muted-foreground">{t('studioTotal', { kind })}</span>
-              <span className="font-mono text-[0.95rem] font-bold text-primary tabular-nums">
-                {sign}
-                {n(readTotal)}
-              </span>
-            </span>
+            <ReadoutRow name={t('studioTotal', { kind })} value={`${sign}${n(readTotal)}`} total />
           )}
         </div>
 
@@ -432,7 +431,7 @@ export function StudioTimeline({
           >
             <ComposedChart
               data={data}
-              margin={{ left: 4, right: 16, top: 8, bottom: 0 }}
+              margin={{ left: 4, right: 16, top: 24, bottom: 0 }}
               barCategoryGap={1}
               onMouseMove={(state) => {
                 const index = Number(state?.activeTooltipIndex);
@@ -463,6 +462,12 @@ export function StudioTimeline({
                 width={48}
               />
               <ChartTooltip cursor={{ strokeDasharray: '3 3' }} content={() => null} />
+              <ReferenceLine
+                x={readX}
+                stroke="none"
+                ifOverflow="visible"
+                label={{ content: cursorLabel(readLabel, (readX - xmin) / (xmax - xmin || 1)) }}
+              />
               {shown.map((e) =>
                 view === 'stack' ? (
                   <Area
@@ -562,5 +567,45 @@ export function StudioTimeline({
 
       <StudioTimelineTable kind={kind} games={games} totals={totals} colorOf={colorOf} />
     </>
+  );
+}
+
+/**
+ * One line of the panel above the chart: swatch, name cut to fit, value on
+ * the right. Fixed-width cells keep the panel the same height while the
+ * pointer moves over the chart.
+ */
+function ReadoutRow({
+  color,
+  name,
+  value,
+  muted = false,
+  total = false,
+}: {
+  color?: string;
+  name: string;
+  value: string;
+  muted?: boolean;
+  total?: boolean;
+}) {
+  return (
+    <span className="flex min-w-0 items-baseline gap-2">
+      {color && (
+        <span aria-hidden className="inline-block size-2.5 shrink-0 rounded-[2px]" style={{ background: color }} />
+      )}
+      <span
+        title={name}
+        className={`min-w-0 flex-1 truncate text-[0.82rem] ${total ? 'text-muted-foreground' : ''}`}
+      >
+        {name}
+      </span>
+      <span
+        className={`shrink-0 font-mono text-[0.95rem] tabular-nums ${
+          total ? 'font-bold text-primary' : muted ? 'font-semibold text-muted-foreground' : 'font-semibold'
+        }`}
+      >
+        {value}
+      </span>
+    </span>
   );
 }

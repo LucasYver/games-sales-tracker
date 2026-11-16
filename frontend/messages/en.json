@@ -589,7 +589,7 @@
       "linear": "Linear",
       "log": "Log"
     },
-    "readoutLatest": "Last point shown · hover the chart to read a month",
+    "readoutLatest": "Latest reading",
     "readoutLaunchMonth": "Launch month",
     "readoutMonth": "{n, plural, one {# month} other {# months}} after launch",
     "notReleased": "not out yet",

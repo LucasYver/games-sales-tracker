@@ -589,7 +589,7 @@
       "linear": "Linéaire",
       "log": "Log"
     },
-    "readoutLatest": "Dernier point affiché · survolez la courbe pour lire un mois",
+    "readoutLatest": "Dernier relevé",
     "readoutLaunchMonth": "Mois de la sortie",
     "readoutMonth": "{n} mois après la sortie",
     "notReleased": "pas encore sorti",

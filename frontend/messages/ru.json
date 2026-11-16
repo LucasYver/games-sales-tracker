@@ -589,7 +589,7 @@
       "linear": "Линейная",
       "log": "Лог."
     },
-    "readoutLatest": "Последняя точка графика · наведите курсор, чтобы увидеть месяц",
+    "readoutLatest": "Последнее значение",
     "readoutLaunchMonth": "Месяц выхода",
     "readoutMonth": "{n, plural, one {# месяц} few {# месяца} many {# месяцев} other {# месяца}} после выхода",
     "notReleased": "ещё не вышла",

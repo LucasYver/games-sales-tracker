@@ -589,7 +589,7 @@
       "linear": "خطي",
       "log": "لوغاريتمي"
     },
-    "readoutLatest": "آخر نقطة معروضة · مرّر المؤشر على المنحنى لقراءة شهر",
+    "readoutLatest": "آخر قراءة",
     "readoutLaunchMonth": "شهر الإصدار",
     "readoutMonth": "{n, plural, zero {# شهر} one {شهر واحد} two {شهران} few {# أشهر} many {# شهرًا} other {# شهر}} بعد الإصدار",
     "notReleased": "لم تصدر بعد",

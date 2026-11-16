@@ -589,7 +589,7 @@
       "linear": "Lineal",
       "log": "Log"
     },
-    "readoutLatest": "Último punto mostrado · pasa el ratón por la curva para leer un mes",
+    "readoutLatest": "Último dato",
     "readoutLaunchMonth": "Mes del lanzamiento",
     "readoutMonth": "{n, plural, one {# mes} other {# meses}} después del lanzamiento",
     "notReleased": "aún no ha salido",
