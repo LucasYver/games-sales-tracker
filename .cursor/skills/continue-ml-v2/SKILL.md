@@ -257,6 +257,14 @@ What was learned:
    answer for multi-platform catalog games by 18 % (sum of the same games 6.07 →
    6.55 billion) with the same bias on published figures. Same nature as the H24
    side effect. The locked test does not measure it.
+9. Per-platform sales from the V2 (exploration 2026-11-15, `ml2/platforms.py`,
+   README last section, nothing changed): PC from the model (×1.37 on PC figures) and
+   consoles from store ratings (PS ×1.56, Xbox ×2.06) are usable; the model's own
+   console answers are not (×2.0, ×5.7 in time). But on the 1,944 PC + consoles games
+   estimated by the model, PC + console parts cover only 38 % of the total in the
+   median (208 sales per review in total vs 50 PC + 14 consoles; published totals of
+   such games: 118). No split rule is clean until that gap is understood. No Switch
+   in the base. Not decided by the owner.
 
 ## Keep this skill current
 
