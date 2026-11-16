@@ -29,7 +29,7 @@ every pass.
 ## How a product is accepted
 
 Both titles become tokens: accents, ™ ® and platform names are dropped ("for PS5",
-"Xbox Series X|S", "(PC)"), and roman numerals become digits, so "Alan Wake II"
+"Xbox Series X|S", "(PC)", the headset tag "PS VR"), and roman numerals become digits, so "Alan Wake II"
 equals "Alan Wake 2". Then `storeTitleRelation` gives one of four answers:
 
 | Relation | Meaning | Accepted? |
@@ -37,7 +37,7 @@ equals "Alan Wake 2". Then `storeTitleRelation` gives one of four answers:
 | `exact` | Same tokens, also across spacing ("WarDogs" / "War Dogs") | Yes |
 | `edition` | The extra words only name a packaging, a remaster or a Game Preview | Yes |
 | `subtitle` | One title is the other plus other words | Only if the store release is within 45 days of the game's first, PlayStation or Xbox release date |
-| `none` | Not a prefix, the extra words open with a number (a sequel), or they contain demo, beta, trial, artbook or soundtrack | No |
+| `none` | Not a prefix, the extra words open with a number (a sequel), or they contain demo, beta, trial, artbook, soundtrack, VR or VR2 | No |
 
 Examples:
 
@@ -45,6 +45,10 @@ Examples:
 - `Grand Theft Auto V` / `Grand Theft Auto VI`: not a prefix once numerals are
   digits, rejected.
 - `Vampire Crawlers` / `Vampire Crawlers Demo`: rejected whatever the date.
+- `L.A. Noire: The VR Case Files` / `L.A. Noire`: rejected, although the two
+  shipped 29 days apart.
+- `Dying: Reborn` / `DYING: Reborn PSVR`: exact. "PS VR" on a PlayStation listing
+  says the game supports the headset; a bare "VR" names another product.
 - `RemiLore: Lost Girl in the Lands of Lore` / `RemiLore`: subtitle, same date,
   accepted.
 - `The Witcher 3: Wild Hunt` / `... — Remastered`: edition, accepted.
@@ -53,7 +57,8 @@ Examples:
 Choices to keep:
 
 - A remaster counts as the same game, because the store often sells only that
-  listing, with the original's ratings. VR versions do not count.
+  listing, with the original's ratings. VR versions do not count, even with
+  a close date.
 - The store may name its edition with up to two free words ("Zombies Chronicles
   Edition"). A catalog title may add only one ("Jotunn Edition"), otherwise
   "Need for Speed Rivals: Complete Edition" would match "Need for Speed".
@@ -143,6 +148,13 @@ its rejected count to about 170 on the same pages.
 - **Lookalike letters:** `Raji: An Ancient Epiс` on Xbox has a Cyrillic letter and
   does not match.
 - **Exact title, different game:** two games with the same name still match.
+- **Free games are not re-checked:** the daily `STORE_RATINGS` pass skips
+  `isFree` games, so a link they got before the strict rules stays and blocks
+  the right game. On 2026-11-16, 5 of their 107 links were wrong and were
+  removed by hand (Ghostwire: Tokyo, Life is Strange: True Colors, ...).
+- **Leftover rows:** a game that read another game's product without holding its
+  link keeps those rows after a rule change, because `forgetWrongStoreProduct`
+  only acts on a stored link. Deleting them needs the owner's yes.
 
 ## Changing the rules
 

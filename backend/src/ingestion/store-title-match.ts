@@ -34,6 +34,11 @@ const PLATFORM_WORDS = new Set([
 const XBOX_PLATFORM_NAMES =
   /\bxbox\s*(?:one|360|series(?:\s*x\s*\|?\s*s|\s*[xs])?)?|\bwindows(?:\s*1[01])?\b|\(pc\)/gi;
 
+// "PS VR" tags a PlayStation listing that supports the headset, not another
+// game: "DYING: Reborn PSVR" is the store's only "Dying: Reborn". A bare "VR"
+// still names a separate product (see NOT_THE_GAME_WORDS).
+const PS_VR_TAG = /\bps\s*vr2?\b/gi;
+
 // Words that name a packaging of the same game, never a different game. A
 // remaster counts: the store often sells only that listing, with the original's
 // ratings ("The Witcher 3: Wild Hunt — Remastered"). An exact concept still wins
@@ -86,13 +91,17 @@ const EDITION_WORDS = new Set([
   'year',
 ]);
 
-// Never the game itself, however close the title and the date.
+// Never the game itself, however close the title and the date. A VR version
+// is its own product: "L.A. Noire: The VR Case Files" shipped 29 days after the
+// "L.A. Noire" remaster, so the date alone would accept it.
 const NOT_THE_GAME_WORDS = new Set([
   'artbook',
   'beta',
   'demo',
   'soundtrack',
   'trial',
+  'vr',
+  'vr2',
 ]);
 
 const EDITION_SUFFIXES = new Set([
@@ -111,6 +120,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export function storeTitleTokens(title: string): string[] {
   const tokens = title
     .replace(XBOX_PLATFORM_NAMES, ' ')
+    .replace(PS_VR_TAG, ' ')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
