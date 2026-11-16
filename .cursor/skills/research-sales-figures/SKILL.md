@@ -59,6 +59,7 @@ session knows where to resume.
 | `t6-retry-a` | the first waves' games still short of their searches, most reviewed first | 50 | 2 | 2 | Done, 186 searches, no rate limit; Battlefront II 7 M (EA earnings call, added in review) and Golf With Your Friends; Sea of Thieves skipped (2 M was players), CarX skipped (blocked host) |
 | `t6-retry-b` | the last 23 of them | 23 | 0 | 0 | Done, 82 searches; They Are Billions skipped (unattributed), Graveyard Keeper 4 M only on a blocked host. **Every game without a worldwide figure has now had its full budget or is marked out of scope (pre-2017, free to play)** |
 | `src-pilot-a` | source-first pilot: Polish stock-exchange reports, developer postmortems, Western indie publishers | 35 matched | 23 | 24 | Done, 48 searches and about 67 page opens for 3 agents, about 17% of the 5-hour quota with the review; 18 more figures were already in base. Mostly 5,000 to 50,000 reviews: published figures are for hits, true small games stay rare |
+| `src-b` | source-first: deeper dev case studies, listed publishers (CI Games, Remedy, Creepy Jar), milestone press releases | 48 matched | 25 | 27 | Done, 52 searches; 31 more were already in base (mostly Alinea posts, already imported). Half the new figures went to games with 10,000 to 30,000 reviews. Skipped: Stacklands ('about'), Balatro (mobile), Abiotic Factor (scope unclear). Next idea: studio posts on X (oEmbed), LinkedIn and Bluesky |
 
 After that: every game without a worldwide figure has had its full search budget. New games enter through discovery; rerun `prepare` with `--min-reviews 0 --include-unreviewed` now and then.
 
@@ -130,7 +131,9 @@ figures for 48 searches in `src-pilot-a`, CORE and EXTENDED alike.
 Families that worked: Polish ESPI reports relayed by parkiet.com (exact units per
 platform; add it to `official_hosts`), How To Market A Game case studies
 (Steamworks screenshots), the GameDiscoverCo newsletter quoting developers, and
-gamespress.com press releases (Hooded Horse, tinyBuild, Fireshine). Most of their
+gamespress.com press releases (Hooded Horse, tinyBuild, Fireshine), CI Games and
+Creepy Jar ESPI reports, Remedy reports on mfn.se. Alinea's Substack posts are
+mostly already imported: skip them. Most of their
 figures are for games with 5,000 to 50,000 reviews.
 
 ## Review traps
