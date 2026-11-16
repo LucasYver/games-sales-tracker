@@ -676,5 +676,97 @@
     "momentItem": "{name} — {date}",
     "intro3": "Оценка продаж, игроки и отзывы трёх игр рядом.",
     "compareTop": "Сравнить {count} самые продаваемые"
+  },
+  "studioTimeline": {
+    "title": "{kind, select, studio {Студия} publisher {Издатель} other {Франшиза}} во времени",
+    "leadShare": "На {game} приходится {share} отзывов и оценок {kind, select, studio {студии} publisher {издателя} other {франшизы}} во всех магазинах.",
+    "moverShare": "За последние 30 дней {game} принесла {share} новых.",
+    "others": "{count, plural, one {Ещё # игра} few {Ещё # игры} many {Ещё # игр} other {Ещё # игры}}",
+    "kpi": {
+      "total": "Отзывы и оценки, все магазины",
+      "split": "Steam {steam} · PS {ps} · Xbox {xbox}",
+      "recent": "Последние 30 дней",
+      "mover": "Самая активная игра (30 дней)",
+      "moverNote": "{share} новых отзывов и оценок",
+      "steamYear": "Steam, последние 12 месяцев",
+      "steamYearNote": "+{growth} за год"
+    },
+    "storeLabel": "Магазин",
+    "store": {
+      "steam": "Steam",
+      "ps": "PlayStation",
+      "xbox": "Xbox"
+    },
+    "viewLabel": "Вид",
+    "view": {
+      "stack": "Итог",
+      "lines": "По играм",
+      "launch": "С момента выхода",
+      "barsMonth": "Отзывы в месяц",
+      "barsWeek": "Оценки в неделю"
+    },
+    "rangeLabel": "Период",
+    "range": {
+      "all": "Всё",
+      "month": {
+        "long": "5 лет",
+        "short": "2 года"
+      },
+      "week": {
+        "long": "6 месяцев",
+        "short": "3 месяца"
+      },
+      "launch": {
+        "long": "Первые 5 лет",
+        "short": "Первые 2 года"
+      }
+    },
+    "note": {
+      "steam": {
+        "stack": "Отзывы Steam {kind, select, studio {студии} publisher {издателя} other {франшизы}}, по полосе на игру: что каждый релиз добавил к каталогу.",
+        "lines": "Отзывы Steam каждой игры по календарю.",
+        "launch": "Кривые выровнены по месяцу выхода: какой запуск стартовал сильнее и какой держится дольше.",
+        "bars": "Новые отзывы Steam за каждый месяц по играм: пики релизов и DLC, затем длинный хвост каталога."
+      },
+      "console": {
+        "stack": "Оценки {store} {kind, select, studio {студии} publisher {издателя} other {франшизы}}. Игра входит в итог с начала отслеживания (пустой кружок), а не с выхода: ступенька — не пик продаж.",
+        "lines": "Оценки {store} каждой игры с начала отслеживания.",
+        "bars": "Новые оценки {store} за каждую неделю по играм. Первая отслеживаемая неделя считается нулём."
+      }
+    },
+    "readoutLatest": "Последнее значение",
+    "readoutLaunchMonth": "Месяц выхода",
+    "readoutMonth": "{n}-й месяц после выхода",
+    "readoutWeek": "Неделя от {date}",
+    "studioTotal": "{kind, select, studio {Студия} publisher {Издатель} other {Франшиза}}",
+    "chartAria": "Игры {kind, select, studio {студии} publisher {издателя} other {франшизы}} во времени: {metric}",
+    "metric": {
+      "steam": "отзывы Steam",
+      "ps": "оценки PlayStation",
+      "xbox": "оценки Xbox"
+    },
+    "tickLaunch": "Выход",
+    "tickYears": "{n, plural, one {# год} few {# года} many {# лет} other {# года}}",
+    "tickMonths": "{n} мес.",
+    "gamesLabel": "Показанные игры",
+    "legendRelease": "Выход",
+    "legendTracking": "Начало отслеживания",
+    "footnote": {
+      "steam": "Отзывы Steam с выхода каждой игры. Игры без страницы в Steam показаны в PlayStation или Xbox.",
+      "console": "Оценки {store} для большинства игр записываются только с 2026 года: разница между играми надёжна, тренд — ещё нет. Между редкими замерами кривая интерполируется."
+    },
+    "tableTitle": "По играм",
+    "col": {
+      "game": "Игра",
+      "release": "Выход",
+      "total": "Всего",
+      "share": "Доля {kind, select, studio {студии} publisher {издателя} other {франшизы}}",
+      "recent": "30 дней",
+      "sales": "Оценка продаж"
+    },
+    "noFigure": "Нет данных",
+    "before2017": "До 2017",
+    "shareLegend": "Полоса доли:",
+    "tableNote": "Всего = отзывы Steam + оценки PlayStation + оценки Xbox. Игры, вышедшие до 2017 года, сохраняют данные магазинов; не оцениваются только их продажи. Отзыв — не продажа."
   }
 }

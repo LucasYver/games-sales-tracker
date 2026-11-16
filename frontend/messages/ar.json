@@ -676,5 +676,97 @@
     "momentItem": "{name} في {date}",
     "intro3": "المبيعات المقدّرة واللاعبون والمراجعات للألعاب الثلاث، جنبًا إلى جنب.",
     "compareTop": "مقارنة الألعاب الـ{count} الأكثر مبيعًا"
+  },
+  "studioTimeline": {
+    "title": "{kind, select, studio {الاستوديو} publisher {الناشر} other {السلسلة}} عبر الزمن",
+    "leadShare": "تستحوذ {game} على {share} من مراجعات {kind, select, studio {الاستوديو} publisher {الناشر} other {السلسلة}} وتقييماته في كل المتاجر.",
+    "moverShare": "خلال آخر 30 يومًا، جاءت {share} من الجديدة من {game}.",
+    "others": "{count, plural, one {لعبة أخرى} two {لعبتان أخريان} few {# ألعاب أخرى} many {# لعبة أخرى} other {# لعبة أخرى}}",
+    "kpi": {
+      "total": "المراجعات والتقييمات، كل المتاجر",
+      "split": "Steam {steam} · PS {ps} · Xbox {xbox}",
+      "recent": "آخر 30 يومًا",
+      "mover": "اللعبة الأنشط (30 يومًا)",
+      "moverNote": "{share} من المراجعات والتقييمات الجديدة",
+      "steamYear": "Steam، آخر 12 شهرًا",
+      "steamYearNote": "+{growth} خلال عام"
+    },
+    "storeLabel": "المتجر",
+    "store": {
+      "steam": "Steam",
+      "ps": "PlayStation",
+      "xbox": "Xbox"
+    },
+    "viewLabel": "العرض",
+    "view": {
+      "stack": "الإجمالي",
+      "lines": "حسب اللعبة",
+      "launch": "منذ الإطلاق",
+      "barsMonth": "المراجعات شهريًا",
+      "barsWeek": "التقييمات أسبوعيًا"
+    },
+    "rangeLabel": "الفترة",
+    "range": {
+      "all": "الكل",
+      "month": {
+        "long": "5 سنوات",
+        "short": "سنتان"
+      },
+      "week": {
+        "long": "6 أشهر",
+        "short": "3 أشهر"
+      },
+      "launch": {
+        "long": "أول 5 سنوات",
+        "short": "أول سنتين"
+      }
+    },
+    "note": {
+      "steam": {
+        "stack": "مراجعات Steam {kind, select, studio {للاستوديو} publisher {للناشر} other {للسلسلة}}، شريط لكل لعبة: ما أضافه كل إصدار إلى الكتالوج.",
+        "lines": "مراجعات Steam لكل لعبة على التقويم.",
+        "launch": "منحنيات مصفوفة على شهر الإطلاق: أي إطلاق بدأ بأقوى انطلاقة وأيها يصمد أطول.",
+        "bars": "مراجعات Steam الجديدة كل شهر حسب اللعبة: ذروات الإطلاق والمحتوى الإضافي، ثم الذيل الطويل للكتالوج."
+      },
+      "console": {
+        "stack": "تقييمات {store} {kind, select, studio {للاستوديو} publisher {للناشر} other {للسلسلة}}. تدخل اللعبة في الإجمالي عند بدء تتبعها (دائرة فارغة)، لا عند إطلاقها: القفزة ليست ذروة مبيعات.",
+        "lines": "تقييمات {store} لكل لعبة منذ بدء تتبعها.",
+        "bars": "تقييمات {store} الجديدة كل أسبوع حسب اللعبة. أول أسبوع متتبَّع يُحسب صفرًا."
+      }
+    },
+    "readoutLatest": "آخر قراءة",
+    "readoutLaunchMonth": "شهر الإطلاق",
+    "readoutMonth": "الشهر {n} بعد الإطلاق",
+    "readoutWeek": "أسبوع {date}",
+    "studioTotal": "{kind, select, studio {الاستوديو} publisher {الناشر} other {السلسلة}}",
+    "chartAria": "ألعاب {kind, select, studio {الاستوديو} publisher {الناشر} other {السلسلة}} عبر الزمن: {metric}",
+    "metric": {
+      "steam": "مراجعات Steam",
+      "ps": "تقييمات PlayStation",
+      "xbox": "تقييمات Xbox"
+    },
+    "tickLaunch": "الإطلاق",
+    "tickYears": "{n, plural, one {سنة} two {سنتان} few {# سنوات} many {# سنة} other {# سنة}}",
+    "tickMonths": "{n} شهر",
+    "gamesLabel": "الألعاب المعروضة",
+    "legendRelease": "الإطلاق",
+    "legendTracking": "بدء التتبع",
+    "footnote": {
+      "steam": "مراجعات Steam منذ إطلاق كل لعبة. الألعاب التي ليست لها صفحة على Steam تظهر في PlayStation أو Xbox.",
+      "console": "لا تُسجَّل تقييمات {store} إلا منذ 2026 لمعظم الألعاب: الفارق بين الألعاب موثوق، والاتجاه ليس بعد. بين قراءتين متباعدتين يُستكمل المنحنى بالاستيفاء."
+    },
+    "tableTitle": "لعبة بلعبة",
+    "col": {
+      "game": "اللعبة",
+      "release": "الإطلاق",
+      "total": "الإجمالي",
+      "share": "حصة {kind, select, studio {الاستوديو} publisher {الناشر} other {السلسلة}}",
+      "recent": "آخر 30 يومًا",
+      "sales": "المبيعات المقدَّرة"
+    },
+    "noFigure": "لا أرقام",
+    "before2017": "قبل 2017",
+    "shareLegend": "شريط الحصة:",
+    "tableNote": "الإجمالي = مراجعات Steam + تقييمات PlayStation + تقييمات Xbox. الألعاب الصادرة قبل 2017 تحتفظ بأرقام المتاجر؛ مبيعاتها فقط لا تُقدَّر. المراجعة ليست عملية بيع."
   }
 }

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import { notFound, permanentRedirect } from "next/navigation";
 import { localeLanguages } from "@/i18n/routing";
-import { getFranchiseHub } from "@/lib/api";
+import { getHubTimeline, getFranchiseHub } from "@/lib/api";
 import { GameHubPage } from "@/components/chart-room/HubPage";
 
 type Params = Promise<{ locale: string; slug: string }>;
@@ -38,8 +38,9 @@ export async function generateMetadata({
 
 export default async function FranchisePage({ params }: { params: Params }) {
   const { locale, slug } = await params;
-  const [hub, t] = await Promise.all([
+  const [hub, timeline, t] = await Promise.all([
     getFranchiseHub(slug),
+    getHubTimeline("franchise", slug),
     getTranslations({ locale, namespace: "hubs" }),
   ]);
   if (!hub) notFound();
@@ -54,6 +55,7 @@ export default async function FranchisePage({ params }: { params: Params }) {
       title={t("franchiseTitle", { name: hub.name })}
       hub={hub}
       kind="franchise"
+      timeline={timeline}
     />
   );
 }

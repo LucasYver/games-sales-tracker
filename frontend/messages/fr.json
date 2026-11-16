@@ -676,5 +676,97 @@
     "momentItem": "{name} en {date}",
     "intro3": "Ventes estimées, joueurs et avis des trois jeux, côte à côte.",
     "compareTop": "Comparer les {count} plus vendus"
+  },
+  "studioTimeline": {
+    "title": "{kind, select, studio {Le studio} publisher {L’éditeur} other {La franchise}} dans le temps",
+    "leadShare": "{game} porte {share} des avis {kind, select, studio {du studio} publisher {de l’éditeur} other {de la franchise}}, tous stores confondus.",
+    "moverShare": "Sur les 30 derniers jours, {game} apporte {share} des nouveaux avis.",
+    "others": "{count, plural, one {# autre jeu} other {# autres jeux}}",
+    "kpi": {
+      "total": "Avis cumulés, tous stores",
+      "split": "Steam {steam} · PS {ps} · Xbox {xbox}",
+      "recent": "30 derniers jours",
+      "mover": "Jeu moteur (30 jours)",
+      "moverNote": "{share} des nouveaux avis",
+      "steamYear": "Steam, 12 derniers mois",
+      "steamYearNote": "+{growth} sur un an"
+    },
+    "storeLabel": "Store",
+    "store": {
+      "steam": "Steam",
+      "ps": "PlayStation",
+      "xbox": "Xbox"
+    },
+    "viewLabel": "Vue",
+    "view": {
+      "stack": "Cumul",
+      "lines": "Par jeu",
+      "launch": "Depuis la sortie",
+      "barsMonth": "Reviews par mois",
+      "barsWeek": "Notes par semaine"
+    },
+    "rangeLabel": "Période",
+    "range": {
+      "all": "Tout",
+      "month": {
+        "long": "5 ans",
+        "short": "2 ans"
+      },
+      "week": {
+        "long": "6 mois",
+        "short": "3 mois"
+      },
+      "launch": {
+        "long": "5 premières années",
+        "short": "2 premières années"
+      }
+    },
+    "note": {
+      "steam": {
+        "stack": "Les reviews Steam {kind, select, studio {du studio} publisher {de l’éditeur} other {de la franchise}}, une bande par jeu : ce que chaque sortie ajoute au catalogue.",
+        "lines": "Les reviews Steam de chaque jeu sur le calendrier.",
+        "launch": "Courbes alignées sur le mois de sortie : quel lancement a démarré le plus fort, et lequel tient dans la durée.",
+        "bars": "Nouvelles reviews Steam chaque mois, empilées par jeu : les pics de sortie et de DLC, puis la traîne du catalogue."
+      },
+      "console": {
+        "stack": "Les notes {store} {kind, select, studio {du studio} publisher {de l’éditeur} other {de la franchise}}. Un jeu entre dans le cumul à son début de suivi (cercle vide), pas à sa sortie : une marche n’est pas un pic de ventes.",
+        "lines": "Les notes {store} de chaque jeu depuis son début de suivi.",
+        "bars": "Nouvelles notes {store} chaque semaine, empilées par jeu. La première semaine suivie compte zéro."
+      }
+    },
+    "readoutLatest": "Dernier relevé",
+    "readoutLaunchMonth": "Mois de sortie",
+    "readoutMonth": "{n}e mois après la sortie",
+    "readoutWeek": "Semaine du {date}",
+    "studioTotal": "{kind, select, studio {Studio} publisher {Éditeur} other {Franchise}}",
+    "chartAria": "Les jeux {kind, select, studio {du studio} publisher {de l’éditeur} other {de la franchise}} dans le temps : {metric}",
+    "metric": {
+      "steam": "reviews Steam",
+      "ps": "notes PlayStation",
+      "xbox": "notes Xbox"
+    },
+    "tickLaunch": "Sortie",
+    "tickYears": "{n, plural, one {# an} other {# ans}}",
+    "tickMonths": "{n} mois",
+    "gamesLabel": "Jeux affichés",
+    "legendRelease": "Sortie",
+    "legendTracking": "Début du suivi",
+    "footnote": {
+      "steam": "Reviews Steam depuis la sortie de chaque jeu. Les jeux sans page Steam apparaissent sur PlayStation ou Xbox.",
+      "console": "Les notes {store} ne sont relevées que depuis 2026 pour la plupart des jeux : l’écart entre jeux est fiable, la tendance pas encore. Entre deux relevés espacés, la courbe est interpolée."
+    },
+    "tableTitle": "Jeu par jeu",
+    "col": {
+      "game": "Jeu",
+      "release": "Sortie",
+      "total": "Total avis",
+      "share": "Part {kind, select, studio {du studio} publisher {de l’éditeur} other {de la franchise}}",
+      "recent": "30 derniers jours",
+      "sales": "Ventes est."
+    },
+    "noFigure": "Aucun chiffre",
+    "before2017": "Avant 2017",
+    "shareLegend": "Barre de part :",
+    "tableNote": "Total avis = reviews Steam + notes PlayStation + notes Xbox. Les jeux sortis avant 2017 gardent leurs chiffres de store ; seules leurs ventes ne sont pas estimées. Un avis n’est pas une vente."
   }
 }

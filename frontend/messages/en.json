@@ -676,5 +676,97 @@
     "momentItem": "{name} in {date}",
     "intro3": "Estimated sales, players and reviews of the three games, side by side.",
     "compareTop": "Compare the top {count} sellers"
+  },
+  "studioTimeline": {
+    "title": "{kind, select, studio {The studio} publisher {The publisher} other {The franchise}} over time",
+    "leadShare": "{game} holds {share} of the {kind, select, studio {studio's} publisher {publisher's} other {franchise's}} reviews and ratings, all stores combined.",
+    "moverShare": "Over the last 30 days, {game} brought {share} of the new ones.",
+    "others": "{count, plural, one {# other game} other {# other games}}",
+    "kpi": {
+      "total": "Reviews and ratings, all stores",
+      "split": "Steam {steam} · PS {ps} · Xbox {xbox}",
+      "recent": "Last 30 days",
+      "mover": "Top game (30 days)",
+      "moverNote": "{share} of the new reviews and ratings",
+      "steamYear": "Steam, last 12 months",
+      "steamYearNote": "+{growth} over a year"
+    },
+    "storeLabel": "Store",
+    "store": {
+      "steam": "Steam",
+      "ps": "PlayStation",
+      "xbox": "Xbox"
+    },
+    "viewLabel": "View",
+    "view": {
+      "stack": "Total",
+      "lines": "By game",
+      "launch": "Since launch",
+      "barsMonth": "Reviews per month",
+      "barsWeek": "Ratings per week"
+    },
+    "rangeLabel": "Period",
+    "range": {
+      "all": "All",
+      "month": {
+        "long": "5 years",
+        "short": "2 years"
+      },
+      "week": {
+        "long": "6 months",
+        "short": "3 months"
+      },
+      "launch": {
+        "long": "First 5 years",
+        "short": "First 2 years"
+      }
+    },
+    "note": {
+      "steam": {
+        "stack": "The {kind, select, studio {studio's} publisher {publisher's} other {franchise's}} Steam reviews, one band per game: what each release added to the catalogue.",
+        "lines": "Each game's Steam reviews on the calendar.",
+        "launch": "Curves lined up on the launch month: which launch started strongest, and which one lasts.",
+        "bars": "New Steam reviews each month, stacked by game: launch and DLC peaks, then the catalogue's long tail."
+      },
+      "console": {
+        "stack": "The {kind, select, studio {studio's} publisher {publisher's} other {franchise's}} {store} ratings. A game joins the total when its tracking starts (hollow dot), not at launch: a step is not a sales peak.",
+        "lines": "Each game's {store} ratings since its tracking started.",
+        "bars": "New {store} ratings each week, stacked by game. The first tracked week counts zero."
+      }
+    },
+    "readoutLatest": "Latest reading",
+    "readoutLaunchMonth": "Launch month",
+    "readoutMonth": "Month {n} after launch",
+    "readoutWeek": "Week of {date}",
+    "studioTotal": "{kind, select, studio {Studio} publisher {Publisher} other {Franchise}}",
+    "chartAria": "The {kind, select, studio {studio's} publisher {publisher's} other {franchise's}} games over time: {metric}",
+    "metric": {
+      "steam": "Steam reviews",
+      "ps": "PlayStation ratings",
+      "xbox": "Xbox ratings"
+    },
+    "tickLaunch": "Launch",
+    "tickYears": "{n, plural, one {# year} other {# years}}",
+    "tickMonths": "{n} mo",
+    "gamesLabel": "Games shown",
+    "legendRelease": "Release",
+    "legendTracking": "Tracking starts",
+    "footnote": {
+      "steam": "Steam reviews since each game's launch. Games without a Steam page show up under PlayStation or Xbox.",
+      "console": "{store} ratings have only been recorded since 2026 for most games: the gap between games is reliable, the trend not yet. Between two distant readings the curve is interpolated."
+    },
+    "tableTitle": "Game by game",
+    "col": {
+      "game": "Game",
+      "release": "Release",
+      "total": "Total",
+      "share": "{kind, select, studio {Studio} publisher {Publisher} other {Franchise}} share",
+      "recent": "Last 30 days",
+      "sales": "Est. sales"
+    },
+    "noFigure": "No figure",
+    "before2017": "Before 2017",
+    "shareLegend": "Share bar:",
+    "tableNote": "Total = Steam reviews + PlayStation ratings + Xbox ratings. Games released before 2017 keep their store figures; only their sales are not estimated. A review is not a sale."
   }
 }

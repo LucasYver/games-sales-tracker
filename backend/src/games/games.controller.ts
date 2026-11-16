@@ -96,9 +96,24 @@ export class GamesController {
     return this.games.getStudioHub(slug);
   }
 
+  @Get('studios/:slug/timeline')
+  studioTimeline(@Param('slug') slug: string) {
+    return this.games.getStudioTimeline(slug);
+  }
+
   @Get('publishers/:slug')
   publisher(@Param('slug') slug: string) {
     return this.games.getPublisherHub(slug);
+  }
+
+  @Get('publishers/:slug/timeline')
+  publisherTimeline(@Param('slug') slug: string) {
+    return this.games.getPublisherTimeline(slug);
+  }
+
+  @Get('franchises/:slug/timeline')
+  franchiseTimeline(@Param('slug') slug: string) {
+    return this.games.getFranchiseTimeline(slug);
   }
 
   @Get('franchises/:slug')

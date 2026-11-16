@@ -914,6 +914,139 @@ export class GamesService {
   }
 
   private async getCompanyHub(hub: CompanyHub, slug: string) {
+    const found = await this.resolveCompanyHub(hub, slug);
+    return this.toHub(found.slug, found.name, found.games);
+  }
+
+  /** Store history of a studio's games (see `hubTimeline`). */
+  async getStudioTimeline(slug: string) {
+    return this.hubTimeline(
+      await this.resolveCompanyHub(COMPANY_HUBS.studio, slug),
+    );
+  }
+
+  /** Store history of a publisher's games (see `hubTimeline`). */
+  async getPublisherTimeline(slug: string) {
+    return this.hubTimeline(
+      await this.resolveCompanyHub(COMPANY_HUBS.publisher, slug),
+    );
+  }
+
+  /** Store history of a franchise's games (see `hubTimeline`). */
+  async getFranchiseTimeline(slug: string) {
+    return this.hubTimeline(await this.resolveFranchiseHub(slug));
+  }
+
+  /**
+   * Steam reviews (one point per calendar month) and PlayStation and Xbox
+   * ratings (one point per week) of every game of a hub, for the "over time"
+   * chart of its page. Answers under the hub's own slug, as the hub route
+   * does. Two index reads per game and metric, no estimate.
+   */
+  private async hubTimeline(found: { slug: string; games: Game[] }) {
+    const ids = found.games.map((g) => g.id);
+    // Steam keeps its synthetic rows (the monthly backfill of old reviews), as
+    // the game page does; console ratings drop the reconstructed ones.
+    const metricFilter = `(s.metric = 'STEAM_REVIEWS'
+      OR (s.metric IN ('PS_RATINGS', 'XBOX_RATINGS') AND NOT s.synthetic))`;
+    const [points, latest] = await Promise.all([
+      this.signals.query<
+        { gameId: string; metric: string; bucket: string; value: string }[]
+      >(
+        `SELECT s."gameId", s.metric::text AS metric,
+           CASE WHEN s.metric = 'STEAM_REVIEWS'
+             THEN EXTRACT(YEAR FROM s."capturedAt" AT TIME ZONE 'UTC') * 12
+                  + EXTRACT(MONTH FROM s."capturedAt" AT TIME ZONE 'UTC') - 1
+             ELSE FLOOR(EXTRACT(EPOCH FROM s."capturedAt") / 604800)
+           END AS bucket,
+           MAX(s.value) AS value
+         FROM signal_snapshot s
+         WHERE s."gameId" = ANY($1::uuid[]) AND ${metricFilter}
+         GROUP BY 1, 2, 3
+         ORDER BY 1, 2, 3`,
+        [ids],
+      ),
+      // Today's count and the count 30 days before it, per game and store.
+      this.signals.query<
+        {
+          gameId: string;
+          metric: string;
+          value: string;
+          before: string | null;
+        }[]
+      >(
+        `SELECT g.id AS "gameId", m.metric, last.value, prev.value AS before
+         FROM unnest($1::uuid[]) AS g(id)
+         CROSS JOIN (VALUES ('STEAM_REVIEWS'), ('PS_RATINGS'), ('XBOX_RATINGS'))
+           AS m(metric)
+         JOIN LATERAL (
+           SELECT s.value, s."capturedAt"
+           FROM signal_snapshot s
+           WHERE s."gameId" = g.id AND s.metric = m.metric::signal_snapshot_metric_enum
+             AND ${metricFilter}
+           ORDER BY s."capturedAt" DESC
+           LIMIT 1
+         ) last ON true
+         LEFT JOIN LATERAL (
+           SELECT s.value
+           FROM signal_snapshot s
+           WHERE s."gameId" = g.id AND s.metric = m.metric::signal_snapshot_metric_enum
+             AND ${metricFilter}
+             AND s."capturedAt" <= last."capturedAt" - interval '30 days'
+           ORDER BY s."capturedAt" DESC
+           LIMIT 1
+         ) prev ON true`,
+        [ids],
+      ),
+    ]);
+
+    const STORES = {
+      STEAM_REVIEWS: 'steam',
+      PS_RATINGS: 'ps',
+      XBOX_RATINGS: 'xbox',
+    } as const;
+    type Store = (typeof STORES)[keyof typeof STORES];
+    type StoreSeries = {
+      /** [bucket, value]: month index (year × 12 + month) for Steam, week index (Unix epoch / 7 days) for consoles. */
+      points: [number, number][];
+      latest: number;
+      /** Gain over the last 30 days; null when tracked for less than that. */
+      gain30: number | null;
+    };
+    const byGame = new Map<string, Partial<Record<Store, StoreSeries>>>();
+    const entry = (gameId: string, metric: string) => {
+      const store = STORES[metric as keyof typeof STORES];
+      const game = byGame.get(gameId) ?? {};
+      byGame.set(gameId, game);
+      return { game, store };
+    };
+    for (const row of latest) {
+      const { game, store } = entry(row.gameId, row.metric);
+      const value = Number(row.value);
+      game[store] = {
+        points: [],
+        latest: value,
+        gain30: row.before == null ? null : value - Number(row.before),
+      };
+    }
+    for (const row of points) {
+      const { game, store } = entry(row.gameId, row.metric);
+      game[store]?.points.push([Number(row.bucket), Number(row.value)]);
+    }
+
+    return {
+      slug: found.slug,
+      games: found.games.map((g) => ({
+        slug: g.slug,
+        steam: byGame.get(g.id)?.steam ?? null,
+        ps: byGame.get(g.id)?.ps ?? null,
+        xbox: byGame.get(g.id)?.xbox ?? null,
+      })),
+    };
+  }
+
+  /** The games behind a studio or publisher slug, under the hub's own slug. */
+  private async resolveCompanyHub(hub: CompanyHub, slug: string) {
     const notFound = () =>
       new NotFoundException(`${hub.label} "${slug}" not found`);
     if (!slug) throw notFound();
@@ -953,7 +1086,7 @@ export class GamesService {
        LIMIT 1`,
       [hubSlug],
     );
-    return this.toHub(hubSlug, name, games);
+    return { slug: hubSlug, name, games };
   }
 
   /**
@@ -962,6 +1095,12 @@ export class GamesService {
    * that hub's slug, so the page can redirect.
    */
   async getFranchiseHub(slug: string) {
+    const found = await this.resolveFranchiseHub(slug);
+    return this.toHub(found.slug, found.name, found.games);
+  }
+
+  /** The games behind a franchise slug, under the hub's own slug. */
+  private async resolveFranchiseHub(slug: string) {
     const hubWhere = `${franchiseSlugSql('g')} = :slug`;
     let games = await this.hubGames(hubWhere, slug);
     let hubSlug = slug;
@@ -984,11 +1123,11 @@ export class GamesService {
     if (games.length < FRANCHISE_HUB_MIN_GAMES) {
       throw new NotFoundException(`Franchise "${slug}" not found`);
     }
-    return this.toHub(
-      hubSlug,
-      franchiseName(hubSlug, mostCommon(games.map((g) => g.seriesName))),
+    return {
+      slug: hubSlug,
+      name: franchiseName(hubSlug, mostCommon(games.map((g) => g.seriesName))),
       games,
-    );
+    };
   }
 
   /** Every studio with a hub page, for the public index. */
