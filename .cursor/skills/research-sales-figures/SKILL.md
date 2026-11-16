@@ -55,9 +55,10 @@ session knows where to resume.
 | `t4-5k-50k-j` | 5,000 to 50,000, retries first | 50 | 1 | 1 | Done, 160 searches, no rate limit; Unravel (2016) marked done |
 | `t4-5k-50k-k` | 5,000 to 50,000, retries first | 50 | 3 | 4 | Done, 166 searches; Mr. Prepper found in review (PlayWay via spidersweb.pl); Spilled! skipped (only relays on blocked hosts); Battlefield Hardline (2015) marked done |
 | `t4-5k-50k-l` | 5,000 to 50,000, last 46 | 46 | 5 | 5 | Done, 156 searches; the 5,000 to 50,000 tier is exhausted |
-| `t5-2k-5k-a` | 2,000 to 5,000, most reviewed first | 0 | 0 | 0 | **Next, if the owner wants it: run `prepare` with `--min-reviews 2000 --max-reviews 5000`. Expect almost nothing: waves i to l found 11 games in 196** |
+| `t5-0-5k-a` | every game under 5,000 reviews, plus 17 with no Steam review count (`--include-unreviewed`) | 35 | 6 | 4 | Done, 127 searches, no rate limit; College Football 27 and Little Witch in the Woods already in base; Halo 4, The Unfinished Swan, Titanfall (pre-2017), Honkai: Star Rail, Dauntless, Goals, Morimens, Age of Empires III: DE (free to play) marked done |
+| `t6-retry-a` | the 78 games of the first waves (`essai-20`, `t1-50k`, `t2`) still without a worldwide figure and short of their searches, most reviewed first | 0 | 0 | 0 | **Next: run `prepare` with `--min-reviews 0 --include-unreviewed`. Retries come first, so it picks them. 78 games, two waves. Big games, so better yield than below 50,000** |
 
-After that: the rest of 10,000 to 20,000 reviews, then below 10,000.
+After that: every game without a worldwide figure has had its full search budget. New games enter through discovery; rerun `prepare` with `--min-reviews 0 --include-unreviewed` now and then.
 
 ## Resume
 

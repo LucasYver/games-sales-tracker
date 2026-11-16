@@ -124,7 +124,9 @@ def prepare(args) -> None:
         blocked = blocked_hosts(cur)
     games = pd.DataFrame(rows, columns=["id", "name", "developer", "publisher", "release", "platforms"])
     games["rev"] = games.id.map(latest_reviews())
-    games = games[(games.rev >= args.min_reviews) & (games.rev < args.max_reviews)]
+    in_range = (games.rev >= args.min_reviews) & (games.rev < args.max_reviews)
+    # Jeux absents de Steam (ou sans avis dans le snapshot) : sinon jamais choisis.
+    games = games[in_range | (games.rev.isna() if args.include_unreviewed else False)]
     log = read_log()
     def still_to_do(game_id: str) -> bool:
         return game_id not in log or int(log[game_id]["searches"]) < int(log[game_id]["needed"])
@@ -135,7 +137,7 @@ def prepare(args) -> None:
     picked["console"] = picked.platforms.str.contains("PLAYSTATION|XBOX")
     picked["known"] = picked.id.map(lambda i: known.get(i, []))
     picked["release"] = picked.release.astype(str)
-    picked["rev"] = picked.rev.astype(int)
+    picked["rev"] = picked.rev.fillna(0).astype(int)
     records = json.loads(picked.to_json(orient="records", force_ascii=False))
 
     out = tranche_dir(args.tranche)
@@ -306,6 +308,7 @@ def main() -> None:
     p.add_argument("--max-reviews", type=int, default=10**9)
     p.add_argument("--limit", type=int, default=50, help="la recherche web a coupé à 200 recherches pour une vague")
     p.add_argument("--batches", type=int, default=5)
+    p.add_argument("--include-unreviewed", action="store_true", help="ajoute les jeux sans nombre d'avis Steam")
     p.set_defaults(run=prepare)
     p = commands.add_parser("check")
     p.add_argument("tranche")
