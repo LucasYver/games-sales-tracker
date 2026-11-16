@@ -16,7 +16,7 @@ import {
   type TimelineGame,
 } from '@/lib/studio-timeline';
 
-type SortKey = 'game' | 'release' | Store | 'total' | 'share' | 'recent' | 'players' | 'sales';
+type SortKey = 'game' | 'release' | Store | 'total' | 'share' | 'recent' | 'players' | 'lastPeak' | 'sales';
 type SortDir = 'asc' | 'desc';
 type Sort = { key: SortKey; dir: SortDir };
 
@@ -36,6 +36,8 @@ function sortValue(g: TimelineGame, key: SortKey): number | string | null {
       return recentTotal(g) || null;
     case 'players':
       return g.playersPeak || null;
+    case 'lastPeak':
+      return g.lastMonthPeak || null;
     case 'sales':
       return g.units || null;
     default:
@@ -143,7 +145,7 @@ export function StudioTimelineTable({
         {t('tableTitle')}
       </h2>
       <div className="overflow-x-auto rounded-[3px] border border-border">
-        <table className="w-full min-w-[1000px] border-collapse text-sm">
+        <table className="w-full min-w-[1100px] border-collapse text-sm">
           <thead className="bg-surface-hi">
             <tr>
               <SortTh {...th} sortKey="game" align="left">{t('col.game')}</SortTh>
@@ -155,6 +157,7 @@ export function StudioTimelineTable({
               <SortTh {...th} sortKey="share" align="left">{t('col.share', { kind })}</SortTh>
               <SortTh {...th} sortKey="recent" align="right">{t('col.recent')}</SortTh>
               <SortTh {...th} sortKey="players" align="right">{t('col.players')}</SortTh>
+              <SortTh {...th} sortKey="lastPeak" align="right">{t('col.lastPeak')}</SortTh>
               <SortTh {...th} sortKey="sales" align="right">{t('col.sales')}</SortTh>
             </tr>
           </thead>
@@ -213,6 +216,9 @@ export function StudioTimelineTable({
                   <td className={num}>{recent > 0 ? `+${n(recent)}` : '—'}</td>
                   <td className={`${num} ${g.playersPeak ? '' : 'text-text-faint'}`}>
                     {g.playersPeak ? n(g.playersPeak) : '—'}
+                  </td>
+                  <td className={`${num} ${g.lastMonthPeak ? '' : 'text-text-faint'}`}>
+                    {g.lastMonthPeak ? n(g.lastMonthPeak) : '—'}
                   </td>
                   <td
                     className={`${num} ${g.units ? 'font-bold text-primary' : 'text-[0.72rem] text-muted-foreground'}`}

@@ -774,7 +774,8 @@
       "share": "Доля {kind, select, studio {студии} publisher {издателя} other {франшизы}}",
       "recent": "30 дней",
       "sales": "Оценка продаж",
-      "players": "Игроки, этот месяц"
+      "players": "Игроки, этот месяц",
+      "lastPeak": "Пик, прошлый месяц"
     },
     "noFigure": "Нет данных",
     "before2017": "До 2017",
