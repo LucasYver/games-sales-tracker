@@ -32,7 +32,8 @@
     "themeDark": "Cambiar al tema oscuro",
     "themeLight": "Cambiar al tema claro",
     "about": "Acerca de",
-    "contact": "Contacto"
+    "contact": "Contacto",
+    "main": "Secciones"
   },
   "footer": {
     "explore": "Explorar",
@@ -301,7 +302,11 @@
     "yearTitlePage": "Juegos más vendidos lanzados en {year}, página {page}",
     "yearDescription": "Los videojuegos lanzados en {year} que más se han vendido, por copias: ventas estimadas o declaradas en PC, PlayStation y Xbox, actualizadas a diario.",
     "yearIntro": "{count, plural, one {# juego lanzado} other {# juegos lanzados}} en {year}, por ventas estimadas o declaradas en todas las plataformas. La página de cada juego explica su cifra.",
-    "otherYears": "Otros años"
+    "otherYears": "Otros años",
+    "filterLabel": "Filtrar la lista",
+    "filterPlaceholder": "Buscar por nombre…",
+    "filterCount": "{count} de {total}",
+    "filterEmpty": "Ningún resultado para «{query}»."
   },
   "pagination": {
     "nav": "Paginación",
@@ -584,7 +589,7 @@
       "linear": "Lineal",
       "log": "Log"
     },
-    "readoutLatest": "Último punto mostrado · pasa el ratón por la curva para leer un mes",
+    "readoutLatest": "Último dato",
     "readoutLaunchMonth": "Mes del lanzamiento",
     "readoutMonth": "{n, plural, one {# mes} other {# meses}} después del lanzamiento",
     "notReleased": "aún no ha salido",
@@ -676,5 +681,111 @@
     "momentItem": "{name} en {date}",
     "intro3": "Ventas estimadas, jugadores y reseñas de los tres juegos, lado a lado.",
     "compareTop": "Comparar los {count} más vendidos"
+  },
+  "studioTimeline": {
+    "title": "{kind, select, studio {El estudio} publisher {La editora} other {La franquicia}} a lo largo del tiempo",
+    "leadShare": "{game} reúne el {share} de las reseñas y valoraciones {kind, select, studio {del estudio} publisher {de la editora} other {de la franquicia}}, en todas las tiendas.",
+    "moverShare": "En los últimos 30 días, {game} aporta el {share} de las nuevas.",
+    "others": "{count, plural, one {# juego más} other {# juegos más}}",
+    "kpi": {
+      "total": "Reseñas y valoraciones, todas las tiendas",
+      "split": "Steam {steam} · PS {ps} · Xbox {xbox}",
+      "recent": "Últimos 30 días",
+      "mover": "Juego más activo (30 días)",
+      "moverNote": "{share} de las nuevas reseñas y valoraciones",
+      "steamYear": "Steam, últimos 12 meses",
+      "steamYearNote": "+{growth} en un año"
+    },
+    "store": {
+      "steam": "Steam",
+      "ps": "PlayStation",
+      "xbox": "Xbox"
+    },
+    "viewLabel": "Vista",
+    "view": {
+      "stack": "Total",
+      "lines": "Por juego",
+      "launch": "Desde el lanzamiento",
+      "barsMonth": "Reseñas por mes",
+      "barsWeek": "Valoraciones por semana"
+    },
+    "rangeLabel": "Periodo",
+    "range": {
+      "all": "Todo",
+      "month": {
+        "long": "5 años",
+        "short": "2 años"
+      },
+      "week": {
+        "long": "6 meses",
+        "short": "3 meses"
+      },
+      "launch": {
+        "long": "Primeros 5 años",
+        "short": "Primeros 2 años"
+      }
+    },
+    "note": {
+      "steam": {
+        "stack": "Las reseñas de Steam {kind, select, studio {del estudio} publisher {de la editora} other {de la franquicia}}, una banda por juego: lo que cada lanzamiento añade al catálogo.",
+        "lines": "Las reseñas de Steam de cada juego en el calendario.",
+        "launch": "Curvas alineadas en el mes de lanzamiento: qué lanzamiento arrancó más fuerte y cuál aguanta mejor.",
+        "bars": "Nuevas reseñas de Steam cada mes, apiladas por juego: los picos de lanzamiento y de DLC, y luego la cola del catálogo."
+      },
+      "console": {
+        "stack": "Las valoraciones de {store} {kind, select, studio {del estudio} publisher {de la editora} other {de la franquicia}}. Un juego entra en el total cuando empieza su seguimiento (círculo vacío), no en su lanzamiento: un escalón no es un pico de ventas.",
+        "lines": "Las valoraciones de {store} de cada juego desde que empezó su seguimiento.",
+        "bars": "Nuevas valoraciones de {store} cada semana, apiladas por juego. La primera semana seguida cuenta cero."
+      },
+      "ccu": {
+        "stack": "Los jugadores simultáneos de Steam {kind, select, studio {del estudio} publisher {de la editora} other {de la franquicia}}: el pico mensual de cada juego, apilado. Los picos rara vez caen el mismo día, así que la cima es un techo, no un recuento.",
+        "lines": "El mayor número de jugadores simultáneos de Steam de cada juego, mes a mes.",
+        "launch": "Picos de jugadores simultáneos alineados en el mes de lanzamiento: hasta dónde subió cada lanzamiento y lo rápido que se asentó."
+      }
+    },
+    "readoutLatest": "Último dato",
+    "readoutLaunchMonth": "Mes de lanzamiento",
+    "readoutMonth": "Mes {n} tras el lanzamiento",
+    "readoutWeek": "Semana del {date}",
+    "studioTotal": "{kind, select, studio {Estudio} publisher {Editora} other {Franquicia}}",
+    "chartAria": "Los juegos {kind, select, studio {del estudio} publisher {de la editora} other {de la franquicia}} a lo largo del tiempo: {metric}",
+    "metric": {
+      "steam": "reseñas de Steam",
+      "ps": "valoraciones de PlayStation",
+      "xbox": "valoraciones de Xbox",
+      "ccu": "jugadores simultáneos de Steam"
+    },
+    "tickLaunch": "Lanzamiento",
+    "tickYears": "{n, plural, one {# año} other {# años}}",
+    "tickMonths": "{n} meses",
+    "gamesLabel": "Juegos mostrados",
+    "legendRelease": "Lanzamiento",
+    "legendTracking": "Inicio del seguimiento",
+    "footnote": {
+      "steam": "Reseñas de Steam desde el lanzamiento de cada juego. Los juegos sin página de Steam aparecen en PlayStation o Xbox.",
+      "console": "Las valoraciones de {store} solo se registran desde 2026 para la mayoría de los juegos: la diferencia entre juegos es fiable, la tendencia todavía no. Entre dos datos lejanos, la curva se interpola.",
+      "ccu": "Jugadores simultáneos solo en Steam: las consolas no publican esta cifra. Un punto por mes, el dato más alto del mes; el mes en curso no ha terminado."
+    },
+    "tableTitle": "Juego por juego",
+    "col": {
+      "game": "Juego",
+      "release": "Lanzamiento",
+      "total": "Total",
+      "share": "Parte {kind, select, studio {del estudio} publisher {de la editora} other {de la franquicia}}",
+      "recent": "Últimos 30 días",
+      "sales": "Ventas est.",
+      "players": "Jugadores, este mes"
+    },
+    "noFigure": "Sin cifras",
+    "before2017": "Antes de 2017",
+    "shareLegend": "Barra de parte:",
+    "tableNote": "Total = reseñas de Steam + valoraciones de PlayStation + valoraciones de Xbox. Los juegos lanzados antes de 2017 conservan sus cifras de tienda; solo sus ventas no se estiman. Una reseña no es una venta.",
+    "sourceLabel": "Dato",
+    "source": {
+      "steam": "Reseñas de Steam",
+      "ps": "Valoraciones PlayStation",
+      "xbox": "Valoraciones Xbox",
+      "ccu": "Jugadores Steam"
+    }
   }
 }

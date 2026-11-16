@@ -471,6 +471,54 @@ export function getStudioHub(slug: string): Promise<GameHub | null> {
   return getHub(`studios/${encodeURIComponent(slug)}`);
 }
 
+/** One store's history for a game of a studio timeline. */
+export interface TimelineStoreSeries {
+  /**
+   * [bucket, highest value seen in it]: month index (year × 12 + month) for
+   * Steam, week index (Unix epoch / 7 days) for PlayStation and Xbox.
+   */
+  points: [number, number][];
+  latest: number;
+  /** Gain over the last 30 days; null when tracked for less than that. */
+  gain30: number | null;
+}
+
+export interface HubTimeline {
+  slug: string;
+  games: {
+    slug: string;
+    steam: TimelineStoreSeries | null;
+    ps: TimelineStoreSeries | null;
+    xbox: TimelineStoreSeries | null;
+    /** Steam concurrent players: each month's peak; `latest` is this month's. */
+    ccu: TimelineStoreSeries | null;
+  }[];
+}
+
+export type HubKind = 'studio' | 'publisher' | 'franchise';
+
+const HUB_PATHS: Record<HubKind, string> = {
+  studio: 'studios',
+  publisher: 'publishers',
+  franchise: 'franchises',
+};
+
+/** Store history of every game of a hub; a failure hides the section, never the page. */
+export async function getHubTimeline(
+  kind: HubKind,
+  slug: string,
+): Promise<HubTimeline | null> {
+  try {
+    const res = await fetch(
+      `${API_URL}/games/${HUB_PATHS[kind]}/${encodeURIComponent(slug)}/timeline`,
+      { next: { revalidate: RELATED_TTL } },
+    );
+    return res.ok ? ((await res.json()) as HubTimeline) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function getPublisherHub(slug: string): Promise<GameHub | null> {
   return getHub(`publishers/${encodeURIComponent(slug)}`);
 }

@@ -15,6 +15,8 @@ type Events = {
   // Search
   search_result_click: { game: string; position: number };
   search_no_result: { query: string };
+  // Filter box of the studio, publisher and franchise indexes (hub = studio | publisher | franchise).
+  hub_search_no_result: { hub: string; query: string };
   // Listing filters
   filter_change: { filter: string; value: string };
   filter_reset: Record<string, never>;
@@ -33,6 +35,9 @@ type Events = {
   compare_pick: { from: string; game: string };
   compare_option: { option: string; value: string };
   link_copy: { page: string };
+  // "Over time" section of studio, publisher and franchise pages: which store, view, period and games
+  // visitors pick (option = store | view | range | game).
+  studio_timeline_option: { option: string; value: string };
   // Site preferences
   language_change: { to: string };
   theme_toggle: { theme: string };

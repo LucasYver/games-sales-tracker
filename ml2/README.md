@@ -627,3 +627,41 @@ Not verified: the write path never ran (no local database). Cost: one more row p
 estimated game (about 4,500 rows, a few MB) and about ten more queries per rebuild; no
 cron, no backfill. Games move to the V2 at their next rebuild (270 to 400 a day, at most
 once a week each), so the site mixes v1.5 and V2 for two to three weeks after the deploy.
+
+## Exploration — per-platform sales from the V2 (2026-11-15, read-only, nothing changed)
+
+Asked by the owner: could the V2 replace the matcher for the per-platform lines (PC,
+PlayStation, Xbox) of the game page, and would the result be clean? `platforms.py`
+(read-only) answers with the frozen catalog (`2026-11-09T1952`) and the bench of the
+latest snapshot. The base has no Switch platform at all, so a Switch line is out of
+reach.
+
+Ingredients, judged on published platform figures:
+
+| Ingredient | Games | Typical error | Bias |
+| ---------- | ----- | ------------- | ---- |
+| Model, PC figures (CV / time) | 105 / 52 | ×1.37 / ×1.38 | ×1.09 / ×1.34 |
+| Model, PlayStation figures (CV / time) | 51 / 27 | ×2.02 / ×2.28 | ×0.84 / ×2.17 |
+| Model, Xbox figures (CV / time) | 27 / 18 | ×2.05 / ×5.74 | ×1.37 / ×5.74 |
+| PS ratings × 35, each game left out (figure < 1 year) | 73 (49) | ×1.56 (×1.45) | ×1.00 |
+| Xbox ratings × 53 / 21 Game Pass, left out (< 1 year) | 34 (23) | ×2.06 (×1.82) | ×1.00 |
+
+So PC from the model, consoles from the store ratings; the model's own console answers
+are not usable.
+
+On the 83 / 44 / 28 games that published a platform figure and a total within 90 days,
+the V2 shares match the published ones (PC 0.64 vs 0.58, PS 0.35 vs 0.37, Xbox 0.08 vs
+0.10; in-sample, so flattering). Two split rules: A (shares of the parts, scaled to the
+total) PC ×1.22, PS ×1.25, Xbox ×1.62; B (model PC kept, consoles take the rest by their
+ratings) ×1.39, ×1.33, ×1.58.
+
+The catalog is where it breaks. Share of the displayed total the parts cover (model PC +
+console ratings), median: PC-only games estimated by the model 1.00 (same number); PC +
+consoles games anchored 0.69; **PC + consoles games estimated by the model (1,944, 46 %
+of estimated games) 0.38** (10 %–90 %: 0.23–0.72). Per Steam review on those games
+(1,000 to 10,000 reviews): total 208, PC 50 (PC-only games: 47), consoles 14. Published
+totals of games on PC and consoles of that size: 118 per review (112 games); the model
+gives 125 on the multi-platform games anchored on a figure and 200 on the others, whose
+PC and console parts are not higher. So rule A shows those games as 77 % PC, rule B as
+26 % PC and 74 % consoles; published figures cannot say which, and both hide that the
+total itself is the odd part. Same family as open point 8.
