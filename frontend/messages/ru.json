@@ -79,14 +79,19 @@
   },
   "searchBar": {
     "close": "Закрыть поиск",
-    "empty": "Игра не найдена.",
+    "empty": "Ничего не найдено: ни игр, ни студий, ни издателей.",
     "hint": "Для поиска введите не менее {count} символов.",
     "keyboardHint": "↑ ↓ — навигация · ↵ — открыть · Esc — закрыть",
-    "placeholder": "Найти игру (например, Hades, Baldur's Gate)",
+    "placeholder": "Найти игру, студию или издателя",
     "resultsCount": "Результатов: {count}",
     "resultsLabel": "Результаты поиска",
     "reviewsCount": "Отзывов: {count}",
-    "searching": "Поиск…"
+    "searching": "Поиск…",
+    "companiesHeading": "Студии и издатели",
+    "kindStudio": "Студия",
+    "kindPublisher": "Издатель",
+    "companyGames": "{count, plural, one {# игра} few {# игры} many {# игр} other {# игры}}",
+    "moreGames": "Другие игры"
   },
   "filter": {
     "closeFilters": "Закрыть фильтры",
