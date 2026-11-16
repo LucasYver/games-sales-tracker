@@ -302,7 +302,11 @@
     "yearTitlePage": "Juegos más vendidos lanzados en {year}, página {page}",
     "yearDescription": "Los videojuegos lanzados en {year} que más se han vendido, por copias: ventas estimadas o declaradas en PC, PlayStation y Xbox, actualizadas a diario.",
     "yearIntro": "{count, plural, one {# juego lanzado} other {# juegos lanzados}} en {year}, por ventas estimadas o declaradas en todas las plataformas. La página de cada juego explica su cifra.",
-    "otherYears": "Otros años"
+    "otherYears": "Otros años",
+    "filterLabel": "Filtrar la lista",
+    "filterPlaceholder": "Buscar por nombre…",
+    "filterCount": "{count} de {total}",
+    "filterEmpty": "Ningún resultado para «{query}»."
   },
   "pagination": {
     "nav": "Paginación",

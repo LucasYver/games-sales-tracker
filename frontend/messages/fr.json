@@ -302,7 +302,11 @@
     "yearTitlePage": "Meilleures ventes de jeux sortis en {year}, page {page}",
     "yearDescription": "Les jeux vidéo sortis en {year} qui se sont le plus vendus, classés par exemplaires : ventes estimées ou déclarées sur PC, PlayStation et Xbox, chaque jour.",
     "yearIntro": "{count, plural, one {# jeu sorti} other {# jeux sortis}} en {year} et {count, plural, one {suivi, classé} other {suivis, classés}} par ventes estimées ou déclarées, toutes plateformes. La page de chaque jeu détaille son chiffre.",
-    "otherYears": "Autres années"
+    "otherYears": "Autres années",
+    "filterLabel": "Filtrer la liste",
+    "filterPlaceholder": "Rechercher par nom…",
+    "filterCount": "{count} sur {total}",
+    "filterEmpty": "Aucun résultat pour « {query} »."
   },
   "pagination": {
     "nav": "Pagination",

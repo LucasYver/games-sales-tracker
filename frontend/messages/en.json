@@ -302,7 +302,11 @@
     "yearTitlePage": "Best-selling games released in {year}, page {page}",
     "yearDescription": "The best-selling video games released in {year}, ranked by copies sold: estimated and reported sales on PC, PlayStation and Xbox, updated daily.",
     "yearIntro": "{count, plural, one {# game} other {# games}} released in {year} and tracked, ranked by estimated or reported sales across all platforms. Each game page explains its figure.",
-    "otherYears": "Other years"
+    "otherYears": "Other years",
+    "filterLabel": "Filter the list",
+    "filterPlaceholder": "Search by name…",
+    "filterCount": "{count} of {total}",
+    "filterEmpty": "Nothing matches “{query}”."
   },
   "pagination": {
     "nav": "Pagination",

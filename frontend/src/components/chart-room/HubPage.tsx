@@ -10,6 +10,7 @@ import {
 import { SITE_URL } from '@/lib/site-url';
 import { GamesTable } from '@/components/chart-room/GamesTable';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
+import { HubIndexList } from '@/components/chart-room/HubIndexList';
 import { CompareTopLink } from '@/components/compare/CompareEntry';
 import { MAX_COMPARED } from '@/lib/compare';
 import { timelineHasData } from '@/lib/studio-timeline';
@@ -308,24 +309,7 @@ export function HubIndexPage({
           <p className="mt-2 mb-5 max-w-[75ch] text-[0.82rem] leading-relaxed text-muted-foreground">
             {intro}
           </p>
-          <ul className="gap-x-6 sm:columns-2 lg:columns-3">
-            {items.map((item) => (
-              <li
-                key={item.slug}
-                className="flex break-inside-avoid justify-between gap-3 border-b border-border-soft py-2 text-sm"
-              >
-                <Link
-                  href={`${basePath}/${item.slug}`}
-                  className="min-w-0 font-semibold text-foreground hover:text-primary"
-                >
-                  {item.name}
-                </Link>
-                <span className="shrink-0 font-mono text-[0.75rem] text-muted-foreground tabular-nums">
-                  {item.games}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <HubIndexList items={items} basePath={basePath} />
         </div>
       </div>
     </main>
