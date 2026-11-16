@@ -938,9 +938,9 @@ export class GamesService {
   }
 
   /**
-   * Steam reviews (one point per calendar month) and PlayStation and Xbox
-   * ratings (one point per week) of every game of a hub, for the "over time"
-   * chart of its page. Answers under the hub's own slug, as the hub route
+   * Steam reviews and Steam concurrent players (one point per calendar month,
+   * the month's highest) and PlayStation and Xbox ratings (one point per
+   * week) of every game of a hub, for the "over time" chart of its page. Answers under the hub's own slug, as the hub route
    * does. Two index reads per game and metric, no estimate.
    */
   private async hubTimeline(found: { slug: string; games: Game[] }) {
@@ -954,14 +954,16 @@ export class GamesService {
         { gameId: string; metric: string; bucket: string; value: string }[]
       >(
         `SELECT s."gameId", s.metric::text AS metric,
-           CASE WHEN s.metric = 'STEAM_REVIEWS'
+           CASE WHEN s.metric IN ('STEAM_REVIEWS', 'STEAM_CONCURRENT')
              THEN EXTRACT(YEAR FROM s."capturedAt" AT TIME ZONE 'UTC') * 12
                   + EXTRACT(MONTH FROM s."capturedAt" AT TIME ZONE 'UTC') - 1
              ELSE FLOOR(EXTRACT(EPOCH FROM s."capturedAt") / 604800)
            END AS bucket,
            MAX(s.value) AS value
          FROM signal_snapshot s
-         WHERE s."gameId" = ANY($1::uuid[]) AND ${metricFilter}
+         WHERE s."gameId" = ANY($1::uuid[])
+           AND (${metricFilter}
+             OR (s.metric = 'STEAM_CONCURRENT' AND NOT s.synthetic))
          GROUP BY 1, 2, 3
          ORDER BY 1, 2, 3`,
         [ids],
@@ -1004,13 +1006,15 @@ export class GamesService {
       STEAM_REVIEWS: 'steam',
       PS_RATINGS: 'ps',
       XBOX_RATINGS: 'xbox',
+      STEAM_CONCURRENT: 'ccu',
     } as const;
     type Store = (typeof STORES)[keyof typeof STORES];
     type StoreSeries = {
       /** [bucket, value]: month index (year × 12 + month) for Steam, week index (Unix epoch / 7 days) for consoles. */
       points: [number, number][];
+      /** Today's count; for concurrent players, the current month's peak. */
       latest: number;
-      /** Gain over the last 30 days; null when tracked for less than that. */
+      /** Gain over the last 30 days; null when tracked for less than that (always for players). */
       gain30: number | null;
     };
     const byGame = new Map<string, Partial<Record<Store, StoreSeries>>>();
@@ -1031,7 +1035,13 @@ export class GamesService {
     }
     for (const row of points) {
       const { game, store } = entry(row.gameId, row.metric);
-      game[store]?.points.push([Number(row.bucket), Number(row.value)]);
+      const value = Number(row.value);
+      // Concurrent players have no "today" row: the last month stands for it.
+      if (store === 'ccu') {
+        game.ccu ??= { points: [], latest: value, gain30: null };
+        game.ccu.latest = value;
+      }
+      game[store]?.points.push([Number(row.bucket), value]);
     }
 
     return {
@@ -1041,6 +1051,7 @@ export class GamesService {
         steam: byGame.get(g.id)?.steam ?? null,
         ps: byGame.get(g.id)?.ps ?? null,
         xbox: byGame.get(g.id)?.xbox ?? null,
+        ccu: byGame.get(g.id)?.ccu ?? null,
       })),
     };
   }
