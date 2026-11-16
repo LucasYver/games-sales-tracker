@@ -36,7 +36,8 @@ type Events = {
   compare_option: { option: string; value: string };
   link_copy: { page: string };
   // "Over time" section of studio, publisher and franchise pages: which store, view, period and games
-  // visitors pick (option = store | view | range | game).
+  // visitors pick, and how they sort the per-game table (option = store | view | range | game | sort;
+  // a sort value is "<column>_<asc|desc>").
   studio_timeline_option: { option: string; value: string };
   // Site preferences
   language_change: { to: string };

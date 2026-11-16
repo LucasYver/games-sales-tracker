@@ -1,7 +1,9 @@
 'use client';
 
+import { useMemo, useState, type ReactNode } from 'react';
 import { useFormatter, useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
+import { trackEvent } from '@/lib/analytics';
 import type { HubKind } from '@/lib/api';
 import { monthDate } from '@/lib/compare';
 import {
@@ -10,8 +12,94 @@ import {
   recentTotal,
   releasedBefore2017,
   type StudioTotals,
+  type Store,
   type TimelineGame,
 } from '@/lib/studio-timeline';
+
+type SortKey = 'game' | 'release' | Store | 'total' | 'share' | 'recent' | 'players' | 'sales';
+type SortDir = 'asc' | 'desc';
+type Sort = { key: SortKey; dir: SortDir };
+
+const DEFAULT_SORT: Sort = { key: 'total', dir: 'desc' };
+
+/** The value a column sorts on; null (no figure) always goes to the bottom. */
+function sortValue(g: TimelineGame, key: SortKey): number | string | null {
+  switch (key) {
+    case 'game':
+      return g.name;
+    case 'release':
+      return g.releaseMonth;
+    case 'total':
+    case 'share':
+      return g.total || null;
+    case 'recent':
+      return recentTotal(g) || null;
+    case 'players':
+      return g.playersPeak || null;
+    case 'sales':
+      return g.units || null;
+    default:
+      return g.counts[key] || null;
+  }
+}
+
+function sortGames(games: TimelineGame[], { key, dir }: Sort): TimelineGame[] {
+  const sign = dir === 'asc' ? 1 : -1;
+  return [...games].sort((a, b) => {
+    const va = sortValue(a, key);
+    const vb = sortValue(b, key);
+    if (va == null || vb == null) {
+      if (va != null) return -1;
+      if (vb != null) return 1;
+    } else {
+      const diff = typeof va === 'string' ? va.localeCompare(vb as string) : va - (vb as number);
+      if (diff !== 0) return sign * diff;
+    }
+    return b.total - a.total || a.name.localeCompare(b.name);
+  });
+}
+
+/** A column header that sorts the table: first click on the column's natural order, next one reverses it. */
+function SortTh({
+  sortKey,
+  sort,
+  onSort,
+  align,
+  className,
+  children,
+}: {
+  sortKey: SortKey;
+  sort: Sort;
+  onSort: (key: SortKey) => void;
+  align: 'left' | 'right';
+  className: string;
+  children: ReactNode;
+}) {
+  const active = sort.key === sortKey;
+  return (
+    <th
+      scope="col"
+      aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
+      className={`${className} ${align === 'right' ? 'text-right' : 'text-left'}`}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`group inline-flex cursor-pointer items-center gap-1 uppercase hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
+          align === 'right' ? 'flex-row-reverse' : ''
+        } ${active ? 'text-primary' : ''}`}
+      >
+        {children}
+        <span
+          aria-hidden
+          className={`inline-block w-[1ch] text-[0.85em] ${active ? '' : 'opacity-0 group-hover:opacity-50 group-focus-visible:opacity-50'}`}
+        >
+          {active ? (sort.dir === 'asc' ? '↑' : '↓') : '↕'}
+        </span>
+      </button>
+    </th>
+  );
+}
 
 /**
  * Every game of the studio with its count on each store, its share of the
@@ -39,6 +127,15 @@ export function StudioTimelineTable({
   const num = 'px-3 py-2 text-right font-mono text-[0.78rem] tabular-nums whitespace-nowrap';
   const head =
     'px-3 py-2 font-mono text-[0.66rem] font-normal tracking-wider whitespace-nowrap text-muted-foreground uppercase';
+  const [sort, setSort] = useState<Sort>(DEFAULT_SORT);
+  const rows = useMemo(() => sortGames(games, sort), [games, sort]);
+  const onSort = (key: SortKey) => {
+    const dir: SortDir =
+      sort.key === key ? (sort.dir === 'asc' ? 'desc' : 'asc') : key === 'game' ? 'asc' : 'desc';
+    setSort({ key, dir });
+    trackEvent('studio_timeline_option', { option: 'sort', value: `${key}_${dir}` });
+  };
+  const th = { sort, onSort, className: head };
 
   return (
     <section aria-labelledby="studio-table-title" className="border-b border-border px-4 py-5">
@@ -49,20 +146,20 @@ export function StudioTimelineTable({
         <table className="w-full min-w-[1000px] border-collapse text-sm">
           <thead className="bg-surface-hi">
             <tr>
-              <th scope="col" className={`${head} text-left`}>{t('col.game')}</th>
-              <th scope="col" className={`${head} text-left`}>{t('col.release')}</th>
+              <SortTh {...th} sortKey="game" align="left">{t('col.game')}</SortTh>
+              <SortTh {...th} sortKey="release" align="left">{t('col.release')}</SortTh>
               {STORES.map((s) => (
-                <th key={s} scope="col" className={`${head} text-right`}>{t(`store.${s}`)}</th>
+                <SortTh key={s} {...th} sortKey={s} align="right">{t(`store.${s}`)}</SortTh>
               ))}
-              <th scope="col" className={`${head} text-right`}>{t('col.total')}</th>
-              <th scope="col" className={`${head} text-left`}>{t('col.share', { kind })}</th>
-              <th scope="col" className={`${head} text-right`}>{t('col.recent')}</th>
-              <th scope="col" className={`${head} text-right`}>{t('col.players')}</th>
-              <th scope="col" className={`${head} text-right`}>{t('col.sales')}</th>
+              <SortTh {...th} sortKey="total" align="right">{t('col.total')}</SortTh>
+              <SortTh {...th} sortKey="share" align="left">{t('col.share', { kind })}</SortTh>
+              <SortTh {...th} sortKey="recent" align="right">{t('col.recent')}</SortTh>
+              <SortTh {...th} sortKey="players" align="right">{t('col.players')}</SortTh>
+              <SortTh {...th} sortKey="sales" align="right">{t('col.sales')}</SortTh>
             </tr>
           </thead>
           <tbody>
-            {games.map((g) => {
+            {rows.map((g) => {
               const none = g.total === 0;
               const recent = recentTotal(g);
               return (
