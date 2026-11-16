@@ -1,129 +1,56 @@
 gameId,name,tranche,date,searches,needed,figures
 588e207e-eeba-46a9-8bcf-3968e54bb8de,ASTRONEER,essai-20,2026-11-01,2,4,1
 80833b38-a375-40ec-997e-2d47d3bca8e2,BattleBit Remastered,essai-20,2026-11-01,2,2,1
-cbf6fbcb-22ea-449e-8901-9a3f432a812a,Battlefield™ 2042,essai-20,2026-11-01,2,4,0
 6cc1b74a-77a7-44ee-bc52-46e26145934b,Battlefield™ V,essai-20,2026-11-01,2,4,1
-9ec33cd2-da23-48e7-8740-49fbe540f3de,Bloons TD 6,essai-20,2026-11-01,2,4,0
 2fa2f3c4-0b7b-4414-874e-87ee9f691334,DayZ,essai-20,2026-11-01,2,4,1
-11299967-4381-4188-a0ff-0d2f7122ac13,FOR HONOR™,essai-20,2026-11-01,2,4,0
-036a4f6c-532d-423c-96e2-5a75bc50c6a8,Forza Horizon 4,essai-20,2026-11-01,2,4,0
-4e973915-0679-463f-b68a-665e14f63280,Hell Let Loose,essai-20,2026-11-01,2,4,0
-e5053392-ddbd-45b3-b769-f38566886afb,Hunt: Showdown 1896,essai-20,2026-11-01,2,4,0
 37d8ea83-8c76-45b2-8a6b-b66c3ccf9986,Insurgency: Sandstorm,essai-20,2026-11-01,2,4,1
 51b38122-234b-476a-815a-6f776d58290f,Kenshi,essai-20,2026-11-01,2,2,3
 ec8f0c3c-4ffe-4135-8b34-9b3472d025f6,Last Epoch,essai-20,2026-11-01,2,4,3
 a71efd92-e102-42b7-a543-5e226539ba10,MiSide,essai-20,2026-11-01,2,2,0
 cb1ae0c2-54a4-4e7b-ac39-0fce439306f6,Muse Dash,essai-20,2026-11-01,2,2,0
-a94750bd-9de7-42d7-bca0-06a0e8a558cc,Need for Speed™ Heat,essai-20,2026-11-01,2,4,0
 ffaedc5a-8644-43bc-9e9c-0297e0d88c15,Path of Exile 2,essai-20,2026-11-01,2,4,1
 213c645a-e7dc-4339-8b85-0dc46f424cef,People Playground,essai-20,2026-11-01,2,2,0
-3f3d7794-7238-45f6-9fc0-0d77db0eb60f,Totally Accurate Battle Simulator,essai-20,2026-11-01,2,4,0
-5af79448-a939-41e5-88fe-f29c5bd4ca52,"Warhammer 40,000: Darktide",essai-20,2026-11-01,2,4,0
 a2eab4f3-7b8c-4ef8-8384-628ca61eda21,ARK: Survival Evolved,t1-50k,2026-11-01,5,4,0
 e3224767-2b87-4d89-8c23-05e887aa216f,Age of Empires II: Definitive Edition,t1-50k,2026-11-01,2,4,0
 4f446f76-f5de-4b5f-aa37-12f1f48213fa,Age of History II,t1-50k,2026-11-01,2,2,0
-70965ebf-d556-4de7-9338-ae5caf3f2b13,Among Us,t1-50k,2026-11-01,3,4,0
-92020d3e-2f75-49f2-ab95-c747f5b940e6,Assassin's Creed® Origins,t1-50k,2026-11-01,3,4,1
-3d9a6001-7160-4288-bac6-dbd997c54211,Back 4 Blood,t1-50k,2026-11-01,1,4,0
-454959c2-d57b-4a15-ac0b-fbf120905826,Backrooms: Escape Together,t1-50k,2026-11-01,2,4,0
-90f8e1ec-9ec9-4c09-ae43-0f8f3bb5520d,Barotrauma,t1-50k,2026-11-01,1,2,0
-47d96669-2682-429f-8562-61193cd4b2d4,Battlefield 4™,t1-50k,2026-11-01,3,4,0
-8bef7c3d-30ba-401f-bb74-2e2048625b7b,Battlefield™ 1,t1-50k,2026-11-01,1,4,0
-a9daeb71-0f42-495a-85b0-cb6c6fe06b07,Besiege,t1-50k,2026-11-01,3,4,0
-a5079503-5cc4-4cd9-be2b-f621e086ff55,Black Desert,t1-50k,2026-11-01,3,4,0
 e629cc20-40ec-47af-a638-421b096c3063,Bodycam,t1-50k,2026-11-01,2,2,0
-d6a96e5e-2365-4937-9067-b543685ba2d9,Bongo Cat,t1-50k,2026-11-01,1,2,0
-5b1b1549-0ab1-4252-8125-dfdc1ee229cb,Brick Rigs,t1-50k,2026-11-01,1,2,0
 bae0cfb4-1c0d-44b0-b4f6-99b825ab4074,Car Mechanic Simulator 2018,t1-50k,2026-11-01,5,4,1
-351e88c4-3d32-4f8b-88f0-1c950e73f549,CarX Drift Racing Online,t1-50k,2026-11-01,3,4,0
 3d265b5b-acc5-414d-bc4c-e98b5721f3ab,Chivalry 2,t1-50k,2026-11-01,3,4,2
-0b1e72b3-7380-457c-961e-4f096868b783,Combat Master,t1-50k,2026-11-01,1,2,0
-3d2fef16-ca54-48b3-9ff7-bd371b847c84,Cookie Clicker,t1-50k,2026-11-01,1,4,0
-e76ef768-2d7b-4b5e-824e-25322c642970,DOOM Eternal,t1-50k,2026-11-01,3,4,0
+0b1e72b3-7380-457c-961e-4f096868b783,Combat Master,t1-50k,2026-11-01,1,0,0
 0c3f57ef-bd68-47b9-aa21-6ae435ef400b,Deceit,t1-50k,2026-11-01,2,2,0
 0fc47a75-7af8-4423-8be5-b9fccf3e7846,Devour,t1-50k,2026-11-01,2,2,0
-1b205d9e-62e8-4bd7-a31c-d51a89756579,Diablo® IV,t1-50k,2026-11-01,1,4,0
-76a57bf2-e9b9-45ef-a038-ab293670987d,EA SPORTS FC™ 25,t1-50k,2026-11-01,1,4,0
-31b511b5-93f5-4b9a-b036-2d3373ff0519,EA SPORTS FIFA 21,t1-50k,2026-11-01,1,4,0
-b988142d-8523-4b4b-ab30-233eceda48fe,Fall Guys,t1-50k,2026-11-01,2,4,0
 8dcb4c04-5f9d-477f-9321-95994b580a5f,Farming Simulator 19,t1-50k,2026-11-01,3,4,1
 9585188d-99a8-42e4-9241-24f6219bb27d,Farming Simulator 22,t1-50k,2026-11-01,1,4,3
-2ca0398a-372d-4cb6-a2ad-a2dc27bd4531,Five Nights at Freddy's: Security Breach,t1-50k,2026-11-01,3,4,0
-612c71a4-714a-450b-8536-a2c58e11b76e,Forza Horizon 5,t1-50k,2026-11-01,2,4,0
-2522383a-b6ac-41b7-81ee-7d8af9bcf117,Foxhole,t1-50k,2026-11-01,1,2,0
-6884bd8b-8eb5-4b82-8dcc-5f8ae43f951c,GTFO,t1-50k,2026-11-01,1,2,0
 81a79a60-a482-4d2b-90a1-c06f4d430c79,GUILTY GEAR -STRIVE-,t1-50k,2026-11-01,2,4,2
-a184ce46-8050-4ded-916a-fa8f58f8bcca,Gang Beasts,t1-50k,2026-11-01,2,4,0
 b0072546-3b8c-4b50-b3f2-281b89ec0da7,Getting Over It with Bennett Foddy,t1-50k,2026-11-01,2,2,0
-a3702a8d-b029-4900-93c5-9b2920c7f1f1,Golf With Your Friends,t1-50k,2026-11-01,2,4,0
-bd28a0eb-7596-4132-b9c6-e35b875fff61,Graveyard Keeper,t1-50k,2026-11-01,3,4,1
-96207f53-4edf-4cde-b61f-591530ee012e,Grounded,t1-50k,2026-11-01,2,4,1
 f830fbb4-ce23-40e1-a24a-a0c32b675fee,Gunfire Reborn,t1-50k,2026-11-01,2,4,2
-d105feb6-48e4-4e1e-8504-5f943b970a25,HITMAN™ 2,t1-50k,2026-11-01,2,4,0
 9d69ac57-5a8d-4fae-abf1-4f393f9ce6fa,House Flipper,t1-50k,2026-11-01,4,4,0
 e611426a-519a-4b8b-9ddb-e11f3d6e02ad,Icarus,t1-50k,2026-11-01,2,2,0
-404fb892-3910-4e9f-be8d-2ab9b1cdc350,Kards: The WWII Card Game,t1-50k,2026-11-01,1,2,0
+404fb892-3910-4e9f-be8d-2ab9b1cdc350,Kards: The WWII Card Game,t1-50k,2026-11-01,1,0,0
 7b782d80-8ade-4074-8a2a-8577a1c68afb,Lobotomy Corporation,t1-50k,2026-11-01,2,2,1
-222af41a-d30d-43a3-a85d-51fa66f66e0c,Marvel’s Spider-Man Remastered,t1-50k,2026-11-01,1,4,1
 096bbd9a-9c63-4dbc-b3a2-e74819b8bac9,Medieval Dynasty,t1-50k,2026-11-01,1,4,2
-41ba651d-d374-4cf9-af40-3e0810a18a8d,Middle-earth™: Shadow of War™,t1-50k,2026-11-01,2,4,0
-18e8d67a-fe30-469f-ba1a-20ca294be17d,Mirror,t1-50k,2026-11-01,1,2,0
-ef67bdee-fcac-4e39-8da5-a3c06c1b44a1,Mordhau,t1-50k,2026-11-01,2,4,1
-c0e4f3b2-8ab6-4d9a-9c00-9f190044ac04,MultiVersus,t1-50k,2026-11-01,1,4,0
 64bff29b-7715-4d50-ac7c-c9b3df226689,My Summer Car,t1-50k,2026-11-01,2,2,0
 8ce9f87a-d29c-47bc-b3b5-6b02a79401d0,NBA 2K20,t1-50k,2026-11-01,2,4,1
 4bddf153-54ea-4583-a651-538773b13ba6,NBA 2K23,t1-50k,2026-11-01,2,4,2
-9d245e3f-eb6e-44b4-b165-0168980ca9f7,Naruto to Boruto: Shinobi Striker,t1-50k,2026-11-01,3,4,0
-697714f0-3a77-4ed6-9f3e-53f4ca967e29,Need for Speed Unbound,t1-50k,2026-11-01,1,4,0
 f06cfb9e-6ad9-4432-8f68-0551e6fcd7b4,Noita,t1-50k,2026-11-01,2,2,0
-9cee541a-b0e3-415c-b532-89c8d3b7c675,One-Armed Robber,t1-50k,2026-11-01,1,2,0
-127f9437-b9ad-4240-8d97-6fe2451cdba7,Ori and the Will of the Wisps,t1-50k,2026-11-01,3,4,0
-dff5b99f-9598-4cc5-ab3a-63048ab76536,Outlast 2,t1-50k,2026-11-01,2,4,0
-2d3d997d-2438-4c56-a1e6-0fe30784dbff,Overcooked! 2,t1-50k,2026-11-01,2,4,0
 46ae9bdd-cd2d-4d8f-ba08-1faaef11dac5,PC Building Simulator,t1-50k,2026-11-01,4,4,2
-926a0831-e7b7-402e-9890-682accb0246e,Party Animals,t1-50k,2026-11-01,2,4,0
-58937895-b7c0-4cd6-8d15-9c24321d90a0,Payday 3,t1-50k,2026-11-01,2,4,0
 b19d0a45-5325-4672-abc9-9baa493325c7,Phantom Blade 0,t1-50k,2026-11-01,2,4,1
 e464701c-df34-4740-9650-c1f31da9b401,Pizza Tower,t1-50k,2026-11-01,2,2,0
-984f58d2-263b-4242-a777-7d0961a16e51,Plants vs. Zombies Garden Warfare 2: Deluxe Edition,t1-50k,2026-11-01,1,4,0
-41a43500-b05f-4645-9b24-e63243d04a9a,Prey,t1-50k,2026-11-01,1,4,0
-390b220a-448e-4a3b-95cd-992c7d3604bf,Project: Playtime,t1-50k,2026-11-01,1,2,0
-f5367d04-88ff-4963-b5db-418e790ba592,Pummel Party,t1-50k,2026-11-01,1,4,0
-a9bf2fa1-aca7-439c-851b-4172aaaf6970,Rain World,t1-50k,2026-11-01,1,4,0
+390b220a-448e-4a3b-95cd-992c7d3604bf,Project: Playtime,t1-50k,2026-11-01,1,0,0
 59e4c6a9-a39b-46d2-8180-554cec855c1e,Ravenfield,t1-50k,2026-11-01,2,2,0
-87dbb032-acaa-4737-9b76-37886576adec,Realm Royale Reforged,t1-50k,2026-11-01,1,4,0
+87dbb032-acaa-4737-9b76-37886576adec,Realm Royale Reforged,t1-50k,2026-11-01,1,0,0
 9c056d55-e326-4fff-87b8-711d8850e5f0,RimWorld,t1-50k,2026-11-01,2,2,1
-be839f32-4bc4-436c-83a9-ef2305917755,Ring of Elysium,t1-50k,2026-11-01,1,2,0
 440ca16a-a6ff-4069-b55c-689bcea50199,Rising Storm 2: Vietnam,t1-50k,2026-11-01,2,2,1
-2279bb30-191e-4a72-92d2-d5c21f97dcc1,Risk of Rain 2,t1-50k,2026-11-01,2,4,2
-aa41b15f-85d4-4e43-98bd-0e5e722a253a,Robocraft,t1-50k,2026-11-01,1,2,0
-520af97b-7104-4734-8375-c9c3f191f997,Russian Fishing 4,t1-50k,2026-11-01,1,2,0
-4434609d-780c-42ac-8486-8c4d342c7799,STAR WARS Battlefront II,t1-50k,2026-11-01,3,4,0
-22953c89-4e42-49a4-a1e4-77d059b03c19,STAR WARS Jedi: Survivor™,t1-50k,2026-11-01,2,4,0
 d28f4959-09f3-492c-8f3c-0d29d652d94a,Satisfactory,t1-50k,2026-11-01,3,4,1
-8dbc310c-6657-4dac-b5e0-c931fe8f89b4,Sea of Thieves,t1-50k,2026-11-01,3,4,0
-2e456d66-d928-4b56-b888-493583ed9e5c,Sid Meier's Civilization VII,t1-50k,2026-11-01,2,4,0
 3ee85789-e2af-4965-b281-b3d1aa2c21ab,Skul: The Hero Slayer,t1-50k,2026-11-01,1,4,2
 cf75bde2-3f33-43e5-a651-e836ba3238b7,Slime Rancher 2,t1-50k,2026-11-01,2,4,1
-e7bb4708-7ae9-486a-a6ed-fefc13d7fcbe,Sniper Elite 4,t1-50k,2026-11-01,2,4,0
 7de1748b-60ec-423f-95ea-8d5a93642532,Sons Of The Forest,t1-50k,2026-11-01,2,2,1
-35fff751-5f8f-417e-bf65-90768fdc1fae,State of Decay 2: Juggernaut Edition,t1-50k,2026-11-01,1,4,0
-a6701456-8ced-40c7-88d6-4b13a12bf1a1,Stick Fight: The Game,t1-50k,2026-11-01,1,4,1
 d73d5041-f924-4180-8abe-1d6fa0a26a29,Stormworks: Build and Rescue,t1-50k,2026-11-01,2,2,0
-52559df2-8440-4735-9d1c-676372032cff,Stray,t1-50k,2026-11-01,3,4,0
-2e38e42c-b231-4c2f-b7fa-f39d83fbb2e0,The Forest,t1-50k,2026-11-01,2,4,0
 2c3432ce-dd00-4f0c-9caa-12d54d0d023f,The Long Drive,t1-50k,2026-11-01,2,2,0
-bd1b32a6-3c6f-45c9-a3d9-90d703c5664b,They Are Billions,t1-50k,2026-11-01,2,4,0
 8bfbe59b-359c-4142-a371-a3c5ac550310,Total War: WARHAMMER II,t1-50k,2026-11-01,2,2,0
-95de640c-15d8-437c-9d49-152d8c25c73b,Vampire Survivors,t1-50k,2026-11-01,3,4,0
-c78d26ab-8766-4208-98fc-2ea228ff4b1d,Vampire: The Masquerade - Bloodhunt,t1-50k,2026-11-01,1,4,0
+c78d26ab-8766-4208-98fc-2ea228ff4b1d,Vampire: The Masquerade - Bloodhunt,t1-50k,2026-11-01,1,0,0
 33cea7f1-89fd-423b-adce-bc073f55bc98,Wallpaper Engine,t1-50k,2026-11-01,2,2,0
-de5d610d-100f-4c08-a616-bc8c70283e7f,Webfishing,t1-50k,2026-11-01,1,2,0
-867dfa55-eb59-4aea-8ddf-7f2bd7c66cf3,What Remains of Edith Finch,t1-50k,2026-11-01,2,4,0
 7e3e063c-219d-4cbc-bd50-176f75798275,Wolcen: Lords of Mayhem,t1-50k,2026-11-01,1,4,1
-5cc5158c-4bbc-4251-b1e0-ed5e48a13f1a,Wolfenstein II: The New Colossus,t1-50k,2026-11-01,1,4,0
-67d3eecb-497a-4bdb-b812-3ff9733175e4,WorldBox,t1-50k,2026-11-01,1,2,0
-d33181dd-abae-4de8-8322-d8be7eeee6ce,Yakuza 0,t1-50k,2026-11-01,3,4,0
 6621b437-5dfb-4cb8-bf55-c6c4cb30a1e8,Aion 2,t2-20k-50k-a,2026-11-01,2,2,0
 dfa7bb1a-3838-4c47-8518-b55a2ad9500d,Assassin's Creed Valhalla,t2-20k-50k-a,2026-11-01,4,4,0
 7fc93bd8-c544-459a-b05c-f2f99ed05ba1,Assetto Corsa Competizione,t2-20k-50k-a,2026-11-01,5,4,0
@@ -1307,3 +1234,76 @@ f757c753-2d0c-4284-aba4-586845b4043d,Tetris Effect,t5-0-5k-a,2026-11-16,4,4,0
 afc55ed9-bb98-4878-aec1-930e7e1df3df,Trek to Yomi,t5-0-5k-a,2026-11-16,4,4,0
 27175096-891e-49ec-aa31-eeed1ad676e7,World War Z,t5-0-5k-a,2026-11-16,4,4,1
 e50f95ae-2feb-4c0e-8db0-6ff522048b57,Zup! S,t5-0-5k-a,2026-11-16,2,2,0
+70965ebf-d556-4de7-9338-ae5caf3f2b13,Among Us,t6-retry-a,2026-11-16,4,4,0
+92020d3e-2f75-49f2-ab95-c747f5b940e6,Assassin's Creed® Origins,t6-retry-a,2026-11-16,4,4,0
+3d9a6001-7160-4288-bac6-dbd997c54211,Back 4 Blood,t6-retry-a,2026-11-16,4,4,0
+90f8e1ec-9ec9-4c09-ae43-0f8f3bb5520d,Barotrauma,t6-retry-a,2026-11-16,2,2,0
+8bef7c3d-30ba-401f-bb74-2e2048625b7b,Battlefield 1,t6-retry-a,2026-11-16,4,4,0
+47d96669-2682-429f-8562-61193cd4b2d4,Battlefield 4,t6-retry-a,2026-11-16,4,0,0
+cbf6fbcb-22ea-449e-8901-9a3f432a812a,Battlefield™ 2042,t6-retry-a,2026-11-16,4,4,0
+a5079503-5cc4-4cd9-be2b-f621e086ff55,Black Desert,t6-retry-a,2026-11-16,4,0,0
+9ec33cd2-da23-48e7-8740-49fbe540f3de,Bloons TD 6,t6-retry-a,2026-11-16,4,4,0
+d6a96e5e-2365-4937-9067-b543685ba2d9,Bongo Cat,t6-retry-a,2026-11-16,2,2,0
+351e88c4-3d32-4f8b-88f0-1c950e73f549,CarX Drift Racing Online,t6-retry-a,2026-11-16,4,4,1
+3d2fef16-ca54-48b3-9ff7-bd371b847c84,Cookie Clicker,t6-retry-a,2026-11-16,4,0,0
+e76ef768-2d7b-4b5e-824e-25322c642970,DOOM Eternal,t6-retry-a,2026-11-16,4,4,0
+1b205d9e-62e8-4bd7-a31c-d51a89756579,Diablo® IV,t6-retry-a,2026-11-16,4,4,0
+76a57bf2-e9b9-45ef-a038-ab293670987d,EA SPORTS FC 25,t6-retry-a,2026-11-16,4,4,0
+11299967-4381-4188-a0ff-0d2f7122ac13,FOR HONOR™,t6-retry-a,2026-11-16,4,4,0
+b988142d-8523-4b4b-ab30-233eceda48fe,Fall Guys,t6-retry-a,2026-11-16,4,4,0
+2ca0398a-372d-4cb6-a2ad-a2dc27bd4531,Five Nights at Freddy's: Security Breach,t6-retry-a,2026-11-16,4,4,0
+036a4f6c-532d-423c-96e2-5a75bc50c6a8,Forza Horizon 4,t6-retry-a,2026-11-16,4,4,0
+612c71a4-714a-450b-8536-a2c58e11b76e,Forza Horizon 5,t6-retry-a,2026-11-16,4,4,0
+a3702a8d-b029-4900-93c5-9b2920c7f1f1,Golf With Your Friends,t6-retry-a,2026-11-16,4,4,1
+96207f53-4edf-4cde-b61f-591530ee012e,Grounded,t6-retry-a,2026-11-16,4,4,0
+d105feb6-48e4-4e1e-8504-5f943b970a25,HITMAN™ 2,t6-retry-a,2026-11-16,4,4,0
+4e973915-0679-463f-b68a-665e14f63280,Hell Let Loose,t6-retry-a,2026-11-16,4,4,0
+e5053392-ddbd-45b3-b769-f38566886afb,Hunt: Showdown 1896,t6-retry-a,2026-11-16,4,4,0
+222af41a-d30d-43a3-a85d-51fa66f66e0c,Marvel’s Spider-Man Remastered,t6-retry-a,2026-11-16,4,4,0
+41ba651d-d374-4cf9-af40-3e0810a18a8d,Middle-earth: Shadow of War,t6-retry-a,2026-11-16,4,4,0
+18e8d67a-fe30-469f-ba1a-20ca294be17d,Mirror,t6-retry-a,2026-11-16,2,2,0
+ef67bdee-fcac-4e39-8da5-a3c06c1b44a1,Mordhau,t6-retry-a,2026-11-16,4,4,0
+c0e4f3b2-8ab6-4d9a-9c00-9f190044ac04,MultiVersus,t6-retry-a,2026-11-16,4,0,0
+a94750bd-9de7-42d7-bca0-06a0e8a558cc,Need for Speed™ Heat,t6-retry-a,2026-11-16,4,4,0
+127f9437-b9ad-4240-8d97-6fe2451cdba7,Ori and the Will of the Wisps,t6-retry-a,2026-11-16,4,4,0
+2d3d997d-2438-4c56-a1e6-0fe30784dbff,Overcooked! 2,t6-retry-a,2026-11-16,4,4,0
+926a0831-e7b7-402e-9890-682accb0246e,Party Animals,t6-retry-a,2026-11-16,4,4,0
+be839f32-4bc4-436c-83a9-ef2305917755,Ring of Elysium,t6-retry-a,2026-11-16,2,0,0
+2279bb30-191e-4a72-92d2-d5c21f97dcc1,Risk of Rain 2,t6-retry-a,2026-11-16,4,4,0
+aa41b15f-85d4-4e43-98bd-0e5e722a253a,Robocraft,t6-retry-a,2026-11-16,2,0,0
+520af97b-7104-4734-8375-c9c3f191f997,Russian Fishing 4,t6-retry-a,2026-11-16,2,0,0
+22953c89-4e42-49a4-a1e4-77d059b03c19,STAR WARS Jedi: Survivor,t6-retry-a,2026-11-16,4,4,0
+4434609d-780c-42ac-8486-8c4d342c7799,STAR WARS™ Battlefront™ II,t6-retry-a,2026-11-16,4,4,1
+8dbc310c-6657-4dac-b5e0-c931fe8f89b4,Sea of Thieves,t6-retry-a,2026-11-16,4,4,1
+35fff751-5f8f-417e-bf65-90768fdc1fae,State of Decay 2: Juggernaut Edition,t6-retry-a,2026-11-16,4,4,0
+a6701456-8ced-40c7-88d6-4b13a12bf1a1,Stick Fight: The Game,t6-retry-a,2026-11-16,4,4,0
+52559df2-8440-4735-9d1c-676372032cff,Stray,t6-retry-a,2026-11-16,4,4,0
+2e38e42c-b231-4c2f-b7fa-f39d83fbb2e0,The Forest,t6-retry-a,2026-11-16,4,4,0
+3f3d7794-7238-45f6-9fc0-0d77db0eb60f,Totally Accurate Battle Simulator,t6-retry-a,2026-11-16,4,4,0
+95de640c-15d8-437c-9d49-152d8c25c73b,Vampire Survivors,t6-retry-a,2026-11-16,4,4,0
+5af79448-a939-41e5-88fe-f29c5bd4ca52,"Warhammer 40,000: Darktide",t6-retry-a,2026-11-16,4,4,0
+de5d610d-100f-4c08-a616-bc8c70283e7f,Webfishing,t6-retry-a,2026-11-16,2,2,0
+d33181dd-abae-4de8-8322-d8be7eeee6ce,Yakuza 0,t6-retry-a,2026-11-16,4,0,0
+454959c2-d57b-4a15-ac0b-fbf120905826,Backrooms: Escape Together,t6-retry-b,2026-11-16,4,4,0
+a9daeb71-0f42-495a-85b0-cb6c6fe06b07,Besiege,t6-retry-b,2026-11-16,4,4,0
+5b1b1549-0ab1-4252-8125-dfdc1ee229cb,Brick Rigs,t6-retry-b,2026-11-16,2,2,0
+31b511b5-93f5-4b9a-b036-2d3373ff0519,EA SPORTS FIFA 21,t6-retry-b,2026-11-16,4,4,0
+2522383a-b6ac-41b7-81ee-7d8af9bcf117,Foxhole,t6-retry-b,2026-11-16,2,2,0
+6884bd8b-8eb5-4b82-8dcc-5f8ae43f951c,GTFO,t6-retry-b,2026-11-16,2,2,0
+a184ce46-8050-4ded-916a-fa8f58f8bcca,Gang Beasts,t6-retry-b,2026-11-16,4,4,0
+bd28a0eb-7596-4132-b9c6-e35b875fff61,Graveyard Keeper,t6-retry-b,2026-11-16,4,4,0
+9d245e3f-eb6e-44b4-b165-0168980ca9f7,Naruto to Boruto: Shinobi Striker,t6-retry-b,2026-11-16,4,4,0
+697714f0-3a77-4ed6-9f3e-53f4ca967e29,Need for Speed™ Unbound,t6-retry-b,2026-11-16,4,4,0
+9cee541a-b0e3-415c-b532-89c8d3b7c675,One-Armed Robber,t6-retry-b,2026-11-16,2,0,0
+dff5b99f-9598-4cc5-ab3a-63048ab76536,Outlast 2,t6-retry-b,2026-11-16,4,4,0
+58937895-b7c0-4cd6-8d15-9c24321d90a0,Payday 3,t6-retry-b,2026-11-16,4,4,0
+984f58d2-263b-4242-a777-7d0961a16e51,Plants vs. Zombies: Garden Warfare 2,t6-retry-b,2026-11-16,4,0,0
+41a43500-b05f-4645-9b24-e63243d04a9a,Prey,t6-retry-b,2026-11-16,4,4,0
+f5367d04-88ff-4963-b5db-418e790ba592,Pummel Party,t6-retry-b,2026-11-16,4,4,0
+a9bf2fa1-aca7-439c-851b-4172aaaf6970,Rain World,t6-retry-b,2026-11-16,4,4,0
+2e456d66-d928-4b56-b888-493583ed9e5c,Sid Meier's Civilization VII,t6-retry-b,2026-11-16,4,4,0
+e7bb4708-7ae9-486a-a6ed-fefc13d7fcbe,Sniper Elite 4,t6-retry-b,2026-11-16,4,4,0
+bd1b32a6-3c6f-45c9-a3d9-90d703c5664b,They Are Billions,t6-retry-b,2026-11-16,4,4,0
+867dfa55-eb59-4aea-8ddf-7f2bd7c66cf3,What Remains of Edith Finch,t6-retry-b,2026-11-16,4,4,0
+5cc5158c-4bbc-4251-b1e0-ed5e48a13f1a,Wolfenstein II: The New Colossus,t6-retry-b,2026-11-16,4,4,0
+67d3eecb-497a-4bdb-b812-3ff9733175e4,WorldBox,t6-retry-b,2026-11-16,2,2,0

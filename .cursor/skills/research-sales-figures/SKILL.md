@@ -56,7 +56,8 @@ session knows where to resume.
 | `t4-5k-50k-k` | 5,000 to 50,000, retries first | 50 | 3 | 4 | Done, 166 searches; Mr. Prepper found in review (PlayWay via spidersweb.pl); Spilled! skipped (only relays on blocked hosts); Battlefield Hardline (2015) marked done |
 | `t4-5k-50k-l` | 5,000 to 50,000, last 46 | 46 | 5 | 5 | Done, 156 searches; the 5,000 to 50,000 tier is exhausted |
 | `t5-0-5k-a` | every game under 5,000 reviews, plus 17 with no Steam review count (`--include-unreviewed`) | 35 | 6 | 4 | Done, 127 searches, no rate limit; College Football 27 and Little Witch in the Woods already in base; Halo 4, The Unfinished Swan, Titanfall (pre-2017), Honkai: Star Rail, Dauntless, Goals, Morimens, Age of Empires III: DE (free to play) marked done |
-| `t6-retry-a` | the 78 games of the first waves (`essai-20`, `t1-50k`, `t2`) still without a worldwide figure and short of their searches, most reviewed first | 0 | 0 | 0 | **Next: run `prepare` with `--min-reviews 0 --include-unreviewed`. Retries come first, so it picks them. 78 games, two waves. Big games, so better yield than below 50,000** |
+| `t6-retry-a` | the first waves' games still short of their searches, most reviewed first | 50 | 2 | 2 | Done, 186 searches, no rate limit; Battlefront II 7 M (EA earnings call, added in review) and Golf With Your Friends; Sea of Thieves skipped (2 M was players), CarX skipped (blocked host) |
+| `t6-retry-b` | the last 23 of them | 23 | 0 | 0 | Done, 82 searches; They Are Billions skipped (unattributed), Graveyard Keeper 4 M only on a blocked host. **Every game without a worldwide figure has now had its full budget or is marked out of scope (pre-2017, free to play)** |
 
 After that: every game without a worldwide figure has had its full search budget. New games enter through discovery; rerun `prepare` with `--min-reviews 0 --include-unreviewed` now and then.
 
