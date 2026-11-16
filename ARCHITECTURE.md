@@ -192,7 +192,7 @@ estimate rebuild, and matcher inspection.
 `frontend/src/app/`. Locales `en`, `fr`, `es`, `ru` and `ar` via `next-intl`. Admin is
 outside the locale prefix. The blog exists in `en` and `fr` only (`hasBlog` in
 `i18n/routing.ts`): one paid AI write per language, so `/es/blog`, `/ru/blog`
-and `/ar/blog` are 404s, left out of the header and the sitemap.
+and `/ar/blog` are 404s, left out of the header and the sitemap. The header's second row links the studio, publisher and franchise indexes and the blog, current section marked (`components/chart-room/SiteNav.tsx`).
 
 Arabic is right to left: the layout sets `dir="rtl"` (`isRtl` in
 `i18n/routing.ts`) and wraps the page in Radix's direction provider. Public
@@ -209,7 +209,7 @@ country code is Argentina.
 | `/[locale]` | Search and filterable catalog |
 | `/[locale]/game/[slug]` | Headline estimate, history, signals, regional prices |
 | `/[locale]/compare/[...slugs]` | Two games side by side, or three when the visitor adds one: estimates, Steam and console signals on one chart (aligned on launch or on the calendar) and a table (today or at the same age). Slugs in alphabetical order (any other order redirects); only two-game pages from the same franchise or studio are indexed. Entry points: the Compare button and related-game links on game pages, and "compare the top sellers" on franchise, studio and publisher pages. Chart and table choices live in the query string (`metric`, `axis`, `period`, `scale`, `table`), so a shared link opens on the same view. Built from the two cached game details, no backend route (`lib/compare.ts`) |
-| `/[locale]/studio/[slug]`, `/[locale]/publisher/[slug]`, `/[locale]/franchise/[slug]` | Every game of a studio, publisher or franchise: total sales, best seller, latest release, then "over time" (Steam reviews per month since launch, PlayStation and Xbox ratings per week since tracking began, stacked or per game, launches side by side, new reviews per period) and a per-game table (count per store, share of the hub, last 30 days, estimate). The history comes from `GET /games/{studios,publishers,franchises}/:slug/timeline` (two index reads per game and metric, cached 24 h like the hub); the eight games with the most reviews and ratings get their own colour, the rest one band (`lib/studio-timeline.ts`, `components/studio/`) |
+| `/[locale]/studio/[slug]`, `/[locale]/publisher/[slug]`, `/[locale]/franchise/[slug]` | Every game of a studio, publisher or franchise: total sales, best seller, latest release, then "over time" (Steam reviews and Steam concurrent players per month since launch, PlayStation and Xbox ratings per week since tracking began, stacked or per game, launches side by side, new reviews per period) and a per-game table (count per store, share of the hub, last 30 days, estimate). The history comes from `GET /games/{studios,publishers,franchises}/:slug/timeline` (two index reads per game and metric, cached 24 h like the hub); the eight games with the most reviews and ratings get their own colour, the rest one band (`lib/studio-timeline.ts`, `components/studio/`) |
 | `/[locale]/blog` | Published official-sales articles (human-reviewed) |
 | `/[locale]/blog/[slug]` | One article, FR/EN, no model estimates |
 | `/[locale]/privacy` | Privacy page: audience measurement, ads, contact |

@@ -32,7 +32,8 @@
     "themeDark": "Cambiar al tema oscuro",
     "themeLight": "Cambiar al tema claro",
     "about": "Acerca de",
-    "contact": "Contacto"
+    "contact": "Contacto",
+    "main": "Secciones"
   },
   "footer": {
     "explore": "Explorar",
@@ -691,7 +692,6 @@
       "steamYear": "Steam, últimos 12 meses",
       "steamYearNote": "+{growth} en un año"
     },
-    "storeLabel": "Tienda",
     "store": {
       "steam": "Steam",
       "ps": "PlayStation",
@@ -732,6 +732,11 @@
         "stack": "Las valoraciones de {store} {kind, select, studio {del estudio} publisher {de la editora} other {de la franquicia}}. Un juego entra en el total cuando empieza su seguimiento (círculo vacío), no en su lanzamiento: un escalón no es un pico de ventas.",
         "lines": "Las valoraciones de {store} de cada juego desde que empezó su seguimiento.",
         "bars": "Nuevas valoraciones de {store} cada semana, apiladas por juego. La primera semana seguida cuenta cero."
+      },
+      "ccu": {
+        "stack": "Los jugadores simultáneos de Steam {kind, select, studio {del estudio} publisher {de la editora} other {de la franquicia}}: el pico mensual de cada juego, apilado. Los picos rara vez caen el mismo día, así que la cima es un techo, no un recuento.",
+        "lines": "El mayor número de jugadores simultáneos de Steam de cada juego, mes a mes.",
+        "launch": "Picos de jugadores simultáneos alineados en el mes de lanzamiento: hasta dónde subió cada lanzamiento y lo rápido que se asentó."
       }
     },
     "readoutLatest": "Último dato",
@@ -743,7 +748,8 @@
     "metric": {
       "steam": "reseñas de Steam",
       "ps": "valoraciones de PlayStation",
-      "xbox": "valoraciones de Xbox"
+      "xbox": "valoraciones de Xbox",
+      "ccu": "jugadores simultáneos de Steam"
     },
     "tickLaunch": "Lanzamiento",
     "tickYears": "{n, plural, one {# año} other {# años}}",
@@ -753,7 +759,8 @@
     "legendTracking": "Inicio del seguimiento",
     "footnote": {
       "steam": "Reseñas de Steam desde el lanzamiento de cada juego. Los juegos sin página de Steam aparecen en PlayStation o Xbox.",
-      "console": "Las valoraciones de {store} solo se registran desde 2026 para la mayoría de los juegos: la diferencia entre juegos es fiable, la tendencia todavía no. Entre dos datos lejanos, la curva se interpola."
+      "console": "Las valoraciones de {store} solo se registran desde 2026 para la mayoría de los juegos: la diferencia entre juegos es fiable, la tendencia todavía no. Entre dos datos lejanos, la curva se interpola.",
+      "ccu": "Jugadores simultáneos solo en Steam: las consolas no publican esta cifra. Un punto por mes, el dato más alto del mes; el mes en curso no ha terminado."
     },
     "tableTitle": "Juego por juego",
     "col": {
@@ -762,11 +769,19 @@
       "total": "Total",
       "share": "Parte {kind, select, studio {del estudio} publisher {de la editora} other {de la franquicia}}",
       "recent": "Últimos 30 días",
-      "sales": "Ventas est."
+      "sales": "Ventas est.",
+      "players": "Jugadores, este mes"
     },
     "noFigure": "Sin cifras",
     "before2017": "Antes de 2017",
     "shareLegend": "Barra de parte:",
-    "tableNote": "Total = reseñas de Steam + valoraciones de PlayStation + valoraciones de Xbox. Los juegos lanzados antes de 2017 conservan sus cifras de tienda; solo sus ventas no se estiman. Una reseña no es una venta."
+    "tableNote": "Total = reseñas de Steam + valoraciones de PlayStation + valoraciones de Xbox. Los juegos lanzados antes de 2017 conservan sus cifras de tienda; solo sus ventas no se estiman. Una reseña no es una venta.",
+    "sourceLabel": "Dato",
+    "source": {
+      "steam": "Reseñas de Steam",
+      "ps": "Valoraciones PlayStation",
+      "xbox": "Valoraciones Xbox",
+      "ccu": "Jugadores Steam"
+    }
   }
 }

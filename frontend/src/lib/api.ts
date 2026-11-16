@@ -490,6 +490,8 @@ export interface HubTimeline {
     steam: TimelineStoreSeries | null;
     ps: TimelineStoreSeries | null;
     xbox: TimelineStoreSeries | null;
+    /** Steam concurrent players: each month's peak; `latest` is this month's. */
+    ccu: TimelineStoreSeries | null;
   }[];
 }
 

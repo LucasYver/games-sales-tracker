@@ -32,7 +32,8 @@
     "themeDark": "Switch to dark theme",
     "themeLight": "Switch to light theme",
     "about": "About",
-    "contact": "Contact"
+    "contact": "Contact",
+    "main": "Main sections"
   },
   "footer": {
     "explore": "Explore",
@@ -691,7 +692,6 @@
       "steamYear": "Steam, last 12 months",
       "steamYearNote": "+{growth} over a year"
     },
-    "storeLabel": "Store",
     "store": {
       "steam": "Steam",
       "ps": "PlayStation",
@@ -732,6 +732,11 @@
         "stack": "The {kind, select, studio {studio's} publisher {publisher's} other {franchise's}} {store} ratings. A game joins the total when its tracking starts (hollow dot), not at launch: a step is not a sales peak.",
         "lines": "Each game's {store} ratings since its tracking started.",
         "bars": "New {store} ratings each week, stacked by game. The first tracked week counts zero."
+      },
+      "ccu": {
+        "stack": "The {kind, select, studio {studio's} publisher {publisher's} other {franchise's}} Steam concurrent players: each game's monthly peak, stacked. Peaks rarely fall on the same day, so the top is a ceiling, not a count.",
+        "lines": "Each game's highest number of concurrent Steam players, month by month.",
+        "launch": "Concurrent-player peaks lined up on the launch month: how high each launch climbed and how fast it settled."
       }
     },
     "readoutLatest": "Latest reading",
@@ -743,7 +748,8 @@
     "metric": {
       "steam": "Steam reviews",
       "ps": "PlayStation ratings",
-      "xbox": "Xbox ratings"
+      "xbox": "Xbox ratings",
+      "ccu": "Steam concurrent players"
     },
     "tickLaunch": "Launch",
     "tickYears": "{n, plural, one {# year} other {# years}}",
@@ -753,7 +759,8 @@
     "legendTracking": "Tracking starts",
     "footnote": {
       "steam": "Steam reviews since each game's launch. Games without a Steam page show up under PlayStation or Xbox.",
-      "console": "{store} ratings have only been recorded since 2026 for most games: the gap between games is reliable, the trend not yet. Between two distant readings the curve is interpolated."
+      "console": "{store} ratings have only been recorded since 2026 for most games: the gap between games is reliable, the trend not yet. Between two distant readings the curve is interpolated.",
+      "ccu": "Concurrent players on Steam only; consoles publish no player count. One point per month, the month's highest reading; the current month is not over."
     },
     "tableTitle": "Game by game",
     "col": {
@@ -762,11 +769,19 @@
       "total": "Total",
       "share": "{kind, select, studio {Studio} publisher {Publisher} other {Franchise}} share",
       "recent": "Last 30 days",
-      "sales": "Est. sales"
+      "sales": "Est. sales",
+      "players": "Players, this month"
     },
     "noFigure": "No figure",
     "before2017": "Before 2017",
     "shareLegend": "Share bar:",
-    "tableNote": "Total = Steam reviews + PlayStation ratings + Xbox ratings. Games released before 2017 keep their store figures; only their sales are not estimated. A review is not a sale."
+    "tableNote": "Total = Steam reviews + PlayStation ratings + Xbox ratings. Games released before 2017 keep their store figures; only their sales are not estimated. A review is not a sale.",
+    "sourceLabel": "Data",
+    "source": {
+      "steam": "Steam reviews",
+      "ps": "PlayStation ratings",
+      "xbox": "Xbox ratings",
+      "ccu": "Steam players"
+    }
   }
 }

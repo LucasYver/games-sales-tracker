@@ -46,7 +46,7 @@ export function StudioTimelineTable({
         {t('tableTitle')}
       </h2>
       <div className="overflow-x-auto rounded-[3px] border border-border">
-        <table className="w-full min-w-[900px] border-collapse text-sm">
+        <table className="w-full min-w-[1000px] border-collapse text-sm">
           <thead className="bg-surface-hi">
             <tr>
               <th scope="col" className={`${head} text-left`}>{t('col.game')}</th>
@@ -57,6 +57,7 @@ export function StudioTimelineTable({
               <th scope="col" className={`${head} text-right`}>{t('col.total')}</th>
               <th scope="col" className={`${head} text-left`}>{t('col.share', { kind })}</th>
               <th scope="col" className={`${head} text-right`}>{t('col.recent')}</th>
+              <th scope="col" className={`${head} text-right`}>{t('col.players')}</th>
               <th scope="col" className={`${head} text-right`}>{t('col.sales')}</th>
             </tr>
           </thead>
@@ -113,6 +114,9 @@ export function StudioTimelineTable({
                     )}
                   </td>
                   <td className={num}>{recent > 0 ? `+${n(recent)}` : '—'}</td>
+                  <td className={`${num} ${g.playersPeak ? '' : 'text-text-faint'}`}>
+                    {g.playersPeak ? n(g.playersPeak) : '—'}
+                  </td>
                   <td
                     className={`${num} ${g.units ? 'font-bold text-primary' : 'text-[0.72rem] text-muted-foreground'}`}
                   >

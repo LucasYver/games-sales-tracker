@@ -32,7 +32,8 @@
     "themeDark": "Passer en thème sombre",
     "themeLight": "Passer en thème clair",
     "about": "À propos",
-    "contact": "Contact"
+    "contact": "Contact",
+    "main": "Rubriques"
   },
   "footer": {
     "explore": "Explorer",
@@ -691,7 +692,6 @@
       "steamYear": "Steam, 12 derniers mois",
       "steamYearNote": "+{growth} sur un an"
     },
-    "storeLabel": "Store",
     "store": {
       "steam": "Steam",
       "ps": "PlayStation",
@@ -732,6 +732,11 @@
         "stack": "Les notes {store} {kind, select, studio {du studio} publisher {de l’éditeur} other {de la franchise}}. Un jeu entre dans le cumul à son début de suivi (cercle vide), pas à sa sortie : une marche n’est pas un pic de ventes.",
         "lines": "Les notes {store} de chaque jeu depuis son début de suivi.",
         "bars": "Nouvelles notes {store} chaque semaine, empilées par jeu. La première semaine suivie compte zéro."
+      },
+      "ccu": {
+        "stack": "Les joueurs simultanés Steam {kind, select, studio {du studio} publisher {de l’éditeur} other {de la franchise}} : le pic mensuel de chaque jeu, empilé. Les pics tombent rarement le même jour, le haut de la pile est donc un plafond, pas un décompte.",
+        "lines": "Le plus haut nombre de joueurs simultanés Steam de chaque jeu, mois par mois.",
+        "launch": "Pics de joueurs simultanés alignés sur le mois de sortie : jusqu’où chaque lancement est monté, et à quelle vitesse il s’est tassé."
       }
     },
     "readoutLatest": "Dernier relevé",
@@ -743,7 +748,8 @@
     "metric": {
       "steam": "reviews Steam",
       "ps": "notes PlayStation",
-      "xbox": "notes Xbox"
+      "xbox": "notes Xbox",
+      "ccu": "joueurs simultanés Steam"
     },
     "tickLaunch": "Sortie",
     "tickYears": "{n, plural, one {# an} other {# ans}}",
@@ -753,7 +759,8 @@
     "legendTracking": "Début du suivi",
     "footnote": {
       "steam": "Reviews Steam depuis la sortie de chaque jeu. Les jeux sans page Steam apparaissent sur PlayStation ou Xbox.",
-      "console": "Les notes {store} ne sont relevées que depuis 2026 pour la plupart des jeux : l’écart entre jeux est fiable, la tendance pas encore. Entre deux relevés espacés, la courbe est interpolée."
+      "console": "Les notes {store} ne sont relevées que depuis 2026 pour la plupart des jeux : l’écart entre jeux est fiable, la tendance pas encore. Entre deux relevés espacés, la courbe est interpolée.",
+      "ccu": "Joueurs simultanés sur Steam uniquement : les consoles ne publient pas ce chiffre. Un point par mois, le plus haut relevé du mois ; le mois en cours n’est pas terminé."
     },
     "tableTitle": "Jeu par jeu",
     "col": {
@@ -762,11 +769,19 @@
       "total": "Total avis",
       "share": "Part {kind, select, studio {du studio} publisher {de l’éditeur} other {de la franchise}}",
       "recent": "30 derniers jours",
-      "sales": "Ventes est."
+      "sales": "Ventes est.",
+      "players": "Joueurs, ce mois"
     },
     "noFigure": "Aucun chiffre",
     "before2017": "Avant 2017",
     "shareLegend": "Barre de part :",
-    "tableNote": "Total avis = reviews Steam + notes PlayStation + notes Xbox. Les jeux sortis avant 2017 gardent leurs chiffres de store ; seules leurs ventes ne sont pas estimées. Un avis n’est pas une vente."
+    "tableNote": "Total avis = reviews Steam + notes PlayStation + notes Xbox. Les jeux sortis avant 2017 gardent leurs chiffres de store ; seules leurs ventes ne sont pas estimées. Un avis n’est pas une vente.",
+    "sourceLabel": "Donnée",
+    "source": {
+      "steam": "Reviews Steam",
+      "ps": "Notes PlayStation",
+      "xbox": "Notes Xbox",
+      "ccu": "Joueurs Steam"
+    }
   }
 }

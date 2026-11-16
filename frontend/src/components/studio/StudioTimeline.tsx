@@ -19,8 +19,8 @@ import type { HubKind, HubTimeline, PopularGame } from '@/lib/api';
 import { monthDate } from '@/lib/compare';
 import {
   GAME_COLORS,
+  METRICS,
   OTHERS_COLOR,
-  STORES,
   TOP_GAMES,
   buildTimelineGames,
   gainValue,
@@ -31,6 +31,7 @@ import {
   weekDate,
   weekIndex,
   type Dense,
+  type Metric,
   type Store,
   type TimelineGame,
 } from '@/lib/studio-timeline';
@@ -60,7 +61,7 @@ function sum(values: number[]) {
 }
 
 /**
- * Every game of a studio over time, store by store: the studio's total as
+ * Every game of a hub over time, store by store (and Steam players): the studio's total as
  * stacked bands, each game's curve, launches side by side and new reviews per
  * period, then the per-game table. The eight games with the most reviews and
  * ratings have their own colour; the rest share one band.
@@ -79,7 +80,7 @@ export function StudioTimeline({
   const games = useMemo(() => buildTimelineGames(hubGames, timeline), [hubGames, timeline]);
   const totals = useMemo(() => studioTotals(games), [games]);
 
-  const [storeChoice, setStore] = useState<Store>('steam');
+  const [metricChoice, setMetric] = useState<Metric>('steam');
   const [viewChoice, setView] = useState<View>('stack');
   const [rangeChoice, setRange] = useState<Range>('all');
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
@@ -91,17 +92,23 @@ export function StudioTimeline({
   const rest = withData.slice(TOP_GAMES);
   const colorOf = new Map(top.map((g, i) => [g.slug, GAME_COLORS[i]]));
 
-  const stores = STORES.filter((s) => games.some((g) => g.series[s]));
-  const store = stores.includes(storeChoice) ? storeChoice : stores[0];
-  const weekly = store !== 'steam';
-  const views: View[] = weekly ? ['stack', 'lines', 'bars'] : ['stack', 'lines', 'launch', 'bars'];
+  const metrics = METRICS.filter((m) => games.some((g) => g.series[m]));
+  const metric = metrics.includes(metricChoice) ? metricChoice : metrics[0];
+  const weekly = metric === 'ps' || metric === 'xbox';
+  const players = metric === 'ccu';
+  // Players are not cumulative: a month's new players means nothing.
+  const views: View[] = weekly
+    ? ['stack', 'lines', 'bars']
+    : players
+      ? ['stack', 'lines', 'launch']
+      : ['stack', 'lines', 'launch', 'bars'];
   const view = views.includes(viewChoice) ? viewChoice : 'lines';
   const launch = view === 'launch';
   const stacked = view === 'stack' || view === 'bars';
 
   // Oldest release at the bottom of a stack, the other games under it all.
   const entries: Entry[] = top
-    .filter((g) => g.series[store] && (!launch || g.releaseMonth != null))
+    .filter((g) => g.series[metric] && (!launch || g.releaseMonth != null))
     .map((g) => ({
       key: `g${top.indexOf(g)}`,
       name: g.name,
@@ -110,7 +117,7 @@ export function StudioTimeline({
       release: g.releaseMonth,
     }))
     .sort((a, b) => (a.release ?? 0) - (b.release ?? 0));
-  const restHere = rest.filter((g) => g.series[store]);
+  const restHere = rest.filter((g) => g.series[metric]);
   if (restHere.length > 0 && !launch) {
     entries.unshift({
       key: 'others',
@@ -122,7 +129,7 @@ export function StudioTimeline({
   }
   const shown = entries.filter((e) => !hidden.has(e.key));
 
-  const dense = (g: TimelineGame): Dense | null => g.series[store];
+  const dense = (g: TimelineGame): Dense | null => g.series[metric];
   const lastBucket = (d: Dense | null) => (d ? d.start + d.values.length - 1 : -Infinity);
 
   // X axis: calendar buckets, or months since launch.
@@ -155,7 +162,7 @@ export function StudioTimeline({
 
   const valueOf = (e: Entry, x: number): number | null => {
     if (launch) return lineValue(dense(e.members[0]), (e.release ?? 0) + x);
-    if (view === 'bars') return sum(e.members.map((g) => gainValue(dense(g), x, store)));
+    if (view === 'bars') return sum(e.members.map((g) => gainValue(dense(g), x, metric)));
     if (view === 'stack') return sum(e.members.map((g) => stackValue(dense(g), x)));
     const parts = e.members
       .map((g) => lineValue(dense(g), x))
@@ -226,8 +233,12 @@ export function StudioTimeline({
         const x = weekly ? weekIndex(monthDate(g.releaseMonth)) : g.releaseMonth;
         if (x >= xmin && x <= xmax) dots.push({ key: `${e.key}-r`, x, color: e.color, hollow: false });
       }
-      const first = g.firstBucket[store];
-      if (weekly && first != null && first > xmin && first <= xmax) {
+      // Tracking that began well after launch is marked, so its start never reads as a launch.
+      const first = g.firstBucket[metric];
+      const releaseX =
+        g.releaseMonth == null ? null : weekly ? weekIndex(monthDate(g.releaseMonth)) : g.releaseMonth;
+      const late = first != null && (releaseX == null || first > releaseX + (weekly ? 4 : 1));
+      if (late && first > xmin && first <= xmax) {
         dots.push({ key: `${e.key}-t`, x: first, color: e.color, hollow: true });
       }
     }
@@ -324,7 +335,9 @@ export function StudioTimeline({
       : []),
   ];
 
-  const metric = t(`metric.${store}`);
+  const metricName = t(`metric.${metric}`);
+  const family = players ? 'ccu' : weekly ? 'console' : 'steam';
+  const storeName = weekly ? t(`store.${metric}`) : '';
   const viewLabel = (v: View) =>
     v === 'bars' ? t(weekly ? 'view.barsWeek' : 'view.barsMonth') : t(`view.${v}`);
   const rangeLabel = (r: Range) =>
@@ -355,13 +368,13 @@ export function StudioTimeline({
         </div>
 
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2.5">
-          {stores.length > 1 && (
-            <Segmented<Store>
+          {metrics.length > 1 && (
+            <Segmented<Metric>
               showLabel
-              label={t('storeLabel')}
-              value={store}
-              onChange={choose<Store>('store', setStore)}
-              options={stores.map((s) => ({ value: s, label: t(`store.${s}`) }))}
+              label={t('sourceLabel')}
+              value={metric}
+              onChange={choose<Metric>('store', setMetric)}
+              options={metrics.map((m) => ({ value: m, label: t(`source.${m}`) }))}
             />
           )}
           <Segmented<View>
@@ -382,7 +395,7 @@ export function StudioTimeline({
           )}
         </div>
         <p className="text-[0.82rem] text-muted-foreground">
-          {t(`note.${weekly ? 'console' : 'steam'}.${view}`, { kind, store: t(`store.${store}`) })}
+          {t(`note.${family}.${view}`, { kind, store: storeName })}
         </p>
 
         <div
@@ -415,7 +428,7 @@ export function StudioTimeline({
           <ChartContainer
             config={config}
             className="aspect-auto h-80 w-full"
-            aria-label={t('chartAria', { kind, metric })}
+            aria-label={t('chartAria', { kind, metric: metricName })}
           >
             <ComposedChart
               data={data}
@@ -533,7 +546,7 @@ export function StudioTimeline({
                 <span aria-hidden className="inline-block size-2 rounded-full bg-muted-foreground" />
                 {t('legendRelease')}
               </span>
-              {weekly && (
+              {dots.some((d) => d.hollow) && (
                 <span className="inline-flex items-center gap-1.5">
                   <span aria-hidden className="inline-block size-2 rounded-full border-[1.5px] border-muted-foreground" />
                   {t('legendTracking')}
@@ -543,7 +556,7 @@ export function StudioTimeline({
           )}
         </div>
         <p className="font-mono text-[0.72rem] leading-relaxed text-muted-foreground">
-          {t(weekly ? 'footnote.console' : 'footnote.steam', { store: t(`store.${store}`) })}
+          {t(`footnote.${family}`, { store: storeName })}
         </p>
       </section>
 

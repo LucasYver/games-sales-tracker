@@ -14,6 +14,9 @@ import {
 
 export const STORES = ['steam', 'ps', 'xbox'] as const;
 export type Store = (typeof STORES)[number];
+/** What the chart can show: a store's reviews or ratings, or Steam concurrent players. */
+export const METRICS = ['steam', 'ps', 'xbox', 'ccu'] as const;
+export type Metric = (typeof METRICS)[number];
 
 /** Games drawn on their own; the rest of the studio is one "other games" band. */
 export const TOP_GAMES = 8;
@@ -93,7 +96,7 @@ export function lineValue(d: Dense | null, x: number): number | null {
  * Steam, whose history starts at launch; a console series starts when
  * tracking did, so its first count is not a gain.
  */
-export function gainValue(d: Dense | null, x: number, store: Store): number {
+export function gainValue(d: Dense | null, x: number, store: Metric): number {
   if (!d) return 0;
   const i = x - d.start;
   if (i < 0 || i >= d.values.length) return 0;
@@ -113,9 +116,11 @@ export interface TimelineGame {
   total: number;
   /** New reviews or ratings over the last 30 days, per store (a drop counts 0). */
   recent: Record<Store, number>;
-  series: Record<Store, Dense | null>;
-  /** First bucket per store, or null without data. */
-  firstBucket: Record<Store, number | null>;
+  series: Record<Metric, Dense | null>;
+  /** First bucket per metric, or null without data. */
+  firstBucket: Record<Metric, number | null>;
+  /** Highest Steam concurrent players this month, 0 without data. */
+  playersPeak: number;
 }
 
 export function buildTimelineGames(
@@ -129,15 +134,18 @@ export function buildTimelineGames(
       const of = (s: Store): TimelineStoreSeries | null => t?.[s] ?? null;
       const counts = {} as Record<Store, number>;
       const recent = {} as Record<Store, number>;
-      const series = {} as Record<Store, Dense | null>;
-      const firstBucket = {} as Record<Store, number | null>;
+      const series = {} as Record<Metric, Dense | null>;
+      const firstBucket = {} as Record<Metric, number | null>;
       for (const s of STORES) {
         const data = of(s);
         counts[s] = data?.latest ?? 0;
         // A drop means the store product was matched again, not lost ratings.
         recent[s] = Math.max(0, data?.gain30 ?? 0);
-        series[s] = densify(data?.points ?? []);
-        firstBucket[s] = data?.points[0]?.[0] ?? null;
+      }
+      for (const m of METRICS) {
+        const data = m === 'ccu' ? (t?.ccu ?? null) : of(m);
+        series[m] = densify(data?.points ?? []);
+        firstBucket[m] = data?.points[0]?.[0] ?? null;
       }
       const release = game.releaseDate ? new Date(game.releaseDate) : null;
       // A game out for a year does not gain a quarter of its count in a
@@ -159,6 +167,7 @@ export function buildTimelineGames(
         recent,
         series,
         firstBucket,
+        playersPeak: t?.ccu?.latest ?? 0,
       };
     })
     .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
