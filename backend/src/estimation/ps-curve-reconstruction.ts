@@ -1,6 +1,7 @@
 /**
- * Reconstruct a PlayStation ratings-over-time curve from a single recent
- * anchor plus the SAME game's dense Steam-review cumulative curve, used as a
+ * Reconstruct a PlayStation ratings-over-time curve from a single real
+ * anchor (production uses the game's earliest real PS point, the one nearest
+ * the stretch it fills) plus the SAME game's dense Steam-review cumulative curve, used as a
  * temporal SHAPE prior. Empirically validated on real (non-synthetic) held-out
  * PS points: median error ≈ x1.09, and with the shape-reliability guardrail
  * below ~97% of kept points fall within x2 — see
@@ -28,7 +29,7 @@ export interface DatedValue {
 }
 
 export interface PsReconstructionInputs {
-  /** Latest REAL PS_RATINGS snapshot (value must be > 0). */
+  /** One REAL PS_RATINGS snapshot (value must be > 0); production passes the earliest. */
   anchor: DatedValue;
   /** Per-platform PS launch date; null falls back to calendar alignment. */
   psReleaseDate: Date | null;

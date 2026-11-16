@@ -4,37 +4,51 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../app.module';
+import {
+  reconstructPsCurveMonthly,
+  reconstructPsRatingAt,
+  type DatedValue,
+  type PsReconstructionInputs,
+} from '../estimation/ps-curve-reconstruction';
 
 /**
- * Read-only empirical validation of the "PS rating curve reconstruction"
- * idea: can we rebuild a PlayStation ratings-over-time curve from a single
- * recent anchor plus the SAME game's dense Steam-review cumulative curve
- * (used purely as a temporal SHAPE prior)?
+ * Read-only empirical validation of the PlayStation ratings-curve
+ * reconstruction (`ps-curve-reconstruction.ts`). It calls the SHIPPED pure
+ * function, guardrails included, so the numbers describe what production
+ * writes. Nothing is written to the DB.
  *
- * Protocol (leave-the-early-points-out):
- *   For every game with >= 2 real PS_RATINGS days:
- *     - anchor  = latest real PS day (value + date)   ← the only PS input we allow
- *     - test(s) = every earlier real PS day at least --min-gap-days before anchor
- *   Reconstruct the PS count at each test date t as:
- *       predShape(t) = anchorValue * steamRev(t) / steamRev(anchorDate)
- *   and compare to the real PS value at t.
+ * Protocol (hide the early points):
+ *   For every game with >= 2 real PS_RATINGS days, each real day T that has a
+ *   real day at least --min-gap-days later is a test point. Its value is
+ *   predicted from ONE real anchor and the game's Steam-review curve, with two
+ *   anchor strategies:
+ *     - latest  : the game's latest real PS day (what production used until now)
+ *     - nearest : the first real PS day at least --min-gap-days after T
+ *                 (what "anchor on the earliest real point" does in production:
+ *                 the anchor nearest to the stretch being reconstructed)
+ *   Baselines: flat (= latest anchor value) and linear-since-PS-release.
  *
- * Baselines for context:
- *   - flat    : predFlat(t) = anchorValue         (no shape at all)
- *   - release : predRel(t)  = anchorValue * (t - release)/(anchorDate - release)
- *               clamped to [0,1] (naive linear-since-release accumulation)
+ * Breakdowns: by anchor gap, by test age since PS release (the launch window
+ * is the part the reconstruction fills), signed bias, worst errors.
+ *
+ * Coverage: which games have a stretch between PS release and their first real
+ * PS point, whether they already hold synthetic rows, and what each strategy
+ * would write for them today.
  *
  * Error metric = |log10(pred / actual)| (0.30 ≈ 2x off, 0.10 ≈ 1.26x off).
- * Nothing is written to the DB. Read-only.
  *
  * Usage (from backend/):
  *   npx ts-node src/scripts/_tmp-validate-ps-reconstruction.ts \
  *     [--min-gap-days 60] [--out <path>]
  */
 
+const MS_PER_DAY = 24 * 3600 * 1000;
+// A first real PS point within this many days of the PS release counts as
+// "observed from launch": nothing worth reconstructing before it.
+const LAUNCH_COVERED_DAYS = 31;
+
 interface CliOptions {
   minGapDays: number;
-  steamFloor: number;
   outPath: string;
 }
 
@@ -44,55 +58,53 @@ function parseArgs(): CliOptions {
     const i = args.indexOf(flag);
     return i >= 0 ? args[i + 1] : undefined;
   };
+  const out = get('--out');
   return {
     minGapDays: get('--min-gap-days') ? Number(get('--min-gap-days')) : 60,
-    // Below this many Steam reviews at the anchor the game has a negligible
-    // Steam footprint (console-first titles like CoD Vanguard): the Steam
-    // shape is meaningless and the guarded method abstains.
-    steamFloor: get('--steam-floor') ? Number(get('--steam-floor')) : 500,
-    outPath: get('--out')
-      ? resolve(process.cwd(), get('--out')!)
+    outPath: out
+      ? resolve(process.cwd(), out)
       : resolve(__dirname, '../../../scripts/.validate-ps-reconstruction.json'),
   };
-}
-
-interface PsPoint {
-  day: string; // YYYY-MM-DD (UTC)
-  date: Date;
-  value: number;
 }
 
 interface GameRow {
   gameId: string;
   name: string;
-  releaseDate: Date | null;
   psReleaseDate: Date | null;
-  pcReleaseDate: Date | null;
+  syntheticRows: number;
 }
+
+type Strategy = 'latest' | 'nearest';
+const STRATEGIES: Strategy[] = ['latest', 'nearest'];
 
 interface TestRow {
   gameId: string;
   name: string;
-  anchorDay: string;
-  anchorValue: number;
   testDay: string;
   testValue: number;
-  gapDays: number;
-  steamAtTest: number | null;
-  steamAtAnchor: number | null;
-  predShape: number | null;
-  predShapeAligned: number | null;
+  ageDays: number | null; // test date minus PS release
+  latestDay: string;
+  latestGapDays: number;
+  nearestDay: string;
+  nearestGapDays: number;
+  pred: Record<Strategy, number | null>;
+  abstain: Record<Strategy, string | null>;
   predFlat: number;
   predRelease: number | null;
-  logErrShape: number | null;
-  logErrShapeAligned: number | null;
-  logErrFlat: number;
-  logErrRelease: number | null;
-  // Guardrail flags (prod would abstain / fall back to genre shape).
-  preRelease: boolean; // test date before PS launch
-  negligibleSteam: boolean; // Steam footprint too small at anchor
-  desynced: boolean; // PS vs PC launch differ > 60d (alignment matters)
-  steamLagDays: number | null; // first Steam review minus PS release (late-to-Steam)
+}
+
+interface CoverageRow {
+  gameId: string;
+  name: string;
+  psReleaseDay: string | null;
+  firstRealDay: string;
+  uncoveredDays: number | null;
+  syntheticRows: number;
+  wouldWrite: Record<Strategy, number>;
+  abstainReason: Record<Strategy, string | null>;
+  // Reconstructed value the day before the first real point vs that point:
+  // the visible jump on the chart (1 = continuous).
+  jumpRatio: Record<Strategy, number | null>;
 }
 
 async function main(): Promise<void> {
@@ -106,112 +118,81 @@ async function main(): Promise<void> {
   const dataSource = app.get(DataSource);
 
   try {
-    const games = await loadGamesWithPsHistory(dataSource);
-    logger.log(`Games with >= 2 real PS_RATINGS days: ${games.length}`);
+    const games = await loadGamesWithRealPs(dataSource);
+    logger.log(`Games with real PS_RATINGS: ${games.length}`);
 
     const testRows: TestRow[] = [];
+    const coverage: CoverageRow[] = [];
+
     for (const game of games) {
-      const psPoints = await loadPsPoints(dataSource, game.gameId);
-      if (psPoints.length < 2) continue;
+      const [psPoints, steamReviews] = await Promise.all([
+        loadPsPoints(dataSource, game.gameId),
+        loadSteamPoints(dataSource, game.gameId),
+      ]);
+      if (psPoints.length === 0) continue;
+      const psRelease = game.psReleaseDate;
+      const inputsFor = (anchor: DatedValue): PsReconstructionInputs => ({
+        anchor,
+        psReleaseDate: psRelease,
+        steamReviews,
+      });
 
-      const psRelease = game.psReleaseDate ?? game.releaseDate;
-      const pcRelease = game.pcReleaseDate ?? game.releaseDate;
-      const desynced =
-        psRelease !== null &&
-        pcRelease !== null &&
-        daysBetween(psRelease, pcRelease) > 60;
+      coverage.push(coverageFor(game, psPoints, steamReviews, inputsFor));
 
-      const steamPoints = await loadSteamPoints(dataSource, game.gameId);
-      // Production anchors the Steam-shape timeline on the FIRST Steam review,
-      // not the IGDB PC release. Mirror that here so the validation reflects the
-      // shipped algorithm.
-      const firstSteam = steamPoints.length > 0 ? steamPoints[0].date : null;
-      const steamTimelineStart = firstSteam ?? pcRelease;
-      const steamLagDays =
-        firstSteam !== null && psRelease !== null
-          ? daysBetween(psRelease, firstSteam)
-          : null;
+      const latest = psPoints[psPoints.length - 1];
+      for (let i = 0; i < psPoints.length - 1; i++) {
+        const test = psPoints[i];
+        const nearest = psPoints
+          .slice(i + 1)
+          .find((p) => days(test.capturedAt, p.capturedAt) >= opts.minGapDays);
+        if (!nearest) continue;
 
-      const anchor = psPoints[psPoints.length - 1];
-      const steamAtAnchor = steamAt(steamPoints, anchor.date);
-      // Aligned anchor: Steam reviews at the date equivalent to the anchor's
-      // PS-elapsed time (steamTimelineStart + (anchorDate - psRelease)).
-      const steamAtAnchorAligned = steamAt(
-        steamPoints,
-        mapToPcTimeline(anchor.date, psRelease, steamTimelineStart),
-      );
-
-      for (const test of psPoints.slice(0, -1)) {
-        const gapDays = daysBetween(test.date, anchor.date);
-        if (gapDays < opts.minGapDays) continue;
-
-        const steamAtTest = steamAt(steamPoints, test.date);
-        const steamAtTestAligned = steamAt(
-          steamPoints,
-          mapToPcTimeline(test.date, psRelease, steamTimelineStart),
-        );
-
-        const predShape =
-          steamAtTest !== null && steamAtAnchor !== null && steamAtAnchor > 0
-            ? anchor.value * (steamAtTest / steamAtAnchor)
-            : null;
-
-        const predShapeAligned =
-          steamAtTestAligned !== null &&
-          steamAtAnchorAligned !== null &&
-          steamAtAnchorAligned > 0
-            ? anchor.value * (steamAtTestAligned / steamAtAnchorAligned)
-            : null;
-
-        const predFlat = anchor.value;
-        const predRelease = releasePrediction(
-          psRelease,
-          test.date,
-          anchor.date,
-          anchor.value,
-        );
-
-        const preRelease = psRelease !== null && test.date < psRelease;
-        const negligibleSteam =
-          steamAtAnchorAligned === null ||
-          steamAtAnchorAligned < opts.steamFloor;
+        const anchors: Record<Strategy, DatedValue> = { latest, nearest };
+        const pred = {} as Record<Strategy, number | null>;
+        const abstain = {} as Record<Strategy, string | null>;
+        for (const s of STRATEGIES) {
+          const out = reconstructPsRatingAt(
+            test.capturedAt,
+            inputsFor(anchors[s]),
+          );
+          pred[s] = out.value;
+          abstain[s] = out.reason;
+        }
 
         testRows.push({
           gameId: game.gameId,
           name: game.name,
-          anchorDay: anchor.day,
-          anchorValue: anchor.value,
-          testDay: test.day,
+          testDay: day(test.capturedAt),
           testValue: test.value,
-          gapDays,
-          steamAtTest,
-          steamAtAnchor,
-          predShape,
-          predShapeAligned,
-          predFlat,
-          predRelease,
-          logErrShape: logErr(predShape, test.value),
-          logErrShapeAligned: logErr(predShapeAligned, test.value),
-          logErrFlat: logErr(predFlat, test.value)!,
-          logErrRelease: logErr(predRelease, test.value),
-          preRelease,
-          negligibleSteam,
-          desynced,
-          steamLagDays,
+          ageDays: psRelease ? days(psRelease, test.capturedAt) : null,
+          latestDay: day(latest.capturedAt),
+          latestGapDays: days(test.capturedAt, latest.capturedAt),
+          nearestDay: day(nearest.capturedAt),
+          nearestGapDays: days(test.capturedAt, nearest.capturedAt),
+          pred,
+          abstain,
+          predFlat: latest.value,
+          predRelease: releasePrediction(
+            psRelease,
+            test.capturedAt,
+            latest.capturedAt,
+            latest.value,
+          ),
         });
       }
     }
 
-    const report = summarise(testRows);
-    printReport(testRows, report, opts);
+    const report = buildReport(testRows, coverage);
+    printReport(report, opts);
     writeFileSync(
       opts.outPath,
       JSON.stringify(
         {
           generatedAt: new Date().toISOString(),
-          opts,
-          summary: report,
+          opts: { minGapDays: opts.minGapDays },
+          report,
           rows: testRows,
+          coverage,
         },
         null,
         2,
@@ -223,57 +204,100 @@ async function main(): Promise<void> {
   }
 }
 
-/**
- * Games that have PS_RATINGS snapshots on at least two distinct UTC days.
- * De-duping to distinct days avoids counting multiple same-day live polls
- * as "history".
- */
-async function loadGamesWithPsHistory(
-  dataSource: DataSource,
-): Promise<GameRow[]> {
-  return dataSource.query<GameRow[]>(
-    `SELECT g.id AS "gameId", g.name AS name, g."releaseDate" AS "releaseDate",
-            ps."releaseDate" AS "psReleaseDate",
-            pc."releaseDate" AS "pcReleaseDate"
+function coverageFor(
+  game: GameRow,
+  psPoints: DatedValue[],
+  steamReviews: DatedValue[],
+  inputsFor: (anchor: DatedValue) => PsReconstructionInputs,
+): CoverageRow {
+  const first = psPoints[0];
+  const anchors: Record<Strategy, DatedValue> = {
+    latest: psPoints[psPoints.length - 1],
+    nearest: first, // production "earliest" anchor
+  };
+  const fromDate = game.psReleaseDate ?? steamReviews[0]?.capturedAt ?? null;
+  const toDate = new Date(first.capturedAt.getTime() - MS_PER_DAY);
+
+  const wouldWrite = { latest: 0, nearest: 0 };
+  const abstainReason = { latest: null, nearest: null } as Record<
+    Strategy,
+    string | null
+  >;
+  const jumpRatio = { latest: null, nearest: null } as Record<
+    Strategy,
+    number | null
+  >;
+  for (const s of STRATEGIES) {
+    if (!fromDate || fromDate.getTime() > toDate.getTime()) {
+      abstainReason[s] = 'no-gap';
+      continue;
+    }
+    const inputs = inputsFor(anchors[s]);
+    const curve = reconstructPsCurveMonthly(fromDate, toDate, inputs);
+    wouldWrite[s] = curve.length;
+    if (curve.length === 0) {
+      abstainReason[s] = reconstructPsRatingAt(toDate, inputs).reason;
+    } else {
+      const last = curve[curve.length - 1];
+      jumpRatio[s] = first.value > 0 ? last.value / first.value : null;
+    }
+  }
+
+  return {
+    gameId: game.gameId,
+    name: game.name,
+    psReleaseDay: game.psReleaseDate ? day(game.psReleaseDate) : null,
+    firstRealDay: day(first.capturedAt),
+    uncoveredDays: game.psReleaseDate
+      ? days(game.psReleaseDate, first.capturedAt)
+      : null,
+    syntheticRows: game.syntheticRows,
+    wouldWrite,
+    abstainReason,
+    jumpRatio,
+  };
+}
+
+// ───── data loading ──────────────────────────────────────────────────────
+
+async function loadGamesWithRealPs(dataSource: DataSource): Promise<GameRow[]> {
+  const rows = await dataSource.query<
+    Array<{
+      gameId: string;
+      name: string;
+      psReleaseDate: Date | string | null;
+      syntheticRows: string;
+    }>
+  >(
+    `SELECT g.id AS "gameId", g.name AS name,
+            COALESCE(ps."releaseDate", g."releaseDate") AS "psReleaseDate",
+            COALESCE(syn.n, 0) AS "syntheticRows"
        FROM game g
-       JOIN (
-         SELECT "gameId", COUNT(DISTINCT date_trunc('day', "capturedAt")) AS days
-           FROM signal_snapshot
-          WHERE metric = 'PS_RATINGS' AND synthetic = false
-          GROUP BY "gameId"
-         HAVING COUNT(DISTINCT date_trunc('day', "capturedAt")) >= 2
-       ) h ON h."gameId" = g.id
+       JOIN (SELECT DISTINCT "gameId" FROM signal_snapshot
+              WHERE metric = 'PS_RATINGS' AND synthetic = false) r
+         ON r."gameId" = g.id
        LEFT JOIN game_platform_release_date ps
               ON ps."gameId" = g.id AND ps.platform = 'PLAYSTATION'
-       LEFT JOIN game_platform_release_date pc
-              ON pc."gameId" = g.id AND pc.platform = 'PC'
+       LEFT JOIN (SELECT "gameId", COUNT(*) AS n FROM signal_snapshot
+                   WHERE metric = 'PS_RATINGS' AND synthetic = true
+                   GROUP BY "gameId") syn
+              ON syn."gameId" = g.id
       WHERE g."deletedAt" IS NULL
       ORDER BY g.name ASC`,
   );
+  return rows.map((r) => ({
+    gameId: r.gameId,
+    name: r.name,
+    psReleaseDate: r.psReleaseDate ? new Date(r.psReleaseDate) : null,
+    syntheticRows: Number(r.syntheticRows),
+  }));
 }
 
-/**
- * Map a date on the PS timeline to the equivalent date on the PC timeline by
- * preserving elapsed-time-since-launch: pcRelease + (date - psRelease). When
- * either per-platform date is missing (or they coincide) this is the identity.
- */
-function mapToPcTimeline(
-  date: Date,
-  psRelease: Date | null,
-  pcRelease: Date | null,
-): Date {
-  if (!psRelease || !pcRelease) return date;
-  const elapsed = date.getTime() - psRelease.getTime();
-  return new Date(pcRelease.getTime() + elapsed);
-}
-
-/**
- * One PS point per UTC day (max cumulative value that day), oldest first.
- */
+/** One real PS point per UTC day (max cumulative value that day), oldest first. */
 async function loadPsPoints(
   dataSource: DataSource,
   gameId: string,
-): Promise<PsPoint[]> {
+): Promise<DatedValue[]> {
   const rows = await dataSource.query<Array<{ day: string; value: string }>>(
     `SELECT to_char(date_trunc('day', "capturedAt"), 'YYYY-MM-DD') AS day,
             MAX(value) AS value
@@ -284,26 +308,19 @@ async function loadPsPoints(
     [gameId],
   );
   return rows.map((r) => ({
-    day: r.day,
-    date: new Date(`${r.day}T00:00:00.000Z`),
+    capturedAt: new Date(`${r.day}T00:00:00.000Z`),
     value: Number(r.value),
   }));
 }
 
-interface SteamPoint {
-  date: Date;
-  value: number;
-}
-
-// Load a game's full cumulative STEAM_REVIEWS curve in one query, then resolve
-// lookups in memory. Avoids a network round-trip per test point (the previous
-// per-lookup queries made the run take tens of minutes) and mirrors the prod
-// pure function, which receives the whole steamReviews array.
+/** Real cumulative STEAM_REVIEWS curve, ascending (same input as production). */
 async function loadSteamPoints(
   dataSource: DataSource,
   gameId: string,
-): Promise<SteamPoint[]> {
-  const rows = await dataSource.query<Array<{ capturedAt: Date; value: string }>>(
+): Promise<DatedValue[]> {
+  const rows = await dataSource.query<
+    Array<{ capturedAt: Date; value: string }>
+  >(
     `SELECT "capturedAt", value
        FROM signal_snapshot
       WHERE "gameId" = $1 AND metric = 'STEAM_REVIEWS' AND synthetic = false
@@ -311,21 +328,12 @@ async function loadSteamPoints(
     [gameId],
   );
   return rows.map((r) => ({
-    date: new Date(r.capturedAt),
+    capturedAt: new Date(r.capturedAt),
     value: Number(r.value),
   }));
 }
 
-// Latest cumulative Steam review count at/at-before `cutoff` (null if before the
-// first review). `points` must be ascending by date.
-function steamAt(points: SteamPoint[], cutoff: Date): number | null {
-  let found: number | null = null;
-  for (const p of points) {
-    if (p.date.getTime() <= cutoff.getTime()) found = p.value;
-    else break;
-  }
-  return found;
-}
+// ───── helpers ───────────────────────────────────────────────────────────
 
 function releasePrediction(
   releaseDate: Date | null,
@@ -337,121 +345,247 @@ function releasePrediction(
   const spanAnchor = anchorDate.getTime() - releaseDate.getTime();
   if (spanAnchor <= 0) return null;
   const spanTest = testDate.getTime() - releaseDate.getTime();
-  const frac = Math.min(1, Math.max(0, spanTest / spanAnchor));
-  return anchorValue * frac;
+  return anchorValue * Math.min(1, Math.max(0, spanTest / spanAnchor));
 }
 
-function logErr(pred: number | null, actual: number): number | null {
+/** Signed log10 error (positive = overestimate). */
+function signedErr(pred: number | null, actual: number): number | null {
   if (pred === null || pred <= 0 || actual <= 0) return null;
-  return Math.abs(Math.log10(pred / actual));
+  return Math.log10(pred / actual);
 }
 
-function daysBetween(a: Date, b: Date): number {
-  return Math.round(Math.abs(b.getTime() - a.getTime()) / (24 * 3600 * 1000));
+function days(a: Date, b: Date): number {
+  return Math.round((b.getTime() - a.getTime()) / MS_PER_DAY);
 }
 
-interface MethodStats {
-  method: string;
+function day(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+// ───── report ────────────────────────────────────────────────────────────
+
+interface Stats {
   n: number;
-  medianAbsLogErr: number;
-  meanAbsLogErr: number;
-  within1_26x: number; // fraction with |logErr| <= 0.10
-  within2x: number; // fraction with |logErr| <= 0.30
+  games: number;
+  medianX: number; // median |error| as a multiplicative factor
+  p90X: number;
+  within1_26x: number;
+  within2x: number;
+  medianBiasX: number; // median signed error as a factor (>1 = overestimates)
 }
 
-function summarise(rows: TestRow[]): MethodStats[] {
-  const methods: Array<{ key: keyof TestRow; label: string }> = [
-    { key: 'logErrShape', label: 'shape (raw)' },
-    { key: 'logErrShapeAligned', label: 'shape (aligned)' },
-    { key: 'logErrFlat', label: 'flat (anchor)' },
-    { key: 'logErrRelease', label: 'linear-release' },
-  ];
-  return methods.map(({ key, label }) => {
-    const errs = rows
-      .map((r) => r[key] as number | null)
-      .filter((e): e is number => e !== null && Number.isFinite(e))
-      .sort((a, b) => a - b);
-    if (errs.length === 0) {
-      return {
-        method: label,
-        n: 0,
-        medianAbsLogErr: NaN,
-        meanAbsLogErr: NaN,
-        within1_26x: NaN,
-        within2x: NaN,
-      };
+function stats(pairs: Array<{ gameId: string; err: number }>): Stats | null {
+  if (pairs.length === 0) return null;
+  const abs = pairs.map((p) => Math.abs(p.err)).sort((a, b) => a - b);
+  const signed = pairs.map((p) => p.err).sort((a, b) => a - b);
+  const q = (xs: number[], f: number) =>
+    xs[Math.min(xs.length - 1, Math.floor(xs.length * f))];
+  return {
+    n: pairs.length,
+    games: new Set(pairs.map((p) => p.gameId)).size,
+    medianX: 10 ** q(abs, 0.5),
+    p90X: 10 ** q(abs, 0.9),
+    within1_26x: abs.filter((e) => e <= 0.1).length / abs.length,
+    within2x: abs.filter((e) => e <= 0.3).length / abs.length,
+    medianBiasX: 10 ** q(signed, 0.5),
+  };
+}
+
+type MethodKey = Strategy | 'flat' | 'linear-release';
+const METHODS: MethodKey[] = ['latest', 'nearest', 'flat', 'linear-release'];
+
+function errFor(r: TestRow, m: MethodKey): number | null {
+  if (m === 'flat') return signedErr(r.predFlat, r.testValue);
+  if (m === 'linear-release') return signedErr(r.predRelease, r.testValue);
+  return signedErr(r.pred[m], r.testValue);
+}
+
+/**
+ * Every method is scored on the SAME rows: those where both shape strategies
+ * produced a value (neither tripped a guardrail), so differences come from
+ * the method, not from which rows it chose to answer.
+ */
+function methodTable(rows: TestRow[]): Record<MethodKey, Stats | null> {
+  const common = rows.filter(
+    (r) => r.pred.latest !== null && r.pred.nearest !== null,
+  );
+  const out = {} as Record<MethodKey, Stats | null>;
+  for (const m of METHODS) {
+    out[m] = stats(
+      common.flatMap((r) => {
+        const err = errFor(r, m);
+        return err === null ? [] : [{ gameId: r.gameId, err }];
+      }),
+    );
+  }
+  return out;
+}
+
+const AGE_BINS: Array<[string, number, number]> = [
+  ['0-30d', 0, 31],
+  ['31-90d', 31, 91],
+  ['91-365d', 91, 366],
+  ['1-2y', 366, 731],
+  ['>2y', 731, Infinity],
+];
+const GAP_BINS: Array<[string, number, number]> = [
+  ['60-180d', 0, 181],
+  ['181-365d', 181, 366],
+  ['1-2y', 366, 731],
+  ['>2y', 731, Infinity],
+];
+
+function buildReport(rows: TestRow[], coverage: CoverageRow[]) {
+  const byAge: Record<string, Record<MethodKey, Stats | null>> = {};
+  for (const [label, lo, hi] of AGE_BINS) {
+    byAge[label] = methodTable(
+      rows.filter(
+        (r) => r.ageDays !== null && r.ageDays >= lo && r.ageDays < hi,
+      ),
+    );
+  }
+  const byGap: Record<string, Stats | null> = {};
+  for (const [label, lo, hi] of GAP_BINS) {
+    byGap[label] = stats(
+      rows.flatMap((r) => {
+        if (r.latestGapDays < lo || r.latestGapDays >= hi) return [];
+        const err = signedErr(r.pred.latest, r.testValue);
+        return err === null ? [] : [{ gameId: r.gameId, err }];
+      }),
+    );
+  }
+
+  const abstained: Record<Strategy, Record<string, number>> = {
+    latest: {},
+    nearest: {},
+  };
+  for (const r of rows) {
+    for (const s of STRATEGIES) {
+      const reason = r.abstain[s];
+      if (reason) abstained[s][reason] = (abstained[s][reason] ?? 0) + 1;
     }
-    return {
-      method: label,
-      n: errs.length,
-      medianAbsLogErr: errs[Math.floor(errs.length / 2)],
-      meanAbsLogErr: errs.reduce((a, b) => a + b, 0) / errs.length,
-      within1_26x: errs.filter((e) => e <= 0.1).length / errs.length,
-      within2x: errs.filter((e) => e <= 0.3).length / errs.length,
-    };
-  });
+  }
+
+  const withGap = coverage.filter(
+    (c) => c.uncoveredDays === null || c.uncoveredDays > LAUNCH_COVERED_DAYS,
+  );
+  const jumps = (s: Strategy) =>
+    withGap
+      .map((c) => c.jumpRatio[s])
+      .filter((x): x is number => x !== null)
+      .map((x) => Math.abs(Math.log10(x)))
+      .sort((a, b) => a - b);
+  const medianJump = (s: Strategy) => {
+    const j = jumps(s);
+    return j.length ? 10 ** j[Math.floor(j.length / 2)] : null;
+  };
+
+  return {
+    testRows: rows.length,
+    testGames: new Set(rows.map((r) => r.gameId)).size,
+    overall: methodTable(rows),
+    byAgeSincePsRelease: byAge,
+    latestAnchorByGap: byGap,
+    abstained,
+    coverage: {
+      gamesWithRealPs: coverage.length,
+      coveredFromLaunch: coverage.length - withGap.length,
+      withUncoveredLaunch: withGap.length,
+      withUncoveredLaunchAndSynthetic: withGap.filter(
+        (c) => c.syntheticRows > 0,
+      ).length,
+      withUncoveredLaunchNoSynthetic: withGap.filter(
+        (c) => c.syntheticRows === 0,
+      ).length,
+      wouldGetCurve: {
+        latest: withGap.filter((c) => c.wouldWrite.latest > 0).length,
+        nearest: withGap.filter((c) => c.wouldWrite.nearest > 0).length,
+      },
+      pointsWouldWrite: {
+        latest: withGap.reduce((a, c) => a + c.wouldWrite.latest, 0),
+        nearest: withGap.reduce((a, c) => a + c.wouldWrite.nearest, 0),
+      },
+      medianJumpAtFirstRealPoint: {
+        latest: medianJump('latest'),
+        nearest: medianJump('nearest'),
+      },
+      abstainReasons: {
+        latest: countBy(withGap, (c) => c.abstainReason.latest),
+        nearest: countBy(withGap, (c) => c.abstainReason.nearest),
+      },
+    },
+    worstNearest: rows
+      .filter((r) => r.pred.nearest !== null)
+      .map((r) => ({
+        name: r.name,
+        testDay: r.testDay,
+        anchorDay: r.nearestDay,
+        actual: r.testValue,
+        pred: Math.round(r.pred.nearest!),
+        factor: Number(
+          (10 ** Math.abs(signedErr(r.pred.nearest, r.testValue)!)).toFixed(2),
+        ),
+      }))
+      .sort((a, b) => b.factor - a.factor)
+      .slice(0, 25),
+  };
+}
+
+function countBy<T>(xs: T[], key: (x: T) => string | null) {
+  const out: Record<string, number> = {};
+  for (const x of xs) {
+    const k = key(x);
+    if (k) out[k] = (out[k] ?? 0) + 1;
+  }
+  return out;
 }
 
 function printReport(
-  rows: TestRow[],
-  stats: MethodStats[],
+  report: ReturnType<typeof buildReport>,
   opts: CliOptions,
 ): void {
   const pad = (s: string, n: number) => s.padEnd(n);
-  const num = (v: number, w = 8) =>
-    Number.isFinite(v) ? v.toFixed(3).padStart(w) : 'n/a'.padStart(w);
-
-  const table = (label: string, subset: TestRow[]): void => {
-    const games = new Set(subset.map((r) => r.gameId)).size;
-    const s = summarise(subset);
-    console.log('');
-    console.log(`${label}: ${subset.length} rows across ${games} game(s)`);
+  const fx = (v: number | undefined) =>
+    v === undefined || !Number.isFinite(v) ? 'n/a' : `x${v.toFixed(2)}`;
+  const pct = (v: number | undefined) =>
+    v === undefined || !Number.isFinite(v) ? 'n/a' : `${Math.round(v * 100)}%`;
+  const header = () =>
     console.log(
-      `${pad('method', 16)} ${pad('N', 5)} ${pad('median|log|', 12)} ${pad('mean|log|', 12)} ${pad('<=1.26x', 9)} ${pad('<=2x', 8)}`,
+      `  ${pad('method', 16)}${pad('N', 6)}${pad('games', 7)}${pad('median', 9)}${pad('p90', 9)}${pad('<=1.26x', 9)}${pad('<=2x', 7)}bias`,
     );
-    console.log('-'.repeat(16 + 1 + 5 + 1 + 12 + 1 + 12 + 1 + 9 + 1 + 8));
-    for (const m of s) {
-      console.log(
-        `${pad(m.method, 16)} ${pad(String(m.n), 5)} ${num(m.medianAbsLogErr, 12)} ${num(m.meanAbsLogErr, 12)} ${num(m.within1_26x, 9)} ${num(m.within2x, 8)}`,
-      );
-    }
+  const line = (label: string, s: Stats | null) =>
+    console.log(
+      s
+        ? `  ${pad(label, 16)}${pad(String(s.n), 6)}${pad(String(s.games), 7)}${pad(fx(s.medianX), 9)}${pad(fx(s.p90X), 9)}${pad(pct(s.within1_26x), 9)}${pad(pct(s.within2x), 7)}${fx(s.medianBiasX)}`
+        : `  ${pad(label, 16)}no rows`,
+    );
+  const table = (title: string, t: Record<MethodKey, Stats | null>) => {
+    console.log(`\n${title}`);
+    header();
+    for (const m of METHODS) line(m, t[m]);
   };
 
-  void stats;
-  console.log('');
-  console.log(`min gap ${opts.minGapDays}d, steam floor ${opts.steamFloor}`);
-
-  const guarded = rows.filter((r) => !r.preRelease && !r.negligibleSteam);
-  const excluded = rows.length - guarded.length;
-
-  table('ALL rows (no guardrails)', rows);
-  table(
-    `GUARDED rows (drop pre-release + negligible-Steam; ${excluded} excluded)`,
-    guarded,
-  );
-  table(
-    'DESYNCED subset (PS↔PC launch > 60d apart)',
-    guarded.filter((r) => r.desynced),
-  );
-
-  console.log('');
-  console.log('Worst aligned errors among GUARDED rows:');
   console.log(
-    `${pad('game', 30)} ${pad('test→anchor', 24)} ${pad('gap', 5)} ${pad('actual', 8)} ${pad('predAlign', 10)} ${pad('|log|', 7)} ${pad('desync', 6)}`,
+    `\nmin gap ${opts.minGapDays}d — ${report.testRows} test points across ${report.testGames} games`,
   );
-  const detail = guarded
-    .filter((r) => r.logErrShapeAligned !== null)
-    .sort((a, b) => (b.logErrShapeAligned ?? 0) - (a.logErrShapeAligned ?? 0))
-    .slice(0, 25);
-  for (const r of detail) {
+  table('ALL (rows where both shape strategies answer)', report.overall);
+  for (const [label, t] of Object.entries(report.byAgeSincePsRelease)) {
+    table(`TEST AGE SINCE PS RELEASE ${label}`, t);
+  }
+  console.log('\nLATEST anchor, by gap test→anchor');
+  header();
+  for (const [label, s] of Object.entries(report.latestAnchorByGap)) {
+    line(label, s);
+  }
+  console.log('\nAbstentions on test rows:', JSON.stringify(report.abstained));
+  console.log('\nCOVERAGE');
+  console.log(JSON.stringify(report.coverage, null, 2));
+  console.log('\nWorst errors, nearest anchor:');
+  for (const w of report.worstNearest) {
     console.log(
-      `${pad(r.name.slice(0, 29), 30)} ${pad(`${r.testDay}→${r.anchorDay}`, 24)} ${pad(String(r.gapDays), 5)} ${pad(String(r.testValue), 8)} ${pad(r.predShapeAligned !== null ? r.predShapeAligned.toFixed(0) : 'n/a', 10)} ${num(r.logErrShapeAligned ?? NaN, 7)} ${pad(r.desynced ? 'yes' : 'no', 6)}`,
+      `  ${pad(w.name.slice(0, 32), 34)}${w.testDay}→${w.anchorDay}  actual ${w.actual}  pred ${w.pred}  x${w.factor}`,
     );
   }
-  console.log('');
-  console.log(
-    'Interpretation: |log|=0.30 ≈ 2x off, 0.10 ≈ 1.26x off. "aligned" maps PS-elapsed time onto the PC (Steam) timeline before taking the shape ratio.',
-  );
 }
 
 main()

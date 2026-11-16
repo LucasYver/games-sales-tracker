@@ -1050,8 +1050,12 @@ export class EstimationService {
     if (realPoints.length === 0)
       return { pointsWritten: 0, skipped: 'no-anchor' };
     const earliestReal = realPoints[0];
-    const anchor = realPoints[realPoints.length - 1];
-    if (anchor.value <= 0) return { pointsWritten: 0, skipped: 'no-anchor' };
+    // Anchor on the earliest real point with ratings: it is the closest one
+    // to the stretch being reconstructed (the error grows with the distance
+    // to the anchor) and it makes the curve meet the first real point
+    // instead of jumping to it.
+    const anchor = realPoints.find((p) => p.value > 0);
+    if (!anchor) return { pointsWritten: 0, skipped: 'no-anchor' };
 
     const steamRows = await this.signals.find({
       where: {
