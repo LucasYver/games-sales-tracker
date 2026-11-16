@@ -137,6 +137,12 @@ All of these happened on real figures:
   combined "PS4 and Xbox" figure is refused.
 - **Never set `isEstimate`.** Only sourced figures get written. Alinea and Rhys
   Elliott count as data (`alinea-milestones`), other estimators are refused.
+- **Not doubtful, audited 2026-11-16.** Agents sometimes flag these known figures;
+  leave them. `PLAYSTATION_LEAK` rows are the Insomniac leak's SIE shipment table
+  (sell-in, PlayStation only, as of 2022-02-27), relayed by a VGChartz forum thread.
+  Alinea per-platform figures computed from a stated share of a stated total
+  (Townfall PS5 70.9% of 404,000, Mortal Shell II, Star Wars Zero Company) are house
+  practice.
 - **Blocked hosts stay blocked**: `trusted_source` rows with `active=false`, and
   `TAVILY_EXCLUDED_DOMAINS`. `prepare` writes the list and `apply` refuses them.
 - **The harvest cron skips researched games.** `apply --commit` sets
