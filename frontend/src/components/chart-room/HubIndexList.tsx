@@ -5,19 +5,10 @@ import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
 import { trackEvent } from '@/lib/analytics';
 import type { HubIndexItem } from '@/lib/api';
+import { fold } from '@/lib/fold';
 
 /** A filter that settles on nothing is reported once, after this pause. */
 const NO_RESULT_DELAY_MS = 1500;
-
-/** Lower case, no accents, no punctuation: "Éditions" and "editions" match. */
-function fold(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim();
-}
 
 /**
  * Every studio, publisher or franchise with a page, with a box that narrows

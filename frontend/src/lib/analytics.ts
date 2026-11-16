@@ -15,6 +15,8 @@ type Events = {
   // Search
   search_result_click: { game: string; position: number };
   search_no_result: { query: string };
+  // A studio or publisher picked in the live search (hub = studio | publisher).
+  search_hub_click: { hub: string; slug: string };
   // Filter box of the studio, publisher and franchise indexes (hub = studio | publisher | franchise).
   hub_search_no_result: { hub: string; query: string };
   // Listing filters

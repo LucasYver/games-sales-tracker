@@ -79,14 +79,19 @@
   },
   "searchBar": {
     "close": "إغلاق البحث",
-    "empty": "لم يُعثر على أي لعبة.",
+    "empty": "لم يُعثر على أي لعبة أو استوديو أو ناشر.",
     "hint": "اكتب {count} أحرف على الأقل للبحث.",
     "keyboardHint": "↑ ↓ للتنقل · ↵ للفتح · Esc للإغلاق",
-    "placeholder": "ابحث عن لعبة (مثل Hades أو Baldur's Gate)",
+    "placeholder": "ابحث عن لعبة أو استوديو أو ناشر",
     "resultsCount": "{count} نتيجة",
     "resultsLabel": "نتائج البحث",
     "reviewsCount": "{count} مراجعة",
-    "searching": "جارٍ البحث…"
+    "searching": "جارٍ البحث…",
+    "companiesHeading": "الاستوديوهات والناشرون",
+    "kindStudio": "استوديو",
+    "kindPublisher": "ناشر",
+    "companyGames": "{count, plural, zero {# لعبة} one {لعبة واحدة} two {لعبتان} few {# ألعاب} many {# لعبة} other {# لعبة}}",
+    "moreGames": "ألعاب أخرى"
   },
   "filter": {
     "closeFilters": "إغلاق المرشحات",

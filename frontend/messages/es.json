@@ -79,14 +79,19 @@
   },
   "searchBar": {
     "close": "Cerrar la búsqueda",
-    "empty": "No se ha encontrado ningún juego.",
+    "empty": "No se ha encontrado ningún juego, estudio ni editora.",
     "hint": "Escribe al menos {count} caracteres para buscar.",
     "keyboardHint": "↑ ↓ para navegar · ↵ para abrir · Esc para cerrar",
-    "placeholder": "Buscar un juego (p. ej., Hades, Baldur's Gate)",
+    "placeholder": "Buscar un juego, estudio o editora",
     "resultsCount": "{count} resultados",
     "resultsLabel": "Resultados de la búsqueda",
     "reviewsCount": "{count} reseñas",
-    "searching": "Buscando…"
+    "searching": "Buscando…",
+    "companiesHeading": "Estudios y editoras",
+    "kindStudio": "Estudio",
+    "kindPublisher": "Editora",
+    "companyGames": "{count, plural, one {# juego} other {# juegos}}",
+    "moreGames": "Más juegos"
   },
   "filter": {
     "closeFilters": "Cerrar los filtros",

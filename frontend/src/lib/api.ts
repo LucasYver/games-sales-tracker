@@ -463,6 +463,11 @@ export function getPublishers(): Promise<HubIndexItem[]> {
   return getHubIndex('publishers');
 }
 
+/** A studio or publisher hub offered by the live search. */
+export interface SearchCompany extends HubIndexItem {
+  kind: 'studio' | 'publisher';
+}
+
 export function getFranchises(): Promise<HubIndexItem[]> {
   return getHubIndex('franchises');
 }
