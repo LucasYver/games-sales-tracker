@@ -61,6 +61,7 @@ session knows where to resume.
 | `src-pilot-a` | source-first pilot: Polish stock-exchange reports, developer postmortems, Western indie publishers | 35 matched | 23 | 24 | Done, 48 searches and about 67 page opens for 3 agents, about 17% of the 5-hour quota with the review; 18 more figures were already in base. Mostly 5,000 to 50,000 reviews: published figures are for hits, true small games stay rare |
 | `src-b` | source-first: deeper dev case studies, listed publishers (CI Games, Remedy, Creepy Jar), milestone press releases | 48 matched | 25 | 27 | Done, 52 searches; 31 more were already in base (mostly Alinea posts, already imported). Half the new figures went to games with 10,000 to 30,000 reviews. Skipped: Stacklands ('about'), Balatro (mobile), Abiotic Factor (scope unclear). |
 | `src-c` | social-network test: studio posts on LinkedIn, X, Bluesky | 0 | 0 | 0 | Done, 7 searches. A public LinkedIn post reads without login, and its exact date is `(activity id >> 22)` in ms. But web search returns profiles, never posts, so posts cannot be found. X answers 402 without login and Bluesky renders nothing: do not retry. Their figures arrive only through press relays, or as links the owner pastes |
+| `x-pilot-a` | X official API (pay-per-use, `ml/x_search.py`), 20 indie games with no figure, 3,000 to 15,000 reviews | 20 | 2 | 0 | 132 posts read, about $0.67. Found Friends vs Friends 150,000 in 5 days (Raw Fury CEO) and Everhood over 600,000 (its PR agency). Not written: x.com is in the excluded domains (`ingestion.service.ts`), waiting for the owner. Most posts are noise (giveaways, physical editions, unrelated words): about $0.30 per figure. Without `start_time` the API only searches the last 30 days |
 
 After that: every game without a worldwide figure has had its full search budget. New games enter through discovery; rerun `prepare` with `--min-reviews 0 --include-unreviewed` now and then.
 
@@ -223,6 +224,7 @@ All of these happened on real figures:
 |---|---|
 | `ml/research_figures.py` | `prepare`, `check`, `apply`, `import-harvest` and `stamp` |
 | `source-prompt.md` | Prompt for source-first agents |
+| `ml/x_search.py` | Capped X API search (`pick`, `search`), needs `X_BEARER_TOKEN` in `backend/.env` |
 | `agent-prompt.md` | Prompt for the research agents |
 | `searched_games.csv` | One row per game searched, tracked in git |
 | `ml/reports/research/<tranche>/` | Batches, results, review, `applied.csv` (ignored by git) |
