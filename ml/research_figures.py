@@ -222,7 +222,11 @@ def apply(args) -> None:
 
     {"skip": [{"game": ..., "units": ..., "reason": ...}],
      "change": [{"game": ..., "units": ..., "platform": ..., "date": ..., "source": ...}],
-     "official_hosts": ["chivalry2.com"]}
+     "official_hosts": ["chivalry2.com"],
+     "official_social_posts": ["https://x.com/<studio>/status/<id>"]}
+
+    `official_social_posts` lets through a post on a blocked social host (x.com)
+    once the review confirmed it comes from the studio's or publisher's own account.
     """
     folder = tranche_dir(args.tranche)
     checked = json.loads((folder / "checked.json").read_text())
@@ -231,6 +235,7 @@ def apply(args) -> None:
     skip = {(d["game"], d["units"]): d["reason"] for d in decisions.get("skip", [])}
     change = {(d["game"], d["units"]): d for d in decisions.get("change", [])}
     official = set(decisions.get("official_hosts", [])) | {"sec.gov"}
+    social = set(decisions.get("official_social_posts", []))
     blocked = {l.strip() for l in (folder / "blocked_hosts.txt").read_text().splitlines() if l.strip()}
 
     report, written = [], 0
@@ -242,11 +247,11 @@ def apply(args) -> None:
                 report.append({**line, "plateforme": r["platform"], "date": r["date"], "statut": "écarté", "raison": skip[key]})
                 continue
             host = host_of(r["source_url"])
-            if is_blocked(host, blocked):
+            if is_blocked(host, blocked) and r["source_url"] not in social:
                 raise SystemExit(f"{r['game']} {r['units']} : hôte bloqué {host}. L'écarter dans decisions.json.")
             fix = change.get(key, {})
             platform, day = fix.get("platform", r["platform"]), fix.get("date", r["date"])
-            source = fix.get("source") or ("OFFICIAL" if host in official else "WIKIPEDIA" if "wikipedia" in host else "MEDIA")
+            source = fix.get("source") or ("OFFICIAL" if host in official or r["source_url"] in social else "WIKIPEDIA" if "wikipedia" in host else "MEDIA")
             publisher = "Alinea Analytics" if r.get("alinea") else re.sub(r"\s*\(.*", "", r.get("stated_by") or "") or None
             line.update(plateforme=platform, date=day)
             cur.execute('select 1 from milestone where "gameId"=%s and units=%s and platform=%s and "reportedAt"::date=%s::date',
