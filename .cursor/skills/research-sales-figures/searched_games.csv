@@ -1,6 +1,5 @@
 gameId,name,tranche,date,searches,needed,figures
 588e207e-eeba-46a9-8bcf-3968e54bb8de,ASTRONEER,essai-20,2026-11-01,2,4,1
-80833b38-a375-40ec-997e-2d47d3bca8e2,BattleBit Remastered,essai-20,2026-11-01,2,2,1
 6cc1b74a-77a7-44ee-bc52-46e26145934b,Battlefield™ V,essai-20,2026-11-01,2,4,1
 2fa2f3c4-0b7b-4414-874e-87ee9f691334,DayZ,essai-20,2026-11-01,2,4,1
 37d8ea83-8c76-45b2-8a6b-b66c3ccf9986,Insurgency: Sandstorm,essai-20,2026-11-01,2,4,1
@@ -10,6 +9,41 @@ a71efd92-e102-42b7-a543-5e226539ba10,MiSide,essai-20,2026-11-01,2,2,0
 cb1ae0c2-54a4-4e7b-ac39-0fce439306f6,Muse Dash,essai-20,2026-11-01,2,2,0
 ffaedc5a-8644-43bc-9e9c-0297e0d88c15,Path of Exile 2,essai-20,2026-11-01,2,4,1
 213c645a-e7dc-4339-8b85-0dc46f424cef,People Playground,essai-20,2026-11-01,2,2,0
+4427a62f-fe1c-410f-b376-9bed70088210,20 Minutes Till Dawn,src-pilot-a,2026-11-16,2,2,1
+90805aa7-8bf8-463d-b48f-88c8901a7acc,9 Kings,src-pilot-a,2026-11-16,2,2,1
+54575c8e-e047-4e4a-ba9c-bd559db2518b,A Game About Digging A Hole,src-pilot-a,2026-11-16,0,4,1
+63bad063-1843-4e97-8d2b-b88907cfdb49,Against the Storm,src-pilot-a,2026-11-16,0,4,2
+86c31c9c-7ebf-4871-926f-8c5396c04a58,Backpack Battles,src-pilot-a,2026-11-16,0,2,1
+80833b38-a375-40ec-997e-2d47d3bca8e2,BattleBit Remastered,src-pilot-a,2026-11-16,2,2,1
+9d932e23-f787-499c-91c8-f0a9389f56cb,Big Walk,src-pilot-a,2026-11-16,0,4,1
+ad18da44-74d4-4d49-a68c-16c9624b710f,Car Mechanic Simulator 2021,src-pilot-a,2026-11-16,4,4,2
+de52c7c0-703c-49a6-9b09-90a04e75e4ae,Core Keeper,src-pilot-a,2026-11-16,0,4,1
+0c6a9d35-cadb-4edc-acfa-c67d5fbc6763,Cult of the Lamb,src-pilot-a,2026-11-16,0,4,2
+4cdcd5a8-7b68-4d4b-b0bb-ae821d2ab1b0,Date Everything!,src-pilot-a,2026-11-16,0,4,1
+c88a42b9-7002-417f-b0ef-7950b5a042ac,Dispatch,src-pilot-a,2026-11-16,0,4,1
+cdf36ff6-56fa-4e80-9685-89d93909eb7a,Drug Dealer Simulator,src-pilot-a,2026-11-16,4,4,4
+9bc7661b-bbab-4021-8be4-a56ca45eb7e7,Dungeons of Edera,src-pilot-a,2026-11-16,0,2,1
+09acca20-e005-4d35-a8f2-2e699b529fb6,Empires of the Undergrowth,src-pilot-a,2026-11-16,0,2,1
+a2fc0abf-8899-402b-bd4b-e0c7c5db60af,Far Far West,src-pilot-a,2026-11-16,0,2,1
+9d69ac57-5a8d-4fae-abf1-4f393f9ce6fa,House Flipper,src-pilot-a,2026-11-16,4,4,1
+f39e634f-fb03-4c70-85cf-4168cb32eddb,Hydroneer,src-pilot-a,2026-11-16,4,4,1
+6dba35e5-0765-46af-a8f6-06f97445064b,Junkyard Simulator,src-pilot-a,2026-11-16,0,4,1
+357561ac-998a-408a-8643-fac540c917fa,Manor Lords,src-pilot-a,2026-11-16,0,4,1
+5f8c1598-fe7e-4179-8821-983af841ddbb,Mr. Prepper,src-pilot-a,2026-11-16,4,4,1
+1b5e880f-fa57-4fed-ab62-41ede90af6d4,Old World,src-pilot-a,2026-11-16,2,2,1
+2396ebc5-305f-4892-b741-9ac2e9adb990,Paralives,src-pilot-a,2026-11-16,0,2,1
+aab9dbe7-26cb-4266-a243-a7af2bba4b46,Peglin,src-pilot-a,2026-11-16,4,4,1
+05af0510-fd16-407f-bfe0-3a2aafaa0ac5,Potion Craft,src-pilot-a,2026-11-16,4,4,1
+58560529-e718-4f21-a0c9-5d62f5271d0d,Ravenous Devils,src-pilot-a,2026-11-16,4,4,1
+6d19d27e-9f78-4503-ae3b-91431127f384,Succubus,src-pilot-a,2026-11-16,4,4,2
+fbe2351e-e90b-4a34-b23e-7f83d2ce3cd5,Tactical Breach Wizards,src-pilot-a,2026-11-16,0,2,1
+cb29bfe6-b03a-482e-84bd-d23f6cb80e90,Tainted Grail: The Fall of Avalon,src-pilot-a,2026-11-16,0,4,1
+850b558e-a7ba-4ba5-9b7e-122221d32fa8,Terra Invicta,src-pilot-a,2026-11-16,3,2,1
+5e6ff240-7c4a-498b-9f43-a83186a9c79e,The Last Caretaker,src-pilot-a,2026-11-16,0,2,1
+ec9d5296-0bbb-4640-8177-3737169caddd,The Tenants,src-pilot-a,2026-11-16,4,4,1
+f64056b9-5a24-45ee-b60b-3e95dd6d033e,Workers & Resources: Soviet Republic,src-pilot-a,2026-11-16,0,2,1
+e31ec703-9bbd-4b9f-821a-61d0b3caa2c7,Xenonauts 2,src-pilot-a,2026-11-16,0,2,1
+61d9df31-d351-4a85-8674-ca66a53f0aaf,Zero Sievert,src-pilot-a,2026-11-16,3,2,1
 a2eab4f3-7b8c-4ef8-8384-628ca61eda21,ARK: Survival Evolved,t1-50k,2026-11-01,5,4,0
 e3224767-2b87-4d89-8c23-05e887aa216f,Age of Empires II: Definitive Edition,t1-50k,2026-11-01,2,4,0
 4f446f76-f5de-4b5f-aa37-12f1f48213fa,Age of History II,t1-50k,2026-11-01,2,2,0
@@ -24,7 +58,6 @@ bae0cfb4-1c0d-44b0-b4f6-99b825ab4074,Car Mechanic Simulator 2018,t1-50k,2026-11-
 81a79a60-a482-4d2b-90a1-c06f4d430c79,GUILTY GEAR -STRIVE-,t1-50k,2026-11-01,2,4,2
 b0072546-3b8c-4b50-b3f2-281b89ec0da7,Getting Over It with Bennett Foddy,t1-50k,2026-11-01,2,2,0
 f830fbb4-ce23-40e1-a24a-a0c32b675fee,Gunfire Reborn,t1-50k,2026-11-01,2,4,2
-9d69ac57-5a8d-4fae-abf1-4f393f9ce6fa,House Flipper,t1-50k,2026-11-01,4,4,0
 e611426a-519a-4b8b-9ddb-e11f3d6e02ad,Icarus,t1-50k,2026-11-01,2,2,0
 404fb892-3910-4e9f-be8d-2ab9b1cdc350,Kards: The WWII Card Game,t1-50k,2026-11-01,1,0,0
 7b782d80-8ade-4074-8a2a-8577a1c68afb,Lobotomy Corporation,t1-50k,2026-11-01,2,2,1
@@ -82,7 +115,6 @@ a8d86151-abc0-4d07-b242-dc9ec86cfa86,NBA 2K22,t2-20k-50k-a,2026-11-01,2,4,1
 67a9952b-539a-4032-a046-e00e42aaf04f,NBA 2K24,t2-20k-50k-a,2026-11-01,2,4,2
 07417eff-b011-4a36-8402-5ed0af943cbd,Outward,t2-20k-50k-a,2026-11-01,1,4,1
 43f5587f-fe71-4bac-868f-e23b46a03062,Pacify,t2-20k-50k-a,2026-11-01,4,4,0
-05af0510-fd16-407f-bfe0-3a2aafaa0ac5,Potion Craft,t2-20k-50k-a,2026-11-01,4,4,1
 ef1aafeb-9fad-4399-88fe-f45349cfb70e,Riders Republic,t2-20k-50k-a,2026-11-01,4,4,0
 14a8c071-d197-47e8-a7a3-43cdeb37143f,Sanabi,t2-20k-50k-a,2026-11-01,2,2,0
 a3fb66cb-b30d-47d1-8b42-061effc87c36,TBH: Task Bar Hero,t2-20k-50k-a,2026-11-01,2,2,0
@@ -102,7 +134,6 @@ ec0207ad-6c28-4f28-889b-394b6bf0694f,Bendy and the Ink Machine,t2-20k-50k-b,2026
 f8f54e2c-6e63-45d3-ba52-0d5ff223e1aa,Beyond: Two Souls,t2-20k-50k-b,2026-11-01,4,4,2
 8202f9af-0a99-48de-abd9-e71bc47105ca,Bless Unleashed,t2-20k-50k-b,2026-11-01,4,4,0
 dd72dee3-b95a-4b8f-972e-7badaffcae61,Bright Memory,t2-20k-50k-b,2026-11-01,4,4,0
-ad18da44-74d4-4d49-a68c-16c9624b710f,Car Mechanic Simulator 2021,t2-20k-50k-b,2026-11-01,4,4,0
 039ecb24-6c92-4006-baa8-a958d3b518c8,Crab Champions,t2-20k-50k-b,2026-11-01,2,2,0
 fe427637-c253-4fc6-824d-f53733b0604d,Deadside,t2-20k-50k-b,2026-11-01,4,4,0
 95c18936-e5a1-4a5a-97dd-bb3476257364,Empyrion: Galactic Survival,t2-20k-50k-b,2026-11-01,3,2,0
@@ -136,7 +167,6 @@ b070359a-8113-4439-b0bc-d9de317a3b30,Trailmakers,t2-20k-50k-b,2026-11-01,4,4,0
 6749ff84-f1a6-4304-8c6b-ca9cfcd8796d,Unheard,t2-20k-50k-b,2026-11-01,4,4,0
 5584c819-63bf-4f8f-92b2-0b68719d1647,"Warhammer 40,000: Space Marine - Anniversary Edition",t2-20k-50k-b,2026-11-01,2,2,0
 867bb254-5f26-46f8-96fa-4cdb7857eef7,Zero Hour,t2-20k-50k-b,2026-11-01,2,2,0
-4427a62f-fe1c-410f-b376-9bed70088210,20 Minutes Till Dawn,t2-20k-50k-c,2026-11-01,2,2,0
 31df02f4-2843-46d5-a0e2-a5e8fdcfdae8,A Plague Tale: Requiem,t2-20k-50k-c,2026-11-01,4,4,0
 6a13b4e7-208b-4ff8-b24d-320e09b19219,AI Limit,t2-20k-50k-c,2026-11-01,4,4,0
 9d4840d3-41ce-4fff-afaf-2e074b50e52a,Aliens: Fireteam Elite,t2-20k-50k-c,2026-11-01,4,4,0
@@ -158,7 +188,6 @@ ad48d723-2b39-4aa1-a4b1-43ab356bd83d,Football Manager 2024,t2-20k-50k-c,2026-11-
 5839261d-338c-4dda-b6a9-477612fdb180,GoreBox,t2-20k-50k-c,2026-11-01,2,2,0
 bf0bc4cd-b778-4109-a3fe-df26553d0986,Holdfast: Nations At War,t2-20k-50k-c,2026-11-01,4,4,0
 46ebd793-f802-490c-88e0-b9d170250bc7,Humankind,t2-20k-50k-c,2026-11-01,4,4,0
-f39e634f-fb03-4c70-85cf-4168cb32eddb,Hydroneer,t2-20k-50k-c,2026-11-01,4,4,1
 ce209608-1531-458d-8636-c2cacea6384f,IdleOn,t2-20k-50k-c,2026-11-01,2,2,0
 4defca4f-7f37-45a7-b061-41e3d7d02ebb,Imperator: Rome,t2-20k-50k-c,2026-11-01,2,2,0
 19a0cab8-7245-448d-ab60-25f5f83f1d0a,Just Cause 4 Reloaded,t2-20k-50k-c,2026-11-01,4,4,0
@@ -230,7 +259,6 @@ c22f17f0-c003-492a-8ff8-85bfafb35b80,Tiny Tina's Wonderlands,t2-20k-50k-d,2026-1
 8e27f131-700a-4bbf-8d07-184dd66a11a7,"Warhammer 40,000: Dawn of War III",t2-20k-50k-d,2026-11-01,2,2,0
 47da3f06-2261-4a27-b707-ba88f957bf4d,We Were Here Expeditions: The FriendShip,t2-20k-50k-d,2026-11-01,4,4,0
 1345fe82-3276-4b62-b979-88621b733abe,eFootball PES 2020,t2-20k-50k-d,2026-11-01,4,4,0
-90805aa7-8bf8-463d-b48f-88c8901a7acc,9 Kings,t2-20k-50k-e,2026-11-01,2,2,1
 6052d0df-b225-4ac7-bd98-3c0d77cf737e,A Short Hike,t2-20k-50k-e,2026-11-01,4,4,0
 81bf1ee5-724c-4a0e-b44c-72b080a2c413,Atlyss,t2-20k-50k-e,2026-11-01,2,2,0
 1c1cbe3f-7650-4bad-a919-adadc51eb998,Atri: My Dear Moments,t2-20k-50k-e,2026-11-01,2,2,0
@@ -283,7 +311,6 @@ a454df14-30fc-4d27-aaa6-fcb006e1fe54,War Selection,t2-20k-50k-e,2026-11-01,2,2,0
 70d918f1-3cc6-493c-aa36-813b9d5cedf5,Demon Slayer: Kimetsu no Yaiba - The Hinokami Chronicles,t2-20k-50k-f,2026-11-03,2,4,2
 93d44c55-5ae0-4cb3-be7f-7c3578e94877,Dressmaker,t2-20k-50k-f,2026-11-03,2,2,0
 e00fb680-91c4-467d-91c3-cdce0a6e5158,Drive Beyond Horizons,t2-20k-50k-f,2026-11-03,2,2,0
-cdf36ff6-56fa-4e80-9685-89d93909eb7a,Drug Dealer Simulator,t2-20k-50k-f,2026-11-03,4,4,1
 7ae4a8f7-e1d2-470a-b735-b092fb4958d9,Ghostwire: Tokyo,t2-20k-50k-f,2026-11-03,4,4,0
 730b24dd-6947-4924-b1fb-05acb4ced0ff,Lockdown Protocol,t2-20k-50k-f,2026-11-03,2,2,0
 fc632043-7ac3-43b9-b95b-5265d3e379c1,Minecraft Dungeons,t2-20k-50k-f,2026-11-03,4,4,0
@@ -336,7 +363,6 @@ be8604b3-c30a-41ad-89a4-257bddc48a74,Super People,t3-10k-20k-a,2026-11-03,2,2,0
 ac854641-15e5-472e-a1b6-e9067711d889,Last Man Standing,t3-10k-20k-b,2026-11-03,2,2,0
 8d6a922c-82bd-41e1-b1cc-ec3c0040c68b,Magicraft,t3-10k-20k-b,2026-11-03,2,2,1
 ac3d3e9a-d4a7-4dac-8389-8a7f6443b116,Myth of Empires,t3-10k-20k-b,2026-11-03,2,2,0
-aab9dbe7-26cb-4266-a243-a7af2bba4b46,Peglin,t3-10k-20k-b,2026-11-03,4,4,0
 ab28da99-8688-47b8-b05a-35a81823dcc5,Quaver,t3-10k-20k-b,2026-11-03,2,2,0
 d388dcf6-1f56-4090-a3b1-43f7ab6d3766,Shelldiver,t3-10k-20k-b,2026-11-03,4,4,0
 893a1deb-f4ed-4519-8ccc-d465fe929408,SpaceEngine,t3-10k-20k-b,2026-11-03,3,2,0
@@ -422,7 +448,6 @@ a9886cbc-3675-4506-89f0-6fa7d4acdc6b,Webbed,t3-10k-20k-d,2026-11-03,4,4,0
 6df092bd-99e1-45ea-bc8d-0ab770fe87e4,Wobbledogs,t3-10k-20k-d,2026-11-03,2,2,0
 6efafc01-af66-4697-9ea1-fb7679a67ada,Wolfenstein: Youngblood,t3-10k-20k-d,2026-11-03,4,4,0
 b8617462-3cfa-4732-86b2-63f9171616f8,Youtubers Life,t3-10k-20k-d,2026-11-03,2,2,0
-61d9df31-d351-4a85-8674-ca66a53f0aaf,Zero Sievert,t3-10k-20k-d,2026-11-03,3,2,0
 1b9eef12-449c-4b32-aee7-9a6cea803388,A Date with Death,t3-10k-20k-e,2026-11-03,2,2,0
 1eeaf957-a830-4a80-9753-202e29328924,Avorion,t3-10k-20k-e,2026-11-03,2,2,1
 5967406c-f9cd-4bdc-97ec-df6d6f0f252d,Chrono Ark,t3-10k-20k-e,2026-11-03,3,2,0
@@ -648,7 +673,6 @@ a4bfcd86-d1ab-4353-811b-83d76c41ad9b,Internet Cafe Simulator,t4-5k-50k-a,2026-11
 37d82122-ffa4-4f5a-847e-b3c56eefa1f8,Pentiment,t4-5k-50k-a,2026-11-04,4,4,0
 f7657490-cf15-437a-b94e-b6dae6e03850,Poco,t4-5k-50k-a,2026-11-04,2,2,0
 5146f160-902b-4657-be3d-ae28694c0eea,Pumpkin Jack,t4-5k-50k-a,2026-11-04,4,4,0
-58560529-e718-4f21-a0c9-5d62f5271d0d,Ravenous Devils,t4-5k-50k-a,2026-11-04,4,4,0
 be931f55-6411-487f-b83c-4fb72d814ff1,Replaced,t4-5k-50k-a,2026-11-04,4,4,0
 81caa54d-45c6-4518-af1e-e1e7cd378b8a,Reventure,t4-5k-50k-a,2026-11-04,2,2,0
 f52b05c0-b4bd-49a8-b0cd-7622822ccfab,Rivals of Aether II,t4-5k-50k-a,2026-11-04,2,2,0
@@ -658,7 +682,6 @@ f52b05c0-b4bd-49a8-b0cd-7622822ccfab,Rivals of Aether II,t4-5k-50k-a,2026-11-04,
 04fa8841-5248-4988-9fb1-05ed8c11e25d,Smalland: Survive the Wilds,t4-5k-50k-a,2026-11-04,4,4,0
 ffba8719-c345-48d6-9683-78a5fb7130bc,Smash Legends,t4-5k-50k-a,2026-11-04,2,2,0
 55cdb57e-91ba-46d2-b8ad-15f6c735e3cf,Star Wars: Galactic Racer,t4-5k-50k-a,2026-11-04,4,4,0
-850b558e-a7ba-4ba5-9b7e-122221d32fa8,Terra Invicta,t4-5k-50k-a,2026-11-04,3,2,0
 57d0bff8-d8c4-48b7-bb63-c92d91d7433a,The Complex: Found Footage,t4-5k-50k-a,2026-11-04,2,2,0
 2077e590-a167-45ce-b24d-8e6d6cdb83a5,The Medium,t4-5k-50k-a,2026-11-04,4,4,0
 ea480363-f4dd-4eeb-901c-4095594adfd1,The Song of Saya,t4-5k-50k-a,2026-11-04,2,2,0
@@ -841,7 +864,6 @@ b64b0c58-a9ab-484f-a797-bd211da0965b,The Cycle: Frontier,t4-5k-50k-e,2026-11-15,
 84e843da-9bf6-49ad-a9a5-d63e8e1124d8,The Dungeon of Naheulbeuk: The Amulet of Chaos,t4-5k-50k-e,2026-11-15,4,4,0
 ba2dd7b7-2869-4e97-839d-eae75a9d0dac,The Guild 3,t4-5k-50k-e,2026-11-15,2,2,0
 69f58573-21c2-470e-8b71-3194b02c94c0,The LEGO Ninjago Movie Video Game,t4-5k-50k-e,2026-11-15,4,4,0
-ec9d5296-0bbb-4640-8177-3737169caddd,The Tenants,t4-5k-50k-e,2026-11-15,4,4,0
 7ec487c9-26bb-404e-8002-e34f10187c74,The Wild Eight,t4-5k-50k-e,2026-11-15,4,4,0
 d7fdc304-b0e9-4582-9332-8bf62dcb6791,Transport Fever 3,t4-5k-50k-e,2026-11-15,4,4,0
 c7a9b4e0-eded-4142-98a8-63f7ca837f33,Twelve Minutes,t4-5k-50k-e,2026-11-15,5,4,0
@@ -929,7 +951,6 @@ dbf1faf0-7a5e-42d3-bda4-68a3676354ee,Madden NFL 22,t4-5k-50k-g,2026-11-15,4,4,0
 a6a8d77a-6eb6-4a0b-9bc9-27f58511cf09,Minami Lane,t4-5k-50k-g,2026-11-15,4,4,0
 2748ae09-cf76-4ae2-bce4-428a90dd38d2,My Dream Setup,t4-5k-50k-g,2026-11-15,2,2,0
 4c5b60d1-3705-40a6-ae89-eb569312ce5d,Nobody Saves the World,t4-5k-50k-g,2026-11-15,4,4,0
-1b5e880f-fa57-4fed-ab62-41ede90af6d4,Old World,t4-5k-50k-g,2026-11-15,2,2,0
 f23e5bae-4231-4db7-a6be-a6fa7094a67c,Overkill's The Walking Dead,t4-5k-50k-g,2026-11-15,2,2,0
 4fdfb2be-620e-4aab-b211-9151c0215771,Passpartout: The Starving Artist,t4-5k-50k-g,2026-11-15,2,2,1
 44fdbdc0-2710-4f34-b22d-5171ba4c172a,Pools,t4-5k-50k-g,2026-11-15,4,4,0
@@ -1123,7 +1144,6 @@ e5e63c9a-ef63-4f32-a0f2-2eaf0cd3033a,Legend of Keepers,t4-5k-50k-k,2026-11-15,4,
 402e7c4a-ee61-47b9-b2e8-194f0c83a758,MX vs. ATV: Legends,t4-5k-50k-k,2026-11-15,4,4,0
 65557c96-6235-4464-b800-0f57ee6647d2,Mio: Memories in Orbit,t4-5k-50k-k,2026-11-15,4,4,0
 36ffe459-4c7b-47c5-a038-03e0c2334ca2,Moncage,t4-5k-50k-k,2026-11-15,2,2,0
-5f8c1598-fe7e-4179-8821-983af841ddbb,Mr. Prepper,t4-5k-50k-k,2026-11-15,4,4,1
 e60b0bf7-e4c9-4802-a26d-a47f974f5089,Naruto x Boruto: Ultimate Ninja Storm Connections,t4-5k-50k-k,2026-11-15,4,4,0
 6d0d67c8-e532-4549-b8f2-733483ec144c,Nekopara: Catboys Paradise,t4-5k-50k-k,2026-11-15,2,2,0
 e2047d28-adb7-4c12-a092-c656425546b5,Nightmare Files: Clap Clap,t4-5k-50k-k,2026-11-15,2,2,0
@@ -1180,7 +1200,6 @@ cf40a00f-217c-4e42-bb43-e545ff39076e,Niche: A Genetics Survival Game,t4-5k-50k-l
 2747eb5b-c2d4-41ce-9330-71ccee083ffb,Shinobi: Art of Vengeance,t4-5k-50k-l,2026-11-15,4,4,0
 52050f31-fabf-4ec3-ab18-a3635f4c6214,Skull and Bones,t4-5k-50k-l,2026-11-15,4,4,0
 499757eb-6bc3-440c-8d20-0257ab8eea73,SpongeBob SquarePants: The Cosmic Shake,t4-5k-50k-l,2026-11-15,4,4,0
-6d19d27e-9f78-4503-ae3b-91431127f384,Succubus,t4-5k-50k-l,2026-11-15,4,4,0
 3a14aca4-265c-4e6c-8efb-62ec1177ef57,Summer Pockets,t4-5k-50k-l,2026-11-15,4,4,0
 b5b576dd-56b5-48ae-9c05-70a379c6ab8c,Sundered,t4-5k-50k-l,2026-11-15,5,4,0
 d11e6be2-812f-4240-91af-bc6ef1eebab0,Sworn,t4-5k-50k-l,2026-11-15,4,4,0

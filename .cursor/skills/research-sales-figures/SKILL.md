@@ -58,6 +58,7 @@ session knows where to resume.
 | `t5-0-5k-a` | every game under 5,000 reviews, plus 17 with no Steam review count (`--include-unreviewed`) | 35 | 6 | 4 | Done, 127 searches, no rate limit; College Football 27 and Little Witch in the Woods already in base; Halo 4, The Unfinished Swan, Titanfall (pre-2017), Honkai: Star Rail, Dauntless, Goals, Morimens, Age of Empires III: DE (free to play) marked done |
 | `t6-retry-a` | the first waves' games still short of their searches, most reviewed first | 50 | 2 | 2 | Done, 186 searches, no rate limit; Battlefront II 7 M (EA earnings call, added in review) and Golf With Your Friends; Sea of Thieves skipped (2 M was players), CarX skipped (blocked host) |
 | `t6-retry-b` | the last 23 of them | 23 | 0 | 0 | Done, 82 searches; They Are Billions skipped (unattributed), Graveyard Keeper 4 M only on a blocked host. **Every game without a worldwide figure has now had its full budget or is marked out of scope (pre-2017, free to play)** |
+| `src-pilot-a` | source-first pilot: Polish stock-exchange reports, developer postmortems, Western indie publishers | 35 matched | 23 | 24 | Done, 48 searches and about 67 page opens for 3 agents, about 17% of the 5-hour quota with the review; 18 more figures were already in base. Mostly 5,000 to 50,000 reviews: published figures are for hits, true small games stay rare |
 
 After that: every game without a worldwide figure has had its full search budget. New games enter through discovery; rerun `prepare` with `--min-reviews 0 --include-unreviewed` now and then.
 
@@ -109,6 +110,28 @@ From `ml/`, with `<tranche>` as the next name in the table.
    This also updates `searched_games.csv`.
 8. **Update the Progress table and report**: what was added, what was skipped and
    why, the quota used, and how far the search got.
+
+## Source-first harvest
+
+Game by game, yield fell to about 2% (2 figures in 73 big games). Starting from
+sources that publish many figures, then matching them to the catalog, gave 24 new
+figures for 48 searches in `src-pilot-a`, CORE and EXTENDED alike.
+
+1. Make the folder `ml/reports/research/<tranche>/`, copy `blocked_hosts.txt` from
+   the last wave, and write `catalog_titles.txt` (every paid game since 2017, one
+   name per line).
+2. Launch one agent per source family with `source-prompt.md`, the full text
+   pasted in, `{SOURCE}` describing the family, `{FOLDER}` and `{N}` filled. Each
+   writes `harvest_<N>.json`.
+3. `research_figures.py import-harvest <tranche>` matches each title to one
+   catalog game and writes `batch_1.json` and `result_1.json`.
+4. Then `check`, the review, `decisions.json` and `apply` as for a wave.
+
+Families that worked: Polish ESPI reports relayed by parkiet.com (exact units per
+platform; add it to `official_hosts`), How To Market A Game case studies
+(Steamworks screenshots), the GameDiscoverCo newsletter quoting developers, and
+gamespress.com press releases (Hooded Horse, tinyBuild, Fireshine). Most of their
+figures are for games with 5,000 to 50,000 reviews.
 
 ## Review traps
 
@@ -194,7 +217,8 @@ All of these happened on real figures:
 
 | File | Role |
 |---|---|
-| `ml/research_figures.py` | `prepare`, `check`, `apply` and `stamp` |
+| `ml/research_figures.py` | `prepare`, `check`, `apply`, `import-harvest` and `stamp` |
+| `source-prompt.md` | Prompt for source-first agents |
 | `agent-prompt.md` | Prompt for the research agents |
 | `searched_games.csv` | One row per game searched, tracked in git |
 | `ml/reports/research/<tranche>/` | Batches, results, review, `applied.csv` (ignored by git) |

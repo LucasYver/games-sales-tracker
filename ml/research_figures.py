@@ -284,6 +284,47 @@ def apply(args) -> None:
     print(f"Journal mis à jour : {LOG}")
 
 
+def match_key(title: str) -> str:
+    title = unicodedata.normalize("NFKC", title).lower().replace("\xad", "")
+    return re.sub(r"[^a-z0-9]+", " ", re.sub(r"[™®©]", "", title)).strip()
+
+
+def import_harvest(args) -> None:
+    """Turns source-first harvests (harvest_*.json, one entry per title) into batch_1 and result_1 for check and apply."""
+    folder = tranche_dir(args.tranche)
+    with connect_read_only() as conn, conn.cursor() as cur:
+        cur.execute('''select id::text, name, "releaseDate"::date, platforms::text from game
+                       where not "isFree" and "deletedAt" is null and "releaseDate">='2017-01-01' and "releaseDate"<now()''')
+        catalog = {}
+        for gid, name, release, platforms in cur.fetchall():
+            catalog.setdefault(match_key(name), []).append((gid, name, str(release), platforms))
+        cur.execute(KNOWN_FIGURES)
+        known = {}
+        for g, platform, units, day, url, rejected, engagement in cur.fetchall():
+            known.setdefault(g, []).append(dict(platform=platform, units=units, date=str(day), url=url,
+                                                rejected=rejected, engagement=engagement))
+    log = read_log()
+    games, results, missing = {}, {}, []
+    for entry in batches(folder, "harvest"):
+        if not entry.get("figures"):
+            continue
+        hits = catalog.get(match_key(entry["title"]), [])
+        if len(hits) != 1:
+            missing.append(f"{entry['title']} ({'ambiguous' if hits else 'not found'})")
+            continue
+        gid, name, release, platforms = hits[0]
+        games[gid] = dict(id=gid, name=name, release=release, platforms=platforms,
+                          console=bool(re.search("PLAYSTATION|XBOX", platforms or "")), known=known.get(gid, []))
+        result = results.setdefault(gid, dict(id=gid, name=name, searches=int(log.get(gid, {}).get("searches") or 0),
+                                              pages_opened=0, figures=[], notes="source-first harvest"))
+        result["figures"] += entry["figures"]
+    (folder / "batch_1.json").write_text(json.dumps(list(games.values()), ensure_ascii=False, indent=1))
+    (folder / "result_1.json").write_text(json.dumps(list(results.values()), ensure_ascii=False, indent=1))
+    print(f"{len(results)} jeux rattachés, {sum(len(r['figures']) for r in results.values())} chiffres")
+    for m in missing:
+        print("  non rattaché :", m)
+
+
 def stamp(args) -> None:
     """Reporte en base la date de chaque jeu du journal, pour les tranches écrites avant la colonne."""
     rows = [r for r in read_log().values() if int(r.get("searches") or 0) > 0]
@@ -317,6 +358,10 @@ def main() -> None:
     p.add_argument("tranche")
     p.add_argument("--commit", action="store_true")
     p.set_defaults(run=apply)
+    p = commands.add_parser("import-harvest", help="rattacher les harvest_*.json au catalogue")
+    p.add_argument("tranche")
+    p.set_defaults(run=import_harvest)
+
     p = commands.add_parser("stamp", help="reporter les dates du journal dans game.lastMilestoneResearchedAt")
     p.add_argument("--commit", action="store_true")
     p.set_defaults(run=stamp)
