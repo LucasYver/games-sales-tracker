@@ -87,7 +87,7 @@ calibration columns are gone.
 
 | Metric | Used for |
 | ------ | -------- |
-| `STEAM_REVIEWS` | PC Boxleiter. Synthetic rows are ignored. |
+| `STEAM_REVIEWS` | PC Boxleiter. Synthetic rows are ignored. Every row is on the live scale: all languages, all purchases (Steam and activated keys). History before 2026-09-01 comes from `appreviewhistogram`, which counts Steam purchases only, so the import rescales it by live total ÷ histogram total, both read the same day (migration `RescaleSteamReviewHistoryToLive` fixed the rows imported before that). |
 | `STEAM_CONCURRENT` | Launch-window peak for the PC first-week method. |
 | `PS_RATINGS` / `XBOX_RATINGS` | Console Boxleiter. Xbox is the worldwide Display Catalog count. |
 | `STEAM_PLAYERS_LEAK` | July 2018 ground truth for anchors and holdout. Not a live estimate input. |

@@ -1992,23 +1992,34 @@ export class IngestionService {
    * multiplier calibrated on the (undercounted) historical point.
    *
    * We keep the reconstructed curve SHAPE but rescale every point by
-   * `liveTotal / reconstructedLatest`, so the last historical point equals
-   * the live total and the cron continues the series seamlessly. Mutates
-   * `rows` in place and returns the anchored latest total (or the original
-   * latest when the live total is unavailable or the series already matches).
+   * `liveTotal / sourceTotalToday`, so the history meets the live series and
+   * the cron continues it seamlessly. Mutates `rows` in place and returns the
+   * latest history value (or the original one when the live total is
+   * unavailable or the series already matches).
+   *
+   * `sourceTotalToday` is the reconstruction source's own total measured now,
+   * at the same moment as the live total, so the ratio only holds the filter
+   * difference. When the history stops at the 2026-09-01 cap its last point is
+   * not today, so the caller must pass the source's full total (for the
+   * histogram, every bucket summed, including those past the cap); comparing
+   * the capped last point to today's live total would turn the reviews posted
+   * since the cap into a bogus scale. Without it, the last history point is
+   * today and is pinned to the live total.
    */
   private async anchorReviewSeriesToLive(
     rows: SignalSnapshot[],
     appId: number,
+    sourceTotalToday?: number,
   ): Promise<number> {
     if (rows.length === 0) return 0;
     const reconstructedLatest = rows[rows.length - 1].value;
-    if (reconstructedLatest <= 0) return reconstructedLatest;
+    const reference = sourceTotalToday ?? reconstructedLatest;
+    if (reconstructedLatest <= 0 || reference <= 0) return reconstructedLatest;
 
     const liveTotal = await this.steam.getTotalReviews(appId);
     if (liveTotal === null || liveTotal <= 0) return reconstructedLatest;
 
-    const scale = liveTotal / reconstructedLatest;
+    const scale = liveTotal / reference;
     // Within 2% the reconstruction is already on the live scale (e.g. the
     // enumeration path) — skip a pointless rewrite.
     if (Math.abs(scale - 1) < 0.02) return reconstructedLatest;
@@ -2016,6 +2027,7 @@ export class IngestionService {
     for (const row of rows) {
       row.value = Math.round(row.value * scale);
     }
+    if (sourceTotalToday !== undefined) return rows[rows.length - 1].value;
     // Pin the last point exactly to the live total to avoid rounding drift.
     rows[rows.length - 1].value = liveTotal;
     return liveTotal;
@@ -2281,9 +2293,18 @@ export class IngestionService {
       };
     }
 
-    const latestTotal = truncatedAtCap
-      ? rows[rows.length - 1].value
-      : await this.anchorReviewSeriesToLive(rows, appId);
+    // The histogram only counts reviews from Steam purchases; the live total
+    // also counts activated keys. Rescale on the histogram's full total (every
+    // bucket, past the cap too) so both totals are measured today.
+    const histogramTotalToday = processedBuckets.reduce(
+      (sum, b) => sum + b.positive + b.negative,
+      0,
+    );
+    const latestTotal = await this.anchorReviewSeriesToLive(
+      rows,
+      appId,
+      truncatedAtCap ? histogramTotalToday : undefined,
+    );
 
     const firstDay = new Date(`${emittedDays[0]}T00:00:00.000Z`);
     const lastDayEnd = new Date(
