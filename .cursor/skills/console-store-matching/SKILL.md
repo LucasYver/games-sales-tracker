@@ -101,7 +101,9 @@ filters only save requests.
 ## When a stored product is wrong
 
 The game's ratings signals (synthetic ones too), price snapshots and `game_source`
-for that store are deleted by `forgetWrongStoreProduct`. This runs only on proof that
+for that store are deleted by `forgetWrongStoreProduct`. It also drops the game's
+`CONSOLE_CURVE` state, so the store-ratings cron rebuilds the reconstructed curve
+from the right product. This runs only on proof that
 the product is another game:
 
 - **PlayStation:** the page loaded, and neither its `<title>` nor its schema.org

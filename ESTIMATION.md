@@ -307,7 +307,7 @@ on Xbox, and the ratio grows with the game's size. There is no `BACKLOG.md`.
 
 | Entity | Timestamp | What it holds |
 | ------ | --------- | ------------- |
-| `SignalSnapshot` | `capturedAt` | Raw public counts. `synthetic = true` rows are display-only and never feed an estimate. |
+| `SignalSnapshot` | `capturedAt` | Raw public counts. `synthetic = true` rows are reconstructed PS / Xbox ratings curves (launch → first real snapshot, `console-curve-reconstruction.ts`), built once per game by the store-ratings cron. They never feed an estimate. |
 | `AchievementSnapshot` | `capturedAt` | Unlock sample. Not an estimate input today. |
 | `SalesEstimate` | `computedAt` | Per-method ranges, one `aggregated` row per platform, and one GLOBAL worldwide row (`ml-v2`, with `estimatedUnits`; §6). Append-only. |
 | `EstimationMethod` | registry | Code, family, `defaultWeight`, `isEnabled`. |

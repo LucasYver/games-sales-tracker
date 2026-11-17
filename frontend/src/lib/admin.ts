@@ -366,6 +366,7 @@ export interface AdminGameChartsData {
   psRatingsHistory: AdminCcuPoint[];
   psRatingsSyntheticHistory: AdminCcuPoint[];
   xboxRatingsHistory: AdminCcuPoint[];
+  xboxRatingsSyntheticHistory: AdminCcuPoint[];
   switchRatingsHistory: AdminCcuPoint[];
   prices: AdminPriceSnapshot[];
   signals: AdminSignal[];

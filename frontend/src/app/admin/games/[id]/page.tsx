@@ -974,7 +974,10 @@ async function ChartsTab({
         )}
         {has('XBOX') && c.xboxRatingsHistory.length > 0 && (
           <ChartCard title="Xbox ratings">
-            <ReviewHistoryChart reviewHistory={c.xboxRatingsHistory} />
+            <ReviewHistoryChart
+              reviewHistory={c.xboxRatingsHistory}
+              syntheticHistory={c.xboxRatingsSyntheticHistory}
+            />
           </ChartCard>
         )}
         {has('SWITCH') && c.switchRatingsHistory.length > 0 && (

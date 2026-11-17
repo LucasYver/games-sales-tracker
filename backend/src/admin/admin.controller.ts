@@ -158,12 +158,6 @@ export class AdminController {
     return this.admin.setEstimateHidden(id, Boolean(body?.hidden));
   }
 
-  @Post('games/:id/backfill-ps-reconstruction')
-  @HttpCode(200)
-  backfillPsReconstruction(@Param('id', ParseUUIDPipe) id: string) {
-    return this.estimation.reconstructPsCurve(id);
-  }
-
   @Post('games/:id/backfill-followers')
   @HttpCode(200)
   backfillFollowers(@Param('id', ParseUUIDPipe) id: string) {
