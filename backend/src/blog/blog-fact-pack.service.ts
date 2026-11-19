@@ -24,6 +24,7 @@ import type {
   BlogFact,
   BlogFactPack,
   BlogFreshness,
+  BlogNewsCandidate,
   BlogRankingSubject,
 } from './blog.types';
 import { packKind, publicAppUrl, slugify } from './blog.types';
@@ -624,25 +625,51 @@ export class BlogFactPackService {
   }
 
   /**
-   * Keeps the news candidates `buildNewsPack` would accept: consolidation
-   * drops relays of a more trusted figure, which the candidate SQL cannot see.
-   * Milestones only (no signals), one game at a time.
+   * Points each news candidate at the milestone `buildNewsPack` accepts.
+   * The same figure is often filed several times (one row per article that
+   * relays it); consolidation keeps the most trusted, then earliest, report,
+   * which the candidate SQL cannot tell apart. A candidate whose figure
+   * consolidation drops altogether (a relay of a more trusted number) goes.
    */
-  async keepNewsFigures<T extends { milestoneId: string }>(
-    candidates: T[],
-  ): Promise<T[]> {
-    const kept = await Promise.all(
-      candidates.map(async (candidate) => {
-        const row = await this.milestones.findOne({
-          where: { id: candidate.milestoneId, ...Milestone.notRejected() },
-          relations: { game: true },
-        });
-        if (!row?.game) return false;
-        const facts = await this.currentMilestoneFacts(row.gameId, row.game);
-        return facts.some((f) => isNewsFact(f, row));
+  async resolveNewsFigures(
+    candidates: BlogNewsCandidate[],
+  ): Promise<BlogNewsCandidate[]> {
+    const resolved = await Promise.all(
+      candidates.map(async (candidate): Promise<BlogNewsCandidate | null> => {
+        const [game, rows] = await Promise.all([
+          this.games.findOne({ where: { id: candidate.gameId } }),
+          this.milestones.find({
+            where: { gameId: candidate.gameId, ...Milestone.notRejected() },
+            order: { reportedAt: 'DESC' },
+          }),
+        ]);
+        const row = rows.find((r) => r.id === candidate.milestoneId);
+        if (!game || !row) return null;
+        const facts = milestoneFacts(rows, game);
+        if (facts.some((f) => isNewsFact(f, row))) return candidate;
+        // The figure survives under another report of it: use that one.
+        const lead = facts.find(
+          (f) =>
+            f.kind === 'sales' &&
+            f.platform === String(row.platform) &&
+            f.value === row.units,
+        );
+        const twin =
+          lead &&
+          rows.find(
+            (r) =>
+              r.sourceUrl && sourceLabel(r.sourceUrl) && isNewsFact(lead, r),
+          );
+        if (!twin) return null;
+        return {
+          ...candidate,
+          milestoneId: twin.id,
+          source: twin.source,
+          reportedAt: twin.reportedAt?.toISOString() ?? candidate.reportedAt,
+        };
       }),
     );
-    return candidates.filter((_, i) => kept[i]);
+    return resolved.filter((c): c is BlogNewsCandidate => c !== null);
   }
 
   /** Whether the figure a news item relays is still on file (not rejected). */
