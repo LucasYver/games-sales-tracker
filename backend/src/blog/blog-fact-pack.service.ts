@@ -546,6 +546,20 @@ const SIGNALS: SignalSpec[] = [
   },
 ];
 
+/** The consolidated fact that is this milestone's figure, as written by `milestoneFacts`. */
+function isNewsFact(
+  fact: Pick<FactFields, 'kind' | 'platform' | 'value' | 'date'>,
+  row: Milestone,
+): boolean {
+  const date = row.reportedAt?.toISOString().slice(0, 10) ?? null;
+  return (
+    fact.kind === 'sales' &&
+    fact.platform === String(row.platform) &&
+    fact.value === row.units &&
+    fact.date === date
+  );
+}
+
 @Injectable()
 export class BlogFactPackService {
   constructor(
@@ -594,14 +608,7 @@ export class BlogFactPackService {
       SIGNALS,
       `sales-news:${row.id}`,
     );
-    const date = row.reportedAt?.toISOString().slice(0, 10) ?? null;
-    const lead = pack.facts.find(
-      (f) =>
-        f.kind === 'sales' &&
-        f.platform === String(row.platform) &&
-        f.value === row.units &&
-        f.date === date,
-    );
+    const lead = pack.facts.find((f) => isNewsFact(f, row));
     if (!lead) {
       throw new BadRequestException(
         'This figure repeats one already on file, so it is not news.',
@@ -614,6 +621,28 @@ export class BlogFactPackService {
       sourceLabel: url,
     };
     return pack;
+  }
+
+  /**
+   * Keeps the news candidates `buildNewsPack` would accept: consolidation
+   * drops relays of a more trusted figure, which the candidate SQL cannot see.
+   * Milestones only (no signals), one game at a time.
+   */
+  async keepNewsFigures<T extends { milestoneId: string }>(
+    candidates: T[],
+  ): Promise<T[]> {
+    const kept = await Promise.all(
+      candidates.map(async (candidate) => {
+        const row = await this.milestones.findOne({
+          where: { id: candidate.milestoneId, ...Milestone.notRejected() },
+          relations: { game: true },
+        });
+        if (!row?.game) return false;
+        const facts = await this.currentMilestoneFacts(row.gameId, row.game);
+        return facts.some((f) => isNewsFact(f, row));
+      }),
+    );
+    return candidates.filter((_, i) => kept[i]);
   }
 
   /** Whether the figure a news item relays is still on file (not rejected). */

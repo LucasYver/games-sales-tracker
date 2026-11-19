@@ -961,3 +961,6 @@ export interface AdminCronJob {
 
 export type RunCronResult =
   { ok: true; name: string; startedAt: string } | { ok: false; error: string };
+
+export type BlogDraftResult =
+  { ok: true; post: AdminBlogDetail } | { ok: false; error: string };

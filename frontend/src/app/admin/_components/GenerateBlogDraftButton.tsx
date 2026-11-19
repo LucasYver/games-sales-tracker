@@ -4,7 +4,7 @@ import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Newspaper } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { AdminBlogDetail, GenerateBlogFormatInput } from '@/lib/admin';
+import type { BlogDraftResult, GenerateBlogFormatInput } from '@/lib/admin';
 import {
   generateBlogDraft,
   generateBlogFormat,
@@ -50,7 +50,7 @@ function DraftButton({
   generate,
 }: {
   label: string;
-  generate: () => Promise<AdminBlogDetail>;
+  generate: () => Promise<BlogDraftResult>;
 }) {
   const [pending, start] = useTransition();
   const router = useRouter();
@@ -58,8 +58,9 @@ function DraftButton({
   function onClick() {
     start(async () => {
       try {
-        const post = await generate();
-        router.push(`/admin/blog/${post.id}`);
+        const result = await generate();
+        if (result.ok) router.push(`/admin/blog/${result.post.id}`);
+        else window.alert(result.error);
       } catch (err) {
         window.alert(
           err instanceof Error ? err.message : 'Draft generation failed',

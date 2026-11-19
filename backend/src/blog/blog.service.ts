@@ -95,7 +95,9 @@ export class BlogService {
 
   async listFormatCandidates() {
     const [news, launches, rankings] = await Promise.all([
-      this.candidates.newsCandidates(),
+      this.candidates
+        .newsCandidates()
+        .then((rows) => this.factPacks.keepNewsFigures(rows)),
       this.candidates.launchCandidates(),
       this.candidates.rankingCandidates(),
     ]);
