@@ -1,7 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThan, Repository } from 'typeorm';
-import { gamePageUrls, notifyIndexNow } from '../common/indexnow';
+import {
+  gamePageUrls,
+  localizedPageUrls,
+  notifyIndexNow,
+} from '../common/indexnow';
+import {
+  COMPANY_HUBS,
+  CompanyHub,
+  FRANCHISE_HUB_MIN_GAMES,
+  franchiseSlugSql,
+  studioSlugSql,
+} from '../games/hubs';
 import { Game, GameRank } from '../entities';
 import { IngestionService } from '../ingestion/ingestion.service';
 import { IngestionStateService } from '../ingestion/ingestion-state.service';
@@ -479,19 +490,76 @@ export class RefreshService {
 
   /**
    * Sends game pages created since the previous nightly run to IndexNow,
-   * whichever path created them (discovery, admin, Steam ingest). The hour on
-   * top of the daily window absorbs a run that started late.
+   * whichever path created them (discovery, admin, Steam ingest), with the
+   * studio, publisher and franchise hubs those games joined: a new game
+   * changes its hubs' tables, and can bring a hub to its threshold and so
+   * create it. The hour on top of the daily window absorbs a run that started
+   * late.
    */
   private async announceNewGames() {
     try {
       const since = new Date(Date.now() - 25 * 60 * 60 * 1000);
       const games = await this.games.find({
         where: { createdAt: MoreThan(since) },
-        select: { slug: true },
+        select: { id: true, slug: true },
       });
-      await notifyIndexNow(games.flatMap((g) => gamePageUrls(g.slug)));
+      if (games.length === 0) return;
+      const hubPaths = await this.hubPathsOf(games.map((g) => g.id));
+      await notifyIndexNow([
+        ...games.flatMap((g) => gamePageUrls(g.slug)),
+        ...hubPaths.flatMap((path) => localizedPageUrls(path)),
+      ]);
     } catch (error) {
       this.logger.warn(`IndexNow announcement failed: ${error}`);
     }
+  }
+
+  /**
+   * Paths of the hubs these games belong to, kept only when the hub exists
+   * (same thresholds and slugs as `GamesService.listHubs`).
+   */
+  private async hubPathsOf(gameIds: string[]): Promise<string[]> {
+    const companyHubSlugs = async (hub: CompanyHub) => {
+      const slug = studioSlugSql('c.name');
+      const rows = await this.games.query<{ slug: string }[]>(
+        `WITH touched AS (
+           SELECT DISTINCT ${slug} AS slug
+           FROM game g
+           JOIN ${hub.table} c ON c.id = g."${hub.idColumn}"
+           WHERE g.id = ANY($1::uuid[])
+         )
+         SELECT t.slug
+         FROM touched t
+         JOIN ${hub.table} c ON ${slug} = t.slug
+         JOIN game g ON g."${hub.idColumn}" = c.id AND g."deletedAt" IS NULL
+         WHERE t.slug <> ''
+         GROUP BY t.slug
+         HAVING COUNT(*) >= $2`,
+        [gameIds, hub.minGames],
+      );
+      return rows.map((row) => row.slug);
+    };
+    const [studios, publishers, franchises] = await Promise.all([
+      companyHubSlugs(COMPANY_HUBS.studio),
+      companyHubSlugs(COMPANY_HUBS.publisher),
+      this.games.query<{ slug: string }[]>(
+        `WITH touched AS (
+           SELECT DISTINCT ${franchiseSlugSql()} AS slug
+           FROM game
+           WHERE id = ANY($1::uuid[]) AND ${franchiseSlugSql()} IS NOT NULL
+         )
+         SELECT t.slug
+         FROM touched t
+         JOIN game g ON ${franchiseSlugSql('g')} = t.slug AND g."deletedAt" IS NULL
+         GROUP BY t.slug
+         HAVING COUNT(*) >= $2`,
+        [gameIds, FRANCHISE_HUB_MIN_GAMES],
+      ),
+    ]);
+    return [
+      ...studios.map((slug) => `/studio/${slug}`),
+      ...publishers.map((slug) => `/publisher/${slug}`),
+      ...franchises.map((row) => `/franchise/${row.slug}`),
+    ];
   }
 }
