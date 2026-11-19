@@ -1686,25 +1686,41 @@ export class GamesService {
       );
     const game = games[0];
     if (!game) throw new NotFoundException(`Game "${slug}" not found`);
-    const figures: {
+    const rows: {
       units: number;
       platform: string;
       source: string;
       publisher: string | null;
       sourceUrl: string | null;
       reportedAt: Date | null;
+      capturedAt: Date;
     }[] = await this.milestones.query(
-      `SELECT units, platform, source, publisher, "sourceUrl", "reportedAt"
+      `SELECT units, platform, source, publisher, "sourceUrl", "reportedAt",
+              "capturedAt"
          FROM milestone
         WHERE "gameId" = $1 AND "rejectedAt" IS NULL
           AND NOT "isEngagement" AND NOT "isEstimate"
         ORDER BY "reportedAt" ASC NULLS LAST, units ASC`,
       [game.id],
     );
+    // When the newest listed figure was added: the page's "updated" date,
+    // its dateModified and its sitemap lastmod.
+    let updatedAt: Date | null = null;
+    for (const row of rows) {
+      if (!updatedAt || row.capturedAt > updatedAt) updatedAt = row.capturedAt;
+    }
     return {
       name: game.name,
       releaseDate: game.releaseDate,
-      figures,
+      updatedAt,
+      figures: rows.map((row) => ({
+        units: row.units,
+        platform: row.platform,
+        source: row.source,
+        publisher: row.publisher,
+        sourceUrl: row.sourceUrl,
+        reportedAt: row.reportedAt,
+      })),
     };
   }
 

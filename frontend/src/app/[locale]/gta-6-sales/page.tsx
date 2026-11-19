@@ -9,6 +9,7 @@ import { OutboundLink } from '@/components/OutboundLink';
 import {
   BENCHMARKS,
   GTA6_LAUNCH,
+  GTA6_PAGE_PUBLISHED,
   GTA6_PATH,
   GTA6_SLUG,
   daysBetween,
@@ -166,28 +167,107 @@ export default async function Gta6SalesPage({
     })),
   ];
 
-  let lead: string;
+  // The direct answer to "how many copies has GTA 6 sold", phrased so a
+  // search engine can lift it: the newest worldwide figure, its source, and
+  // the platform split reported the same day when there is one.
+  let answer: string | null = null;
   if (latest) {
-    lead = t('leadLatest', {
-      units: compact(latest.units, locale),
+    const latestDay = latest.reportedAt!.slice(0, 10);
+    const sameDay = (platform: string) =>
+      figures
+        .filter(
+          (f) =>
+            f.platform === platform && f.reportedAt?.slice(0, 10) === latestDay,
+        )
+        .at(-1);
+    // A credit that is a name ("Sensor Tower", "Take-Two") reads well in the
+    // sentence; a generic one ("industry estimates") does not, so the source
+    // site stands in for it.
+    const credit = latest.publisher?.trim();
+    const source =
+      credit && /^\p{Lu}/u.test(credit) ? credit : hostOf(latest.sourceUrl);
+    const values = {
+      units: format.number(latest.units),
       date: longDate(latest.reportedAt!),
-    });
-  } else if (released) {
-    lead = t('leadAwaiting', { date: launchLabel });
-  } else {
-    lead = t('leadUpcoming', { date: launchLabel, days: -day });
+    };
+    answer = source
+      ? t('answerLatest', { ...values, source })
+      : t('answerLatestNoSource', values);
+    const ps = sameDay('PLAYSTATION');
+    const xbox = sameDay('XBOX');
+    if (ps && xbox) {
+      answer += ` ${t('answerSplit', {
+        ps: format.number(ps.units),
+        xbox: format.number(xbox.units),
+      })}`;
+    }
   }
+  const lead = released
+    ? t('leadAwaiting', { date: launchLabel })
+    : t('leadUpcoming', { date: launchLabel, days: -day });
+  const updatedAt = timeline?.updatedAt ?? latest?.reportedAt ?? null;
+
+  const pageUrl = `${SITE_URL}/${locale}${GTA6_PATH}`;
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: latest
+      ? t('metaTitleUnits', { units: compact(latest.units, locale) })
+      : t('metaTitle'),
+    description: t('metaDescription'),
+    datePublished: GTA6_PAGE_PUBLISHED,
+    dateModified: updatedAt ?? GTA6_PAGE_PUBLISHED,
+    inLanguage: locale,
+    about: {
+      '@type': 'VideoGame',
+      name: 'Grand Theft Auto VI',
+      url: `${SITE_URL}/${locale}/game/${GTA6_SLUG}`,
+    },
+    author: { '@type': 'Organization', name: 'Game Sales Tracker', url: SITE_URL },
+    publisher: {
+      '@type': 'Organization',
+      name: 'Game Sales Tracker',
+      url: SITE_URL,
+    },
+    mainEntityOfPage: pageUrl,
+  };
 
   const [gta5, rdr2] = BENCHMARKS;
 
   return (
     <main className="flex min-h-screen flex-col">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          // `<` escaped so a source name can never close the script tag.
+          __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c'),
+        }}
+      />
       <SiteHeader />
       <article className="mx-auto w-full max-w-4xl px-4 py-8">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
           {t('title')}
         </h1>
-        <p className="mt-3 text-base leading-relaxed font-medium">{lead}</p>
+        {answer ? (
+          <section
+            aria-labelledby="gta6-answer"
+            className="mt-4 rounded-[3px] border border-primary/40 bg-accent px-4 py-3 text-accent-foreground"
+          >
+            <h2 id="gta6-answer" className="text-base font-semibold">
+              {t('answerQuestion')}
+            </h2>
+            <p className="mt-1 text-base leading-relaxed">{answer}</p>
+          </section>
+        ) : (
+          <p className="mt-3 text-base leading-relaxed font-medium">{lead}</p>
+        )}
+        {updatedAt && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            <time dateTime={updatedAt}>
+              {t('updatedOn', { date: longDate(updatedAt) })}
+            </time>
+          </p>
+        )}
         <p className="mt-2 text-sm text-muted-foreground">{t('intro')}</p>
 
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">

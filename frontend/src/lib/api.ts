@@ -628,6 +628,8 @@ export interface SalesTimelineFigure {
 export interface SalesTimeline {
   name: string;
   releaseDate: string | null;
+  /** When the newest listed figure was added (null before the first one). */
+  updatedAt?: string | null;
   figures: SalesTimelineFigure[];
 }
 
