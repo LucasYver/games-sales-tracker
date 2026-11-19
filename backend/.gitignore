@@ -15,3 +15,6 @@ npm-debug.log*
 
 # Prisma
 prisma/*.db
+
+# Steam bot refresh token written by `npm run steam:bot-login`
+steam-bot-token.txt

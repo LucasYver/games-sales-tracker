@@ -106,9 +106,8 @@ export function FollowersHistoryChart({ followersHistory }: Props) {
   if (allPoints.length === 0) {
     return (
       <p className="text-muted-foreground p-6 text-sm">
-        No Steam follower snapshots yet. They are sourced from
-        games-popularity.com (run the backfill, or wait for the weekly
-        steam-followers cron). Note: history only reaches ~2024-03.
+        No Steam follower snapshots yet. The daily steam-followers cron reads
+        them from Steam; games-popularity.com history only reaches ~2024-03.
       </p>
     );
   }

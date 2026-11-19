@@ -107,7 +107,10 @@ Other clients in `ingestion/`:
 - Steam store, reviews, CCU, prices, tags.
 - PlayStation and Xbox ratings and prices.
 - Twitch viewers.
-- games-popularity.com followers (`GAMES_POPULARITY_API_KEY`).
+- Steam followers: the Steam client network, logged on as a bot account
+  (`STEAM_BOT_REFRESH_TOKEN`, `steam-network.client.ts`), reads every game's
+  community-group member count in batches; games-popularity.com
+  (`GAMES_POPULARITY_API_KEY`, free key: 100 requests a day) fills history gaps.
 - Wikipedia and backlog search (Perplexity first; Tavily on credit
   cooldown / missing key / error). Credit exhaustion trips a 24h
   `provider_cooldown` so harvest does not re-probe a dead balance.

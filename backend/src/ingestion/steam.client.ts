@@ -109,6 +109,29 @@ const storeGate = createGate('store', 2_000);
 // catalog is covered every day with runs to spare.
 const appReviewsGate = createGate('GetAppReviews', 400);
 
+// steamcommunity.com group pages, only to find a game's group when the store
+// has none. Valve publishes no number. Measured 2026-11-19 from one IP: ~60
+// requests, even at one per 5 s, then 429 for ~10 minutes.
+const communityGate = createGate('community', 6_000);
+const COMMUNITY_429_BLOCK_MS = 10 * 60_000;
+let communityBlockedUntil = 0;
+
+// The store's events endpoint, to find a game's group. Same domain as the store
+// (~200 req / 5 min / IP), but its own gate so a lookup never waits out the
+// store gate's cooldown.
+const storeEventsGate = createGate('store-events', 2_000);
+const STORE_EVENTS_429_BLOCK_MS = 5 * 60_000;
+let storeEventsBlockedUntil = 0;
+
+/** Group SteamID64 = this base + the group's account id. */
+const STEAM_CLAN_ID_BASE = 103582791429521408n;
+
+/** Result of {@link SteamClient.findClanId}. */
+export type SteamClanIdResult =
+  | { kind: 'ok'; clanId: string }
+  | { kind: 'none' }
+  | { kind: 'rate-limited' };
+
 const APP_REVIEWS_URL =
   'https://api.steampowered.com/IUserReviewsService/GetAppReviews/v1/';
 /** `filter` value for newest-created first, which paginates stably. */
@@ -438,6 +461,100 @@ export class SteamClient {
       `getCurrentPlayerCount failed for ${appId} after retries: ${lastError}`,
     );
     return { kind: 'transient', detail: lastError };
+  }
+
+  /**
+   * The SteamID64 of a game's community group: following a game joins it, so
+   * its member count is the game's followers (`SteamNetworkClient`). It never
+   * changes, so callers store it.
+   *
+   * Asks the store's events endpoint first, which names the group of every
+   * game that has posted an event, then `memberslistxml` (much stricter
+   * limit). `none`: no group found (Valve's own apps, tools, games with no
+   * event). `rate-limited`: a source refused or failed, try again later.
+   */
+  async findClanId(appId: number): Promise<SteamClanIdResult> {
+    const store = await this.getStoreEventsGroupId(appId);
+    if (store.kind === 'ok') return store;
+    const community = await this.getCommunityGroupId(appId);
+    // `none` only when neither source was limited.
+    if (community.kind === 'none' && store.kind === 'rate-limited') {
+      return { kind: 'rate-limited' };
+    }
+    return community;
+  }
+
+  private async getStoreEventsGroupId(
+    appId: number,
+  ): Promise<SteamClanIdResult> {
+    // Own gate and no wait on a 429: the caller runs under a cron budget, and
+    // the store gate's 5-minute cooldown could outlast the function.
+    if (storeEventsBlockedUntil > Date.now()) return { kind: 'rate-limited' };
+    await this.acquireSlot(storeEventsGate);
+    if (storeEventsBlockedUntil > Date.now()) return { kind: 'rate-limited' };
+    try {
+      const { data, status } = await axios.get<unknown>(
+        'https://store.steampowered.com/events/ajaxgetadjacentpartnerevents/',
+        {
+          params: { appid: appId, count_before: 0, count_after: 1 },
+          timeout: 20000,
+          validateStatus: () => true,
+        },
+      );
+      if (status === 429) {
+        storeEventsBlockedUntil = Date.now() + STORE_EVENTS_429_BLOCK_MS;
+        this.logger.warn(
+          `Steam store 429 on app ${appId}: no group lookups for ` +
+            `${STORE_EVENTS_429_BLOCK_MS / 60_000} min`,
+        );
+        return { kind: 'rate-limited' };
+      }
+      if (status !== 200) return { kind: 'rate-limited' };
+      const match = /"clanid":\s*"?(\d+)/.exec(JSON.stringify(data ?? {}));
+      if (!match) return { kind: 'none' };
+      return {
+        kind: 'ok',
+        clanId: (STEAM_CLAN_ID_BASE + BigInt(match[1])).toString(),
+      };
+    } catch (error) {
+      this.logger.warn(`findClanId: store failed for ${appId}: ${error}`);
+      return { kind: 'rate-limited' };
+    }
+  }
+
+  private async getCommunityGroupId(appId: number): Promise<SteamClanIdResult> {
+    // No gate cooldown: callers queued behind a 429 would sleep through it.
+    if (communityBlockedUntil > Date.now()) return { kind: 'rate-limited' };
+    await this.acquireSlot(communityGate);
+    if (communityBlockedUntil > Date.now()) return { kind: 'rate-limited' };
+    try {
+      const { data, status } = await axios.get<string>(
+        `https://steamcommunity.com/games/${appId}/memberslistxml/`,
+        {
+          params: { xml: 1 },
+          timeout: 25000,
+          responseType: 'text',
+          validateStatus: () => true,
+        },
+      );
+      if (status === 429) {
+        communityBlockedUntil = Date.now() + COMMUNITY_429_BLOCK_MS;
+        this.logger.warn(
+          `Steam community 429 on app ${appId}: no group lookups for ` +
+            `${COMMUNITY_429_BLOCK_MS / 60_000} min`,
+        );
+        return { kind: 'rate-limited' };
+      }
+      // Apps without a group get Steam's HTML error page with HTTP 200.
+      const match =
+        typeof data === 'string' ? /<groupID64>(\d+)</.exec(data) : null;
+      if (status === 200 && match) return { kind: 'ok', clanId: match[1] };
+      if (status === 200) return { kind: 'none' };
+      return { kind: 'rate-limited' };
+    } catch (error) {
+      this.logger.warn(`findClanId: community failed for ${appId}: ${error}`);
+      return { kind: 'rate-limited' };
+    }
   }
 
   /**

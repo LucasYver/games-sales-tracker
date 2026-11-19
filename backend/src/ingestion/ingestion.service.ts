@@ -38,6 +38,7 @@ import {
   SteamReviewDailyCount,
 } from './steam.client';
 import { SteamChartsClient } from './steamcharts.client';
+import { SteamNetworkClient } from './steam-network.client';
 import { IgdbClient, IgdbGame } from './igdb.client';
 import { KnownStoreUrls, StoreRatingsClient } from './store-ratings.client';
 import { WikipediaClient } from './wikipedia.client';
@@ -277,6 +278,7 @@ export class IngestionService {
     private readonly estimation: EstimationService,
     private readonly gamesService: GamesService,
     private readonly steam: SteamClient,
+    private readonly steamNetwork: SteamNetworkClient,
     private readonly steamCharts: SteamChartsClient,
     private readonly igdb: IgdbClient,
     private readonly storeRatings: StoreRatingsClient,
@@ -2832,6 +2834,297 @@ export class IngestionService {
           : ''),
     );
     return summary;
+  }
+
+  /**
+   * Daily Steam followers for every tracked game.
+   *
+   * 1. Steam client network (`SteamNetworkClient`): the member count of each
+   *    game's community group, hundreds of groups per request. Covers every
+   *    game whose group is known, in about a minute.
+   * 2. Finds the group of games that have none yet (`SteamClient.findClanId`,
+   *    one store request per game, once), then reads those too.
+   * 3. games-popularity.com while its free quota lasts (100 requests a day):
+   *    first games Steam could not answer, then the history gap of the others
+   *    (the series froze at 2026-10-22). One request returns a game's history.
+   *
+   * A value is stored only when it differs from the game's latest one (one
+   * row per UTC day at most): every read takes the latest value at a date.
+   */
+  async captureAllSteamFollowers(options: { budgetMs?: number } = {}): Promise<{
+    fromSteamNetwork: number;
+    groupsFound: number;
+    fromHistory: number;
+    rowsWritten: number;
+    steamNetworkError: string | null;
+  }> {
+    const budgetMs = options.budgetMs ?? Number.POSITIVE_INFINITY;
+    const startedAt = Date.now();
+    const remainingMs = () => budgetMs - (Date.now() - startedAt);
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
+    const sourceByGameId = await this.trackedSteamSources();
+    const gameIds = [...sourceByGameId.keys()];
+    // Ingestion-state order (least recently attempted first), and the latest
+    // stored day of each game, both read before this run writes anything.
+    const dueGameIds = await this.ingestionState.selectDueForCadence(
+      'STEAM_POPULARITY',
+      gameIds,
+      'day',
+    );
+    const lastAtByGame = await this.latestSignalAt(
+      SignalMetric.STEAM_FOLLOWERS,
+      gameIds,
+    );
+
+    // 1. Groups already known.
+    const answered = new Set<string>();
+    let rowsWritten = 0;
+    // Set inside `readGroups`; a holder so the type is not narrowed to null.
+    const network: { error: string | null } = { error: null };
+    const readGroups = async (gameIdsToRead: string[]) => {
+      if (!this.steamNetwork.enabled || network.error) return;
+      const gamesByClan = new Map<string, string[]>();
+      for (const gameId of gameIdsToRead) {
+        const clanId = sourceByGameId.get(gameId)?.steamClanId;
+        if (!clanId) continue;
+        gamesByClan.set(clanId, [...(gamesByClan.get(clanId) ?? []), gameId]);
+      }
+      if (gamesByClan.size === 0) return;
+      try {
+        const { members } = await this.steamNetwork.fetchFollowerCounts(
+          [...gamesByClan.keys()],
+          { budgetMs: remainingMs() },
+        );
+        const values = new Map<string, number>();
+        for (const [clanId, count] of members) {
+          for (const gameId of gamesByClan.get(clanId) ?? []) {
+            values.set(gameId, count);
+          }
+        }
+        rowsWritten += await this.storeFollowerValues(values, today);
+        await this.ingestionState.markSucceeded(
+          [...values.keys()],
+          'STEAM_POPULARITY',
+        );
+        for (const gameId of values.keys()) answered.add(gameId);
+      } catch (error) {
+        network.error = error instanceof Error ? error.message : String(error);
+        this.logger.warn(`[followers] Steam network failed: ${network.error}`);
+      }
+    };
+    await readGroups(gameIds);
+    const fromKnownGroups = answered.size;
+
+    // 2. Find missing groups, then read them. A lookup that found nothing is
+    // retried after 30 days. Leaves time for step 3.
+    const groupsFound = await this.findMissingSteamClans(
+      [...sourceByGameId.values()],
+      () => remainingMs() - IngestionService.FOLLOWERS_HISTORY_RESERVE_MS,
+    );
+    if (groupsFound.length > 0) await readGroups(groupsFound);
+
+    // 3. games-popularity: unanswered games first, then the history gap of
+    // the others (only the days before today, so Steam's value stays).
+    const yesterday = today.getTime() - 24 * 3600 * 1000;
+    const gapped = dueGameIds.filter(
+      (gameId) => (lastAtByGame.get(gameId) ?? 0) < yesterday,
+    );
+    const historyQueue = [
+      ...gapped.filter((gameId) => !answered.has(gameId)),
+      ...gapped.filter((gameId) => answered.has(gameId)),
+    ];
+    let fromHistory = 0;
+    let historyExhausted = !this.gamesPopularity.enabled;
+    for (const gameId of historyQueue) {
+      if (historyExhausted || remainingMs() <= 0) break;
+      const appId = Number(sourceByGameId.get(gameId)?.externalId);
+      if (!Number.isFinite(appId)) continue;
+      try {
+        const imported = await this.ingestionState.track(
+          gameId,
+          'STEAM_POPULARITY',
+          async () => {
+            const points =
+              await this.gamesPopularity.fetchFollowerHistory(appId);
+            const lastAt = lastAtByGame.get(gameId);
+            const until = answered.has(gameId)
+              ? today.getTime()
+              : Number.POSITIVE_INFINITY;
+            const fresh = (points ?? []).filter((p) => {
+              const at = p.capturedAt.getTime();
+              return (lastAt === undefined || at >= lastAt) && at < until;
+            });
+            if (fresh.length === 0) return 0;
+            const summary = await this.persistDailySignal(
+              gameId,
+              SignalMetric.STEAM_FOLLOWERS,
+              this.bucketDaily(fresh),
+            );
+            return summary.imported;
+          },
+        );
+        if (imported > 0) {
+          fromHistory += 1;
+          rowsWritten += imported;
+        }
+      } catch (error) {
+        if (error instanceof GamesPopularityRateLimitError) {
+          historyExhausted = true;
+        } else {
+          this.logger.warn(
+            `[followers] games-popularity failed for ${gameId}: ${error}`,
+          );
+        }
+      }
+    }
+
+    this.logger.log(
+      `[followers] done: ${fromKnownGroups} from Steam (known groups), ` +
+        `${groupsFound.length} group(s) found, ` +
+        `${answered.size - fromKnownGroups} from Steam (new groups), ` +
+        `${fromHistory} from games-popularity, ${rowsWritten} row(s) written` +
+        (network.error ? `, Steam network failed: ${network.error}` : ''),
+    );
+    return {
+      fromSteamNetwork: answered.size,
+      groupsFound: groupsFound.length,
+      fromHistory,
+      rowsWritten,
+      steamNetworkError: network.error,
+    };
+  }
+
+  /** Time step 2 of the followers capture leaves for games-popularity. */
+  private static readonly FOLLOWERS_HISTORY_RESERVE_MS = 2 * 60 * 1000;
+  /** A group lookup that found nothing is retried after this long. */
+  private static readonly STEAM_CLAN_RETRY_MS = 30 * 24 * 3600 * 1000;
+
+  /**
+   * Look up the community group of STEAM sources that have none, never-checked
+   * first, while `remainingMs()` stays positive. Stops after three refusals in
+   * a row. Returns the games whose group was found (their source rows updated).
+   */
+  private async findMissingSteamClans(
+    sources: GameSource[],
+    remainingMs: () => number,
+  ): Promise<string[]> {
+    const retryBefore = Date.now() - IngestionService.STEAM_CLAN_RETRY_MS;
+    const todo = sources
+      .filter(
+        (source) =>
+          !source.steamClanId &&
+          (!source.steamClanCheckedAt ||
+            source.steamClanCheckedAt.getTime() < retryBefore),
+      )
+      .sort(
+        (a, b) =>
+          (a.steamClanCheckedAt?.getTime() ?? 0) -
+          (b.steamClanCheckedAt?.getTime() ?? 0),
+      );
+
+    const found: string[] = [];
+    let refusedInARow = 0;
+    for (const source of todo) {
+      if (remainingMs() <= 0 || refusedInARow >= 3) break;
+      const appId = Number(source.externalId);
+      if (!Number.isFinite(appId)) continue;
+      const result = await this.steam.findClanId(appId);
+      if (result.kind === 'rate-limited') {
+        refusedInARow += 1;
+        continue;
+      }
+      refusedInARow = 0;
+      source.steamClanId = result.kind === 'ok' ? result.clanId : null;
+      source.steamClanCheckedAt = new Date();
+      await this.gameSources.update(source.id, {
+        steamClanId: source.steamClanId,
+        steamClanCheckedAt: source.steamClanCheckedAt,
+      });
+      if (source.steamClanId) found.push(source.gameId);
+    }
+    if (todo.length > 0) {
+      this.logger.log(
+        `[followers] group lookup: ${found.length} found, ` +
+          `${todo.length - found.length} not found or left for later`,
+      );
+    }
+    return found;
+  }
+
+  /** Latest `capturedAt` (ms) of a real (non-synthetic) signal per game. */
+  private async latestSignalAt(
+    metric: SignalMetric,
+    gameIds: string[],
+  ): Promise<Map<string, number>> {
+    if (gameIds.length === 0) return new Map();
+    const rows: Array<{ gameId: string; lastAt: Date }> =
+      await this.signals.query(
+        `SELECT g.id AS "gameId", l."capturedAt" AS "lastAt"
+           FROM unnest($2::uuid[]) AS g(id)
+           JOIN LATERAL (
+             SELECT "capturedAt" FROM signal_snapshot s
+              WHERE s."gameId" = g.id AND s.metric = $1 AND NOT s.synthetic
+              ORDER BY "capturedAt" DESC LIMIT 1
+           ) l ON true`,
+        [metric, gameIds],
+      );
+    return new Map(
+      rows.map((row) => [row.gameId, new Date(row.lastAt).getTime()]),
+    );
+  }
+
+  /**
+   * Store today's follower values, only where they differ from the game's
+   * latest value: today's row is updated in place, otherwise a row is added
+   * at `day`. Returns the number of rows written.
+   */
+  private async storeFollowerValues(
+    values: Map<string, number>,
+    day: Date,
+  ): Promise<number> {
+    const entries = [...values.entries()];
+    let written = 0;
+    for (let i = 0; i < entries.length; i += 2000) {
+      const chunk = entries.slice(i, i + 2000);
+      const [row]: Array<{ written: number }> = await this.signals.query(
+        `WITH input AS (
+           SELECT * FROM unnest($1::uuid[], $2::int[]) AS i("gameId", value)
+         ), latest AS (
+           SELECT i."gameId", l.id, l.value, l."capturedAt"
+             FROM input i
+             JOIN LATERAL (
+               SELECT id, value, "capturedAt" FROM signal_snapshot s
+                WHERE s."gameId" = i."gameId" AND s.metric = $4
+                  AND NOT s.synthetic
+                ORDER BY "capturedAt" DESC LIMIT 1
+             ) l ON true
+         ), updated AS (
+           UPDATE signal_snapshot s SET value = i.value
+             FROM input i JOIN latest l ON l."gameId" = i."gameId"
+            WHERE s.id = l.id AND l."capturedAt" >= $3 AND l.value <> i.value
+           RETURNING s.id
+         ), inserted AS (
+           INSERT INTO signal_snapshot ("gameId", source, metric, value, "capturedAt")
+           SELECT i."gameId", 'STEAM', $4, i.value, $3
+             FROM input i LEFT JOIN latest l ON l."gameId" = i."gameId"
+            WHERE l."gameId" IS NULL
+               OR (l."capturedAt" < $3 AND l.value <> i.value)
+           RETURNING id
+         )
+         SELECT ((SELECT COUNT(*) FROM updated) +
+                 (SELECT COUNT(*) FROM inserted))::int AS written`,
+        [
+          chunk.map(([gameId]) => gameId),
+          chunk.map(([, value]) => Math.round(value)),
+          day,
+          SignalMetric.STEAM_FOLLOWERS,
+        ],
+      );
+      written += row?.written ?? 0;
+    }
+    return written;
   }
 
   /** Longest Retry-After the follower fan-out waits for before stopping. */

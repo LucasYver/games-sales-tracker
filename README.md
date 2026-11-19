@@ -139,7 +139,8 @@ restauration du dump.
 | `IGDB_CLIENT_ID` / `IGDB_CLIENT_SECRET` | non | Import catalogue IGDB ([Twitch dev console](https://dev.twitch.tv/console/apps)) |
 | `OPENAI_API_KEY` | non | Extraction de chiffres depuis texte (Wikipedia, presse) |
 | `PERPLEXITY_API_KEY` / `TAVILY_API_KEY` | non | Backlog articles (Perplexity → Tavily fallback) |
-| `GAMES_POPULARITY_API_KEY` | non | Backfill followers Steam + top-seller rank |
+| `GAMES_POPULARITY_API_KEY` | non | Historique des followers Steam (clé gratuite : 100 requêtes/jour) |
+| `STEAM_BOT_REFRESH_TOKEN` | non | Followers Steam quotidiens via le réseau du client Steam (compte bot dédié, `npm run steam:bot-login`, ~200 jours) |
 | `ADMIN_SESSION_SECRET` | non | HMAC des sessions admin (vide = back-office désactivé) |
 | `ADMIN_BOOTSTRAP_EMAIL` / `ADMIN_BOOTSTRAP_PASSWORD` | non | Premier compte allowlist au boot |
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | non | Mail de bienvenue admin, relecture des brouillons blog, alerte reviews Steam |

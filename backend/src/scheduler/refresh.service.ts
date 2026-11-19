@@ -259,27 +259,24 @@ export class RefreshService {
   }
 
   /**
-   * Daily refresh of Steam followers from games-popularity.com. Recent-window
-   * only (the multi-year history is seeded once by the backfill script); a
-   * wall-clock budget keeps the run under the Vercel `maxDuration`. The
-   * provider rate-limits: the run waits out one 429 and stops at the second;
-   * least-recently-attempted ordering resumes there on the next run.
+   * Daily Steam followers: the Steam client network for every game whose
+   * group is known, group lookups for the others, and games-popularity.com
+   * for the rest while its free quota lasts. A wall-clock budget keeps the
+   * run under the Vercel `maxDuration`.
    */
-  async captureGamesPopularity() {
+  async captureSteamFollowers() {
     const RUN_BUDGET_MS = 11 * 60 * 1000;
     try {
-      const result = await this.ingestion.syncAllGamesPopularity({
-        fullHistory: false,
+      const result = await this.ingestion.captureAllSteamFollowers({
         budgetMs: RUN_BUDGET_MS,
       });
       this.logger.log(
-        `Games-popularity capture done: ${result.processed} game(s), ` +
-          `${result.followers} followers, ${result.failed} failed, ` +
-          `${result.leftover} left` +
-          (result.rateLimited ? ' (stopped by rate limit).' : '.'),
+        `Steam followers capture done: ${result.fromSteamNetwork} from Steam, ` +
+          `${result.groupsFound} group(s) found, ${result.fromHistory} from ` +
+          `games-popularity, ${result.rowsWritten} row(s) written.`,
       );
     } catch (error) {
-      this.logger.warn(`Games-popularity capture failed: ${error}`);
+      this.logger.warn(`Steam followers capture failed: ${error}`);
     }
   }
 
