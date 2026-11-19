@@ -52,6 +52,26 @@ export class IngestionStateService {
     }
   }
 
+  /**
+   * Record one successful attempt for many games at once, for a pipeline that
+   * works in batches (one query instead of two per game).
+   */
+  async markSucceeded(
+    gameIds: string[],
+    pipeline: IngestionPipeline,
+  ): Promise<void> {
+    if (gameIds.length === 0) return;
+    await this.states.query(
+      `INSERT INTO game_ingestion_state
+         ("gameId", pipeline, "lastAttemptAt", "lastSuccessAt", "failureCount", "lastError")
+       SELECT id, $2, now(), now(), 0, NULL FROM unnest($1::uuid[]) AS id
+       ON CONFLICT ("gameId", pipeline) DO UPDATE
+         SET "lastAttemptAt" = now(), "lastSuccessAt" = now(),
+             "failureCount" = 0, "lastError" = NULL`,
+      [gameIds, pipeline],
+    );
+  }
+
   /** Drop a game's state on one pipeline, so it counts as never run. */
   async forget(gameId: string, pipeline: IngestionPipeline): Promise<void> {
     await this.states.delete({ gameId, pipeline });

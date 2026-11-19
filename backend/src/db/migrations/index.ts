@@ -84,6 +84,7 @@ import { AddSocialPostXWithLink1789020000000 } from './1789020000000-AddSocialPo
 import { AddGameSlugRedirect1789030000000 } from './1789030000000-AddGameSlugRedirect';
 import { AddGameMilestoneResearchedAt1789040000000 } from './1789040000000-AddGameMilestoneResearchedAt';
 import { RescaleSteamReviewHistoryToLive1789050000000 } from './1789050000000-RescaleSteamReviewHistoryToLive';
+import { AddGameSourceSteamClan1789060000000 } from './1789060000000-AddGameSourceSteamClan';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -179,4 +180,5 @@ export const migrations: MixedList<Function | string> = [
   AddGameSlugRedirect1789030000000,
   AddGameMilestoneResearchedAt1789040000000,
   RescaleSteamReviewHistoryToLive1789050000000,
+  AddGameSourceSteamClan1789060000000,
 ];

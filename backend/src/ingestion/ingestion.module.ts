@@ -21,6 +21,7 @@ import { PublishersModule } from '../publishers/publishers.module';
 import { DevelopersModule } from '../developers/developers.module';
 import { IngestionService } from './ingestion.service';
 import { SteamClient } from './steam.client';
+import { SteamNetworkClient } from './steam-network.client';
 import { SteamChartsClient } from './steamcharts.client';
 import { IgdbClient } from './igdb.client';
 import { StoreRatingsClient } from './store-ratings.client';
@@ -62,6 +63,7 @@ import { InstantGamingLinksService } from './instant-gaming-links.service';
   providers: [
     IngestionService,
     SteamClient,
+    SteamNetworkClient,
     SteamChartsClient,
     IgdbClient,
     StoreRatingsClient,
@@ -83,6 +85,7 @@ import { InstantGamingLinksService } from './instant-gaming-links.service';
     IgdbClient,
     IngestionStateService,
     SteamClient,
+    SteamNetworkClient,
     IgdbRefreshService,
     InstantGamingLinksService,
   ],
