@@ -95,11 +95,31 @@ export class BlogService {
 
   async listFormatCandidates() {
     const [news, launches, rankings] = await Promise.all([
-      this.candidates.newsCandidates(),
+      this.newsCandidates(),
       this.candidates.launchCandidates(),
       this.candidates.rankingCandidates(),
     ]);
     return { news, launches, rankings };
+  }
+
+  /**
+   * News candidates pointed at the report consolidation keeps. That report
+   * may be another row than the SQL picked, so its own news item is checked
+   * again here.
+   */
+  private async newsCandidates() {
+    const resolved = await this.factPacks.resolveNewsFigures(
+      await this.candidates.newsCandidates(),
+    );
+    if (!resolved.length) return resolved;
+    const taken = await this.posts.find({
+      select: { topicKey: true },
+      where: {
+        topicKey: In(resolved.map((c) => `sales-news:${c.milestoneId}`)),
+      },
+    });
+    const keys = new Set(taken.map((p) => p.topicKey));
+    return resolved.filter((c) => !keys.has(`sales-news:${c.milestoneId}`));
   }
 
   async list(status: BlogPostStatus, limit = 30, offset = 0) {
@@ -648,7 +668,7 @@ export class BlogService {
     }
 
     const [news, launches] = await Promise.all([
-      this.candidates.newsCandidates(),
+      this.newsCandidates(),
       this.candidates.launchCandidates(1),
     ]);
     const written: Awaited<ReturnType<BlogService['generateFormat']>>[] = [];

@@ -20,7 +20,7 @@ import type { AdminCcuPoint } from '@/lib/admin';
 interface Props {
   reviewHistory: AdminCcuPoint[];
   // Optional reconstructed (synthetic) series drawn as a dashed overlay, e.g.
-  // the rebuilt PS ratings curve filling the pre-measurement gap.
+  // the rebuilt PS or Xbox ratings curve filling the pre-measurement gap.
   syntheticHistory?: AdminCcuPoint[];
 }
 

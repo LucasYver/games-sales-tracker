@@ -461,10 +461,13 @@ export interface AdminGameCharts {
   // Console store-rating series (cumulative counts). Only rendered per-platform
   // and only when the game has data, so a PC-only game shows none.
   psRatingsHistory: { capturedAt: Date; value: number }[];
-  // Reconstructed (synthetic) PS ratings filling the pre-measurement gap —
-  // rendered as a distinct dashed overlay, never mixed with the real series.
+  // Reconstructed PS / Xbox ratings filling the gap between the console launch
+  // and the first real snapshot (`synthetic = true` rows written monthly by the
+  // store-ratings cron, see `console-curve-reconstruction.ts`). Rendered as a
+  // dashed overlay, never mixed with the real series.
   psRatingsSyntheticHistory: { capturedAt: Date; value: number }[];
   xboxRatingsHistory: { capturedAt: Date; value: number }[];
+  xboxRatingsSyntheticHistory: { capturedAt: Date; value: number }[];
   switchRatingsHistory: { capturedAt: Date; value: number }[];
   prices: PriceSnapshot[];
   signals: SignalSnapshot[];
@@ -1198,6 +1201,7 @@ export class AdminService {
       psR,
       psRSynthetic,
       xboxR,
+      xboxRSynthetic,
       switchR,
       prices,
       signals,
@@ -1209,6 +1213,7 @@ export class AdminService {
       series(SignalMetric.PS_RATINGS),
       series(SignalMetric.PS_RATINGS, true),
       series(SignalMetric.XBOX_RATINGS),
+      series(SignalMetric.XBOX_RATINGS, true),
       series(SignalMetric.SWITCH_RATINGS),
       this.prices.find({
         where: { gameId: id, country: 'us', source: SourceType.STEAM },
@@ -1233,6 +1238,7 @@ export class AdminService {
       psRatingsHistory: map(psR),
       psRatingsSyntheticHistory: map(psRSynthetic),
       xboxRatingsHistory: map(xboxR),
+      xboxRatingsSyntheticHistory: map(xboxRSynthetic),
       switchRatingsHistory: map(switchR),
       prices,
       signals,

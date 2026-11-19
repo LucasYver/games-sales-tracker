@@ -59,6 +59,9 @@ newly inserted stub.
 - `isFree = true` is excluded from sales polls.
 - Steam metrics need `game_source.source = 'STEAM'`.
 - `STORE_RATINGS`, `PS_PRICE`, `XBOX_PRICE` need a console platform.
+- `CONSOLE_CURVE` has no cron of its own: the store-ratings cron builds the
+  reconstructed PS / Xbox curve once per game, only after every due game is
+  scraped. A game with a `lastSuccessAt` is never rebuilt.
 - `MILESTONE_HARVEST` also requires `isEligibleForAutomaticHarvest` and
   `isDueForRefresh`. An extended game with a weak rank is skipped on purpose.
   Due selection reads the later of `game.lastMilestoneHarvestedAt` and

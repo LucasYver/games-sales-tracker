@@ -40,12 +40,11 @@ export class SignalSnapshot {
   averageRating: number | null;
 
   // True when this row is a reconstructed (synthetic) value rather than a real
-  // scraped/polled measurement. Currently only PS_RATINGS points rebuilt from
-  // the same game's Steam-review curve shape (see `ps-curve-reconstruction.ts`).
-  // Excluded from every live read (Boxleiter estimate, platform shares, store-
-  // rating display, backfill "already has data" checks); surfaced only as a
-  // distinct series in admin charts. Calibration reconstructs on the fly and
-  // does not read these rows.
+  // scraped/polled measurement: monthly PS_RATINGS / XBOX_RATINGS points from
+  // the console launch to the day before the first real snapshot, shaped on
+  // the game's Steam reviews (`console-curve-reconstruction.ts`, written by
+  // `IngestionService.rebuildConsoleRatingCurves`). For models and the admin
+  // charts; every live estimate read filters on `synthetic = false`.
   @Column({ type: 'boolean', default: false })
   synthetic: boolean;
 

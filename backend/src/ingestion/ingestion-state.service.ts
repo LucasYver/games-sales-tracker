@@ -52,6 +52,11 @@ export class IngestionStateService {
     }
   }
 
+  /** Drop a game's state on one pipeline, so it counts as never run. */
+  async forget(gameId: string, pipeline: IngestionPipeline): Promise<void> {
+    await this.states.delete({ gameId, pipeline });
+  }
+
   async oldestFirst(
     pipeline: IngestionPipeline,
     gameIds: string[],

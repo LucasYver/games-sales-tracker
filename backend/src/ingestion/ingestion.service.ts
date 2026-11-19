@@ -62,6 +62,34 @@ import {
 } from './catalog-tier';
 import { cycleWindow } from './ingestion-cadence';
 import { IngestionStateService } from './ingestion-state.service';
+import {
+  type DatedValue,
+  reconstructUnobservedCurve,
+} from '../estimation/console-curve-reconstruction';
+import { platformReleaseDate } from '../games/platform-release-date';
+
+const CONSOLE_CURVE_METRICS = [
+  {
+    metric: SignalMetric.PS_RATINGS,
+    platform: Platform.PLAYSTATION,
+    source: SourceType.PS_STORE,
+  },
+  {
+    metric: SignalMetric.XBOX_RATINGS,
+    platform: Platform.XBOX,
+    source: SourceType.XBOX_STORE,
+  },
+] as const;
+
+/** Same dates, and every value within 2% (or 1 rating) of the stored one. */
+function sameCurve(stored: DatedValue[], next: DatedValue[]): boolean {
+  if (stored.length !== next.length) return false;
+  return stored.every((p, i) => {
+    const q = next[i];
+    if (p.capturedAt.getTime() !== q.capturedAt.getTime()) return false;
+    return Math.abs(p.value - q.value) <= Math.max(1, 0.02 * q.value);
+  });
+}
 
 const STORE_SOURCE_BY_PLATFORM: Partial<Record<Platform, SourceType>> = {
   [Platform.PLAYSTATION]: SourceType.PS_STORE,
@@ -3829,7 +3857,122 @@ export class IngestionService {
     this.logger.log(
       `[stores] ratings complete: ${scraped} scraped, ${failed} failed, ${leftover} left.`,
     );
+
+    // Ratings come first. Once every due game is scraped, the rest of the
+    // run's budget builds the reconstructed console curve of games that never
+    // had one (games new to the catalog). A curve is built once and never
+    // refreshed: it ends the day before the first real snapshot, which does
+    // not move. `backfill-console-curves.ts` fills the existing catalog.
+    if (leftover === 0) {
+      const done = new Set(
+        (
+          await this.games.query<Array<{ gameId: string }>>(
+            `SELECT "gameId" FROM game_ingestion_state
+              WHERE pipeline = 'CONSOLE_CURVE' AND "lastSuccessAt" IS NOT NULL`,
+          )
+        ).map((r) => r.gameId),
+      );
+      const curveDue = [...consoleGames.keys()].filter((id) => !done.has(id));
+      const curves = await this.runInBatches(
+        curveDue,
+        3,
+        budgetMs,
+        startedAt,
+        (gameId) =>
+          this.ingestionState
+            .track(gameId, 'CONSOLE_CURVE', () =>
+              this.rebuildConsoleRatingCurves(gameId),
+            )
+            .then(() => undefined),
+      );
+      this.logger.log(
+        `[stores] console curves: ${curves.succeeded} rebuilt, ${curves.failed} failed, ` +
+          `${curveDue.length - curves.attempted} left.`,
+      );
+    }
+
     return { scraped, failed, leftover };
+  }
+
+  /**
+   * Store the reconstructed PS and Xbox ratings curves of one game: monthly
+   * `synthetic = true` points from the console launch to the day before the
+   * first real snapshot, shaped on the game's Steam reviews
+   * (`console-curve-reconstruction.ts`). Other models read these rows; every
+   * live estimate read filters them out.
+   *
+   * Rewrites a platform's rows only when the curve changed by more than 2%, so
+   * a re-run does not churn rows that would come back the same. Returns the
+   * number of points written.
+   */
+  async rebuildConsoleRatingCurves(gameId: string): Promise<number> {
+    const point = { capturedAt: true, value: true } as const;
+    const [game, steamReviews] = await Promise.all([
+      this.games.findOne({
+        where: { id: gameId },
+        relations: { platformReleaseDates: true },
+      }),
+      this.signals.find({
+        where: {
+          gameId,
+          metric: SignalMetric.STEAM_REVIEWS,
+          synthetic: false,
+        },
+        order: { capturedAt: 'ASC' },
+        select: point,
+      }),
+    ]);
+    if (!game) return 0;
+
+    const written = await Promise.all(
+      CONSOLE_CURVE_METRICS.map(async ({ metric, platform, source }) => {
+        const [first, last, stored] = await Promise.all([
+          this.signals.findOne({
+            where: { gameId, metric, synthetic: false },
+            order: { capturedAt: 'ASC' },
+            select: point,
+          }),
+          this.signals.findOne({
+            where: { gameId, metric, synthetic: false },
+            order: { capturedAt: 'DESC' },
+            select: point,
+          }),
+          this.signals.find({
+            where: { gameId, metric, synthetic: true },
+            order: { capturedAt: 'ASC' },
+            select: point,
+          }),
+        ]);
+        const curve =
+          first && last
+            ? reconstructUnobservedCurve(
+                [first, last],
+                steamReviews,
+                platformReleaseDate(game, platform),
+              )
+            : [];
+        if (sameCurve(stored, curve)) return 0;
+
+        await this.signals.manager.transaction(async (tx) => {
+          await tx.delete(SignalSnapshot, { gameId, metric, synthetic: true });
+          if (curve.length > 0) {
+            await tx.insert(
+              SignalSnapshot,
+              curve.map((p) => ({
+                gameId,
+                source,
+                metric,
+                value: p.value,
+                synthetic: true,
+                capturedAt: p.capturedAt,
+              })),
+            );
+          }
+        });
+        return curve.length;
+      }),
+    );
+    return written[0] + written[1];
   }
 
   /**
@@ -4703,6 +4846,9 @@ export class IngestionService {
     await this.signals.delete({ gameId, metric });
     await this.prices.delete({ gameId, source });
     await this.gameSources.delete({ gameId, source });
+    // The reconstructed curve went with the signals: let the store-ratings
+    // cron build it again from the right product's first snapshot.
+    await this.ingestionState.forget(gameId, 'CONSOLE_CURVE');
   }
 
   private async knownStoreUrlsFor(gameId: string): Promise<KnownStoreUrls> {

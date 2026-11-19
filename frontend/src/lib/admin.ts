@@ -366,6 +366,7 @@ export interface AdminGameChartsData {
   psRatingsHistory: AdminCcuPoint[];
   psRatingsSyntheticHistory: AdminCcuPoint[];
   xboxRatingsHistory: AdminCcuPoint[];
+  xboxRatingsSyntheticHistory: AdminCcuPoint[];
   switchRatingsHistory: AdminCcuPoint[];
   prices: AdminPriceSnapshot[];
   signals: AdminSignal[];
@@ -960,3 +961,6 @@ export interface AdminCronJob {
 
 export type RunCronResult =
   { ok: true; name: string; startedAt: string } | { ok: false; error: string };
+
+export type BlogDraftResult =
+  { ok: true; post: AdminBlogDetail } | { ok: false; error: string };

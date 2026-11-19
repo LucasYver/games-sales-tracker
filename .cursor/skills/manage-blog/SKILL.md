@@ -38,7 +38,10 @@ Candidate rules and thresholds are the constants and SQL in
 `blog-candidate.service.ts`; the admin tab "News, launches, rankings" lists them.
 
 - News: consolidation has the last word. `buildNewsPack` refuses a figure
-  `consolidateFacts` drops, before any paid call. `publish` refuses a news item
+  `consolidateFacts` drops, before any paid call. One figure is often filed
+  once per article that relays it; `resolveNewsFigures` points each candidate
+  (admin tab and daily cron) at the report consolidation keeps, and drops the
+  candidate if it keeps none. `publish` refuses a news item
   whose milestone has been rejected, unless forced. Nearly all recent figures
   come from press extraction, so the review is the real check.
 - Rankings: one figure per game (`pickAnswerFact`, worldwide only), highest

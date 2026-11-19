@@ -10,7 +10,6 @@ import {
   SalesEstimate,
   SignalMetric,
   SignalSnapshot,
-  SourceType,
 } from '../entities';
 import {
   AGGREGATED_METHOD_CODE,
@@ -18,7 +17,6 @@ import {
 } from './estimation-method.service';
 import { type ResolvedGenreProfile } from '../reference-profiles/sales-profile-resolver.service';
 import { SalesProfileResolverService } from '../reference-profiles/sales-profile-resolver.service';
-import { reconstructPsCurveMonthly } from './ps-curve-reconstruction';
 import {
   ML_V2_METHOD_CODE,
   V2EstimateService,
@@ -1026,98 +1024,6 @@ export class EstimationService {
       high: profileDefaults?.high ?? cfg.defaultHigh,
       method: `${cfg.methodPrefix}-default`,
     };
-  }
-
-  /**
-   * Materialise the reconstructed PS ratings curve for display: a monthly
-   * synthetic series filling the gap between the game's PS launch and its
-   * earliest REAL PS snapshot ("day one → first measurement"). Rows are
-   * written to `signal_snapshot` with `synthetic = true` so they never leak
-   * into any live read. Idempotent: drops prior synthetic PS rows first.
-   */
-  async reconstructPsCurve(gameId: string): Promise<{
-    pointsWritten: number;
-    skipped?: string;
-  }> {
-    const realPoints = await this.signals.find({
-      where: {
-        gameId,
-        metric: SignalMetric.PS_RATINGS,
-        synthetic: false,
-      },
-      order: { capturedAt: 'ASC' },
-    });
-    if (realPoints.length === 0)
-      return { pointsWritten: 0, skipped: 'no-anchor' };
-    const earliestReal = realPoints[0];
-    const anchor = realPoints[realPoints.length - 1];
-    if (anchor.value <= 0) return { pointsWritten: 0, skipped: 'no-anchor' };
-
-    const steamRows = await this.signals.find({
-      where: {
-        gameId,
-        metric: SignalMetric.STEAM_REVIEWS,
-        synthetic: false,
-      },
-      order: { capturedAt: 'ASC' },
-      select: { capturedAt: true, value: true },
-    });
-    if (steamRows.length === 0)
-      return { pointsWritten: 0, skipped: 'no-steam' };
-
-    const game = await this.games.findOne({
-      where: { id: gameId },
-      relations: { platformReleaseDates: true },
-    });
-    const psReleaseDate = game
-      ? platformReleaseDate(game, Platform.PLAYSTATION)
-      : null;
-
-    // Fill from PS launch (or the Steam start when no PS date) up to the day
-    // before the first real PS snapshot — we only reconstruct the unobserved
-    // early stretch, never overwrite a real point.
-    const fromDate = psReleaseDate ?? steamRows[0].capturedAt;
-    const toDate = new Date(
-      earliestReal.capturedAt.getTime() - 24 * 3600 * 1000,
-    );
-    if (fromDate.getTime() > toDate.getTime()) {
-      return { pointsWritten: 0, skipped: 'no-gap' };
-    }
-
-    const curve = reconstructPsCurveMonthly(fromDate, toDate, {
-      anchor: { capturedAt: anchor.capturedAt, value: anchor.value },
-      psReleaseDate,
-      steamReviews: steamRows.map((r) => ({
-        capturedAt: r.capturedAt,
-        value: r.value,
-      })),
-    });
-
-    await this.signals.delete({
-      gameId,
-      metric: SignalMetric.PS_RATINGS,
-      synthetic: true,
-    });
-    if (curve.length === 0) return { pointsWritten: 0, skipped: 'abstained' };
-
-    await this.signals.save(
-      curve.map((p) =>
-        this.signals.create({
-          gameId,
-          source: SourceType.PS_STORE,
-          metric: SignalMetric.PS_RATINGS,
-          value: p.value,
-          synthetic: true,
-          capturedAt: p.capturedAt,
-        }),
-      ),
-      { chunk: 500 },
-    );
-    this.logger.log(
-      `[ps-reconstruct] ${gameId}: wrote ${curve.length} synthetic PS point(s) ` +
-        `${fromDate.toISOString().slice(0, 10)}→${toDate.toISOString().slice(0, 10)}`,
-    );
-    return { pointsWritten: curve.length };
   }
 
   // ───── estimate breakdown (diagnostic) ──────────────────────────────────

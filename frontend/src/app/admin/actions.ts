@@ -8,6 +8,7 @@ import {
   adminFetch,
   type AdminBlogDetail,
   type AdminSocialPost,
+  type BlogDraftResult,
   type GenerateBlogFormatInput,
   type AdminGenreIgdbSyncResult,
   type ManualGameField,
@@ -344,38 +345,72 @@ export async function syncGenresFromIgdb(): Promise<AdminGenreIgdbSyncResult> {
   return result;
 }
 
+/**
+ * Writing a draft can be refused (a news figure that is a relay, a ranking
+ * with too few games...). Errors come back as a value: Next.js hides thrown
+ * messages in production.
+ */
+async function draftResult(
+  write: () => Promise<AdminBlogDetail>,
+  paths: string[] = [],
+): Promise<BlogDraftResult> {
+  try {
+    const post = await write();
+    revalidatePath('/admin/blog');
+    revalidatePath(`/admin/blog/${post.id}`);
+    for (const path of paths) revalidatePath(path);
+    return { ok: true, post };
+  } catch (err) {
+    unstable_rethrow(err);
+    return { ok: false, error: backendMessage(err, 'Draft generation failed') };
+  }
+}
+
+/** The backend's own message (`{"message": ...}`) when there is one. */
+function backendMessage(err: unknown, fallback: string): string {
+  if (!(err instanceof Error)) return fallback;
+  const json = err.message.match(/\{[\s\S]*\}$/)?.[0];
+  if (json) {
+    try {
+      const { message } = JSON.parse(json) as { message?: unknown };
+      if (typeof message === 'string') return message;
+      if (Array.isArray(message)) return message.join('\n');
+    } catch {
+      // not JSON: keep the raw message
+    }
+  }
+  return err.message;
+}
+
 export async function generateBlogDraft(
   gameId: string,
-): Promise<AdminBlogDetail> {
-  const result = await adminFetch<AdminBlogDetail>(
-    `/games/${gameId}/blog-draft`,
-    { method: 'POST' },
+): Promise<BlogDraftResult> {
+  return draftResult(
+    () =>
+      adminFetch<AdminBlogDetail>(`/games/${gameId}/blog-draft`, {
+        method: 'POST',
+      }),
+    [`/admin/games/${gameId}`],
   );
-  revalidatePath('/admin/blog');
-  revalidatePath(`/admin/blog/${result.id}`);
-  revalidatePath(`/admin/games/${gameId}`);
-  return result;
 }
 
 export async function generateBlogFormat(
   input: GenerateBlogFormatInput,
-): Promise<AdminBlogDetail> {
-  const result = await adminFetch<AdminBlogDetail>('/blog/generate', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
-  revalidatePath('/admin/blog');
-  revalidatePath(`/admin/blog/${result.id}`);
-  return result;
+): Promise<BlogDraftResult> {
+  return draftResult(() =>
+    adminFetch<AdminBlogDetail>('/blog/generate', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  );
 }
 
-export async function regenerateBlogPost(id: string): Promise<AdminBlogDetail> {
-  const result = await adminFetch<AdminBlogDetail>(`/blog/${id}/regenerate`, {
-    method: 'POST',
-  });
-  revalidatePath('/admin/blog');
-  revalidatePath(`/admin/blog/${result.id}`);
-  return result;
+export async function regenerateBlogPost(
+  id: string,
+): Promise<BlogDraftResult> {
+  return draftResult(() =>
+    adminFetch<AdminBlogDetail>(`/blog/${id}/regenerate`, { method: 'POST' }),
+  );
 }
 
 function revalidatePublicBlog(post: AdminBlogDetail) {
