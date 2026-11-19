@@ -450,10 +450,10 @@
     "title": "GTA 6 sales tracker",
     "metaTitle": "GTA 6 sales: how many copies has GTA 6 sold?",
     "metaTitleUnits": "GTA 6 sales: {units} copies sold",
-    "metaDescription": "Every official GTA 6 sales figure since launch, with its source, compared with GTA V and Red Dead Redemption 2 over their first weeks.",
+    "metaDescription": "Every published GTA 6 sales figure since launch, with its source, compared with GTA V and Red Dead Redemption 2 over their first weeks.",
     "leadUpcoming": "GTA 6 launches on {date}, in {days, plural, one {# day} other {# days}}. No sales figure exists yet: this page will log each official one as soon as it is published.",
     "leadAwaiting": "GTA 6 launched on {date}. Rockstar and Take-Two have not published a sales figure yet: this page logs each one as soon as it comes out.",
-    "leadLatest": "GTA 6 has sold {units} copies, according to the latest official figure ({date}).",
+    "leadLatest": "GTA 6 has sold {units} copies, according to the latest published figure ({date}).",
     "intro": "We only list figures with a public source: Take-Two, Rockstar and recognised market trackers. Each one is dated and linked.",
     "statLatest": "Latest figure",
     "statLatestNone": "None published yet",
@@ -463,7 +463,7 @@
     "statBenchmark": "RDR2 · GTA V first count",
     "statBenchmarkHint": "Shipped after {rdr2Days} and {gta5Days} days",
     "chartTitle": "GTA 6 against GTA V and RDR2",
-    "chartBody": "Copies shipped worldwide by days since launch. Each point is an official Take-Two figure; the GTA 6 line grows as figures come out.",
+    "chartBody": "Copies sold worldwide by days since launch. GTA V and RDR2 points are Take-Two figures; GTA 6 points are the published figures listed below, and its line grows as new ones come out.",
     "chartAria": "Copies sold by days since launch for GTA 6, GTA V and Red Dead Redemption 2",
     "dayTick": "D+{day}",
     "tooltip": "{units} copies · day {day}",
@@ -487,7 +487,10 @@
     "noModelBody": "Our estimates rely mostly on Steam signals. GTA 6 launches on consoles only, and no game before it reached this scale, so a model would only guess. We show the published figures and their sources instead.",
     "linkGame": "GTA 6 game page",
     "linkMethodology": "How we estimate other games",
-    "gamePageLink": "Follow GTA 6 sales figure by figure, against GTA V and RDR2"
+    "gamePageLink": "Follow GTA 6 sales figure by figure, against GTA V and RDR2",
+    "homeBannerTitle": "GTA 6 is out: follow its sales live.",
+    "homeBannerUnits": "GTA 6: {units} copies sold according to the latest figures.",
+    "homeBannerCta": "Every figure with its source, against GTA V and RDR2 →"
   },
   "about": {
     "title": "About Game Sales Tracker",

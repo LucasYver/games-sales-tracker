@@ -5,10 +5,17 @@
  * hand on 2026-11-11, fixed here because they will never change.
  */
 
+import type { SalesTimelineFigure } from '@/lib/api';
+
 export const GTA6_SLUG = 'grand-theft-auto-vi';
 export const GTA6_PATH = '/gta-6-sales';
 /** Console launch, PS5 and Xbox Series. */
 export const GTA6_LAUNCH = '2026-11-19';
+/**
+ * Last day the home page shows the GTA 6 banner: the launch buzz, up to
+ * Take-Two's first quarterly figures after launch (early February).
+ */
+export const GTA6_BANNER_UNTIL = '2027-02-15';
 
 export interface BenchmarkFigure {
   /** Units sold-in (shipped to stores) worldwide. */
@@ -87,4 +94,14 @@ export function daysBetween(from: string, to: string | Date): number {
   const end =
     typeof to === 'string' ? Date.parse(to.slice(0, 10)) : to.getTime();
   return Math.floor((end - start) / DAY_MS);
+}
+
+/** The latest worldwide figure, else the latest of any platform. */
+export function latestGta6Figure(
+  figures: SalesTimelineFigure[],
+): SalesTimelineFigure | null {
+  const dated = figures.filter((f) => f.reportedAt);
+  const global = dated.filter((f) => f.platform === 'GLOBAL');
+  const pool = global.length > 0 ? global : dated;
+  return pool.at(-1) ?? null;
 }

@@ -17,6 +17,7 @@ import { SiteHeader } from '@/components/chart-room/SiteHeader';
 import { FiltersSidebar } from '@/components/FiltersSidebar';
 import { Pagination } from '@/components/Pagination';
 import { defaultOgImages } from '@/lib/og-meta';
+import { Gta6HomeBanner } from '@/components/Gta6HomeBanner';
 
 const PAGE_SIZE = 50;
 
@@ -256,6 +257,7 @@ export default async function Home({
       <SiteHeader />
 
       <div className="mx-auto w-full max-w-6xl px-4 py-5">
+        {!query && page === 1 && <Gta6HomeBanner locale={locale} />}
         {query ? (
           <SearchResults query={query} results={results} />
         ) : (
