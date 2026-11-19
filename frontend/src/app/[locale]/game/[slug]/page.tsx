@@ -47,7 +47,8 @@ import { SeriesChart } from '@/components/chart-room/SeriesChart';
 import { Suspense } from 'react';
 import { CompareButton, CompareLink } from '@/components/compare/CompareEntry';
 import { pickerSuggestions, type PickerGame } from '@/lib/compare';
-import { GTA6_PATH, GTA6_SLUG } from '@/lib/gta6';
+import { BENCHMARKS, GTA6_PATH, GTA6_SLUG } from '@/lib/gta6';
+import { PromoLink } from '@/components/PromoLink';
 import { MW4_PATH, MW4_SLUG } from '@/lib/mw4';
 
 function compactUnits(units: number, locale: string) {
@@ -178,10 +179,15 @@ function gamePageHref(
   return qs ? `/game/${slug}?${qs}` : `/game/${slug}`;
 }
 
-/** GTA 6 and MW4 get a dedicated tracker; their game page points there. */
+/**
+ * GTA 6 and MW4 get a dedicated tracker; their game page points there. The
+ * games the GTA 6 page compares against (GTA V, RDR2) point there too.
+ */
+const GTA6_TRACKER = { path: GTA6_PATH, ns: 'gta6Sales' } as const;
 const TRACKERS: Record<string, { path: string; ns: 'gta6Sales' | 'mw4Sales' }> =
   {
-    [GTA6_SLUG]: { path: GTA6_PATH, ns: 'gta6Sales' },
+    [GTA6_SLUG]: GTA6_TRACKER,
+    ...Object.fromEntries(BENCHMARKS.map((b) => [b.slug, GTA6_TRACKER])),
     [MW4_SLUG]: { path: MW4_PATH, ns: 'mw4Sales' },
   };
 
@@ -190,13 +196,15 @@ function TrackerLink({ slug }: { slug: string }) {
   const t = useTranslations(tracker?.ns ?? 'gta6Sales');
   if (!tracker) return null;
   return (
-    <Link
+    <PromoLink
       href={tracker.path}
+      from={slug}
+      target={tracker.path.slice(1)}
       className="mx-4 mt-3 flex items-center gap-2 rounded-[3px] border border-primary/40 bg-accent px-3 py-2 text-sm font-medium text-accent-foreground hover:underline"
     >
       <ChartLine className="size-4 shrink-0" aria-hidden />
       {t('gamePageLink')}
-    </Link>
+    </PromoLink>
   );
 }
 

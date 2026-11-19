@@ -26,6 +26,9 @@ type Events = {
   // Outbound links
   outbound_click: { from: string; domain: string };
   instant_gaming_click: { game: string; placement: string };
+  // A promoted internal page (home banner, game page link): whether pushing
+  // a page brings visitors (from = home | <game slug>, target = page name).
+  promo_click: { from: string; target: string };
   // Charts
   chart_range_change: { chart: string; range: string };
   platform_chart_select: { platform: string };

@@ -4,7 +4,7 @@ import { Link } from '@/i18n/navigation';
 import { localeLanguages, routing } from '@/i18n/routing';
 import { SITE_URL } from '@/lib/site-url';
 import { defaultOgImages } from '@/lib/og-meta';
-import { getSalesTimeline, type SalesTimelineFigure } from '@/lib/api';
+import { getSalesTimeline } from '@/lib/api';
 import { OutboundLink } from '@/components/OutboundLink';
 import {
   BENCHMARKS,
@@ -12,6 +12,7 @@ import {
   GTA6_PATH,
   GTA6_SLUG,
   daysBetween,
+  latestGta6Figure as latestFigure,
 } from '@/lib/gta6';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
 import {
@@ -27,16 +28,6 @@ function compact(units: number, locale: string): string {
     notation: 'compact',
     maximumFractionDigits: 1,
   }).format(units);
-}
-
-/** The latest worldwide figure, else the latest of any platform. */
-function latestFigure(
-  figures: SalesTimelineFigure[],
-): SalesTimelineFigure | null {
-  const dated = figures.filter((f) => f.reportedAt);
-  const global = dated.filter((f) => f.platform === 'GLOBAL');
-  const pool = global.length > 0 ? global : dated;
-  return pool.at(-1) ?? null;
 }
 
 function hostOf(url: string | null): string | null {

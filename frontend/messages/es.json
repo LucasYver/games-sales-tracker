@@ -450,10 +450,10 @@
     "title": "Ventas de GTA 6 en directo",
     "metaTitle": "Ventas de GTA 6: ¿cuántas copias ha vendido?",
     "metaTitleUnits": "Ventas de GTA 6: {units} copias vendidas",
-    "metaDescription": "Todas las cifras oficiales de ventas de GTA 6 desde su lanzamiento, con su fuente, comparadas con GTA V y Red Dead Redemption 2 en sus primeras semanas.",
+    "metaDescription": "Todas las cifras de ventas publicadas de GTA 6 desde su lanzamiento, con su fuente, comparadas con GTA V y Red Dead Redemption 2 en sus primeras semanas.",
     "leadUpcoming": "GTA 6 sale el {date}, dentro de {days, plural, one {# día} other {# días}}. Aún no existe ninguna cifra de ventas: esta página añadirá cada cifra oficial en cuanto se publique.",
     "leadAwaiting": "GTA 6 salió el {date}. Rockstar y Take-Two aún no han publicado ninguna cifra de ventas: esta página añade cada una en cuanto sale.",
-    "leadLatest": "GTA 6 ha vendido {units} copias, según la última cifra oficial ({date}).",
+    "leadLatest": "GTA 6 ha vendido {units} copias, según la última cifra publicada ({date}).",
     "intro": "Solo listamos cifras con fuente pública: Take-Two, Rockstar y analistas de mercado reconocidos. Cada una está fechada y enlazada.",
     "statLatest": "Última cifra",
     "statLatestNone": "Ninguna publicada todavía",
@@ -463,7 +463,7 @@
     "statBenchmark": "1.ª cifra RDR2 · GTA V",
     "statBenchmarkHint": "Distribuidas tras {rdr2Days} y {gta5Days} días",
     "chartTitle": "GTA 6 frente a GTA V y RDR2",
-    "chartBody": "Copias distribuidas en el mundo según los días desde el lanzamiento. Cada punto es una cifra oficial de Take-Two; la línea de GTA 6 crece con cada nueva cifra.",
+    "chartBody": "Copias vendidas en el mundo según los días desde el lanzamiento. Los puntos de GTA V y RDR2 son cifras de Take-Two; los de GTA 6 son las cifras publicadas que se listan abajo, y su línea crece con cada nueva cifra.",
     "chartAria": "Copias vendidas según los días desde el lanzamiento de GTA 6, GTA V y Red Dead Redemption 2",
     "dayTick": "D+{day}",
     "tooltip": "{units} copias · día {day}",
@@ -487,7 +487,10 @@
     "noModelBody": "Nuestras estimaciones se basan sobre todo en señales de Steam. GTA 6 sale solo en consolas y ningún juego anterior alcanzó esta escala, así que un modelo solo adivinaría. Preferimos mostrar las cifras publicadas y sus fuentes.",
     "linkGame": "Ficha del juego GTA 6",
     "linkMethodology": "Cómo estimamos otros juegos",
-    "gamePageLink": "Sigue las ventas de GTA 6 cifra a cifra, frente a GTA V y RDR2"
+    "gamePageLink": "Sigue las ventas de GTA 6 cifra a cifra, frente a GTA V y RDR2",
+    "homeBannerTitle": "GTA 6 ya salió: sigue sus ventas en directo.",
+    "homeBannerUnits": "GTA 6: {units} copias vendidas según las últimas cifras.",
+    "homeBannerCta": "Cada cifra con su fuente, frente a GTA V y RDR2 →"
   },
   "about": {
     "title": "Acerca de Game Sales Tracker",

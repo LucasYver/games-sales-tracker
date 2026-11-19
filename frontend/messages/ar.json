@@ -450,10 +450,10 @@
     "title": "متتبع مبيعات GTA 6",
     "metaTitle": "مبيعات GTA 6: كم نسخة باعت GTA 6؟",
     "metaTitleUnits": "مبيعات GTA 6: {units} نسخة مبيعة",
-    "metaDescription": "جميع أرقام مبيعات GTA 6 الرسمية منذ الإطلاق، مع مصادرها، مقارنةً بـGTA V وRed Dead Redemption 2 في أسابيعهما الأولى.",
+    "metaDescription": "جميع أرقام مبيعات GTA 6 المنشورة منذ الإطلاق، مع مصادرها، مقارنةً بـGTA V وRed Dead Redemption 2 في أسابيعهما الأولى.",
     "leadUpcoming": "تصدر GTA 6 في {date}، بعد {days, plural, zero {# يوم} one {يوم واحد} two {يومين} few {# أيام} many {# يومًا} other {# يوم}}. لا يوجد أي رقم مبيعات بعد: ستسجّل هذه الصفحة كل رقم رسمي فور نشره.",
     "leadAwaiting": "صدرت GTA 6 في {date}. لم تنشر Rockstar وTake-Two أي رقم مبيعات بعد: تسجّل هذه الصفحة كل رقم فور صدوره.",
-    "leadLatest": "باعت GTA 6 {units} نسخة، وفق أحدث رقم رسمي ({date}).",
+    "leadLatest": "باعت GTA 6 {units} نسخة، وفق أحدث رقم منشور ({date}).",
     "intro": "لا ندرج إلا الأرقام ذات المصدر العام: Take-Two وRockstar ومتتبعو السوق المعترف بهم. كل رقم مؤرَّخ ومرفق برابطه.",
     "statLatest": "أحدث رقم",
     "statLatestNone": "لم يُنشر أي رقم بعد",
@@ -463,7 +463,7 @@
     "statBenchmark": "RDR2 · أول رقم لـGTA V",
     "statBenchmarkHint": "شُحنت بعد {rdr2Days} و{gta5Days} يومًا من الإطلاق",
     "chartTitle": "GTA 6 مقارنةً بـGTA V وRDR2",
-    "chartBody": "النسخ المشحونة عالميًا حسب عدد الأيام منذ الإطلاق. كل نقطة رقم رسمي من Take-Two؛ يمتد خط GTA 6 مع صدور الأرقام.",
+    "chartBody": "النسخ المبيعة عالميًا حسب عدد الأيام منذ الإطلاق. نقاط GTA V وRDR2 أرقام من Take-Two؛ ونقاط GTA 6 هي الأرقام المنشورة المدرجة أدناه، ويمتد خطها مع كل رقم جديد.",
     "chartAria": "النسخ المبيعة حسب عدد الأيام منذ الإطلاق لـGTA 6 وGTA V وRed Dead Redemption 2",
     "dayTick": "اليوم {day}",
     "tooltip": "{units} نسخة · اليوم {day}",
@@ -487,7 +487,10 @@
     "noModelBody": "تعتمد تقديراتنا أساسًا على مؤشرات Steam. تصدر GTA 6 على أجهزة الكونسول فقط، ولم تبلغ أي لعبة قبلها هذا الحجم، لذا لن يفعل أي نموذج سوى التخمين. نعرض بدلًا من ذلك الأرقام المنشورة ومصادرها.",
     "linkGame": "صفحة لعبة GTA 6",
     "linkMethodology": "كيف نقدّر الألعاب الأخرى",
-    "gamePageLink": "تابع مبيعات GTA 6 رقمًا برقم، مقارنةً بـGTA V وRDR2"
+    "gamePageLink": "تابع مبيعات GTA 6 رقمًا برقم، مقارنةً بـGTA V وRDR2",
+    "homeBannerTitle": "صدرت GTA 6: تابع مبيعاتها مباشرةً.",
+    "homeBannerUnits": "GTA 6: بيعت {units} نسخة وفق أحدث الأرقام.",
+    "homeBannerCta": "كل رقم مع مصدره، مقارنةً بـGTA V وRDR2 ←"
   },
   "about": {
     "title": "عن Game Sales Tracker",
