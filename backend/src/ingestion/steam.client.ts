@@ -123,9 +123,6 @@ const storeEventsGate = createGate('store-events', 2_000);
 const STORE_EVENTS_429_BLOCK_MS = 5 * 60_000;
 let storeEventsBlockedUntil = 0;
 
-/** Group SteamID64 = this base + the group's account id. */
-const STEAM_CLAN_ID_BASE = 103582791429521408n;
-
 /** Result of {@link SteamClient.findClanId}. */
 export type SteamClanIdResult =
   | { kind: 'ok'; clanId: string }
@@ -471,17 +468,18 @@ export class SteamClient {
    * Asks the store's events endpoint first, which names the group of every
    * game that has posted an event, then `memberslistxml` (much stricter
    * limit). `none`: no group found (Valve's own apps, tools, games with no
-   * event). `rate-limited`: a source refused or failed, try again later.
+   * event, also when only the fallback was limited). `rate-limited`: the
+   * store refused or failed, try again later.
    */
   async findClanId(appId: number): Promise<SteamClanIdResult> {
     const store = await this.getStoreEventsGroupId(appId);
     if (store.kind === 'ok') return store;
     const community = await this.getCommunityGroupId(appId);
-    // `none` only when neither source was limited.
-    if (community.kind === 'none' && store.kind === 'rate-limited') {
-      return { kind: 'rate-limited' };
-    }
-    return community;
+    if (community.kind !== 'rate-limited') return community;
+    // The store answered with no event and the fallback is limited (it
+    // usually is from Vercel): report `none` so the game is retried later
+    // instead of leading the lookup queue on every run.
+    return store.kind === 'none' ? store : community;
   }
 
   private async getStoreEventsGroupId(
@@ -493,11 +491,15 @@ export class SteamClient {
     await this.acquireSlot(storeEventsGate);
     if (storeEventsBlockedUntil > Date.now()) return { kind: 'rate-limited' };
     try {
-      const { data, status } = await axios.get<unknown>(
+      const { data, status } = await axios.get<string>(
         'https://store.steampowered.com/events/ajaxgetadjacentpartnerevents/',
         {
           params: { appid: appId, count_before: 0, count_after: 1 },
           timeout: 20000,
+          // Raw text: `clan_steamid` is an 18-digit JSON number, which
+          // JSON.parse rounds (…859 becomes …860).
+          responseType: 'text',
+          transformResponse: (raw: string) => raw,
           validateStatus: () => true,
         },
       );
@@ -509,13 +511,20 @@ export class SteamClient {
         );
         return { kind: 'rate-limited' };
       }
-      if (status !== 200) return { kind: 'rate-limited' };
-      const match = /"clanid":\s*"?(\d+)/.exec(JSON.stringify(data ?? {}));
-      if (!match) return { kind: 'none' };
-      return {
-        kind: 'ok',
-        clanId: (STEAM_CLAN_ID_BASE + BigInt(match[1])).toString(),
+      if (status !== 200 || typeof data !== 'string') {
+        return { kind: 'rate-limited' };
+      }
+      // The one event asked for must be this game's. Its `clan_steamid` is
+      // the group it shows in: the game's own. The announcement's `clanid` is
+      // the group that wrote it, often the publisher's (HITMAN's events come
+      // from IO Interactive's group).
+      const parsed = JSON.parse(data) as {
+        events?: Array<{ appid?: unknown }>;
       };
+      const event = parsed.events?.[0];
+      if (!event || Number(event.appid) !== appId) return { kind: 'none' };
+      const match = /"clan_steamid"\s*:\s*"?(\d{17,20})/.exec(data);
+      return match ? { kind: 'ok', clanId: match[1] } : { kind: 'none' };
     } catch (error) {
       this.logger.warn(`findClanId: store failed for ${appId}: ${error}`);
       return { kind: 'rate-limited' };

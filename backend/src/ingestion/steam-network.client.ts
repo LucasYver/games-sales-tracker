@@ -31,9 +31,6 @@ function loadSteamUser(): typeof SteamUser {
   /* eslint-enable @typescript-eslint/no-require-imports */
 }
 
-/** Group SteamID64 = this base + the group's account id (`clanid` on the store). */
-export const STEAM_CLAN_ID_BASE = 103582791429521408n;
-
 export interface SteamNetworkFollowerResult {
   /** Group SteamID64 → member count (the game's followers). */
   members: Map<string, number>;
