@@ -198,6 +198,31 @@ export class RefreshService {
     }
 
     this.logger.log(`Harvest complete: ${processed} game(s) processed.`);
+    await this.announceGta6Figures();
+  }
+
+  /**
+   * A new GTA 6 figure is what people search for: when one was captured since
+   * the previous harvest run (by the harvest or by hand), send the GTA 6 sales
+   * page to IndexNow. The window matches the milestone-harvest schedule in
+   * vercel.json (every 6 hours); a resend of the same URLs is harmless.
+   */
+  private async announceGta6Figures() {
+    try {
+      const fresh: unknown[] = await this.games.query(
+        `SELECT 1
+           FROM milestone m
+           JOIN game g ON g.id = m."gameId"
+          WHERE g.slug = 'grand-theft-auto-vi'
+            AND m."rejectedAt" IS NULL
+            AND m."capturedAt" >= NOW() - INTERVAL '6 hours'
+          LIMIT 1`,
+      );
+      if (fresh.length === 0) return;
+      await notifyIndexNow(localizedPageUrls('/gta-6-sales'));
+    } catch (error) {
+      this.logger.warn(`GTA 6 IndexNow announcement failed: ${error}`);
+    }
   }
 
   /**

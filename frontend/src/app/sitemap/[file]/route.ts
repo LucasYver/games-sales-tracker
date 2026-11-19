@@ -1,7 +1,8 @@
 import type { MetadataRoute } from 'next';
 import { hasBlog, routing } from '@/i18n/routing';
 import { SITE_URL } from '@/lib/site-url';
-import { getBlogSitemap } from '@/lib/api';
+import { getBlogSitemap, getSalesTimeline } from '@/lib/api';
+import { GTA6_SLUG } from '@/lib/gta6';
 import {
   fetchSitemapGames,
   fetchSitemapHubs,
@@ -63,7 +64,10 @@ function localeAlternates(
 async function pagesSitemap(
   games: SitemapGame[],
 ): Promise<MetadataRoute.Sitemap> {
-  const posts = await getBlogSitemap();
+  const [posts, gta6] = await Promise.all([
+    getBlogSitemap(),
+    getSalesTimeline(GTA6_SLUG),
+  ]);
   const entries: MetadataRoute.Sitemap = [];
 
   // Home pages — one per locale (page 1 only; no filter/search URLs). The
@@ -99,10 +103,13 @@ async function pagesSitemap(
     }
   }
 
-  // The GTA 6 tracker moves daily around launch.
+  // The GTA 6 tracker moves daily around launch; it changes when a figure is
+  // added.
+  const gta6Modified = parseDate(gta6?.updatedAt);
   for (const locale of routing.locales) {
     entries.push({
       url: `${SITE_URL}/${locale}/gta-6-sales`,
+      lastModified: gta6Modified,
       changeFrequency: 'daily',
       priority: 0.9,
       alternates: localeAlternates('/gta-6-sales'),

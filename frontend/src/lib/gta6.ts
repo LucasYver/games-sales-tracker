@@ -16,6 +16,8 @@ export const GTA6_LAUNCH = '2026-11-19';
  * Take-Two's first quarterly figures after launch (early February).
  */
 export const GTA6_BANNER_UNTIL = '2027-02-15';
+/** First publication of /gta-6-sales: its JSON-LD datePublished. */
+export const GTA6_PAGE_PUBLISHED = '2026-11-11';
 
 export interface BenchmarkFigure {
   /** Units sold-in (shipped to stores) worldwide. */
