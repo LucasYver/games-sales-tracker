@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import SteamUser from 'steam-user';
+import type SteamUser from 'steam-user';
 
 /** `EMsg.ClientGetClanActivityCounts`; Steam answers with one `ClientClanState` per group. */
 const EMSG_GET_CLAN_ACTIVITY_COUNTS = 5554;
@@ -15,6 +15,21 @@ const LOGON_TIMEOUT_MS = 30_000;
 const BATCH_GAP_MS = 500;
 // Warn in the cron log this long before the bot's refresh token expires.
 const TOKEN_WARN_MS = 30 * 24 * 3600 * 1000;
+
+/**
+ * Load steam-user only when the follower cron runs, so a problem in it cannot
+ * take the whole API down at boot (it did once: see below).
+ *
+ * steam-user loads `lzma` through a computed `require` (`requireWithFallback`)
+ * that Vercel's bundler cannot see, so the deploy shipped without it and every
+ * route crashed. The literal `require('lzma')` here gets it bundled.
+ */
+function loadSteamUser(): typeof SteamUser {
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  require('lzma');
+  return require('steam-user') as typeof SteamUser;
+  /* eslint-enable @typescript-eslint/no-require-imports */
+}
 
 /** Group SteamID64 = this base + the group's account id (`clanid` on the store). */
 export const STEAM_CLAN_ID_BASE = 103582791429521408n;
@@ -97,7 +112,8 @@ export class SteamNetworkClient {
       );
     }
 
-    const client = new SteamUser({ autoRelogin: false });
+    const SteamUserClass = loadSteamUser();
+    const client = new SteamUserClass({ autoRelogin: false });
     // Settled per batch: resolves once every group of the batch answered.
     let waiting: { ids: Set<string>; done: () => void } | null = null;
     let lastAnswerAt = 0;
