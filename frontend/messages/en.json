@@ -786,8 +786,7 @@
       "share": "{kind, select, studio {Studio} publisher {Publisher} other {Franchise}} share",
       "recent": "Last 30 days",
       "sales": "Est. sales",
-      "players": "Players, this month",
-      "lastPeak": "Peak, last month"
+      "players": "Players, this month"
     },
     "noFigure": "No figure",
     "before2017": "Before 2017",

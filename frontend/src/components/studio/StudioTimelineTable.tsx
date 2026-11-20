@@ -16,7 +16,7 @@ import {
   type TimelineGame,
 } from '@/lib/studio-timeline';
 
-type SortKey = 'game' | 'release' | Store | 'total' | 'share' | 'recent' | 'players' | 'lastPeak' | 'sales';
+type SortKey = 'game' | 'release' | Store | 'total' | 'share' | 'recent' | 'players' | 'sales';
 type SortDir = 'asc' | 'desc';
 type Sort = { key: SortKey; dir: SortDir };
 
@@ -36,8 +36,6 @@ function sortValue(g: TimelineGame, key: SortKey): number | string | null {
       return recentTotal(g) || null;
     case 'players':
       return g.playersPeak || null;
-    case 'lastPeak':
-      return g.lastMonthPeak || null;
     case 'sales':
       return g.units || null;
     default:
@@ -127,8 +125,9 @@ export function StudioTimelineTable({
   const pct = (v: number) => format.number(v, { style: 'percent', maximumFractionDigits: 1 });
   const maxTotal = Math.max(1, ...games.map((g) => g.total));
   const num = 'px-3 py-2 text-right font-mono text-[0.78rem] tabular-nums whitespace-nowrap';
-  const head =
-    'px-3 py-2 font-mono text-[0.66rem] font-normal tracking-wider whitespace-nowrap text-muted-foreground uppercase';
+  // Header cells stick to the top of the table's scroll box.
+  const headBase =
+    'sticky top-0 bg-surface-hi px-3 py-2 font-mono text-[0.66rem] font-normal tracking-wider whitespace-nowrap text-muted-foreground uppercase';
   const [sort, setSort] = useState<Sort>(DEFAULT_SORT);
   const rows = useMemo(() => sortGames(games, sort), [games, sort]);
   const onSort = (key: SortKey) => {
@@ -137,18 +136,25 @@ export function StudioTimelineTable({
     setSort({ key, dir });
     trackEvent('studio_timeline_option', { option: 'sort', value: `${key}_${dir}` });
   };
+  const head = `${headBase} z-20`;
   const th = { sort, onSort, className: head };
+  // The game column stays visible when the table scrolls sideways.
+  const pinned = 'sticky left-0 shadow-[2px_0_4px_-2px_rgb(0_0_0/0.35)]';
 
   return (
     <section aria-labelledby="studio-table-title" className="border-b border-border px-4 py-5">
       <h2 id="studio-table-title" className="mb-3 font-mono text-[0.8rem] font-bold tracking-wider uppercase">
         {t('tableTitle')}
       </h2>
-      <div className="overflow-x-auto rounded-[3px] border border-border">
-        <table className="w-full min-w-[1100px] border-collapse text-sm">
+      {/* Its own scroll box, so the header row and the game column can stay
+          in view in both directions. */}
+      <div className="max-h-[75vh] overflow-auto overscroll-x-contain rounded-[3px] border border-border">
+        <table className="w-full min-w-[1000px] border-collapse text-sm">
           <thead className="bg-surface-hi">
             <tr>
-              <SortTh {...th} sortKey="game" align="left">{t('col.game')}</SortTh>
+              <SortTh {...th} sortKey="game" align="left" className={`${headBase} ${pinned} z-30`}>
+                {t('col.game')}
+              </SortTh>
               <SortTh {...th} sortKey="release" align="left">{t('col.release')}</SortTh>
               {STORES.map((s) => (
                 <SortTh key={s} {...th} sortKey={s} align="right">{t(`store.${s}`)}</SortTh>
@@ -157,7 +163,6 @@ export function StudioTimelineTable({
               <SortTh {...th} sortKey="share" align="left">{t('col.share', { kind })}</SortTh>
               <SortTh {...th} sortKey="recent" align="right">{t('col.recent')}</SortTh>
               <SortTh {...th} sortKey="players" align="right">{t('col.players')}</SortTh>
-              <SortTh {...th} sortKey="lastPeak" align="right">{t('col.lastPeak')}</SortTh>
               <SortTh {...th} sortKey="sales" align="right">{t('col.sales')}</SortTh>
             </tr>
           </thead>
@@ -168,9 +173,12 @@ export function StudioTimelineTable({
               return (
                 <tr
                   key={g.slug}
-                  className={`border-t border-border-soft even:bg-surface-alt ${none ? 'text-muted-foreground' : ''}`}
+                  className={`group border-t border-border-soft even:bg-surface-alt ${none ? 'text-muted-foreground' : ''}`}
                 >
-                  <th scope="row" className="max-w-64 px-3 py-2 text-left font-normal">
+                  <th
+                    scope="row"
+                    className={`${pinned} z-10 max-w-40 bg-background px-3 py-2 text-left font-normal group-even:bg-surface-alt sm:max-w-64`}
+                  >
                     <span className="flex min-w-0 items-center gap-2">
                       <span
                         aria-hidden
@@ -216,9 +224,6 @@ export function StudioTimelineTable({
                   <td className={num}>{recent > 0 ? `+${n(recent)}` : '—'}</td>
                   <td className={`${num} ${g.playersPeak ? '' : 'text-text-faint'}`}>
                     {g.playersPeak ? n(g.playersPeak) : '—'}
-                  </td>
-                  <td className={`${num} ${g.lastMonthPeak ? '' : 'text-text-faint'}`}>
-                    {g.lastMonthPeak ? n(g.lastMonthPeak) : '—'}
                   </td>
                   <td
                     className={`${num} ${g.units ? 'font-bold text-primary' : 'text-[0.72rem] text-muted-foreground'}`}

@@ -786,8 +786,7 @@
       "share": "Part {kind, select, studio {du studio} publisher {de l’éditeur} other {de la franchise}}",
       "recent": "30 derniers jours",
       "sales": "Ventes est.",
-      "players": "Joueurs, ce mois",
-      "lastPeak": "Pic, mois dernier"
+      "players": "Joueurs, ce mois"
     },
     "noFigure": "Aucun chiffre",
     "before2017": "Avant 2017",

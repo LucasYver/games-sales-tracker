@@ -121,8 +121,6 @@ export interface TimelineGame {
   firstBucket: Record<Metric, number | null>;
   /** Highest Steam concurrent players this month, 0 without data. */
   playersPeak: number;
-  /** Highest Steam concurrent players last month (the last full month), 0 without data. */
-  lastMonthPeak: number;
 }
 
 export function buildTimelineGames(
@@ -130,7 +128,6 @@ export function buildTimelineGames(
   timeline: HubTimeline,
 ): TimelineGame[] {
   const bySlug = new Map(timeline.games.map((g) => [g.slug, g]));
-  const lastMonth = monthIndex(new Date()) - 1;
   return games
     .map((game) => {
       const t = bySlug.get(game.slug);
@@ -171,7 +168,6 @@ export function buildTimelineGames(
         series,
         firstBucket,
         playersPeak: t?.ccu?.latest ?? 0,
-        lastMonthPeak: t?.ccu?.points.find(([bucket]) => bucket === lastMonth)?.[1] ?? 0,
       };
     })
     .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));

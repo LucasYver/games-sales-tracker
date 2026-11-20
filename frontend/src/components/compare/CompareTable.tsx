@@ -311,8 +311,11 @@ export function CompareTable({
       </div>
       <p className="text-[0.82rem] text-muted-foreground">{note}</p>
 
-      <div className="overflow-hidden rounded-[3px] border border-border bg-card">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+      {/* overflow-clip, not overflow-hidden: a hidden overflow would stop the
+          header row from sticking to the viewport. */}
+      <div className="overflow-clip rounded-[3px] border border-border bg-card">
+        {/* The game names stay on screen while the reader scrolls the rows. */}
+        <div className="sticky top-0 z-10 flex flex-wrap items-center gap-x-4 gap-y-2 bg-card px-4 py-3 shadow-[0_2px_6px_-4px_rgb(0_0_0/0.35)]">
           <div className="min-w-0 flex-[1_1_200px] font-mono text-[0.68rem] font-semibold tracking-widest text-muted-foreground uppercase">
             {t('colMetric')}
           </div>
