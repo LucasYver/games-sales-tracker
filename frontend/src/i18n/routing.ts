@@ -1,7 +1,7 @@
 import { defineRouting } from 'next-intl/routing';
 
 export const routing = defineRouting({
-  locales: ['en', 'fr', 'es', 'ru', 'ar'],
+  locales: ['en', 'fr', 'es', 'ru', 'ar', 'zh-CN'],
   defaultLocale: 'en',
   // Pages declare hreflang in their metadata. The middleware's automatic Link
   // header would also advertise translated blog URLs that do not exist.

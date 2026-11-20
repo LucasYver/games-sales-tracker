@@ -194,10 +194,10 @@ estimate rebuild, and matcher inspection.
 
 ## Frontend
 
-`frontend/src/app/`. Locales `en`, `fr`, `es`, `ru` and `ar` via `next-intl`. Admin is
+`frontend/src/app/`. Locales `en`, `fr`, `es`, `ru`, `ar` and `zh-CN` (Simplified Chinese) via `next-intl`. Admin is
 outside the locale prefix. The blog exists in `en` and `fr` only (`hasBlog` in
-`i18n/routing.ts`): one paid AI write per language, so `/es/blog`, `/ru/blog`
-and `/ar/blog` are 404s, left out of the header and the sitemap. The header's second row links the studio, publisher and franchise indexes and the blog, current section marked (`components/chart-room/SiteNav.tsx`).
+`i18n/routing.ts`): one paid AI write per language, so `/es/blog`, `/ru/blog`,
+`/ar/blog` and `/zh-CN/blog` are 404s, left out of the header and the sitemap. The header's second row links the studio, publisher and franchise indexes and the blog, current section marked (`components/chart-room/SiteNav.tsx`).
 
 Arabic is right to left: the layout sets `dir="rtl"` (`isRtl` in
 `i18n/routing.ts`) and wraps the page in Radix's direction provider. Public
@@ -208,6 +208,16 @@ left to right. Share images (Satori) cannot join Arabic letters, so `/ar` pages
 get the English card (`ogLocale` in `lib/og.tsx`). The default price country on
 `/ar` is Saudi Arabia (`defaultPriceCountry` in `lib/api.ts`), since `ar` as a
 country code is Argentina.
+
+Chinese (`zh-CN`) uses the system CJK fonts (PingFang SC, Microsoft YaHei,
+Noto Sans CJK…) placed after DM Sans and Chivo Mono in both stacks
+(`fontOverrides` in `app/[locale]/layout.tsx`): no web font, a CJK face weighs
+several MB. Share cards bundle no Chinese font either, so `/zh-CN` pages get
+the English card. The default price country on `/zh-CN` is China (`cn`, Steam
+prices in CNY); with the PlayStation or Xbox store picked it is Hong Kong
+(`hk`), since mainland China's console stores carry few games and are not
+tracked (`defaultPriceCountry` in `lib/api.ts`).
+Browsers asking for any Chinese (`zh`, `zh-TW`…) are sent to `/zh-CN`.
 
 | Route | Role |
 | ----- | ---- |
@@ -238,7 +248,7 @@ not shown on the public page.
 Default API base: `NEXT_PUBLIC_API_URL` or `http://localhost:3001/api`
 (`frontend/src/lib/api.ts`). Game pages (both tabs) are cached pages
 rebuilt at most every 15 minutes; how they stay cacheable is in the skill
-`write-performant-code`. The sitemap is split (`app/sitemap/[file]/route.ts`, served under `/sitemap/`: `0.xml` = home, fixed pages, blog and posts; `1.xml`… = games; `hubs-1.xml`… = studio, publisher, franchise and year pages) behind an index at `/sitemap.xml` (`app/sitemap.xml/route.ts`); it reads `GET /games/sitemap`, `GET /games/hubs` and `GET /blog/sitemap`. Each file holds at most 2,500 URLs (`lib/sitemap.ts`), about 1.9 MB with the hreflang alternates of 5 locales, to stay well under the 4.5 MB a Vercel function may return on ISR; pages per file are 2,500 divided by the number of locales, so a new locale adds files rather than size. New game pages and the studio, publisher and franchise hubs they belong to (nightly, after the `game-discovery` cron), newly published posts, and the GTA 6 sales page when a new GTA 6 figure was captured in the last 6 hours (checked after each `milestone-harvest` run), go to IndexNow for Bing and other participating engines, not Google (`backend/src/common/indexnow.ts`, key file in `frontend/public/`). Game pages link to Instant Gaming with our affiliate code when the nightly discovery cron matched a product (skill `manage-catalog-discovery`); clicks are the Vercel Analytics custom event `instant_gaming_click`. Every custom event the public site sends (search, filters, the studio, publisher and franchise index filter, pagination, outbound links, promoted internal pages such as the time-limited GTA 6 home banner (`promo_click`, `components/PromoLink.tsx`), chart range and platform, price country and store, game comparison, studio, publisher and franchise timeline, language, theme) is listed and typed in `frontend/src/lib/analytics.ts`; send them through `trackEvent()`, never `track()` directly, and keep each one to 2 properties (Vercel Pro limit). Links to other sites use `components/OutboundLink.tsx` (`outbound_click`). Fonts are DM Sans and Chivo Mono (chosen for its plain zero: Plex Mono's is dotted), with IBM Plex Sans and IBM Plex Mono on `/ru` because neither has Cyrillic, and IBM Plex Sans Arabic on `/ar` (also the fallback of the mono stack there).
+`write-performant-code`. The sitemap is split (`app/sitemap/[file]/route.ts`, served under `/sitemap/`: `0.xml` = home, fixed pages, blog and posts; `1.xml`… = games; `hubs-1.xml`… = studio, publisher, franchise and year pages) behind an index at `/sitemap.xml` (`app/sitemap.xml/route.ts`); it reads `GET /games/sitemap`, `GET /games/hubs` and `GET /blog/sitemap`. Each file holds at most 2,500 URLs (`lib/sitemap.ts`), about 1.9 MB with the hreflang alternates of 5 locales (6 since `zh-CN`, about 2.3 MB), to stay well under the 4.5 MB a Vercel function may return on ISR; pages per file are 2,500 divided by the number of locales, so a new locale adds files rather than size. New game pages and the studio, publisher and franchise hubs they belong to (nightly, after the `game-discovery` cron), newly published posts, and the GTA 6 sales page when a new GTA 6 figure was captured in the last 6 hours (checked after each `milestone-harvest` run), go to IndexNow for Bing and other participating engines, not Google (`backend/src/common/indexnow.ts`, key file in `frontend/public/`). Game pages link to Instant Gaming with our affiliate code when the nightly discovery cron matched a product (skill `manage-catalog-discovery`); clicks are the Vercel Analytics custom event `instant_gaming_click`. Every custom event the public site sends (search, filters, the studio, publisher and franchise index filter, pagination, outbound links, promoted internal pages such as the time-limited GTA 6 home banner (`promo_click`, `components/PromoLink.tsx`), chart range and platform, price country and store, game comparison, studio, publisher and franchise timeline, language, theme) is listed and typed in `frontend/src/lib/analytics.ts`; send them through `trackEvent()`, never `track()` directly, and keep each one to 2 properties (Vercel Pro limit). Links to other sites use `components/OutboundLink.tsx` (`outbound_click`). Fonts are DM Sans and Chivo Mono (chosen for its plain zero: Plex Mono's is dotted), with IBM Plex Sans and IBM Plex Mono on `/ru` because neither has Cyrillic, and IBM Plex Sans Arabic on `/ar` (also the fallback of the mono stack there); `/zh-CN` adds the system Chinese fonts.
 
 Ads are off unless `NEXT_PUBLIC_ADSENSE_CLIENT` is set (`frontend/src/lib/ads.ts`): it loads the AdSense script on public pages and serves `/ads.txt`. `NEXT_PUBLIC_ADSENSE_GAME_SLOT` adds the unit at the bottom of game pages. `NEXT_PUBLIC_CONTACT_EMAIL` overrides the contact address shown on the about, contact and privacy pages (default in `frontend/src/lib/contact.ts`). All three are read at build time, so changing one needs a redeploy.
 

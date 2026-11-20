@@ -68,6 +68,38 @@ function monoStack(extra: string) {
   return [face, extra, ...fallbacks].join(', ');
 }
 
+// Chinese: the system fonts every Chinese site relies on, no web font (a CJK
+// face weighs several MB). DM Sans and Chivo Mono still draw Latin and digits.
+const CJK_FONTS =
+  '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC"';
+
+/** DM Sans, then `extra`, then DM Sans's metric fallback. */
+function sansStack(extra: string) {
+  const [face, ...fallbacks] = sans.style.fontFamily.split(', ');
+  return [face, extra, ...fallbacks].join(', ');
+}
+
+/** Per-locale font variables that override the ones the classes set. */
+function fontOverrides(locale: string): React.CSSProperties | undefined {
+  if (locale === 'ru') {
+    return {
+      '--font-mono': monoStack(monoCyrillic.style.fontFamily),
+    } as React.CSSProperties;
+  }
+  if (locale === 'ar') {
+    return {
+      '--font-mono': monoStack(sansArabic.style.fontFamily),
+    } as React.CSSProperties;
+  }
+  if (locale === 'zh-CN') {
+    return {
+      '--font-sans': sansStack(CJK_FONTS),
+      '--font-mono': monoStack(CJK_FONTS),
+    } as React.CSSProperties;
+  }
+  return undefined;
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -132,20 +164,11 @@ export default async function LocaleLayout({
       dir={dir}
       className={`${fonts} chart-scope dark h-full antialiased`}
       suppressHydrationWarning
-      // Cyrillic or Arabic words in mono text (figures, labels) fall back to
-      // Plex Mono Cyrillic or the Arabic sans, placed before next/font's
-      // metric fallback, which covers every code point and would win.
-      style={
-        locale === 'ru' || locale === 'ar'
-          ? ({
-              '--font-mono': monoStack(
-                locale === 'ru'
-                  ? monoCyrillic.style.fontFamily
-                  : sansArabic.style.fontFamily,
-              ),
-            } as React.CSSProperties)
-          : undefined
-      }
+      // Cyrillic, Arabic or Chinese words in mono text (figures, labels) fall
+      // back to Plex Mono Cyrillic, the Arabic sans or the Chinese system
+      // fonts, placed before next/font's metric fallback, which covers every
+      // code point it has and would otherwise win.
+      style={fontOverrides(locale)}
     >
       <body className="flex min-h-full flex-col">
         <ThemeScript />

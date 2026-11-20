@@ -78,7 +78,7 @@ export async function gameMetadata({
   // Same arguments as the page, so both share one fetch instead of calling
   // the API twice per render.
   const [game, t, tPlatform, format] = await Promise.all([
-    getGame(slug, cc?.trim() || defaultPriceCountry(locale), store),
+    getGame(slug, cc?.trim() || defaultPriceCountry(locale, store), store),
     getTranslations({ locale, namespace: 'gamePageMeta' }),
     getTranslations({ locale, namespace: 'platform' }),
     getFormatter({ locale }),
@@ -1857,7 +1857,7 @@ export async function renderGamePage({
   cc,
   store,
 }: GameView) {
-  const country = cc?.trim() || defaultPriceCountry(locale);
+  const country = cc?.trim() || defaultPriceCountry(locale, store);
   const [game, related] = await Promise.all([
     getGame(slug, country, store),
     getRelatedGames(slug),

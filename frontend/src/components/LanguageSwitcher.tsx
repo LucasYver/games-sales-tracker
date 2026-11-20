@@ -20,6 +20,7 @@ const LANGUAGE_NAMES: Record<(typeof routing.locales)[number], string> = {
   es: 'Español',
   ru: 'Русский',
   ar: 'العربية',
+  'zh-CN': '简体中文',
 };
 
 export function LanguageSwitcher({

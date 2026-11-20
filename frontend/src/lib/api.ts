@@ -305,12 +305,21 @@ export function headlineUnits(game: GameDetail): number | null {
 }
 
 /** Price country a page uses when the URL names none (also the fetch cache key). */
-export function defaultPriceCountry(locale: string): string {
+export function defaultPriceCountry(locale: string, store?: string): string {
+  // Mainland China's PlayStation and Xbox stores carry a few approved games
+  // and are not tracked; Chinese players buy on the Hong Kong stores.
+  if (locale === 'zh-CN' && (store === 'playstation' || store === 'xbox')) {
+    return 'hk';
+  }
   return LOCALE_PRICE_COUNTRY[locale] ?? locale;
 }
 
 // Site locales whose store country is not the locale code ('ar' is Argentina).
-const LOCALE_PRICE_COUNTRY: Record<string, string> = { en: 'us', ar: 'sa' };
+const LOCALE_PRICE_COUNTRY: Record<string, string> = {
+  en: 'us',
+  ar: 'sa',
+  'zh-CN': 'cn',
+};
 
 /** Same rounding as the headline, for a range bound or a compact figure. */
 export function roundUnits(units: number | null): number | null {

@@ -70,7 +70,7 @@ Track a deliberate visitor action when its count would change a decision:
    before inventing a near-duplicate.
 2. At most **2 properties** (Vercel Pro limit), string or number, each value
    cut at 255 characters by the wrapper. Use untranslated ids (slug, enum,
-   key), never translated labels, so the five locales group together.
+   key), never translated labels, so the six locales group together.
 3. Call `trackEvent('name', { ... })` in the handler that performs the
    action, in a client component. Never import `track` from
    `@vercel/analytics` directly.
