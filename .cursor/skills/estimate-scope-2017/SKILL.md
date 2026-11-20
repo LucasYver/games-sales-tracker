@@ -102,11 +102,13 @@ rebuild (the admin Rebuild button publishes it at once).
 The hand exclusions of the frozen V2 (`exclusions` in `v2-frozen.json`, from
 `ml2/exclusions.csv`) still win over the switch: an excluded game gets a V2 of 0
 and stays "Not estimated". Grand Theft Auto V was removed from them on
-2026-11-20 at the owner's request so the switch could publish it. Its entry is
-console-only (the PC is the separate "Grand Theft Auto V Legacy" entry), so it
-is anchored on its last published total with no Steam signal. The owner
-accepted a known overshoot: about 270 M on 230 M (June 2026), because its first
-PS ratings reading (2026-07-03) arrived after that figure and raised the model.
+2026-11-20 at the owner's request so the switch could publish it. The same day
+its Steam app 271590 (link, signals, 2018 leak figure) was moved onto it from
+the "Grand Theft Auto V Legacy" entry, soft-deleted since 2026-07-01, and the
+owner's SteamDB CSVs were imported. Anchored on 230 M (June 2026) and prolonged
+by Steam reviews, it reads about 231 M. Without Steam reviews the anchor
+followed the model's drift instead and read about 270 M. The Enhanced app
+(3240220) is not linked: a free upgrade, and one Steam app per game.
 
 ## What stays
 
