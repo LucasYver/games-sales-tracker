@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import { useFormatter, useTranslations } from 'next-intl';
+import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import {
   isUpcoming,
   listingUnits,
@@ -7,6 +7,7 @@ import {
   type SortOption,
 } from '@/lib/api';
 import { Link } from '@/i18n/navigation';
+import { gameName } from '@/lib/game-name';
 
 function year(iso: string | null): string | null {
   if (!iso) return null;
@@ -75,6 +76,7 @@ export function GamesTable({
   const tCommon = useTranslations('common');
   const tPlatform = useTranslations('platform');
   const format = useFormatter();
+  const locale = useLocale();
 
   const compact = (n: number) =>
     format.number(n, { notation: 'compact', maximumFractionDigits: 1 });
@@ -174,7 +176,7 @@ export function GamesTable({
                   href={`/game/${game.slug}`}
                   className="font-semibold text-foreground after:absolute after:inset-0 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 >
-                  {game.name}
+                  {gameName(game, locale)}
                 </Link>
                 <div className="mt-0.5 text-xs text-muted-foreground">
                   {meta}

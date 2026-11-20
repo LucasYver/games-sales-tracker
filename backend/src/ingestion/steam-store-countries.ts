@@ -146,3 +146,21 @@ export function normalizeSteamPriceCountry(
 export function currencyForCountry(country: SteamStoreCountry): string {
   return STEAM_COUNTRY_CURRENCY[country];
 }
+
+/**
+ * The language each of these countries is asked in by the weekly price cron,
+ * and the site locale that name is shown on. GetItems returns the store name
+ * in the request's language and the price by country only, so this reads the
+ * localized names (黑神话：悟空) in calls the cron makes anyway. `us` gives the
+ * English name the others are compared with.
+ */
+export const STEAM_NAME_LANGUAGES: Partial<
+  Record<SteamStoreCountry, { language: string; locale: string }>
+> = {
+  us: { language: 'english', locale: 'en' },
+  cn: { language: 'schinese', locale: 'zh-CN' },
+  fr: { language: 'french', locale: 'fr' },
+  es: { language: 'spanish', locale: 'es' },
+  ru: { language: 'russian', locale: 'ru' },
+  sa: { language: 'arabic', locale: 'ar' },
+};

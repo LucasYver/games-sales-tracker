@@ -116,6 +116,13 @@ Other clients in `ingestion/`:
   `provider_cooldown` so harvest does not re-probe a dead balance.
 - Steam review languages (`Game.reviewLanguages`), counted by the monthly
   reviewer-playtime cron on the reviews it already reads. Display only.
+- Localized game names (`Game.localizedNames`, jsonb, e.g.
+  `{"zh-CN": "黑神话：悟空"}`): the Steam store name per site locale, kept only
+  where it differs from the English name. Read by the weekly Steam price cron,
+  which asks each country of `STEAM_NAME_LANGUAGES`
+  (`steam-store-countries.ts`: us/english, cn/schinese, fr, es, ru, sa/arabic)
+  in its own language in the `GetItems` call it already makes: no extra Steam
+  call. Free games are not priced, so they get none. Display and search only.
 - IGDB facts, read by the nightly IGDB refresh (`IgdbRefreshService`) and
   shown on the game pages only, never fed to the estimate: release type and
   parent game (`gameType`, `igdbParentGameId`), game modes, player-reported
@@ -218,6 +225,12 @@ prices in CNY); with the PlayStation or Xbox store picked it is Hong Kong
 (`hk`), since mainland China's console stores carry few games and are not
 tracked (`defaultPriceCountry` in `lib/api.ts`).
 Browsers asking for any Chinese (`zh`, `zh-TW`…) are sent to `/zh-CN`.
+
+On every locale, a game's name is its localized Steam name when it has one
+(`gameName` in `lib/game-name.ts`): the game page `<title>` and `<h1>`, the
+listing table and the search results. The meta description puts the English
+name after it, 黑神话：悟空（Black Myth: Wukong）, so English searches still
+match. The site search matches the localized names on every locale.
 
 | Route | Role |
 | ----- | ---- |

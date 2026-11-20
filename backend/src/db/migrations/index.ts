@@ -87,6 +87,7 @@ import { RescaleSteamReviewHistoryToLive1789050000000 } from './1789050000000-Re
 import { AddGameSourceSteamClan1789060000000 } from './1789060000000-AddGameSourceSteamClan';
 import { ResetSteamClanLookups1789070000000 } from './1789070000000-ResetSteamClanLookups';
 import { AddGameEstimateBeforeFloor1789080000000 } from './1789080000000-AddGameEstimateBeforeFloor';
+import { AddGameLocalizedNames1789090000000 } from './1789090000000-AddGameLocalizedNames';
 
 /**
  * Explicit list of TypeORM migrations. We import each migration class here
@@ -185,4 +186,5 @@ export const migrations: MixedList<Function | string> = [
   AddGameSourceSteamClan1789060000000,
   ResetSteamClanLookups1789070000000,
   AddGameEstimateBeforeFloor1789080000000,
+  AddGameLocalizedNames1789090000000,
 ];

@@ -121,6 +121,8 @@ const totalReviewsSql = (gameId: string) =>
 export interface PopularGame {
   id: string;
   name: string;
+  /** Store name per site locale where it differs (`Game.localizedNames`). */
+  localizedNames: Record<string, string> | null;
   slug: string;
   releaseDate: Date | null;
   coverUrl: string | null;
@@ -376,13 +378,25 @@ export class GamesService {
     // Trigram search via word_similarity: compares the query against the
     // best-matching fragment of the title, so short typo-prone queries
     // still rank their full game. ILIKE fallback catches short substrings.
+    // The localized store names (黑神话：悟空) match too, on every locale.
+    const localizedScore = `COALESCE((SELECT max(word_similarity(:q, v.value))
+      FROM jsonb_each_text(g."localizedNames") v), 0)`;
     const [acronymIds, byName] = await Promise.all([
       this.searchAcronymIds(trimmed, limit),
       this.games
         .createQueryBuilder('g')
         .where('word_similarity(:q, g.name) > 0.3', { q: trimmed })
         .orWhere('g.name ILIKE :pattern', { pattern: `%${trimmed}%` })
-        .orderBy('word_similarity(:q, g.name)', 'DESC')
+        .orWhere(
+          `g."localizedNames" IS NOT NULL AND EXISTS (
+            SELECT 1 FROM jsonb_each_text(g."localizedNames") v
+            WHERE v.value ILIKE :pattern OR word_similarity(:q, v.value) > 0.3
+          )`,
+        )
+        .orderBy(
+          `GREATEST(word_similarity(:q, g.name), ${localizedScore})`,
+          'DESC',
+        )
         .addOrderBy('g.releaseDate', 'DESC', 'NULLS LAST')
         .limit(limit)
         .getMany(),
@@ -480,6 +494,7 @@ export class GamesService {
       return {
         id: game.id,
         name: game.name,
+        localizedNames: game.localizedNames ?? null,
         slug: game.slug,
         releaseDate: game.releaseDate,
         coverUrl: game.coverUrl,
@@ -542,6 +557,7 @@ export class GamesService {
       .createQueryBuilder('g')
       .select('g.id', 'id')
       .addSelect('g.name', 'name')
+      .addSelect('g.localizedNames', 'localizedNames')
       .addSelect('g.slug', 'slug')
       .addSelect('g.releaseDate', 'releaseDate')
       .addSelect('g.coverUrl', 'coverUrl')
@@ -746,6 +762,7 @@ export class GamesService {
       qb.offset(offset).limit(limit).getRawMany<{
         id: string;
         name: string;
+        localizedNames: Record<string, string> | null;
         slug: string;
         releaseDate: Date | null;
         coverUrl: string | null;
@@ -765,6 +782,7 @@ export class GamesService {
       return {
         id: r.id,
         name: r.name,
+        localizedNames: r.localizedNames ?? null,
         slug: r.slug,
         releaseDate: r.releaseDate,
         coverUrl: r.coverUrl,
@@ -1297,6 +1315,7 @@ export class GamesService {
         return {
           id: game.id,
           name: game.name,
+          localizedNames: game.localizedNames ?? null,
           slug: game.slug,
           releaseDate: game.releaseDate,
           coverUrl: game.coverUrl,
@@ -1587,6 +1606,7 @@ export class GamesService {
       id: game.id,
       igdbId: game.igdbId,
       name: game.name,
+      localizedNames: game.localizedNames ?? null,
       slug: game.slug,
       releaseDate: game.releaseDate,
       coverUrl: game.coverUrl,

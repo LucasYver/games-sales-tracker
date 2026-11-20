@@ -22,6 +22,7 @@ import {
   type RelatedGames,
 } from '@/lib/api';
 import { localeLanguages } from '@/i18n/routing';
+import { gameName, gameNameWithOriginal } from '@/lib/game-name';
 import { hubYearOf } from '@/lib/hub-years';
 import { ADSENSE_CLIENT, ADSENSE_GAME_SLOT } from '@/lib/ads';
 import { SITE_URL } from '@/lib/site-url';
@@ -102,40 +103,44 @@ export async function gameMetadata({
       })
     : null;
 
+  // The store name in the page's language where Steam has one (黑神话：悟空);
+  // the description adds the English name so English searches still match.
+  const localName = gameName(game, locale);
+  const describedName = gameNameWithOriginal(game, locale);
   let title: string;
   let description: string;
   if (game.isFree) {
-    title = t('titleFree', { name: game.name });
-    description = t('descriptionFree', { name: game.name });
+    title = t('titleFree', { name: localName });
+    description = t('descriptionFree', { name: describedName });
   } else if (unitsLabel) {
-    title = t('titleUnits', { name: game.name, units: unitsLabel });
+    title = t('titleUnits', { name: localName, units: unitsLabel });
     description = asOfLabel
       ? t('descriptionUnits', {
-          name: game.name,
+          name: describedName,
           units: unitsLabel,
           platforms,
           date: asOfLabel,
         })
       : t('descriptionUnitsNoDate', {
-          name: game.name,
+          name: describedName,
           units: unitsLabel,
           platforms,
         });
   } else {
     title = year
-      ? t('title', { name: game.name, year })
-      : t('titleNoYear', { name: game.name });
+      ? t('title', { name: localName, year })
+      : t('titleNoYear', { name: localName });
     description =
       isUpcoming(game.releaseDate) && game.releaseDate
         ? t('descriptionUpcoming', {
-            name: game.name,
+            name: describedName,
             date: format.dateTime(new Date(game.releaseDate), {
               year: 'numeric',
               month: 'long',
               day: 'numeric',
             }),
           })
-        : t('description', { name: game.name });
+        : t('description', { name: describedName });
   }
   const url = `/${locale}/game/${game.slug}`;
 
@@ -249,7 +254,7 @@ function GameHeader({
         <div className="relative size-14 shrink-0 overflow-hidden rounded-[3px] bg-muted sm:size-16">
           <Image
             src={game.coverUrl}
-            alt={game.name}
+            alt={gameName(game, locale)}
             fill
             sizes="64px"
             priority
@@ -260,8 +265,8 @@ function GameHeader({
       <div className="min-w-0 flex-1">
         <h1 className="text-2xl leading-tight font-bold tracking-tight">
           {game.isFree
-            ? t('headingFree', { name: game.name })
-            : t('heading', { name: game.name })}
+            ? t('headingFree', { name: gameName(game, locale) })
+            : t('heading', { name: gameName(game, locale) })}
           {unitsLabel && (
             <span className="mt-1 block font-mono text-base font-semibold text-muted-foreground">
               {t('headingUnits', { units: unitsLabel })}
@@ -1647,6 +1652,11 @@ function GamePageContent({
       {
         '@type': 'VideoGame',
         name: game.name,
+        // The Steam name in the page's language (黑神话：悟空), if it differs.
+        alternateName:
+          gameName(game, locale) !== game.name
+            ? gameName(game, locale)
+            : undefined,
         url: gameUrl,
         image: game.coverUrl ?? undefined,
         description: game.summary ?? undefined,
@@ -1681,7 +1691,7 @@ function GamePageContent({
           {
             '@type': 'ListItem',
             position: parentCrumb ? 3 : 2,
-            name: game.name,
+            name: gameName(game, locale),
             item: gameUrl,
           },
         ],
@@ -1733,7 +1743,7 @@ function GamePageContent({
               <span className="mx-2">/</span>
             </>
           )}
-          {game.name}
+          {gameName(game, locale)}
         </nav>
 
         <GameHeader

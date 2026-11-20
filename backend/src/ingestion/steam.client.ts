@@ -251,19 +251,26 @@ export class SteamClient {
    * Current Steam store prices for many apps in one country, via
    * `IStoreBrowseService/GetItems`. One HTTP call per country × ~50 appids.
    * Currency is not in the payload — it comes from {@link currencyForCountry}.
+   * `names` is each app's store name in `language`: the price depends on the
+   * country only, so the cron reads localized names in the same call.
    */
   async getStorePrices(
     appIds: number[],
     country: SteamStoreCountry,
-  ): Promise<Map<number, SteamPrice | null>> {
+    language = 'english',
+  ): Promise<{
+    prices: Map<number, SteamPrice | null>;
+    names: Map<number, string>;
+  }> {
     const result = new Map<number, SteamPrice | null>();
-    if (appIds.length === 0) return result;
+    const names = new Map<number, string>();
+    if (appIds.length === 0) return { prices: result, names };
 
     const key = this.config.get<string>('STEAM_API_KEY')?.trim();
     const payload = {
       ids: appIds.map((appid) => ({ appid })),
       context: {
-        language: 'english',
+        language,
         country_code: country.toUpperCase(),
       },
       data_request: { include_best_purchase_option: true },
@@ -290,6 +297,10 @@ export class SteamClient {
       const appId = Number(raw?.appid);
       if (!Number.isFinite(appId)) continue;
       seen.add(appId);
+      const name: unknown = (raw as { name?: unknown } | null)?.name;
+      if (typeof name === 'string' && name.trim()) {
+        names.set(appId, name.trim());
+      }
       if (raw?.is_free === true) {
         result.set(appId, null);
         continue;
@@ -302,7 +313,7 @@ export class SteamClient {
     for (const appId of appIds) {
       if (!seen.has(appId)) result.set(appId, null);
     }
-    return result;
+    return { prices: result, names };
   }
 
   /**
@@ -696,9 +707,7 @@ export class SteamClient {
     reachedFloor: boolean;
   } | null> {
     const uniqueDays = [
-      ...new Set(
-        days.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)),
-      ),
+      ...new Set(days.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))),
     ].sort();
     if (uniqueDays.length === 0) {
       return {

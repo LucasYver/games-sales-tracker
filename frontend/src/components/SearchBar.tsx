@@ -11,7 +11,7 @@ import {
 } from 'react';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
-import { useFormatter, useTranslations } from 'next-intl';
+import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import { Building2, Search, X } from 'lucide-react';
 import {
   API_URL,
@@ -23,6 +23,7 @@ import {
 import { Link, useRouter } from '@/i18n/navigation';
 import { trackEvent } from '@/lib/analytics';
 import { fold } from '@/lib/fold';
+import { gameName } from '@/lib/game-name';
 import {
   GamePageSkeleton,
   type GamePreview,
@@ -140,6 +141,7 @@ export function SearchBar() {
   const tPlatform = useTranslations('platform');
   const tCommon = useTranslations('common');
   const format = useFormatter();
+  const locale = useLocale();
   const listId = useId();
 
   const [value, setValue] = useState(params.get('q') ?? '');
@@ -223,7 +225,11 @@ export function SearchBar() {
   // publishers placed after every game would sit out of sight. They come
   // after the games that really match the query and before the near misses.
   const { closeGames, looseGames } = useMemo(() => {
-    const isClose = (game: PopularGame) => closeGameMatch(game.name, query);
+    // A localized store name (黑神话：悟空) counts like the English one.
+    const isClose = (game: PopularGame) =>
+      [game.name, ...Object.values(game.localizedNames ?? {})].some((name) =>
+        closeGameMatch(name, query),
+      );
     return {
       closeGames: visible.filter(isClose),
       looseGames: visible.filter((game) => !isClose(game)),
@@ -563,7 +569,7 @@ export function SearchBar() {
                               </span>
                               <span className="min-w-0 flex-1">
                                 <span className="block truncate font-semibold text-foreground">
-                                  {game.name}
+                                  {gameName(game, locale)}
                                 </span>
                                 <span className="block truncate font-mono text-[0.7rem] text-muted-foreground">
                                   {meta}

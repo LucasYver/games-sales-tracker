@@ -22,6 +22,8 @@ export type ConfidenceLevel = 'LOW' | 'MEDIUM' | 'HIGH';
 export interface GameListItem {
   id: string;
   name: string;
+  /** Steam store name per locale, only where it differs from `name`. */
+  localizedNames?: Record<string, string> | null;
   slug: string;
   releaseDate: string | null;
   coverUrl: string | null;
@@ -155,6 +157,8 @@ export interface StorePrice {
 export interface GameDetail {
   id: string;
   name: string;
+  /** Steam store name per locale, only where it differs from `name`. */
+  localizedNames?: Record<string, string> | null;
   slug: string;
   releaseDate: string | null;
   coverUrl: string | null;

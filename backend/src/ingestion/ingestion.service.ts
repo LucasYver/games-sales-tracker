@@ -27,7 +27,12 @@ import { deriveFranchise, deriveLiveService } from '../games/game-features';
 import { keepManualFields } from '../games/manual-fields';
 import { resolveCompanies } from '../games/game-companies';
 import { slugify } from '../common/slug';
-import { STEAM_STORE_COUNTRIES } from './steam-store-countries';
+import {
+  STEAM_NAME_LANGUAGES,
+  STEAM_STORE_COUNTRIES,
+  SteamStoreCountry,
+} from './steam-store-countries';
+import { sameGameName } from './steam-name';
 import { XBOX_STORE_COUNTRIES } from './xbox-store-countries';
 import { PLAYSTATION_STORE_COUNTRIES } from './playstation-store-countries';
 import { XboxCatalogClient, XBOX_PRODUCT_ID_RE } from './xbox-catalog.client';
@@ -1409,6 +1414,8 @@ export class IngestionService {
         chunk.map((game) => game.id),
         SourceType.STEAM,
       );
+      // Store names per country asked in its own language (STEAM_NAME_LANGUAGES).
+      const namesByCountry = new Map<SteamStoreCountry, Map<number, string>>();
 
       let countriesAttempted = 0;
       let ranOutOfBudget = false;
@@ -1436,10 +1443,13 @@ export class IngestionService {
           ),
         );
         countriesAttempted += countries.length;
-        for (const result of results) {
+        for (const [index, result] of results.entries()) {
           if (result.status === 'fulfilled') {
             captured += result.value.captured;
             skipped += result.value.skipped;
+            if (STEAM_NAME_LANGUAGES[countries[index]]) {
+              namesByCountry.set(countries[index], result.value.names);
+            }
           } else {
             failed += 1;
             this.logger.warn(`[price] country batch failed: ${result.reason}`);
@@ -1454,6 +1464,8 @@ export class IngestionService {
         );
         break;
       }
+
+      await this.saveLocalizedNames(chunk, sourceByGameId, namesByCountry);
 
       const now = new Date();
       for (const game of chunk) {
@@ -1512,6 +1524,50 @@ export class IngestionService {
     return latest;
   }
 
+  /**
+   * Write each game's localized store names (`Game.localizedNames`) from the
+   * names the price calls read in each country's language. A name is kept
+   * only where it differs from the English one; a locale whose call failed
+   * keeps its previous value. Writes only the games whose map changed.
+   */
+  private async saveLocalizedNames(
+    games: Game[],
+    sourceByGameId: Map<string, GameSource>,
+    namesByCountry: Map<SteamStoreCountry, Map<number, string>>,
+  ): Promise<void> {
+    const english = namesByCountry.get('us');
+    for (const game of games) {
+      const appId = Number(sourceByGameId.get(game.id)?.externalId);
+      const next: Record<string, string> = { ...(game.localizedNames ?? {}) };
+      for (const [country, names] of namesByCountry) {
+        const locale = STEAM_NAME_LANGUAGES[country]?.locale;
+        if (!locale || locale === 'en') continue;
+        const name = names.get(appId);
+        const englishName = english?.get(appId);
+        const differs =
+          name !== undefined &&
+          !sameGameName(name, game.name) &&
+          (englishName === undefined || !sameGameName(name, englishName));
+        if (differs) next[locale] = name;
+        else delete next[locale];
+      }
+      const value = Object.keys(next).length > 0 ? next : null;
+      if (
+        JSON.stringify(value) === JSON.stringify(game.localizedNames ?? null)
+      ) {
+        continue;
+      }
+      try {
+        await this.games.update(game.id, { localizedNames: value });
+        game.localizedNames = value;
+      } catch (error) {
+        this.logger.warn(
+          `[price] failed to save localized names for ${game.id}: ${error}`,
+        );
+      }
+    }
+  }
+
   private async captureCountryPrices(
     country: (typeof STEAM_STORE_COUNTRIES)[number],
     appIds: number[],
@@ -1520,8 +1576,16 @@ export class IngestionService {
       string,
       { initial: number; final: number; discountPercent: number }
     >,
-  ): Promise<{ captured: number; skipped: number }> {
-    const prices = await this.steam.getStorePrices(appIds, country);
+  ): Promise<{
+    captured: number;
+    skipped: number;
+    names: Map<number, string>;
+  }> {
+    const { prices, names } = await this.steam.getStorePrices(
+      appIds,
+      country,
+      STEAM_NAME_LANGUAGES[country]?.language,
+    );
     const toInsert: Array<{
       gameId: string;
       source: SourceType;
@@ -1568,7 +1632,7 @@ export class IngestionService {
     if (toInsert.length > 0) {
       await this.prices.insert(toInsert);
     }
-    return { captured: toInsert.length, skipped };
+    return { captured: toInsert.length, skipped, names };
   }
 
   /**

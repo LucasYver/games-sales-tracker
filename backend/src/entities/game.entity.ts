@@ -293,6 +293,14 @@ export class Game {
   @Column({ type: 'timestamptz', nullable: true })
   priceRefreshedAt: Date | null;
 
+  // Steam store name per site locale (`zh-CN`, `fr`, `es`, `ru`, `ar`), kept
+  // only where it differs from the English name: 黑神话：悟空 for Black Myth:
+  // Wukong. Null when no locale has its own name. Filled by the weekly Steam
+  // price cron, which asks each priced country in its own language
+  // (STEAM_NAME_LANGUAGES), so it costs no extra Steam call.
+  @Column({ type: 'jsonb', nullable: true })
+  localizedNames: Record<string, string> | null;
+
   // Latest sample of recent Steam reviews, counted per Steam language code.
   // Display only: the language of a review, not the player's country. Not
   // selected by default, because the catalog-wide reads do not need it.
