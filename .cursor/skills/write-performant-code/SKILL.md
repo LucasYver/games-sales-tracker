@@ -90,6 +90,18 @@ Measured on 2026-11-04:
 - Keep the `revalidate` TTLs. Adding `cache: 'no-store'` or
   `force-dynamic` to a public page sends every view to the backend; do it
   only when the data must be live.
+- A public page is cached (`●` in `next build`) only if nothing in it reads
+  the request. Call `setRequestLocale(locale)` in the page as well as the
+  `[locale]` layout: without it next-intl reads the request headers and the
+  page renders on every view (`ƒ`). Do not read `searchParams` in a cached
+  page; client components read the query through `useUrlQuery`
+  (`components/UrlQuery.tsx`) so the cached HTML keeps the default view.
+- Game pages are cached for 15 minutes: `/game/[slug]` and
+  `/game/[slug]/price` (old `?tab=price` links get a 308 in `middleware.ts`).
+  A `cc` or `store` query is rewritten to the uncached `live` route beside
+  each (`next.config.ts`); since Next skips the server when only the query
+  of a cached page changes, the price pickers call `router.refresh()`.
+  Admin actions expire a game's pages with `updateTag(gameCacheTag(slug))`.
 - Show a loading state for any navigation that waits on the server. The game
   page cannot have a `loading.tsx` (it turns unknown slugs into soft 404s);
   use `GamePageSkeleton` behind a `useTransition`, as `SearchBar` does.

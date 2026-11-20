@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { getFormatter, getTranslations } from 'next-intl/server';
+import { getFormatter, getTranslations, setRequestLocale } from 'next-intl/server';
 import { Link } from '@/i18n/navigation';
 import { OutboundLink } from '@/components/OutboundLink';
 import { localeLanguages, routing } from '@/i18n/routing';
@@ -118,6 +118,7 @@ export default async function Mw4SalesPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
+  setRequestLocale(locale);
   const [t, tPlatform, format, mw4, timeline, ...benchmarkCurves] =
     await Promise.all([
       getTranslations({ locale, namespace: 'mw4Sales' }),

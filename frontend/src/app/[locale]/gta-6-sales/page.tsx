@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { getFormatter, getTranslations } from 'next-intl/server';
+import { getFormatter, getTranslations, setRequestLocale } from 'next-intl/server';
 import { Link } from '@/i18n/navigation';
 import { localeLanguages, routing } from '@/i18n/routing';
 import { SITE_URL } from '@/lib/site-url';
@@ -118,6 +118,7 @@ export default async function Gta6SalesPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
+  setRequestLocale(locale);
   const [t, tPlatform, format, timeline] = await Promise.all([
     getTranslations({ locale, namespace: 'gta6Sales' }),
     getTranslations({ locale, namespace: 'platform' }),

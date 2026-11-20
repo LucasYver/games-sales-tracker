@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback } from 'react';
-import { useSearchParams } from 'next/navigation';
 import { usePathname, useRouter } from '@/i18n/navigation';
+import { useUrlQuery } from '@/components/UrlQuery';
 import {
   CHART_RANGES,
   DEFAULT_CHART_RANGE,
@@ -17,14 +17,15 @@ export function isChartRangeKey(value: string | null): value is ChartRangeKey {
 
 /**
  * Read/write `platform` + `range` on the game page query string. `range` is
- * left out of the URL when it equals the game's default period.
+ * left out of the URL when it equals the game's default period. Needs a
+ * `UrlQuery` above it.
  */
 export function useChartSearchParams(
   defaultRange: ChartRangeKey = DEFAULT_CHART_RANGE,
 ) {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const searchParams = useUrlQuery();
 
   const platform = searchParams.get('platform');
   const rangeParam = searchParams.get('range');

@@ -424,6 +424,9 @@ function revalidatePublicBlog(post: AdminBlogDetail) {
     revalidatePath(`/blog/${slug}`);
   }
   if (post.gameSlug) {
+    // The game page's link to the article comes from its tagged API fetch;
+    // the tag also expires both cached tabs in every locale.
+    updateTag(gameCacheTag(post.gameSlug));
     revalidatePath(`/en/game/${post.gameSlug}`);
     revalidatePath(`/fr/game/${post.gameSlug}`);
     revalidatePath(`/game/${post.gameSlug}`);

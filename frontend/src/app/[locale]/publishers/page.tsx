@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { getTranslations } from 'next-intl/server';
+import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { localeLanguages } from '@/i18n/routing';
 import { getPublishers } from '@/lib/api';
@@ -34,6 +34,7 @@ export async function generateMetadata({
 
 export default async function PublishersPage({ params }: { params: Params }) {
   const { locale } = await params;
+  setRequestLocale(locale);
   const [items, t] = await Promise.all([
     getPublishers(),
     getTranslations({ locale, namespace: 'hubs' }),

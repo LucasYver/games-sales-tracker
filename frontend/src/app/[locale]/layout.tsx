@@ -7,7 +7,11 @@ import {
   IBM_Plex_Sans_Arabic,
 } from 'next/font/google';
 import { NextIntlClientProvider, hasLocale } from 'next-intl';
-import { getMessages, getTranslations } from 'next-intl/server';
+import {
+  getMessages,
+  getTranslations,
+  setRequestLocale,
+} from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { Direction } from 'radix-ui';
 import { SpeedInsights } from '@vercel/speed-insights/next';
@@ -109,6 +113,9 @@ export default async function LocaleLayout({
 }) {
   const { locale } = await params;
   if (!hasLocale(routing.locales, locale)) notFound();
+  // Without it next-intl reads the locale from the request headers, which
+  // makes every page under this layout render per request (no CDN cache).
+  setRequestLocale(locale);
 
   const messages = await getMessages();
   const fonts =

@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { useSearchParams } from 'next/navigation';
 import { usePathname, useRouter } from '@/i18n/navigation';
+import { useUrlQuery } from '@/components/UrlQuery';
 import {
   Select,
   SelectContent,
@@ -17,6 +17,23 @@ import { flagEmoji } from '@/lib/flag';
 
 const STORAGE_KEY = 'steam-price-country';
 
+/**
+ * Put the price country or store in the URL and render it. The game pages are
+ * cached and never read the query, so Next skips the server when only the
+ * query changes; `refresh` asks again, and next.config.ts sends a `cc` or
+ * `store` query to the uncached `live` route.
+ */
+function showPriceQuery(
+  router: ReturnType<typeof useRouter>,
+  pathname: string,
+  params: URLSearchParams,
+) {
+  router.replace(`${pathname}?${params.toString()}` as never, {
+    scroll: false,
+  });
+  router.refresh();
+}
+
 
 export function PriceCountrySelect({
   countries,
@@ -29,7 +46,7 @@ export function PriceCountrySelect({
   const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const searchParams = useUrlQuery();
   const [query, setQuery] = useState('');
 
   const names = useMemo(
@@ -48,9 +65,7 @@ export function PriceCountrySelect({
       if (!countries.some((c) => c.country === stored)) return;
       const params = new URLSearchParams(searchParams.toString());
       params.set('cc', stored);
-      router.replace(`${pathname}?${params.toString()}` as never, {
-        scroll: false,
-      });
+      showPriceQuery(router, pathname, params);
     } catch {
       /* private mode */
     }
@@ -100,9 +115,7 @@ export function PriceCountrySelect({
     }
     const params = new URLSearchParams(searchParams.toString());
     params.set('cc', country);
-    router.replace(`${pathname}?${params.toString()}` as never, {
-      scroll: false,
-    });
+    showPriceQuery(router, pathname, params);
   };
 
   return (
@@ -157,7 +170,7 @@ export function PriceStoreSelect({
   const t = useTranslations('gamePage');
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const searchParams = useUrlQuery();
 
   if (stores.length === 0) return null;
 
@@ -165,9 +178,7 @@ export function PriceStoreSelect({
     if (store !== value) trackEvent('price_store_change', { store });
     const params = new URLSearchParams(searchParams.toString());
     params.set('store', store);
-    router.replace(`${pathname}?${params.toString()}` as never, {
-      scroll: false,
-    });
+    showPriceQuery(router, pathname, params);
   };
 
   return (
