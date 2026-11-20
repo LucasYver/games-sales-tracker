@@ -238,8 +238,13 @@ export class StoreRatingsClient {
     const title = this.extractPsTitle(page);
     if (!title || title === PS_GENERIC_TITLE) return { kind: 'unavailable' };
     const productName = this.extractPsProductName(page);
+    // The concept's own name: the page's <title> and schema.org product name
+    // follow its default product, which can be a bundle ("Grand Theft Auto V
+    // and Great White Shark Card Bundle"), while the ratings read here are the
+    // concept's ("Grand Theft Auto V (PlayStation®5)").
+    const conceptName = this.extractPsConceptName(page, url);
     const storeRelease = this.extractPsReleaseDate(page, url);
-    const matching = [title, productName].filter(
+    const matching = [title, productName, conceptName].filter(
       (storeTitle): storeTitle is string =>
         !!storeTitle &&
         storeProductMatchesGame(name, storeTitle, storeRelease, releaseDates),
@@ -732,6 +737,23 @@ export class StoreRatingsClient {
   private extractPsProductName(page: string): string | null {
     const name = page.match(
       /"@type":"Product","name":"((?:[^"\\]|\\.)+)"/,
+    )?.[1];
+    return name ? this.decodeHtmlEntities(name) : null;
+  }
+
+  /**
+   * The `name` of the page's own concept in the inlined Apollo cache
+   * (`"Concept:{id}":{…,"name":"…"}`), read at the concept's top level only:
+   * the pattern steps over nested objects whole, so a name inside them (a
+   * product, a review author) is never taken. Null on product pages.
+   */
+  private extractPsConceptName(page: string, url: string): string | null {
+    const conceptId = url.match(/\/concept\/(\d+)/)?.[1];
+    if (!conceptId) return null;
+    const name = page.match(
+      new RegExp(
+        `"Concept:${conceptId}(?::[a-z-]+)?":\\{(?:[^{}]|\\{[^{}]*\\})*?"name":"((?:[^"\\\\]|\\\\.)+)"`,
+      ),
     )?.[1];
     return name ? this.decodeHtmlEntities(name) : null;
   }

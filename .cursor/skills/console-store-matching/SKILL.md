@@ -98,6 +98,15 @@ hit, because a `subtitle` hit may be a spin-off.
 Every product must pass `storeProductMatchesGame`, whichever path found it. Search
 filters only save requests.
 
+On a PlayStation concept page three names are tried: the `<title>`, the schema.org
+product name and the concept's own `name` in the inlined cache
+(`extractPsConceptName`, 2026-11-20). The first two follow the concept's default
+product, which can be a bundle: Grand Theft Auto V's concept 201930 shows "Grand
+Theft Auto V and Great White Shark Card Bundle", rejected as a `subtitle` with a late
+date, while the concept is "Grand Theft Auto V (PlayStation®5)" and its ratings are
+the game's. One matching name is enough. On 80 games failing with "PlayStation
+concept not found", 5 matched afterwards, all right (GTA V, Koi, Life Is Strange).
+
 ## When a stored product is wrong
 
 The game's ratings signals (synthetic ones too), price snapshots and `game_source`
@@ -106,8 +115,8 @@ for that store are deleted by `forgetWrongStoreProduct`. It also drops the game'
 from the right product. This runs only on proof that
 the product is another game:
 
-- **PlayStation:** the page loaded, and neither its `<title>` nor its schema.org
-  product name matches. A 404, no title, the generic title "PlayStation" or no
+- **PlayStation:** the page loaded, and none of its `<title>`, schema.org
+  product name and concept name matches. A 404, no title, the generic title "PlayStation" or no
   schema.org name changes nothing. Both names are required so that a change in
   Sony's `<title>` format cannot wipe the catalog. Keep that guard.
 - **Xbox:** the catalog API returned the product with a title, and it does not match.
