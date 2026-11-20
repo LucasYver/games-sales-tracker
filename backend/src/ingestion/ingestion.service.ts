@@ -68,6 +68,10 @@ import {
 } from './ingestion-cadence';
 import { IngestionStateService } from './ingestion-state.service';
 import {
+  RECORD_STEAM_CCU_SQL,
+  type RecordSteamCcuRow,
+} from './steam-ccu-write';
+import {
   type DatedValue,
   reconstructUnobservedCurve,
 } from '../estimation/console-curve-reconstruction';
@@ -1154,52 +1158,20 @@ export class IngestionService {
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
     );
     const dayEnd = new Date(dayStart.getTime() + 24 * 3600 * 1000 - 1);
-    const todayRow = await this.signals.findOne({
-      where: {
-        gameId,
-        metric: SignalMetric.STEAM_CONCURRENT,
-        capturedAt: Between(dayStart, dayEnd),
-      },
-      order: { value: 'DESC' },
-    });
 
-    if (!todayRow) {
-      await this.signals.save(
-        this.signals.create({
-          gameId,
-          source: SourceType.STEAM,
-          metric: SignalMetric.STEAM_CONCURRENT,
-          value: current,
-          capturedAt: dayStart,
-        }),
-      );
-    } else if (current > todayRow.value) {
-      todayRow.value = current;
-      todayRow.capturedAt = dayStart;
-      await this.signals.save(todayRow);
-    }
+    // One statement for the day's row and the all-time peak (see
+    // `RECORD_STEAM_CCU_SQL`). The peak is the highest value, not the latest
+    // capturedAt: the historical-import path writes peak rows dated with the
+    // SteamCharts month of the peak.
+    const [row] = await this.signals.query<RecordSteamCcuRow[]>(
+      RECORD_STEAM_CCU_SQL,
+      [gameId, current, dayStart, dayEnd],
+    );
 
-    // Order by value DESC (not capturedAt): the historical-import path
-    // writes peak rows with an *old* capturedAt (the SteamCharts month of
-    // the peak), so the row with the largest value — not the most recent
-    // one — represents the true current all-time peak.
-    const priorPeak = await this.signals.findOne({
-      where: { gameId, metric: SignalMetric.STEAM_PEAK_CCU },
-      order: { value: 'DESC' },
-    });
-
-    if (!priorPeak || current > priorPeak.value) {
-      await this.signals.save(
-        this.signals.create({
-          gameId,
-          source: SourceType.STEAM,
-          metric: SignalMetric.STEAM_PEAK_CCU,
-          value: current,
-        }),
-      );
+    if (row?.newPeak) {
       this.logger.log(
         `[ccu] gameId=${gameId} appId=${appId} new peak ${current.toLocaleString()} ` +
-          `(prior ${priorPeak?.value.toLocaleString() ?? 'n/a'})`,
+          `(prior ${row.priorPeak?.toLocaleString() ?? 'n/a'})`,
       );
     }
 
