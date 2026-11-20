@@ -232,6 +232,11 @@ What was learned:
   anchor prolonged by Steam reviews was absurd there (FC 24: 6.8 M → 136 M), and he
   did not want the published figure shown as is either. The plumbing stays unused
   (`anchor` column of `exclusions.csv`, `anchorOnly`). Side effect: open point 8.
+- Grand Theft Auto V removed from `exclusions.csv` and from the backend copy
+  `v2-frozen.json` (2026-11-20, owner's request), so the admin switch
+  `estimateBeforeFloor` can publish it. `models/2026-11-09T1952/v2.json` still lists
+  it (never edited). No lab effect: it is released before 2017, so outside the
+  benches anyway. See the `estimate-scope-2017` skill.
 - The plumbing of H25 stays: `figures.parquet` has a `trainOnly` column
   (status unchanged), `bench.load_figures(train_only=True)` returns those rows
   and only a model with `old_games = True` learns from them.

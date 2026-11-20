@@ -99,6 +99,15 @@ on changes no other game. The lab (`ml2/`) knows nothing of it: such a game
 stays out of the benches. Its V2 figure is written at the game's next estimate
 rebuild (the admin Rebuild button publishes it at once).
 
+The hand exclusions of the frozen V2 (`exclusions` in `v2-frozen.json`, from
+`ml2/exclusions.csv`) still win over the switch: an excluded game gets a V2 of 0
+and stays "Not estimated". Grand Theft Auto V was removed from them on
+2026-11-20 at the owner's request so the switch could publish it. Its entry is
+console-only (the PC is the separate "Grand Theft Auto V Legacy" entry), so it
+is anchored on its last published total with no Steam signal. The owner
+accepted a known overshoot: about 270 M on 230 M (June 2026), because its first
+PS ratings reading (2026-07-03) arrived after that figure and raised the model.
+
 ## What stays
 
 - Game pages, signals, prices and the sitemap.
