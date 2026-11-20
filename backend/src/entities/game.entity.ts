@@ -242,6 +242,12 @@ export class Game {
   @Column({ type: 'boolean', default: false })
   estimateHidden: boolean;
 
+  // When true, the game gets a public estimate even though it was released
+  // before 2017 (`ESTIMATE_MIN_RELEASE`, see `games/estimate-scope.ts`). Set
+  // by hand in the admin. `estimateHidden` still wins over it.
+  @Column({ type: 'boolean', default: false })
+  estimateBeforeFloor: boolean;
+
   // Metadata columns an admin corrected by hand (see `games/manual-fields.ts`).
   // The Steam and IGDB upserts keep their values instead of overwriting them.
   @Column({ type: 'text', array: true, default: '{}' })

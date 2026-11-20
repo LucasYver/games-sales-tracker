@@ -410,6 +410,7 @@ export interface AdminGameSummary2 {
   liveService: boolean;
   excludedFromReference: boolean;
   estimateHidden: boolean;
+  estimateBeforeFloor: boolean;
   manualFields: string[];
   igdbId: number | null;
   lastRefreshedAt: Date | null;
@@ -1137,6 +1138,7 @@ export class AdminService {
       liveService: game.liveService,
       excludedFromReference: game.excludedFromReference,
       estimateHidden: game.estimateHidden,
+      estimateBeforeFloor: game.estimateBeforeFloor,
       manualFields: game.manualFields ?? [],
       igdbId: game.igdbId,
       lastRefreshedAt: game.lastRefreshedAt,
@@ -1363,6 +1365,22 @@ export class AdminService {
     game.estimateHidden = hidden;
     await this.games.save(game);
     return { id, slug: game.slug, estimateHidden: hidden };
+  }
+
+  /**
+   * Let a game released before 2017 get a public estimate anyway
+   * (`game.estimateBeforeFloor`), or put it back under the floor. Its V2 figure
+   * is written at the game's next estimate rebuild.
+   */
+  async setEstimateBeforeFloor(
+    id: string,
+    allowed: boolean,
+  ): Promise<{ id: string; slug: string; estimateBeforeFloor: boolean }> {
+    const game = await this.games.findOne({ where: { id } });
+    if (!game) throw new NotFoundException(`Game ${id} not found`);
+    game.estimateBeforeFloor = allowed;
+    await this.games.save(game);
+    return { id, slug: game.slug, estimateBeforeFloor: allowed };
   }
 
   /**

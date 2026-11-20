@@ -121,6 +121,18 @@ export async function setEstimateHidden(
   updateTag(gameCacheTag(result.slug));
 }
 
+export async function setEstimateBeforeFloor(
+  gameId: string,
+  allowed: boolean,
+): Promise<void> {
+  const result = await adminFetch<{ slug: string }>(
+    `/games/${gameId}/estimate-before-floor`,
+    { method: 'POST', body: JSON.stringify({ allowed }) },
+  );
+  revalidatePath(`/admin/games/${gameId}`);
+  updateTag(gameCacheTag(result.slug));
+}
+
 export interface UpdateGamePayload {
   name?: string;
   releaseDate?: string | null;

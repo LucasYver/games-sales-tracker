@@ -177,13 +177,15 @@ export class AdminDashboardService {
         `SELECT source, COUNT(*) AS c FROM milestone
            WHERE "rejectedAt" IS NULL GROUP BY source`,
       ),
-      // Same scope as the public site: released from 2017 on, or undated.
+      // Same scope as the public site: released from 2017 on, undated, or
+      // let through by hand.
       this.db.query<Array<{ c: string }>>(
         `SELECT COUNT(DISTINCT e."gameId") AS c
            FROM sales_estimate e
            JOIN game g ON g.id = e."gameId"
            WHERE g."deletedAt" IS NULL
-             AND (g."releaseDate" IS NULL OR g."releaseDate" >= $1)`,
+             AND (g."releaseDate" IS NULL OR g."releaseDate" >= $1
+                  OR g."estimateBeforeFloor")`,
         [ESTIMATE_MIN_RELEASE],
       ),
       // Per day over the whole weekly window; weeks are summed from it.

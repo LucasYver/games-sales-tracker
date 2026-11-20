@@ -158,6 +158,15 @@ export class AdminController {
     return this.admin.setEstimateHidden(id, Boolean(body?.hidden));
   }
 
+  @Post('games/:id/estimate-before-floor')
+  @HttpCode(200)
+  setEstimateBeforeFloor(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { allowed: boolean },
+  ) {
+    return this.admin.setEstimateBeforeFloor(id, body?.allowed === true);
+  }
+
   @Post('games/:id/backfill-followers')
   @HttpCode(200)
   backfillFollowers(@Param('id', ParseUUIDPipe) id: string) {

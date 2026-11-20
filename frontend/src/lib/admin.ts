@@ -312,6 +312,8 @@ export interface AdminGamePageSummary {
   excludedFromReference: boolean;
   /** The public site shows no estimate for this game. */
   estimateHidden: boolean;
+  /** Released before 2017 but given a public estimate anyway. */
+  estimateBeforeFloor: boolean;
   /** Metadata columns corrected by hand; the crons keep their values. */
   manualFields: ManualGameField[];
   igdbId: number | null;

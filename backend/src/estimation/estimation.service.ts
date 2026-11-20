@@ -1116,7 +1116,12 @@ export class EstimationService {
     const ml = mlExplanation?.estimate ?? null;
     const game = await this.games.findOne({
       where: { id: gameId },
-      select: { id: true, releaseDate: true, estimateHidden: true },
+      select: {
+        id: true,
+        releaseDate: true,
+        estimateHidden: true,
+        estimateBeforeFloor: true,
+      },
     });
     const hiddenOnSite = game ? estimateNotPublic(game) : false;
     const v2 = await this.v2Estimate.estimate(gameId).catch(() => null);

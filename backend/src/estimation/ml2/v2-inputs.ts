@@ -41,7 +41,8 @@ const GAMES_SQL = `
          "gameType"::text AS "gameType", "gameModes"::text[] AS "gameModes",
          ("timeToBeat"->>'normally')::float8 AS "timeToBeatSeconds",
          genres, "steamTags", COALESCE(array_length(dlc, 1), 0) AS "dlcCount",
-         "estimateHidden", COALESCE("igdbGamePassCloud", false) AS "gamePass"
+         "estimateHidden", "estimateBeforeFloor",
+         COALESCE("igdbGamePassCloud", false) AS "gamePass"
     FROM game`;
 
 const RELEASES_SQL = `
@@ -145,6 +146,8 @@ interface GameRow {
   steamTags: string | null;
   dlcCount: number;
   estimateHidden: boolean | null;
+  /** Released before 2017 but let through by hand in the admin. */
+  estimateBeforeFloor: boolean | null;
   gamePass: boolean;
 }
 
@@ -181,7 +184,10 @@ export interface V2Figure {
 }
 
 export type V2Status =
-  /** Deleted, free, or released before 2017: the site gives no estimate. */
+  /**
+   * Deleted, free, or released before 2017 (unless the admin let it through,
+   * `game.estimateBeforeFloor`): the site gives no estimate.
+   */
   | 'out-of-scope'
   /** Excluded by hand (`exclusions` of the frozen file, or hidden in the admin). */
   | 'excluded'
@@ -371,6 +377,13 @@ export class V2World {
     );
   }
 
+  /** Released before 2017 and not let through by hand. */
+  private beforeFloor(g: GameRow, first: number | null): boolean {
+    return (
+      first !== null && first < SCOPE_START && g.estimateBeforeFloor !== true
+    );
+  }
+
   private excluded(g: GameRow): boolean {
     return (
       g.estimateHidden === true ||
@@ -386,7 +399,7 @@ export class V2World {
     const g = this.games.get(gameId)!;
     const first = this.firstRelease(gameId);
     if (g.deleted || g.isFree === true) return 'out-of-scope';
-    if (first !== null && first < SCOPE_START) return 'out-of-scope';
+    if (this.beforeFloor(g, first)) return 'out-of-scope';
     if (this.excluded(g)) return 'excluded';
     if (first === null || first > asOf.getTime()) return 'unreleased';
     return 'estimated';
@@ -409,7 +422,7 @@ export class V2World {
     this.kept.set(gameId, out);
     if (!g || g.deleted || g.isFree === true || this.excluded(g)) return out;
     const first = this.firstRelease(gameId);
-    if (first !== null && first < SCOPE_START) return out;
+    if (this.beforeFloor(g, first)) return out;
     const rows = this.milestones.get(gameId) ?? [];
     const platforms: readonly string[] = V2_PLATFORMS;
     const seen = new Set(
@@ -464,6 +477,10 @@ export class V2World {
       const theirs = this.firstRelease(peer.id);
       if (peer.id === gameId || theirs === null) continue;
       if (mine !== null && theirs >= mine) continue;
+      // A pre-2017 game let through by hand gets its own figures back, but
+      // they do not feed its series' record: newer games stay as the frozen
+      // model was trained.
+      if (theirs < SCOPE_START) continue;
       const known = this.figures(peer.id)
         .filter((f) => f.total && f.reportedAt < t)
         .map((f) => f.units);

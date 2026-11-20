@@ -1356,7 +1356,7 @@ export class GamesService {
     const visibleMilestones = game.isFree || unreleased ? [] : game.milestones;
 
     const estimateHidden = game.estimateHidden;
-    const outOfScope = estimateHidden || estimateOutOfScope(game.releaseDate);
+    const outOfScope = estimateHidden || estimateOutOfScope(game);
     const noEstimate = game.isFree || outOfScope || unreleased;
     // Only estimates computed from signals captured after launch are public:
     // the first one lands at the next rebuild following the release.

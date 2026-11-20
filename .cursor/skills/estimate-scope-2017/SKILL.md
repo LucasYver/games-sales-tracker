@@ -84,6 +84,21 @@ moves backfilled month rows to the end of their month and cuts a series when
 its page stops counting (MW III, BO6 in 2026). It is never an estimate: no
 reviews-to-units ratio is applied there.
 
+## Older games let through by hand
+
+The reverse switch (2026-11-20): `game.estimateBeforeFloor`, toggled in the
+admin Estimates tab (`POST /admin/games/:id/estimate-before-floor`), shown only
+for games released before 2017. It gives that one game a public estimate
+despite the floor. `estimateOutOfScope`, `estimateNotPublic` and
+`estimatePublicSql` honour it; `estimateHidden` still wins over it.
+
+`V2World.status` and `figures` also honour it, so the V2 estimates the game and
+anchors it on its own published figures. Those figures still do not feed the
+series record of newer games (`bestBefore` skips pre-2017 peers), so turning it
+on changes no other game. The lab (`ml2/`) knows nothing of it: such a game
+stays out of the benches. Its V2 figure is written at the game's next estimate
+rebuild (the admin Rebuild button publishes it at once).
+
 ## What stays
 
 - Game pages, signals, prices and the sitemap.

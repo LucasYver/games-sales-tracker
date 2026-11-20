@@ -42,6 +42,7 @@ import { EstimateBreakdownView } from '../../_components/EstimateBreakdownPanel'
 import { MlExplanationPanel } from '../../_components/MlExplanationPanel';
 import {
   deleteGame,
+  setEstimateBeforeFloor,
   setEstimateHidden,
   setReferenceExclusion,
 } from '../../actions';
@@ -636,6 +637,12 @@ async function EstimatesTab({
   const latestEstimate = s.latestEstimate;
   const declared = b?.declared ?? null;
 
+  // The public site estimates games released from 2017 on; an older one can
+  // be let through by hand (see `games/estimate-scope.ts`).
+  const beforeFloor =
+    s.releaseDate !== null &&
+    new Date(s.releaseDate) < new Date('2017-01-01T00:00:00.000Z');
+
   const platforms =
     b?.platforms
       .slice()
@@ -662,6 +669,37 @@ async function EstimatesTab({
           </Button>
         </form>
       </div>
+      {(beforeFloor || s.estimateBeforeFloor) && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={s.estimateBeforeFloor ? 'default' : 'secondary'}>
+            {s.estimateBeforeFloor
+              ? 'Released before 2017: estimate allowed on the site'
+              : 'Released before 2017: not estimated on the site'}
+          </Badge>
+          <form
+            action={setEstimateBeforeFloor.bind(
+              null,
+              gameId,
+              !s.estimateBeforeFloor,
+            )}
+            className="ml-auto"
+          >
+            <Button type="submit" variant="outline" size="sm">
+              {s.estimateBeforeFloor
+                ? 'Back under the 2017 floor'
+                : 'Allow estimate despite 2017 floor'}
+            </Button>
+          </form>
+        </div>
+      )}
+      {s.estimateBeforeFloor && (
+        <p className="text-muted-foreground -mt-3 text-xs">
+          The site shows this game&apos;s estimate although the model is less
+          reliable before 2017. Its V2 figure is written at the next estimate
+          rebuild: use <strong>Rebuild</strong> in the header to publish it now.
+          &ldquo;Hide estimate on the site&rdquo; still wins over this switch.
+        </p>
+      )}
       {s.estimateHidden && (
         <p className="text-muted-foreground -mt-3 text-xs">
           The site shows no figure and no chart for this game: its public
