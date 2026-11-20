@@ -5,7 +5,6 @@ import {
   AchievementSnapshot,
   EstimationMethod,
   Game,
-  Milestone,
   Platform,
   SalesEstimate,
   SignalMetric,
@@ -21,11 +20,8 @@ import {
   ML_V2_METHOD_CODE,
   V2EstimateService,
 } from './ml2/v2-estimate.service';
-import {
-  mlEstimateApplies,
-  MlEstimateService,
-  type MlExplanation,
-} from './ml/ml-estimate.service';
+import type { V2Explanation } from './ml2/v2-explain';
+import type { V2GameEstimate } from './ml2/v2-catalog';
 import {
   FIRST_WEEK_BUCKET_LARGE_YEAR1_RATIO,
   FIRST_WEEK_BUCKET_SMALL_YEAR1_RATIO,
@@ -51,7 +47,6 @@ import {
   firstWeekProjectionMultiplier,
   genreProjectionMultiplier,
 } from '../games/sales-modeling.constants';
-import { estimateNotPublic } from '../games/estimate-scope';
 import { platformReleaseDate } from '../games/platform-release-date';
 
 // How aggressively `aggregateMethods` widens the combined band when the
@@ -143,41 +138,38 @@ export interface PlatformBreakdownResult {
 export interface EstimateBreakdownResult {
   computedAt: string;
   platforms: PlatformBreakdownResult[];
+  /** Sum of the platform aggregates: only the split matters since the V2. */
   total: { low: number; high: number } | null;
-  /**
-   * Worldwide ML estimate (`MlEstimateService`), computed live; `shown`
-   * when it is the figure the site displays (`mlEstimateApplies`).
-   */
-  ml: { low: number; high: number; units: number; shown: boolean } | null;
   /**
    * Worldwide V2 estimate (`V2EstimateService`), computed live: the figure
    * the site displays from the game's next rebuild on. `units` is null when
    * the V2 gives no estimate (the site then shows "Not estimated").
    */
-  v2: {
-    version: string;
-    status: string;
-    basis: string | null;
-    units: number | null;
-    low: number | null;
-    high: number | null;
-    modelUnits: number | null;
-    modelPc: number | null;
-    consoleUnits: number | null;
-    steamReviews: number | null;
-    anchorUnits: number | null;
-    anchorDate: string | null;
-    bestPublished: number | null;
-  } | null;
-  /** How the ML estimate was computed (inputs, split by family). */
-  mlExplanation: MlExplanation | null;
-  /** Released before the estimate scope: the public site shows no estimate. */
-  hiddenOnSite: boolean;
-  declared: {
-    units: number;
-    source: string;
-    reportedAt: string | null;
-  } | null;
+  v2: V2BreakdownResult | null;
+}
+
+/** The V2 estimate of one game, computed live, as the admin shows it. */
+export interface V2BreakdownResult {
+  computedAt: string;
+  version: string;
+  status: string;
+  basis: string | null;
+  units: number | null;
+  low: number | null;
+  high: number | null;
+  modelUnits: number | null;
+  modelLow: number | null;
+  modelHigh: number | null;
+  modelPc: number | null;
+  consoleUnits: number | null;
+  steamReviews: number | null;
+  anchorUnits: number | null;
+  anchorDate: string | null;
+  /** Steam reviews at the anchor's date, as the model reads them. */
+  anchorSteamReviews: number | null;
+  bestPublished: number | null;
+  /** Why the model answered its total: each family's factor. */
+  explanation: V2Explanation | null;
 }
 
 interface AggregateTrace {
@@ -236,15 +228,12 @@ export class EstimationService {
     private readonly games: Repository<Game>,
     @InjectRepository(SignalSnapshot)
     private readonly signals: Repository<SignalSnapshot>,
-    @InjectRepository(Milestone)
-    private readonly milestones: Repository<Milestone>,
     @InjectRepository(SalesEstimate)
     private readonly estimates: Repository<SalesEstimate>,
     @InjectRepository(AchievementSnapshot)
     private readonly achievements: Repository<AchievementSnapshot>,
     private readonly methods: EstimationMethodService,
     private readonly salesProfile: SalesProfileResolverService,
-    private readonly mlEstimate: MlEstimateService,
     private readonly v2Estimate: V2EstimateService,
   ) {
     this.platforms = [
@@ -1040,24 +1029,15 @@ export class EstimationService {
   async computeBreakdown(gameId: string): Promise<EstimateBreakdownResult> {
     const computedAt = new Date().toISOString();
 
+    // The platform pipeline (the split the public page scales to the V2
+    // figure) and the V2 estimate read independent data: run them together.
     const trace = createEstimateTrace();
-    const results = await this.estimateAllPlatforms(gameId, undefined, trace);
-
-    const { aggregates } = await this.aggregateResultsByPlatform(
-      gameId,
-      results,
-      trace,
-    );
-
-    const milestones = await this.milestones.find({
-      where: {
-        gameId,
-        isEngagement: false,
-        platform: Platform.GLOBAL,
-      },
-      order: { units: 'DESC' },
-    });
-    const bestDeclared = milestones.length > 0 ? milestones[0] : null;
+    const [{ aggregates }, v2] = await Promise.all([
+      this.estimateAllPlatforms(gameId, undefined, trace).then((results) =>
+        this.aggregateResultsByPlatform(gameId, results, trace),
+      ),
+      this.v2Estimate.estimate(gameId, undefined, true).catch(() => null),
+    ]);
 
     const platformOrder: Platform[] = [];
     const seen = new Set<Platform>();
@@ -1112,67 +1092,45 @@ export class EstimationService {
             ),
           }
         : null;
-    const mlExplanation = total ? await this.mlEstimate.explain(gameId) : null;
-    const ml = mlExplanation?.estimate ?? null;
-    const game = await this.games.findOne({
-      where: { id: gameId },
-      select: {
-        id: true,
-        releaseDate: true,
-        estimateHidden: true,
-        estimateBeforeFloor: true,
-      },
-    });
-    const hiddenOnSite = game ? estimateNotPublic(game) : false;
-    const v2 = await this.v2Estimate.estimate(gameId).catch(() => null);
-    // The V2 decides what the site shows as soon as it answers for the game.
-    const v2Decides = v2?.status === 'estimated' || v2?.status === 'excluded';
-    const round = (n: number | null | undefined) =>
-      n === null || n === undefined ? null : Math.round(n);
-
     return {
       computedAt,
       platforms,
       total,
-      ml:
-        ml && total
-          ? {
-              low: Math.round(ml.low),
-              high: Math.round(ml.high),
-              units: Math.round(ml.units),
-              shown:
-                !hiddenOnSite &&
-                !v2Decides &&
-                mlEstimateApplies(
-                  (total.low + total.high) / 2,
-                  mlExplanation?.steamReviews ?? null,
-                ),
-            }
-          : null,
-      v2: v2 && {
-        version: this.v2Estimate.version,
-        status: v2.status,
-        basis: v2.estimate?.basis ?? null,
-        units: round(v2.estimate?.units),
-        low: round(v2.estimate?.low),
-        high: round(v2.estimate?.high),
-        modelUnits: round(v2.model?.units),
-        modelPc: round(v2.modelPc),
-        consoleUnits: round(v2.estimate?.consoleUnits),
-        steamReviews: round(v2.steamReviews),
-        anchorUnits: v2.anchor?.units ?? null,
-        anchorDate: v2.anchor?.reportedAt.toISOString() ?? null,
-        bestPublished: v2.bestPublished,
-      },
-      mlExplanation,
-      hiddenOnSite,
-      declared: bestDeclared
-        ? {
-            units: bestDeclared.units,
-            source: bestDeclared.source,
-            reportedAt: bestDeclared.reportedAt?.toISOString() ?? null,
-          }
-        : null,
+      v2: v2 && this.toV2Breakdown(v2),
+    };
+  }
+
+  /**
+   * The live V2 estimate with why the model answered its total: what the
+   * admin estimate tab shows. No platform pipeline, so it stays fast.
+   */
+  async computeV2Breakdown(gameId: string): Promise<V2BreakdownResult | null> {
+    const v2 = await this.v2Estimate.estimate(gameId, undefined, true);
+    return v2 && this.toV2Breakdown(v2);
+  }
+
+  private toV2Breakdown(v2: V2GameEstimate): V2BreakdownResult {
+    const round = (n: number | null | undefined) =>
+      n === null || n === undefined ? null : Math.round(n);
+    return {
+      computedAt: new Date().toISOString(),
+      version: this.v2Estimate.version,
+      status: v2.status,
+      basis: v2.estimate?.basis ?? null,
+      units: round(v2.estimate?.units),
+      low: round(v2.estimate?.low),
+      high: round(v2.estimate?.high),
+      modelUnits: round(v2.model?.units),
+      modelLow: round(v2.model?.low),
+      modelHigh: round(v2.model?.high),
+      modelPc: round(v2.modelPc),
+      consoleUnits: round(v2.estimate?.consoleUnits),
+      steamReviews: round(v2.steamReviews),
+      anchorUnits: v2.anchor?.units ?? null,
+      anchorDate: v2.anchor?.reportedAt.toISOString() ?? null,
+      anchorSteamReviews: round(v2.anchor?.steamReviewsAtDate),
+      bestPublished: v2.bestPublished,
+      explanation: v2.explanation ?? null,
     };
   }
 }

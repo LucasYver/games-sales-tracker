@@ -663,71 +663,6 @@ export interface AdminGenreIgdbSyncResult {
   skipped: number;
 }
 
-// ─── Estimate breakdown (diagnostic) ────────────────────────────────────────
-
-export interface BoxleiterBreakdownEntry {
-  type: 'boxleiter';
-  platform: Platform;
-  method: string;
-  signal: { metric: string; value: number; capturedAt: string };
-  multiplierSource: 'matcher' | 'global';
-  multiplierLow: number;
-  multiplierHigh: number;
-  finalLow: number;
-  finalHigh: number;
-}
-
-export interface FirstWeekBreakdownEntry {
-  type: 'first-week';
-  method: string;
-  launchPeakValue: number;
-  launchPeakCapturedAt: string;
-  ccuRatioLow: number;
-  ccuRatioHigh: number;
-  weekOneFinalLow: number;
-  weekOneFinalHigh: number;
-  ageDays: number;
-  projectionMultiplier: number;
-  m1: number | null;
-  profileSource: 'matcher' | 'global';
-  finalLow: number;
-  finalHigh: number;
-}
-
-export interface SplitBreakdownEntry {
-  type: 'split';
-  platform: Platform;
-  method: string;
-  sourcePlatform: Platform;
-  sourceLow: number;
-  sourceHigh: number;
-  sourceShare: number;
-  targetShare: number;
-  ratio: number;
-  finalLow: number;
-  finalHigh: number;
-}
-
-export interface WeightedBreakdownEntry {
-  method: string;
-  weight: number;
-}
-
-export interface PlatformBreakdownResult {
-  platform: Platform;
-  entries: (
-    BoxleiterBreakdownEntry | FirstWeekBreakdownEntry | SplitBreakdownEntry
-  )[];
-  weightedEntries: WeightedBreakdownEntry[];
-  totalWeight: number;
-  weightedLow: number;
-  weightedHigh: number;
-  disagreement: number;
-  inflate: number;
-  aggregateLow: number;
-  aggregateHigh: number;
-}
-
 export type BlogPostStatus = 'DRAFT' | 'PUBLISHED' | 'REJECTED';
 
 export type SocialPostKind =
@@ -892,66 +827,48 @@ export interface AdminBlogCandidate {
   steamReviews: number | null;
 }
 
-export interface AdminMlExplanation {
-  modelVersion: string;
-  asOf: string;
-  pcReleaseDate: string | null;
-  rule: {
-    minDaysAfterRelease: number;
-    minSteamReviews: number;
-    minSiteUnits: number;
-  };
-  halfWidthFactor: number;
-  /** Null before J+3 or without a PC release date. */
-  estimate: { units: number; low: number; high: number } | null;
-  steamReviews?: number | null;
-  inputs: { label: string; value: number | string | null }[];
-  decomposition: {
-    start: { forest: number; ridge: number; average: number };
-    families: {
-      family: string;
-      forest: number;
-      ridge: number;
-      average: number;
-    }[];
-    result: { forest: number; ridge: number; average: number };
-  } | null;
+/**
+ * `GET /admin/games/:id/v2-estimate`: the worldwide V2 estimate computed
+ * live, what the public site displays from the game's next rebuild on.
+ * `units` null = "Not estimated" on the site.
+ */
+export interface AdminV2Estimate {
+  computedAt: string;
+  version: string;
+  status: string;
+  basis: string | null;
+  units: number | null;
+  low: number | null;
+  high: number | null;
+  modelUnits: number | null;
+  modelLow: number | null;
+  modelHigh: number | null;
+  modelPc: number | null;
+  consoleUnits: number | null;
+  steamReviews: number | null;
+  anchorUnits: number | null;
+  anchorDate: string | null;
+  /** Steam reviews at the anchor's date, as the model reads them. */
+  anchorSteamReviews: number | null;
+  bestPublished: number | null;
+  /** Why the model answered its total: each family's factor. */
+  explanation: AdminV2Explanation | null;
 }
 
-export interface AdminEstimateBreakdown {
-  computedAt: string;
-  platforms: PlatformBreakdownResult[];
-  total: { low: number; high: number } | null;
-  /** Worldwide ML estimate; `shown` when the public site displays it. */
-  ml: { low: number; high: number; units: number; shown: boolean } | null;
-  /**
-   * Worldwide V2 estimate, computed live: what the public site displays from
-   * the game's next rebuild on. `units` null = "Not estimated" on the site.
-   */
-  v2: {
-    version: string;
-    status: string;
-    basis: string | null;
-    units: number | null;
-    low: number | null;
-    high: number | null;
-    modelUnits: number | null;
-    modelPc: number | null;
-    consoleUnits: number | null;
-    steamReviews: number | null;
-    anchorUnits: number | null;
-    anchorDate: string | null;
-    bestPublished: number | null;
-  } | null;
-  /** How the ML estimate was computed. */
-  mlExplanation: AdminMlExplanation | null;
-  /** Released before 2017: the public site shows no estimate. */
-  hiddenOnSite: boolean;
-  declared: {
-    units: number;
-    source: string;
-    reportedAt: string | null;
-  } | null;
+/** `explainV2` of the backend: exact Shapley factors per input family. */
+export interface AdminV2Explanation {
+  /** perReview: sales per Steam review × reviews; direct: sales. */
+  head: 'perReview' | 'direct';
+  steamReviews: number | null;
+  /** Answer knowing nothing of the game (per review on the perReview head). */
+  base: number;
+  /** The model's answer (per review on the perReview head). */
+  full: number;
+  families: {
+    name: string;
+    factor: number;
+    inputs: { label: string; value: string | null }[];
+  }[];
 }
 
 /** One scheduled job, as listed by `GET /admin/crons`. */

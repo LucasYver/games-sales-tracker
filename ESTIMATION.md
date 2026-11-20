@@ -236,11 +236,18 @@ even if the code emits the tag.
 - A batch computed before the V2 keeps its `ml-ensemble` row (the v1.5 model
   of `ml/`, stored only where the platform-sum midpoint was ≥ 300k with
   ≥ 1,000 Steam reviews) until the game's next rebuild; no backfill (skill
-  `let-crons-catch-up`). `MlEstimateService` is no longer called by a
-  rebuild; the admin still shows its explanation.
-- The admin estimate tab shows the V2 computed live (`v2` of the breakdown
-  endpoint): how the estimate is reached, the model alone, the console
-  sales, the anchor.
+  `let-crons-catch-up`). Nothing calls `MlEstimateService` any more.
+- The admin estimate tab (`GET /admin/games/:id/v2-estimate`,
+  `computeV2Breakdown`: the V2 alone, no platform pipeline, a few hundred
+  ms) shows the V2 computed live next to the stored snapshot the site shows
+  now (flagged when a rebuild would change it), the chain of the V2 rule that
+  decided (anchor and Steam review growth, model and consoles + PC, consoles
+  alone, platform floor) and what the model saw
+  (`estimation/ml2/v2-explain.ts`, admin only: exact Shapley factors of nine
+  input families on the model's total, with the values read; a family left
+  out counts as missing to the trees). The per-platform trace is no longer
+  shown; `GET /admin/games/:id/estimate-breakdown` (`computeBreakdown`) still
+  returns it for diagnostics.
 - **Scope:** the public API publishes no estimate for games released before
   2017 (`estimateOutOfScope` on `game.releaseDate`, `games/estimate-scope.ts`):
   no headline, platform lines or history, and they rank last when sorting by

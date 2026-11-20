@@ -44,7 +44,7 @@ NestJS modules under `backend/src/`. Entry points worth knowing:
 | Admin API | `admin/admin.controller.ts` (`X-Admin-Session`) |
 | Public blog | `blog/blog.controller.ts` (published posts only) |
 | Vercel crons | `scheduler/cron-jobs.ts` (job list) + `scheduler/cron.controller.ts` + `scheduler/refresh.service.ts`; manual runs from `/admin/crons` via `scheduler/admin-cron.controller.ts` |
-| Estimation | `estimation/estimation.service.ts`; worldwide V2 estimate in `estimation/ml2/` (v1.5 of `estimation/ml/` is kept for the admin explanation only) |
+| Estimation | `estimation/estimation.service.ts`; worldwide V2 estimate in `estimation/ml2/` (v1.5 of `estimation/ml/` is no longer called) |
 | Matcher | `reference-profiles/` |
 | Schema | `entities/` + `db/migrations/` (explicit registry in `db/migrations/index.ts`) |
 

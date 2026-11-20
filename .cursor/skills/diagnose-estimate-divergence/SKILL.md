@@ -73,7 +73,8 @@ Read `DATABASE_URL` from `backend/.env`. Never hardcode it.
 Prefer `EstimationService.computeBreakdown` (admin
 `GET /admin/games/:id/estimate-breakdown`). It already traces signals,
 multiplier source (`matcher` or `global`), first-week inputs, splits, and
-aggregates. Use SQL when the API is down.
+aggregates, plus the live V2 (`v2`: basis, model, consoles, anchor and its
+Steam reviews then). Use SQL when the API is down.
 
 ```sql
 SELECT "estimatedTodayLow", "estimatedTodayHigh", "estimatedTodayUnits", "computedAt", reconciliation

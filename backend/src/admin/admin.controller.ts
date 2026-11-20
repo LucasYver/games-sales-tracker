@@ -184,6 +184,12 @@ export class AdminController {
     return this.estimation.computeBreakdown(id);
   }
 
+  /** The live V2 estimate and its explanation: the admin estimate tab. */
+  @Get('games/:id/v2-estimate')
+  v2Estimate(@Param('id', ParseUUIDPipe) id: string) {
+    return this.estimation.computeV2Breakdown(id);
+  }
+
   @Get('milestones')
   listMilestones(
     @Query('gameId') gameId?: string,

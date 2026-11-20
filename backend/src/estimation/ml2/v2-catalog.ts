@@ -1,5 +1,6 @@
 import { estimateV2, V2Estimate } from './v2-estimate';
 import { buildV2Features, V2FeatureInput } from './v2-features';
+import { explainV2, V2Explanation } from './v2-explain';
 import {
   loadV2Signals,
   v2ReviewsAge,
@@ -36,6 +37,8 @@ export interface V2GameEstimate {
     modelLogAtDate: number;
   } | null;
   bestPublished: number | null;
+  /** Why the model answered its total (only when asked: admin). */
+  explanation?: V2Explanation;
 }
 
 function ask(
@@ -64,6 +67,8 @@ export async function estimateV2Games(
   asOf: Date,
   /** Figures and prices entered after that date are not read (default: `asOf`). */
   knownBy: Date = asOf,
+  /** Also explain the model's total (admin only: a few ms per game). */
+  explain = false,
 ): Promise<Map<string, V2GameEstimate>> {
   const out = new Map<string, V2GameEstimate>();
   const [world, today] = await Promise.all([
@@ -167,6 +172,13 @@ export async function estimateV2Games(
       steamReviews: input.steamReviews,
       anchor,
       bestPublished,
+      ...(explain && {
+        explanation: explainV2(
+          model,
+          input,
+          buildV2Features(input, 'TOTAL', model.columns).features,
+        ),
+      }),
     });
   }
   return out;

@@ -6,8 +6,9 @@ import {
   type AdminGamePageSummary,
   type AdminGameChartsData,
   type AdminMatcherInspection,
-  type AdminEstimateBreakdown,
+  type AdminV2Estimate,
   type AdminIgdbFacts,
+  type AdminV2Explanation,
 } from '@/lib/admin';
 import type { GameMode, GameType, Platform } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
@@ -38,8 +39,6 @@ import { CcuHistoryChart } from '../../_components/CcuHistoryChart';
 import { ReviewHistoryChart } from '../../_components/ReviewHistoryChart';
 import { FollowersHistoryChart } from '../../_components/FollowersHistoryChart';
 import { TwitchViewersHistoryChart } from '../../_components/TwitchViewersHistoryChart';
-import { EstimateBreakdownView } from '../../_components/EstimateBreakdownPanel';
-import { MlExplanationPanel } from '../../_components/MlExplanationPanel';
 import {
   deleteGame,
   setEstimateBeforeFloor,
@@ -597,7 +596,7 @@ function ChipSet({ items }: { items: string[] }) {
   );
 }
 
-// ─── Estimates tab — corpus estimate, per-method pipeline ─────────────
+// ─── Estimates tab — worldwide V2 estimate, platform split ───────────────
 
 const PLATFORM_ORDER: Platform[] = ['PC', 'PLAYSTATION', 'XBOX', 'SWITCH'];
 
@@ -608,34 +607,25 @@ async function EstimatesTab({
   s: AdminGamePageSummary;
   gameId: string;
 }) {
-  const b = await adminFetch<AdminEstimateBreakdown>(
-    `/games/${gameId}/estimate-breakdown`,
+  // The V2 computed live (no platform pipeline: fast): what the site shows
+  // from the game's next rebuild.
+  const v2 = await adminFetch<AdminV2Estimate | null>(
+    `/games/${gameId}/v2-estimate`,
   ).catch(() => null);
-
-  const algo = b?.total ?? null; // sum of the per-platform methods
-  // What the public site displays: the ML estimate where it applies (platform
-  // sum at 300k+ and 1,000+ Steam reviews), the platform sum otherwise.
-  const ml = b?.ml ?? null;
-  // The V2 model decides as soon as it answers for the game (estimated, or
-  // excluded by hand). Its figure goes public at the game's next rebuild.
-  const v2 = b?.v2 ?? null;
-  const v2Decides = v2?.status === 'estimated' || v2?.status === 'excluded';
-  const shown = v2Decides
-    ? v2?.units && v2.low !== null && v2.high !== null
-      ? {
-          low: v2.low,
-          high: v2.high,
-          units: v2.units,
-          label: `V2 model (${V2_BASIS[v2.basis ?? ''] ?? v2.basis})`,
-        }
-      : null
-    : ml?.shown
-    ? { low: ml.low, high: ml.high, units: ml.units, label: 'ML model' }
-    : algo
-      ? { ...algo, units: midpoint(algo.low, algo.high), label: 'corpus model' }
-      : null;
-  const latestEstimate = s.latestEstimate;
-  const declared = b?.declared ?? null;
+  const live = v2?.units != null && v2.low != null && v2.high != null ? v2 : null;
+  // What the site shows now: the last stored snapshot.
+  const published = s.latestEstimate;
+  const publishedUnits = published
+    ? (published.estimatedTodayUnits ??
+      midpoint(published.estimatedTodayLow, published.estimatedTodayHigh))
+    : null;
+  // A rebuild would change the public figure (1 % tolerance for rounding).
+  const stale =
+    v2 !== null &&
+    (live
+      ? publishedUnits === null ||
+        Math.abs(publishedUnits - live.units!) > live.units! * 0.01
+      : publishedUnits !== null);
 
   // The public site estimates games released from 2017 on; an older one can
   // be let through by hand (see `games/estimate-scope.ts`).
@@ -643,14 +633,6 @@ async function EstimatesTab({
     s.releaseDate !== null &&
     new Date(s.releaseDate) < new Date('2017-01-01T00:00:00.000Z');
 
-  const platforms =
-    b?.platforms
-      .slice()
-      .sort(
-        (a, c) =>
-          PLATFORM_ORDER.indexOf(a.platform) -
-          PLATFORM_ORDER.indexOf(c.platform),
-      ) ?? [];
 
   return (
     <div className="flex flex-col gap-5">
@@ -695,9 +677,8 @@ async function EstimatesTab({
       {s.estimateBeforeFloor && (
         <p className="text-muted-foreground -mt-3 text-xs">
           The site shows this game&apos;s estimate although the model is less
-          reliable before 2017. Its V2 figure is written at the next estimate
-          rebuild: use <strong>Rebuild</strong> in the header to publish it now.
-          &ldquo;Hide estimate on the site&rdquo; still wins over this switch.
+          reliable before 2017. &ldquo;Hide estimate on the site&rdquo; still
+          wins over this switch.
         </p>
       )}
       {s.estimateHidden && (
@@ -707,225 +688,335 @@ async function EstimatesTab({
           estimate is still computed here.
         </p>
       )}
-      <p className="text-muted-foreground text-xs">
-        Inputs refreshed {fmtDate(s.lastRefreshedAt)}. Use{' '}
-        <strong>Refresh</strong> / <strong>Rebuild</strong> in the header to
-        re-run.
-      </p>
 
+      {/* ── Live V2 vs what the site shows now ── */}
       <Card>
-        <CardContent className="pt-5">
-          <div className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
-            Estimate today
+        <CardContent className="grid gap-4 pt-5 sm:grid-cols-2">
+          <div>
+            <div className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
+              V2 estimate · live
+            </div>
+            <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums">
+              {live ? compact(live.units) : v2 ? 'Not estimated' : '—'}
+            </div>
+            <div className="text-muted-foreground mt-0.5 text-[11px]">
+              {live
+                ? `${fmtRange(live.low!, live.high!)} · ${V2_BASIS[live.basis ?? ''] ?? live.basis}`
+                : v2
+                  ? v2NotEstimatedReason(v2)
+                  : 'V2 unavailable for this game'}
+            </div>
           </div>
-          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums">
-            {shown
-              ? compact(shown.units)
-              : latestEstimate
-                ? compactSnapshot(latestEstimate)
-                : '—'}
-          </div>
-          <div className="text-muted-foreground mt-0.5 text-[11px]">
-            {shown
-              ? `${fmtRange(shown.low, shown.high)} · ${shown.label}`
-              : 'no snapshot — hit Rebuild'}
+          <div>
+            <div className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
+              On the site now
+            </div>
+            <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums">
+              {published ? compactSnapshot(published) : '—'}
+            </div>
+            <div className="text-muted-foreground mt-0.5 text-[11px]">
+              {published
+                ? `${fmtRange(published.estimatedTodayLow, published.estimatedTodayHigh)} · computed ${fmtDate(published.computedAt)}`
+                : 'no snapshot'}
+            </div>
+            {stale && (
+              <div className="mt-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                Differs from the live V2: <strong>Rebuild</strong> in the header
+                publishes it.
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {b && algo && shown ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-semibold tracking-wide uppercase">
-              How the estimate {compact(shown.units)} is built
-            </CardTitle>
-            <p className="text-muted-foreground text-xs">
-              Each platform aggregates its methods; consoles are ventilated from
-              PC/PS via the matcher split. From a 300k platform sum and 1,000
-              Steam reviews up, the ML model sets the worldwide figure and the
-              public page scales the platform split to it.
-            </p>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {platforms.map((p) => (
-              <div
-                key={p.platform}
-                className="flex flex-wrap items-center gap-2"
-              >
-                <Badge variant="secondary" className="w-24 justify-center">
-                  {p.platform}
-                </Badge>
-                {p.entries.map((e, i) => (
-                  <EntryNode key={i} entry={e} />
-                ))}
-                <PipeOp>→ agg</PipeOp>
-                <PipeNode
-                  label={`${p.platform} total`}
-                  value={compactMid(p.aggregateLow, p.aggregateHigh)}
-                  sub={fmtRange(p.aggregateLow, p.aggregateHigh)}
-                />
-              </div>
-            ))}
-            <div className="border-border flex flex-wrap items-center gap-2 border-t pt-3">
-              <PipeOp>Σ platforms</PipeOp>
-              <PipeNode
-                label="Algo total"
-                value={compactMid(algo.low, algo.high)}
-                sub={fmtRange(algo.low, algo.high)}
-                final={!ml?.shown}
-              />
-              {ml && (
-                <>
-                  <PipeOp>ML model</PipeOp>
-                  <PipeNode
-                    label={ml.shown ? 'Shown on site' : 'ML (not shown)'}
-                    value={compact(ml.units)}
-                    sub={fmtRange(ml.low, ml.high)}
-                    final={ml.shown}
-                  />
-                </>
-              )}
-            </div>
+      {v2 && <V2HowCard v2={v2} />}
 
-            {declared && (
-              <div className="text-muted-foreground border-border border-t pt-3 text-xs">
-                Declared{' '}
-                <span className="text-foreground">
-                  {compact(declared.units)}
-                </span>{' '}
-                ({declared.source}
-                {declared.reportedAt
-                  ? `, ${fmtDate(declared.reportedAt)}`
-                  : ''}){' · '}
-                estimate <span className="text-foreground">today</span>{' '}
-                {compact(shown.units)}
-                {' — '}
-                {shown.high < declared.units ? (
-                  <span className="font-semibold text-red-600 dark:text-red-400">
-                    below a past declared figure — possible under-estimate
-                  </span>
-                ) : declared.units >= shown.low ? (
-                  <span className="font-semibold text-amber-600 dark:text-amber-400">
-                    declared falls within today&apos;s range
-                  </span>
-                ) : (
-                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                    consistent — grown since the declaration
-                  </span>
-                )}
-                <span className="text-muted-foreground">
-                  {' '}
-                  (different dates — not a like-for-like ratio)
-                </span>
-              </div>
-            )}
 
-            <details className="group border-border border-t pt-3">
-              <summary className="text-primary cursor-pointer list-none text-xs font-semibold">
-                <span className="inline-block transition-transform group-open:rotate-90">
-                  ›
-                </span>{' '}
-                Show full trace — every input, source &amp; weight
-              </summary>
-              <div className="mt-3">
-                <EstimateBreakdownView breakdown={b} />
-              </div>
-            </details>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardContent className="text-muted-foreground p-6 text-sm">
-            No estimate computed yet — hit <strong>Rebuild</strong> in the
-            header.
-          </CardContent>
-        </Card>
-      )}
-
-      {v2 && (
-        <Card>
-          <CardContent className="flex flex-col gap-1 p-6 text-sm">
-            <p className="font-semibold">
-              V2 model ({v2.version}) — computed live, public at the next
-              rebuild
-            </p>
-            {v2Decides && v2.units ? (
-              <p>
-                <strong>{compact(v2.units)}</strong>
-                {v2.low !== null && v2.high !== null
-                  ? ` (${fmtRange(v2.low, v2.high)})`
-                  : ''}{' '}
-                · {V2_BASIS[v2.basis ?? ''] ?? v2.basis}
-              </p>
-            ) : (
-              <p>
-                <strong>Not estimated</strong> ·{' '}
-                {v2.status === 'estimated'
-                  ? 'no signal: under 10 Steam reviews, no console rating, no published figure'
-                  : (V2_STATUS[v2.status] ?? v2.status)}
-              </p>
-            )}
-            <p className="text-muted-foreground">
-              Model alone: {v2.modelUnits !== null ? compact(v2.modelUnits) : '—'}{' '}
-              total, {v2.modelPc !== null ? compact(v2.modelPc) : '—'} on PC ·
-              consoles from store ratings:{' '}
-              {v2.consoleUnits ? compact(v2.consoleUnits) : '—'} · Steam
-              reviews: {v2.steamReviews ?? '—'}
-            </p>
-            <p className="text-muted-foreground">
-              Last published total:{' '}
-              {v2.anchorUnits !== null
-                ? `${compact(v2.anchorUnits)} on ${v2.anchorDate?.slice(0, 10)}`
-                : '—'}{' '}
-              · best published figure:{' '}
-              {v2.bestPublished !== null ? compact(v2.bestPublished) : '—'}
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {b?.mlExplanation && (
-        <MlExplanationPanel
-          explanation={b.mlExplanation}
-          shown={b.ml?.shown ?? false}
-          hiddenOnSite={b.hiddenOnSite}
-          siteUnits={algo ? midpoint(algo.low, algo.high) : null}
-        />
-      )}
+      <p className="text-muted-foreground text-xs">
+        Inputs refreshed {fmtDate(s.lastRefreshedAt)} · V2 {v2?.version ?? '—'}
+        {' '}· computed {fmtDate(v2?.computedAt ?? null)}.
+      </p>
     </div>
   );
 }
 
-/** One estimation method as a pipeline node, formula in the subtitle. */
-function EntryNode({
-  entry,
-}: {
-  entry: AdminEstimateBreakdown['platforms'][number]['entries'][number];
-}) {
-  if (entry.type === 'boxleiter') {
-    return (
-      <PipeNode
-        label="Boxleiter"
-        value={compactMid(entry.finalLow, entry.finalHigh)}
-        sub={`${compact(entry.signal.value)} ${entry.signal.metric} × ${entry.multiplierLow.toFixed(1)}–${entry.multiplierHigh.toFixed(1)} [${entry.multiplierSource}]`}
-      />
-    );
-  }
-  if (entry.type === 'first-week') {
-    return (
-      <PipeNode
-        label="First-week CCU"
-        value={compactMid(entry.finalLow, entry.finalHigh)}
-        sub={`peak ${compact(entry.launchPeakValue)} ×[${entry.ccuRatioLow},${entry.ccuRatioHigh}] → wk1 → ×${entry.projectionMultiplier.toFixed(2)} [${entry.profileSource}]`}
-      />
-    );
-  }
-  return (
+function v2NotEstimatedReason(v2: AdminV2Estimate): string {
+  return v2.status === 'estimated'
+    ? 'no signal: under 10 Steam reviews, no console rating, no published figure'
+    : (V2_STATUS[v2.status] ?? v2.status);
+}
+
+/** How the V2 rules reached the figure, one chain per basis. */
+function V2HowCard({ v2 }: { v2: AdminV2Estimate }) {
+  const model = (
     <PipeNode
-      label={`Split ← ${entry.sourcePlatform}`}
-      value={compactMid(entry.finalLow, entry.finalHigh)}
-      sub={`× ${entry.ratio.toFixed(2)} (share ${(entry.targetShare * 100).toFixed(0)}%/${(entry.sourceShare * 100).toFixed(0)}%)`}
+      label="Model total"
+      value={compact(v2.modelUnits)}
+      sub={
+        v2.modelLow != null && v2.modelHigh != null
+          ? fmtRange(v2.modelLow, v2.modelHigh)
+          : undefined
+      }
     />
+  );
+  const result =
+    v2.units != null ? (
+      <PipeNode
+        label="Estimate"
+        value={compact(v2.units)}
+        sub={
+          v2.low != null && v2.high != null
+            ? fmtRange(v2.low, v2.high)
+            : undefined
+        }
+        final
+      />
+    ) : null;
+
+  let chain: React.ReactNode = null;
+  switch (v2.basis) {
+    case 'anchored': {
+      // The applied growth (launch-corrected, never below 1), not the raw
+      // review ratio, which overstates it right after a launch.
+      const applied =
+        v2.units != null && v2.anchorUnits
+          ? v2.units / v2.anchorUnits
+          : null;
+      const byReviews =
+        v2.anchorSteamReviews != null &&
+        v2.anchorSteamReviews > 0 &&
+        v2.steamReviews != null &&
+        v2.steamReviews >= v2.anchorSteamReviews;
+      chain = (
+        <>
+          <PipeNode
+            label="Last published total"
+            value={compact(v2.anchorUnits)}
+            sub={`${fmtDate(v2.anchorDate)} · ${compact(v2.anchorSteamReviews)} reviews`}
+          />
+          <PipeOp>
+            {applied != null ? `×${applied.toFixed(2)} ` : '× '}
+            {byReviews
+              ? `(reviews ${compact(v2.anchorSteamReviews)} → ${compact(v2.steamReviews)}, launch-corrected)`
+              : '(growth of the model)'}
+          </PipeOp>
+          {result}
+        </>
+      );
+      break;
+    }
+    case 'model':
+    case 'model-raised-by-consoles':
+      chain = (
+        <>
+          {model}
+          <PipeOp>max(model, consoles + PC)</PipeOp>
+          <PipeNode
+            label="Consoles + PC"
+            value={compact((v2.consoleUnits ?? 0) + (v2.modelPc ?? 0))}
+            sub={`${compact(v2.consoleUnits)} consoles · ${compact(v2.modelPc)} PC`}
+          />
+          <PipeOp>→</PipeOp>
+          {result}
+        </>
+      );
+      break;
+    case 'consoles':
+      chain = (
+        <>
+          <PipeNode
+            label="Console ratings"
+            value={compact(v2.consoleUnits)}
+            sub="under 10 Steam reviews"
+          />
+          <PipeOp>→</PipeOp>
+          {result}
+        </>
+      );
+      break;
+    case 'platform-floor':
+      chain = (
+        <>
+          {model}
+          <PipeOp>below a published figure</PipeOp>
+          <PipeNode
+            label="Best published"
+            value={compact(v2.bestPublished)}
+            sub="platform figure = floor"
+          />
+          <PipeOp>→</PipeOp>
+          {result}
+        </>
+      );
+      break;
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm font-semibold tracking-wide uppercase">
+          How the V2 reaches it
+        </CardTitle>
+        <p className="text-muted-foreground text-xs">
+          Anchored on the last published total when there is one; otherwise the
+          model, raised to consoles + PC when the store ratings say more; a
+          published platform figure is a floor.
+        </p>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {chain && <div className="flex flex-wrap items-center gap-2">{chain}</div>}
+        <dl className="border-border grid grid-cols-2 gap-x-5 gap-y-1.5 border-t pt-3 text-xs sm:grid-cols-4">
+          <Fact label="Model alone">
+            {compact(v2.modelUnits)} · {compact(v2.modelPc)} PC
+          </Fact>
+          <Fact label="Consoles (ratings)">{compact(v2.consoleUnits)}</Fact>
+          <Fact label="Steam reviews">{compact(v2.steamReviews)}</Fact>
+          <Fact label="Best published">{compact(v2.bestPublished)}</Fact>
+        </dl>
+        {v2.explanation && (
+          <V2ModelExplanation
+            x={v2.explanation}
+            modelUnits={v2.modelUnits}
+            v2={v2}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Why the model answered its total: from a game it knows nothing of, the
+ * factor each family of inputs applies (exact Shapley values, they multiply
+ * to the answer), with the values it read.
+ */
+/** How the model's figure relates to the estimate, per V2 rule. */
+function modelRole(v2: AdminV2Estimate): string | null {
+  switch (v2.basis) {
+    case 'anchored':
+      return 'For reference only: the estimate is anchored on the last published total, not on this figure (it only serves when the reviews cannot be followed).';
+    case 'model-raised-by-consoles':
+      return `The estimate starts from this figure, then the console ratings raise it to ${compact(v2.units)}.`;
+    case 'platform-floor':
+      return `For reference only: a published figure is higher (${compact(v2.bestPublished)}), it sets the floor.`;
+    case 'consoles':
+      return 'For reference only: under 10 Steam reviews, the estimate comes from the console ratings alone.';
+    case 'model':
+      return 'This figure is the estimate.';
+    default:
+      return null;
+  }
+}
+
+function V2ModelExplanation({
+  x,
+  modelUnits,
+  v2,
+}: {
+  x: AdminV2Explanation;
+  modelUnits: number | null;
+  v2: AdminV2Estimate;
+}) {
+  const role = modelRole(v2);
+  const perReview = x.head === 'perReview';
+  const fmt = (n: number) => (perReview ? n.toFixed(1) : compact(n));
+  const rows = x.families.filter(
+    (f) => Math.abs(Math.log(f.factor)) >= 0.005 || f.inputs.length > 0,
+  );
+  const maxLog = Math.max(...rows.map((f) => Math.abs(Math.log(f.factor))), 0.01);
+  return (
+    <div className="border-border flex flex-col gap-2.5 border-t pt-3">
+      <div className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
+        Why the model alone says {compact(modelUnits)}
+      </div>
+      {role && <p className="text-muted-foreground text-xs italic">{role}</p>}
+      <p className="text-xs">
+        {perReview ? (
+          <>
+            The model counts sales per Steam review, then multiplies by the
+            reviews: <strong>{fmt(x.full)}</strong> ×{' '}
+            <strong>{compact(x.steamReviews)}</strong> reviews ={' '}
+            <strong>{compact(modelUnits)}</strong>.
+          </>
+        ) : (
+          <>
+            No Steam reviews, so the model counts sales directly:{' '}
+            <strong>{compact(modelUnits)}</strong>.
+          </>
+        )}
+      </p>
+      <p className="text-xs">
+        A game the model knows nothing about:{' '}
+        <strong>
+          {fmt(x.base)}
+          {perReview ? ' sales per review' : ' sales'}
+        </strong>
+        . Each line below is one kind of information about this game and how
+        much it moves that figure (green raises it, red lowers it):
+      </p>
+      <div className="flex flex-col gap-1.5">
+        {rows.map((f) => {
+          const l = Math.log(f.factor);
+          const width = (Math.abs(l) / maxLog) * 50;
+          const up = l >= 0;
+          return (
+            <div
+              key={f.name}
+              className="grid grid-cols-[110px_120px_48px_1fr] items-center gap-3 text-xs"
+            >
+              <span className="font-medium">{f.name}</span>
+              <span className="bg-muted relative h-2 overflow-hidden rounded-full">
+                <span className="bg-border absolute inset-y-0 left-1/2 w-px" />
+                <span
+                  className={
+                    up
+                      ? 'absolute inset-y-0 left-1/2 rounded-r-full bg-emerald-500'
+                      : 'absolute inset-y-0 right-1/2 rounded-l-full bg-red-500'
+                  }
+                  style={{ width: `${width}%` }}
+                />
+              </span>
+              <span
+                className={
+                  'text-right font-semibold tabular-nums ' +
+                  (Math.abs(l) < 0.005
+                    ? 'text-muted-foreground'
+                    : up
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-red-600 dark:text-red-400')
+                }
+              >
+                ×{f.factor.toFixed(2)}
+              </span>
+              <span className="text-muted-foreground truncate" title={f.inputs.map((i) => `${i.label}: ${i.value}`).join(' · ')}>
+                {f.inputs.length
+                  ? f.inputs.map((i) => `${i.label} ${i.value}`).join(' · ')
+                  : 'nothing known'}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-muted-foreground text-[11px]">
+        {fmt(x.base)}
+        {rows.map((f) => ` × ${f.factor.toFixed(2)}`).join('')} ≈ {fmt(x.full)}
+        {perReview ? ' sales per review' : ' sales'}. When two kinds of
+        information act together, their joint effect is split fairly between
+        them (Shapley values), so the factors always multiply to the
+        model&apos;s figure.
+      </p>
+    </div>
+  );
+}
+
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
+        {label}
+      </dt>
+      <dd className="m-0 tabular-nums">{children}</dd>
+    </div>
   );
 }
 

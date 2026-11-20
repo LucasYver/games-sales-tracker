@@ -112,8 +112,16 @@ To try a hypothesis: add a small subclass of `BEST` in `learned.py` (see
   the admin crons page shows the V2 rollout from 0. It is a production write (7,586
   rows); the cron still does about 300 games per run (11 min, once a day), so a full
   pass takes about 25 runs unless he reruns it by hand from `/admin/crons`.
+- Admin explanation (2026-11-20): `estimation/ml2/v2-explain.ts` gives the
+  admin estimate tab exact Shapley factors of nine input families on the
+  model's total (2^9 calls of `predictLog`, a few ms). Only the admin
+  (`computeV2Breakdown`, `computeBreakdown`) asks for it (`estimateV2Games(..., explain = true)`);
+  the rebuild and the `check-ml2-*` scripts never do. Keep its families in
+  step with the columns after a new freeze (an unknown column lands in
+  "Other").
 - Left for later: the v1.5 code (`estimation/ml/`, `backfill-ml-estimates.ts`) is
-  still there for the admin explanation; the methodology page text was not reviewed;
+  no longer called by anything (the admin estimate tab dropped its v1.5
+  explanation on 2026-11-20); the methodology page text was not reviewed;
   the lab UI was not restarted.
 
 **The model is frozen (owner's decision, 2026-11-12): H27, snapshot

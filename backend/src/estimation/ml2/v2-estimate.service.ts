@@ -22,9 +22,14 @@ export class V2EstimateService {
 
   /**
    * Estimate at `asOf` (default: now) from the signals known then and every
-   * published figure entered so far. Null for an unknown game.
+   * published figure entered so far. Null for an unknown game. `explain`
+   * adds why the model answered its total (admin only).
    */
-  async estimate(gameId: string, asOf?: Date): Promise<V2GameEstimate | null> {
+  async estimate(
+    gameId: string,
+    asOf?: Date,
+    explain = false,
+  ): Promise<V2GameEstimate | null> {
     const now = new Date();
     const result = await estimateV2Games(
       (sql, params) => this.dataSource.query(sql, params),
@@ -32,6 +37,7 @@ export class V2EstimateService {
       [gameId],
       asOf ?? now,
       now,
+      explain,
     );
     return result.get(gameId) ?? null;
   }
