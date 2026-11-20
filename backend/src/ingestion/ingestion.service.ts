@@ -61,7 +61,11 @@ import {
   needsLiveSteamReviewLookup,
   promoteCatalogTier,
 } from './catalog-tier';
-import { cycleWindow } from './ingestion-cadence';
+import {
+  cycleWindow,
+  latestSlotStart,
+  STEAM_CCU_EXTENDED_HOURS_UTC,
+} from './ingestion-cadence';
 import { IngestionStateService } from './ingestion-state.service';
 import {
   type DatedValue,
@@ -1203,14 +1207,18 @@ export class IngestionService {
   }
 
   /**
-   * Poll the live Steam concurrent-player count for every tracked Steam game
-   * and persist CCU signals. Runs on a short cadence (dedicated cron) so
-   * intra-day peaks are captured even though the full refresh only runs
-   * nightly. Paid and free-to-play titles are both polled; F2P still has no
-   * sales estimate. Each game is best-effort: a failure is logged and the
-   * loop continues. Apps with no CCU endpoint are recorded as successes
-   * (unsupported). A flood of failures after successes trips a circuit
-   * breaker so a Steam throttle does not stamp the whole catalog failed.
+   * Poll the live Steam concurrent-player count for tracked Steam games and
+   * persist CCU signals. CORE games are due every UTC hour; EXTENDED games
+   * once per slot of {@link STEAM_CCU_EXTENDED_HOURS_UTC}. Due CORE games go
+   * first so a long run never delays them; EXTENDED games left over at the
+   * budget are picked up by the next hourly runs. Games whose release date
+   * is more than a day away are skipped: Steam has no player count for them
+   * and each one cost a 404 plus a 2 s retry. Paid and free-to-play titles
+   * are both polled; F2P still has no sales estimate. Each game is
+   * best-effort: a failure is logged and the loop continues. Apps with no
+   * CCU endpoint are recorded as successes (unsupported). A flood of
+   * failures after successes trips a circuit breaker so a Steam throttle
+   * does not stamp the whole catalog failed.
    */
   async pollAllSteamCcu(options: { budgetMs?: number } = {}): Promise<{
     polled: number;
@@ -1219,6 +1227,7 @@ export class IngestionService {
   }> {
     const budgetMs = options.budgetMs ?? Number.POSITIVE_INFINITY;
     const startedAt = Date.now();
+    const now = new Date(startedAt);
     // Keep sustained request rate under Steam's public Web API budget.
     // Concurrency 6 with no gap burned ~6k apps in ~1 min and tripped a
     // throttle that returned empty player counts for the rest of the run.
@@ -1237,16 +1246,42 @@ export class IngestionService {
 
     const trackedGames = await this.games.find({
       where: { id: In(gameIds) },
+      select: ['id', 'catalogTier', 'releaseDate'],
     });
-    const trackedIds = new Set(trackedGames.map((game) => game.id));
+    const releasedBy = startedAt + 24 * 3600 * 1000;
+    const pollable = trackedGames.filter(
+      (game) => !game.releaseDate || game.releaseDate.getTime() <= releasedBy,
+    );
+    const pollableIds = new Set(pollable.map((game) => game.id));
     const sourceByGameId = new Map(
       steamSources
-        .filter((source) => trackedIds.has(source.gameId))
+        .filter((source) => pollableIds.has(source.gameId))
         .map((source) => [source.gameId, source]),
     );
-    const orderedGameIds = await this.ingestionState.oldestFirst('STEAM_CCU', [
-      ...sourceByGameId.keys(),
+    const coreIds = pollable
+      .filter((game) => game.catalogTier === CatalogTier.CORE)
+      .map((game) => game.id);
+    const extendedIds = pollable
+      .filter((game) => game.catalogTier !== CatalogTier.CORE)
+      .map((game) => game.id);
+    const extendedSlotStart = latestSlotStart(
+      STEAM_CCU_EXTENDED_HOURS_UTC,
+      now,
+    );
+    const [coreDue, extendedDue] = await Promise.all([
+      this.ingestionState.selectDueForCadence('STEAM_CCU', coreIds, 'hour'),
+      this.ingestionState.selectDue(
+        'STEAM_CCU',
+        extendedIds,
+        startedAt - extendedSlotStart.getTime(),
+      ),
     ]);
+    const orderedGameIds = [...coreDue, ...extendedDue];
+    this.logger.log(
+      `[ccu] due: ${coreDue.length} CORE, ${extendedDue.length} EXTENDED ` +
+        `(slot ${extendedSlotStart.toISOString()}), ` +
+        `${trackedGames.length - pollable.length} unreleased skipped.`,
+    );
 
     let savedCount = 0;
     let consecutiveBad = 0;

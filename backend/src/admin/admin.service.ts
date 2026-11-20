@@ -61,6 +61,9 @@ interface IngestionCronConfig {
   cycle: IngestionCadence;
   hourOffsetMinutes?: number;
   target: 'paid' | 'steam' | 'console' | 'changed-signals' | 'with-sales';
+  // Count only games of this tier (progress and total). Steam CCU tracks
+  // its hourly CORE guarantee; EXTENDED games run at fewer, fixed slots.
+  catalogTier?: CatalogTier;
 }
 
 const INGESTION_CRONS: IngestionCronConfig[] = [
@@ -68,9 +71,10 @@ const INGESTION_CRONS: IngestionCronConfig[] = [
     pipeline: 'STEAM_CCU',
     cronPath: '/api/cron/steam-ccu',
     schedule: '0 * * * *',
-    cadence: 'Hourly',
+    cadence: 'Hourly (CORE); EXTENDED at 01, 13, 17, 20 UTC',
     cycle: 'hour',
     target: 'steam',
+    catalogTier: CatalogTier.CORE,
   },
   {
     pipeline: 'TWITCH_VIEWERS',
@@ -569,6 +573,7 @@ export class AdminService {
       steamReviewsTotal,
       paidGamesTotal,
       steamGamesTotal,
+      steamCoreGamesTotal,
       consoleGamesTotal,
     ] = await Promise.all([
       this.games
@@ -590,6 +595,14 @@ export class AdminService {
         .where('gs.source = :source', { source: SourceType.STEAM })
         .andWhere('g.isFree = false')
         .andWhere('g.deletedAt IS NULL')
+        .getCount(),
+      this.gameSources
+        .createQueryBuilder('gs')
+        .innerJoin(Game, 'g', 'g.id = gs.gameId')
+        .where('gs.source = :source', { source: SourceType.STEAM })
+        .andWhere('g.isFree = false')
+        .andWhere('g.deletedAt IS NULL')
+        .andWhere('g.catalogTier = :tier', { tier: CatalogTier.CORE })
         .getCount(),
       this.games
         .createQueryBuilder('g')
@@ -643,6 +656,10 @@ export class AdminService {
             })
             .andWhere('stateGame.deletedAt IS NULL')
             .andWhere('stateGame.isFree = false')
+            .andWhere(
+              cron.catalogTier ? 'stateGame.catalogTier = :tier' : 'TRUE',
+              cron.catalogTier ? { tier: cron.catalogTier } : {},
+            )
             .setParameter('startedAt', cron.startedAt)
             .getRawOne<{
               cycleAttempted: string;
@@ -683,7 +700,9 @@ export class AdminService {
 
         const total =
           cron.target === 'steam'
-            ? steamGamesTotal
+            ? cron.catalogTier === CatalogTier.CORE
+              ? steamCoreGamesTotal
+              : steamGamesTotal
             : cron.target === 'console'
               ? consoleGamesTotal
               : cron.target === 'changed-signals'

@@ -147,7 +147,9 @@ Production crons are HTTP routes in `vercel.json`, authorized with
 budget and continues from the stalest games on the next invocation. Do not
 copy the cron expressions into this file.
 
-Rough groups: hourly CCU and Twitch, several-times-daily reviews / store
+Rough groups: CCU hourly for CORE games and at four peak hours for EXTENDED
+ones (unreleased games skipped), Twitch four times a day, several-times-daily
+reviews / store
 ratings / milestone harvest / prices / followers, nightly IGDB discovery,
 weekly estimate rebuild and rank, slower playtime and achievement passes.
 The nightly discovery run also re-reads IGDB for part of the catalog, oldest

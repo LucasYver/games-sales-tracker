@@ -67,6 +67,9 @@ Adding a value to `INGESTION_PIPELINES` in
 - Free-to-play (`isFree`) for sales-related jobs.
 - Steam jobs: games with no `game_source` STEAM row.
 - Store ratings / console prices: games with no PS or Xbox platform.
+- Steam CCU: games released more than a day from now. CORE games are due
+  every hour, EXTENDED games once per `STEAM_CCU_EXTENDED_HOURS_UTC` slot
+  (`ingestion-cadence.ts`); due CORE games run first.
 - Milestone harvest is not "every paid game". See
   `isEligibleForAutomaticHarvest` (`CORE`, or `EXTENDED` with
   `recentVelocityPercentile <= 0.1`) plus `isDueForRefresh`.

@@ -66,3 +66,37 @@ export function isDue(
     timestamp < cycleWindow(cadence, now, hourOffsetMinutes).startedAt.getTime()
   );
 }
+
+/**
+ * UTC hours at which EXTENDED games get a Steam player-count reading (CORE
+ * games are read every hour). Only the day's highest reading is stored, so
+ * the slots sit on the usual peaks: 13 UTC (Steam's daily high, Asian
+ * evening), 17 and 20 UTC (European evening) and 01 UTC (American evening).
+ * Keep them at least 3 hours apart: a slot's leftover games are read by the
+ * following hourly runs, once the CORE games are done.
+ */
+export const STEAM_CCU_EXTENDED_HOURS_UTC: readonly number[] = [1, 13, 17, 20];
+
+/**
+ * Start of the latest slot at or before `now`, for a job that runs at fixed
+ * whole UTC hours (`hoursUtc`). Before the first slot of the day it returns
+ * yesterday's last slot.
+ */
+export function latestSlotStart(
+  hoursUtc: readonly number[],
+  now: Date = new Date(),
+): Date {
+  const dayStart = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+  );
+  const hour = now.getUTCHours();
+  const sorted = [...hoursUtc].sort((a, b) => a - b);
+  const todaySlots = sorted.filter((slot) => slot <= hour);
+  const slotHour =
+    todaySlots.length > 0
+      ? todaySlots[todaySlots.length - 1]
+      : sorted[sorted.length - 1] - 24;
+  return new Date(dayStart + slotHour * 3600 * 1000);
+}
