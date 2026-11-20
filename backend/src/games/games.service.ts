@@ -498,25 +498,39 @@ export class GamesService {
     options: {
       limit?: number;
       sort?: 'trending' | 'popular' | 'recent' | 'oldest' | 'sales';
-      platform?: string;
+      /** Games on any of these platforms. */
+      platforms?: Platform[];
       offset?: number;
-      genre?: string;
+      /** Games carrying any of these genres. */
+      genres?: string[];
       status?: 'released' | 'new' | 'upcoming';
       yearMin?: number;
       yearMax?: number;
       minReviews?: number;
+      /** Games offering any of these IGDB modes. */
+      modes?: GameMode[];
+      /** Leave free-to-play games out. */
+      hideFree?: boolean;
+      /**
+       * Games released on no platform outside `platforms`; with no platform
+       * picked, games released on a single platform.
+       */
+      exclusive?: boolean;
     } = {},
   ): Promise<PaginatedGames> {
     const {
       limit = 24,
       sort = 'popular',
-      platform,
+      platforms = [],
       offset = 0,
-      genre,
+      genres = [],
       status,
       yearMin,
       yearMax,
       minReviews,
+      modes = [],
+      hideFree = false,
+      exclusive = false,
     } = options;
 
     // Review count per game, all platforms summed, as correlated index
@@ -542,23 +556,37 @@ export class GamesService {
     // Apply identical row-level filters to both query builders so the
     // pagination total stays consistent with the visible page.
     const applyRowFilters = (target: typeof qb) => {
-      if (platform) {
-        // PostgreSQL enum-array containment: platforms @> ARRAY['X']::platform_enum[]
+      if (platforms.length > 0) {
+        // Enum-array overlap: on at least one of the picked platforms.
         target.andWhere(
-          `g.platforms @> ARRAY[:platform]::game_platforms_enum[]`,
-          { platform },
+          `g.platforms && ARRAY[:...platforms]::game_platforms_enum[]`,
+          { platforms },
+        );
+        if (exclusive) {
+          // ...and on none outside them.
+          target.andWhere(
+            `g.platforms <@ ARRAY[:...platforms]::game_platforms_enum[]`,
+          );
+        }
+      } else if (exclusive) {
+        target.andWhere('cardinality(g.platforms) = 1');
+      }
+
+      if (genres.length > 0) {
+        // `genres` is stored as a comma-separated `simple-array`; compare
+        // whole trimmed tokens so "RPG" doesn't hit "Role-playing (RPG)".
+        target.andWhere(
+          `ARRAY(SELECT trim(x) FROM unnest(string_to_array(g.genres, ',')) AS x) && ARRAY[:...genres]::text[]`,
+          { genres },
         );
       }
 
-      if (genre) {
-        // `genres` is stored as a comma-separated `simple-array`; match whole
-        // tokens (with optional surrounding spaces) so "RPG" doesn't
-        // accidentally hit "Role-playing (RPG)" via substring.
-        target.andWhere(
-          `string_to_array(g.genres, ',') ` +
-            `&& ARRAY[:genre, ' ' || :genre, :genre || ' ', ' ' || :genre || ' ']`,
-          { genre },
-        );
+      if (modes.length > 0) {
+        target.andWhere(`g.gameModes && ARRAY[:...modes]::text[]`, { modes });
+      }
+
+      if (hideFree) {
+        target.andWhere('NOT g.isFree');
       }
 
       if (status === 'upcoming') {

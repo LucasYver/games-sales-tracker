@@ -9,27 +9,26 @@ import {
   getPopularGames,
   searchGames,
   type GenreOption,
-  type SortOption,
-  type StatusOption,
 } from '@/lib/api';
 import { GamesTable } from '@/components/chart-room/GamesTable';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
-import { FiltersSidebar } from '@/components/FiltersSidebar';
+import { ListingFilterBar } from '@/components/ListingFilterBar';
+import {
+  countActiveFilters,
+  listingQuery,
+  parseListingFilters,
+  DEFAULT_SORT,
+  type ListingFilters,
+  type ListingSearchParams,
+} from '@/lib/listing-filters';
 import { Pagination } from '@/components/Pagination';
 import { defaultOgImages } from '@/lib/og-meta';
 import { Gta6HomeBanner } from '@/components/Gta6HomeBanner';
 
 const PAGE_SIZE = 50;
 
-type HomeSearchParams = {
+type HomeSearchParams = ListingSearchParams & {
   q?: string;
-  sort?: string;
-  platform?: string;
-  genre?: string;
-  status?: string;
-  yearMin?: string;
-  yearMax?: string;
-  minReviews?: string;
   page?: string;
 };
 
@@ -141,38 +140,45 @@ function Listing({
   page,
   pageCount,
   offset,
-  sort,
-  params,
+  filters,
+  genres,
 }: {
   popular: Awaited<ReturnType<typeof getPopularGames>>;
   page: number;
   pageCount: number;
   offset: number;
-  sort: SortOption;
-  params: Record<string, string>;
+  filters: ListingFilters;
+  genres: GenreOption[];
 }) {
   const t = useTranslations('home');
 
-  if (popular.items.length === 0) {
-    return <EmptyState>{t('listingEmpty')}</EmptyState>;
-  }
-
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="flex items-baseline gap-2 font-mono text-sm font-bold tracking-wider uppercase">
+    <div className="flex flex-col gap-3">
+      <h1 className="font-mono text-sm font-bold tracking-wider uppercase">
         {t('title')}
-        <span className="text-xs font-medium tracking-normal text-muted-foreground normal-case">
-          {t('gamesCount', { count: popular.total })}
-        </span>
       </h1>
-      <GamesTable
-        games={popular.items}
-        offset={offset}
-        sort={sort}
-        params={params}
-      />
       <Suspense>
-        <Pagination page={page} pageCount={pageCount} />
+        <ListingFilterBar
+          filters={filters}
+          genres={genres}
+          total={popular.total}
+        >
+          {popular.items.length === 0 ? (
+            <EmptyState>{t('listingEmpty')}</EmptyState>
+          ) : (
+            <div className="flex flex-col gap-4">
+              <GamesTable
+                games={popular.items}
+                offset={offset}
+                sort={filters.sort}
+                params={listingQuery(filters)}
+              />
+              <Suspense>
+                <Pagination page={page} pageCount={pageCount} />
+              </Suspense>
+            </div>
+          )}
+        </ListingFilterBar>
       </Suspense>
     </div>
   );
@@ -186,36 +192,10 @@ export default async function Home({
   searchParams: Promise<HomeSearchParams>;
 }) {
   const { locale } = await params;
-  const {
-    q,
-    sort: sortParam,
-    platform: platformParam,
-    genre: genreParam,
-    status: statusParam,
-    yearMin: yearMinParam,
-    yearMax: yearMaxParam,
-    minReviews: minReviewsParam,
-    page: pageParam,
-  } = await searchParams;
-  const query = q?.trim() ?? '';
-  const sort: SortOption =
-    sortParam === 'popular' ||
-    sortParam === 'recent' ||
-    sortParam === 'oldest' ||
-    sortParam === 'sales'
-      ? sortParam
-      : 'trending';
-  const platform = platformParam ?? '';
-  const genre = (genreParam ?? '').trim();
-  // Public home never lists unreleased titles. "new" stays available as a
-  // narrower released-window filter; "upcoming" and bare "all" are ignored.
-  const status: StatusOption = statusParam === 'new' ? 'new' : 'released';
-  const yearMin = sanitizeYear(yearMinParam);
-  const yearMax = sanitizeYear(yearMaxParam);
-  const minReviewsNum = Number(minReviewsParam);
-  const minReviews =
-    Number.isFinite(minReviewsNum) && minReviewsNum > 0 ? minReviewsNum : 0;
-  const page = Math.max(1, Number(pageParam) || 1);
+  const sp = await searchParams;
+  const query = sp.q?.trim() ?? '';
+  const filters = parseListingFilters(sp);
+  const page = Math.max(1, Number(sp.page) || 1);
   const offset = (page - 1) * PAGE_SIZE;
 
   const [rawResults, popular, genres] = await Promise.all([
@@ -224,14 +204,18 @@ export default async function Home({
       ? Promise.resolve({ items: [], total: 0 })
       : getPopularGames({
           limit: PAGE_SIZE,
-          sort,
-          platform: platform || undefined,
+          sort: filters.sort,
+          platform: filters.platforms.join(',') || undefined,
           offset,
-          genre: genre || undefined,
-          status,
-          yearMin: yearMin ?? undefined,
-          yearMax: yearMax ?? undefined,
-          minReviews: minReviews || undefined,
+          genre: filters.genres.join(',') || undefined,
+          // The public home never lists unreleased titles.
+          status: 'released',
+          yearMin: filters.yearMin ?? undefined,
+          yearMax: filters.yearMax ?? undefined,
+          minReviews: filters.minReviews || undefined,
+          modes: filters.modes,
+          hideFree: filters.hideFree,
+          exclusive: filters.exclusive,
         }),
     query ? Promise.resolve<GenreOption[]>([]) : getGenres(),
   ]);
@@ -242,14 +226,6 @@ export default async function Home({
   });
 
   const pageCount = Math.ceil(popular.total / PAGE_SIZE);
-  const listParams: Record<string, string> = {};
-  if (sort !== 'trending') listParams.sort = sort;
-  if (platform) listParams.platform = platform;
-  if (genre) listParams.genre = genre;
-  if (status === 'new') listParams.status = status;
-  if (yearMin != null) listParams.yearMin = String(yearMin);
-  if (yearMax != null) listParams.yearMax = String(yearMax);
-  if (minReviews) listParams.minReviews = String(minReviews);
 
   return (
     <main className="flex flex-col">
@@ -261,30 +237,14 @@ export default async function Home({
         {query ? (
           <SearchResults query={query} results={results} />
         ) : (
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-6">
-            <div className="min-w-0 flex-1">
-              <Listing
-                popular={popular}
-                page={page}
-                pageCount={pageCount}
-                offset={offset}
-                sort={sort}
-                params={listParams}
-              />
-            </div>
-            <Suspense>
-              <FiltersSidebar
-                sort={sort}
-                platform={platform}
-                genre={genre}
-                status={status === 'released' ? '' : status}
-                yearMin={yearMin != null ? String(yearMin) : ''}
-                yearMax={yearMax != null ? String(yearMax) : ''}
-                minReviews={minReviews ? String(minReviews) : ''}
-                genres={genres}
-              />
-            </Suspense>
-          </div>
+          <Listing
+            popular={popular}
+            page={page}
+            pageCount={pageCount}
+            offset={offset}
+            filters={filters}
+            genres={genres}
+          />
         )}
       </div>
     </main>
@@ -293,29 +253,6 @@ export default async function Home({
 
 function hasListingFilters(sp: HomeSearchParams): boolean {
   if (sp.q?.trim()) return true;
-  if (
-    sp.sort === 'popular' ||
-    sp.sort === 'recent' ||
-    sp.sort === 'oldest' ||
-    sp.sort === 'sales'
-  ) {
-    return true;
-  }
-  if (sp.platform) return true;
-  if ((sp.genre ?? '').trim()) return true;
-  // Home already forces released; only a non-default status is a filter.
-  if (sp.status && sp.status !== 'released') return true;
-  if (sanitizeYear(sp.yearMin) != null) return true;
-  if (sanitizeYear(sp.yearMax) != null) return true;
-  const minReviewsNum = Number(sp.minReviews);
-  return Number.isFinite(minReviewsNum) && minReviewsNum > 0;
-}
-
-function sanitizeYear(value: string | undefined): number | null {
-  if (!value) return null;
-  const n = Number(value);
-  if (!Number.isFinite(n)) return null;
-  const max = new Date().getFullYear() + 5;
-  if (n < 1900 || n > max) return null;
-  return Math.trunc(n);
+  const filters = parseListingFilters(sp);
+  return filters.sort !== DEFAULT_SORT || countActiveFilters(filters) > 0;
 }

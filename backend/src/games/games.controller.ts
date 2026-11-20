@@ -6,6 +6,32 @@ import {
   Query,
 } from '@nestjs/common';
 import { GamesService } from './games.service';
+import { Platform } from '../entities/enums';
+import type { GameMode } from './igdb-facts';
+
+/** Platforms the public listing filters on. */
+const LISTING_PLATFORMS: Platform[] = [
+  Platform.PC,
+  Platform.PLAYSTATION,
+  Platform.XBOX,
+  Platform.SWITCH,
+];
+
+/** Game modes the public listing filters on (IGDB `game_modes`). */
+const LISTING_MODES: GameMode[] = ['SINGLE_PLAYER', 'MULTIPLAYER', 'CO_OP'];
+
+/** A comma-separated query value (`PC,XBOX`) as trimmed, unique tokens. */
+function parseList(value?: string): string[] {
+  if (!value) return [];
+  return [
+    ...new Set(
+      value
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean),
+    ),
+  ].slice(0, 20);
+}
 
 @Controller('games')
 export class GamesController {
@@ -30,6 +56,9 @@ export class GamesController {
     @Query('yearMin') yearMin?: string,
     @Query('yearMax') yearMax?: string,
     @Query('minReviews') minReviews?: string,
+    @Query('mode') mode?: string,
+    @Query('hideFree') hideFree?: string,
+    @Query('exclusive') exclusive?: string,
   ) {
     const validSort = [
       'trending',
@@ -51,13 +80,20 @@ export class GamesController {
     return this.games.listPopular({
       limit: parseInt(limit),
       sort: validSort,
-      platform,
+      platforms: parseList(platform).filter((p) =>
+        LISTING_PLATFORMS.includes(p as Platform),
+      ) as Platform[],
       offset: parseInt(offset),
-      genre,
+      genres: parseList(genre),
       status: validStatus,
       yearMin: parseInt(yearMin),
       yearMax: parseInt(yearMax),
       minReviews: parseInt(minReviews),
+      modes: parseList(mode).filter((m) =>
+        LISTING_MODES.includes(m as GameMode),
+      ) as GameMode[],
+      hideFree: hideFree === '1' || hideFree === 'true',
+      exclusive: exclusive === '1' || exclusive === 'true',
     });
   }
 

@@ -357,13 +357,20 @@ export interface PaginatedGames {
 export interface PopularGamesParams {
   limit?: number;
   sort?: SortOption;
+  /** One platform or several, comma-separated (`PLAYSTATION,XBOX`): any of. */
   platform?: string;
   offset?: number;
+  /** One genre or several, comma-separated: any of. */
   genre?: string;
   status?: StatusOption;
   yearMin?: number;
   yearMax?: number;
   minReviews?: number;
+  /** IGDB game modes (`SINGLE_PLAYER`, `MULTIPLAYER`, `CO_OP`), any of. */
+  modes?: string[];
+  hideFree?: boolean;
+  /** Only games on no platform outside `platform`. */
+  exclusive?: boolean;
 }
 
 export async function getPopularGames(
@@ -379,6 +386,9 @@ export async function getPopularGames(
     yearMin,
     yearMax,
     minReviews,
+    modes,
+    hideFree,
+    exclusive,
   } = params;
   const search = new URLSearchParams({
     limit: String(limit),
@@ -392,6 +402,9 @@ export async function getPopularGames(
   if (yearMax != null) search.set('yearMax', String(yearMax));
   if (minReviews != null && minReviews > 0)
     search.set('minReviews', String(minReviews));
+  if (modes && modes.length > 0) search.set('mode', modes.join(','));
+  if (hideFree) search.set('hideFree', '1');
+  if (exclusive) search.set('exclusive', '1');
   const res = await fetch(`${API_URL}/games/popular?${search}`, {
     next: { revalidate: LISTING_TTL },
   });

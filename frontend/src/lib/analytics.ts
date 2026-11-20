@@ -22,6 +22,8 @@ type Events = {
   // Listing filters
   filter_change: { filter: string; value: string };
   filter_reset: Record<string, never>;
+  // A filter combination with no game (filters = its query string).
+  filter_no_result: { filters: string };
   pagination: { page: number };
   // Outbound links
   outbound_click: { from: string; domain: string };
