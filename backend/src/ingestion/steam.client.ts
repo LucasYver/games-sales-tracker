@@ -582,14 +582,30 @@ export class SteamClient {
    * estimation method.
    */
   async getTotalReviews(appId: number): Promise<number | null> {
+    return (await this.getReviewSummary(appId))?.total ?? null;
+  }
+
+  /**
+   * Total Steam reviews and the share of them that are positive (0..1, null
+   * when Steam sends no positive count or the game has no review). One request.
+   */
+  async getReviewSummary(
+    appId: number,
+  ): Promise<{ total: number; positiveShare: number | null } | null> {
     try {
       // A page size of 0 is read as the default, so ask for a single review.
       const data = await this.getAppReviewsPage(appId, { num_per_page: 1 });
 
       const total = data.query_summary?.total_reviews;
-      return typeof total === 'number' ? total : null;
+      if (typeof total !== 'number') return null;
+      const positive = data.query_summary?.total_positive;
+      const positiveShare =
+        typeof positive === 'number' && total > 0 && positive <= total
+          ? positive / total
+          : null;
+      return { total, positiveShare };
     } catch (error) {
-      this.logger.warn(`getTotalReviews failed for ${appId}: ${error}`);
+      this.logger.warn(`getReviewSummary failed for ${appId}: ${error}`);
       return null;
     }
   }

@@ -1014,16 +1014,17 @@ export class IngestionService {
     appId: number,
     { strict = false }: { strict?: boolean } = {},
   ): Promise<void> {
-    let reviews = await this.steam.getTotalReviews(appId);
-    if (reviews === 0) {
-      reviews = await this.confirmZeroReviews(gameId, appId);
+    let summary = await this.steam.getReviewSummary(appId);
+    if (summary?.total === 0) {
+      summary = await this.confirmZeroReviews(gameId, appId);
     }
-    if (reviews === null) {
+    if (summary === null) {
       if (strict) {
         throw new Error(`Steam returned no review total for app ${appId}`);
       }
       return;
     }
+    const reviews = summary.total;
 
     await this.signals.save(
       this.signals.create({
@@ -1031,6 +1032,8 @@ export class IngestionService {
         source: SourceType.STEAM,
         metric: SignalMetric.STEAM_REVIEWS,
         value: reviews,
+        // Positive share (0..1), read by the V2 model as steamPositiveShare.
+        averageRating: summary.positiveShare,
       }),
     );
     if (reviews >= STEAM_CORE_MIN_REVIEWS) {
@@ -1051,7 +1054,7 @@ export class IngestionService {
   private async confirmZeroReviews(
     gameId: string,
     appId: number,
-  ): Promise<number | null> {
+  ): Promise<{ total: number; positiveShare: number | null } | null> {
     const previous = await this.signals.findOne({
       where: {
         gameId,
@@ -1062,19 +1065,19 @@ export class IngestionService {
       order: { capturedAt: 'DESC' },
       select: { value: true },
     });
-    if (!previous) return 0;
+    if (!previous) return { total: 0, positiveShare: null };
 
     const canonical = await this.steam.getCanonicalAppId(appId);
-    const reviews =
+    const summary =
       canonical !== null && canonical !== appId
-        ? await this.steam.getTotalReviews(canonical)
+        ? await this.steam.getReviewSummary(canonical)
         : null;
     if (
-      reviews !== null &&
-      reviews >= previous.value * 0.9 &&
-      reviews <= previous.value * 2
+      summary !== null &&
+      summary.total >= previous.value * 0.9 &&
+      summary.total <= previous.value * 2
     ) {
-      return reviews;
+      return summary;
     }
 
     this.logger.warn(
