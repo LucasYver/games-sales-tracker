@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { useLocale, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import { Link } from '@/i18n/navigation';
-import { hasBlog, localeLanguages, routing } from '@/i18n/routing';
+import { localeLanguages, routing } from '@/i18n/routing';
 import { SITE_URL } from '@/lib/site-url';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
 import { defaultOgImages } from '@/lib/og-meta';
@@ -75,7 +75,6 @@ const EXAMPLE_GAMES = [
 
 export default function MethodologyPage() {
   const t = useTranslations('methodology');
-  const locale = useLocale();
   const strong = (chunks: React.ReactNode) => (
     <strong className="font-semibold text-foreground">{chunks}</strong>
   );
@@ -140,13 +139,11 @@ export default function MethodologyPage() {
               </li>
             ))}
           </ul>
-          {hasBlog(locale) && (
-            <p>
-              <Link href="/blog" className="text-primary hover:underline">
-                {t('examplesBlog')}
-              </Link>
-            </p>
-          )}
+          <p>
+            <Link href="/blog" className="text-primary hover:underline">
+              {t('examplesBlog')}
+            </Link>
+          </p>
         </Section>
       </article>
     </main>

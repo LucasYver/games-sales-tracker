@@ -179,8 +179,10 @@ and revalidate the locale blog + game pages (the game's cached pages
 expire through `updateTag(gameCacheTag(slug))`). A first publish also sends both
 language URLs to IndexNow (`common/indexnow.ts`). The sitemap lists one entry
 per language version, each with its hreflang alternates. Articles exist in
-`en` and `fr` only (`hasBlog` in `frontend/src/i18n/routing.ts`), although the
-site also runs in `es`, `ru` and `ar`.
+`en` and `fr` only (`hasBlog` in `frontend/src/i18n/routing.ts`). The other
+locales (`es`, `ru`, `ar`, `zh-CN`) show the English articles in the translated
+page (`blogContentLocale`): canonical to the English URL, left out of the
+sitemap and hreflang; the language switcher maps each locale to its slug.
 
 `/admin/blog/:id` is the review screen, not a writing plan: fact pack
 (with labels) at the top, then editable EN/FR title / meta / excerpt /

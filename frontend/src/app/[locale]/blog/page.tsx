@@ -1,9 +1,8 @@
 import { getTranslations } from 'next-intl/server';
 import type { Metadata } from 'next';
 import Image from 'next/image';
-import { notFound } from 'next/navigation';
 import { Link } from '@/i18n/navigation';
-import { hasBlog, routing } from '@/i18n/routing';
+import { blogContentLocale, hasBlog, routing } from '@/i18n/routing';
 import { getBlogIndex } from '@/lib/api';
 import { SITE_URL } from '@/lib/site-url';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
@@ -22,16 +21,21 @@ export async function generateMetadata({
   searchParams: Promise<{ page?: string }>;
 }): Promise<Metadata> {
   const { locale } = await params;
-  if (!hasBlog(locale)) notFound();
   const { page: pageRaw } = await searchParams;
   const t = await getTranslations({ locale, namespace: 'blog' });
   const page = Math.max(1, Number(pageRaw) || 1);
   const path = page > 1 ? `/${locale}/blog?page=${page}` : `/${locale}/blog`;
+  const contentLocale = blogContentLocale(locale);
   return {
     title: t('metaIndexTitle'),
     description: t('indexDescription'),
     alternates: {
-      canonical: path,
+      // A locale without articles lists the English ones: that list is the
+      // canonical page, and this locale stays out of the hreflang set.
+      canonical:
+        page > 1
+          ? `/${contentLocale}/blog?page=${page}`
+          : `/${contentLocale}/blog`,
       languages: {
         en: page > 1 ? `/en/blog?page=${page}` : '/en/blog',
         fr: page > 1 ? `/fr/blog?page=${page}` : '/fr/blog',
@@ -57,12 +61,12 @@ export default async function BlogIndexPage({
   searchParams: Promise<{ page?: string }>;
 }) {
   const { locale } = await params;
-  if (!hasBlog(locale)) notFound();
   const { page: pageRaw } = await searchParams;
   const page = Math.max(1, Number(pageRaw) || 1);
   const t = await getTranslations({ locale, namespace: 'blog' });
+  const contentLocale = blogContentLocale(locale);
   const { items, total } = await getBlogIndex(
-    locale,
+    contentLocale,
     PAGE_SIZE,
     (page - 1) * PAGE_SIZE,
   );
@@ -75,15 +79,15 @@ export default async function BlogIndexPage({
         '@type': 'Blog',
         name: t('indexTitle'),
         description: t('indexDescription'),
-        inLanguage: locale,
-        url: `${SITE_URL}/${locale}/blog`,
+        inLanguage: contentLocale,
+        url: `${SITE_URL}/${contentLocale}/blog`,
       },
       {
         '@type': 'ItemList',
         itemListElement: items.map((item, index) => ({
           '@type': 'ListItem',
           position: index + 1,
-          url: `${SITE_URL}/${locale}/blog/${item.slug}`,
+          url: `${SITE_URL}/${contentLocale}/blog/${item.slug}`,
           name: item.title,
         })),
       },
@@ -109,11 +113,14 @@ export default async function BlogIndexPage({
         <p className="mt-3 max-w-[70ch] text-sm leading-relaxed text-muted-foreground">
           {t('indexIntro')}
         </p>
+        {!hasBlog(locale) && (
+          <p className="mt-2 text-sm text-text-faint">{t('englishOnly')}</p>
+        )}
 
         {items.length === 0 ? (
           <p className="mt-10 text-sm text-muted-foreground">{t('empty')}</p>
         ) : (
-          <ul className="mt-8 divide-y divide-border">
+          <ul lang={contentLocale} className="mt-8 divide-y divide-border">
             {items.map((item) => (
               <li key={item.slug} className="py-5">
                 <Link
@@ -157,5 +164,5 @@ export default async function BlogIndexPage({
 }
 
 export function generateStaticParams() {
-  return routing.locales.filter(hasBlog).map((locale) => ({ locale }));
+  return routing.locales.map((locale) => ({ locale }));
 }

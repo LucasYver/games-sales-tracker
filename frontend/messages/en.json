@@ -390,7 +390,8 @@
     "metaIndexTitle": "Official game sales — Blog",
     "publishedOn": "Published {date}",
     "tldrTitle": "In short",
-    "updatedOn": "Updated {date}"
+    "updatedOn": "Updated {date}",
+    "englishOnly": "Articles are only available in English for now."
   },
   "privacy": {
     "adsBody": "This site may show ads provided by Google AdSense. Google and its partners may use cookies to serve these ads and to personalize them based on your visits to this site and other sites.",

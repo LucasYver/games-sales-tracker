@@ -390,7 +390,8 @@
     "metaIndexTitle": "Ventas oficiales de juegos — Blog",
     "publishedOn": "Publicado el {date}",
     "tldrTitle": "En resumen",
-    "updatedOn": "Actualizado el {date}"
+    "updatedOn": "Actualizado el {date}",
+    "englishOnly": "Por ahora, los artículos solo están disponibles en inglés."
   },
   "privacy": {
     "adsBody": "Este sitio puede mostrar anuncios de Google AdSense. Google y sus socios pueden usar cookies para mostrar estos anuncios y personalizarlos según tus visitas a este y otros sitios.",

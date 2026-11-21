@@ -1,7 +1,6 @@
 import { Suspense } from 'react';
-import { useLocale, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
-import { hasBlog } from '@/i18n/routing';
 import { SearchBar } from '@/components/SearchBar';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { ThemeToggle } from '@/components/chart-room/ThemeToggle';
@@ -29,7 +28,6 @@ export function SiteHeader({
   localePaths?: Partial<Record<string, string>>;
 }) {
   const t = useTranslations('siteMeta');
-  const locale = useLocale();
 
   return (
     <header className="border-b border-border bg-card">
@@ -51,7 +49,7 @@ export function SiteHeader({
           <ThemeToggle />
         </div>
       </div>
-      <SiteNav blog={hasBlog(locale)} />
+      <SiteNav />
     </header>
   );
 }

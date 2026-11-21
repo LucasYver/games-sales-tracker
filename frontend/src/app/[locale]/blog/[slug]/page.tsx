@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Link } from '@/i18n/navigation';
+import { blogContentLocale, hasBlog, routing } from '@/i18n/routing';
 import { SALES_TABLE_MARKER, getBlogIndex, getBlogPost } from '@/lib/api';
 import { displayCover } from '@/lib/cover';
 import { SITE_URL } from '@/lib/site-url';
@@ -25,10 +26,12 @@ export async function generateMetadata({
   params: Promise<{ locale: string; slug: string }>;
 }): Promise<Metadata> {
   const { locale, slug } = await params;
-  const post = await getBlogPost(locale, slug);
+  const post = await getBlogPost(blogContentLocale(locale), slug);
   if (!post) return { title: 'Not found' };
 
-  const path = `/${locale}/blog/${post.slug}`;
+  // Under a locale without articles the English one shows: its own URL is
+  // the canonical page and the hreflang set lists written versions only.
+  const path = `/${post.locale}/blog/${post.slug}`;
   const alt = post.alternate;
   return {
     title: post.title,
@@ -69,13 +72,25 @@ export default async function BlogArticlePage({
   params: Promise<{ locale: string; slug: string }>;
 }) {
   const { locale, slug } = await params;
+  const contentLocale = blogContentLocale(locale);
   const [post, index, t, format] = await Promise.all([
-    getBlogPost(locale, slug),
-    getBlogIndex(locale, 50),
+    getBlogPost(contentLocale, slug),
+    getBlogIndex(contentLocale, 50),
     getTranslations({ locale, namespace: 'blog' }),
     getFormatter({ locale }),
   ]);
   if (!post) notFound();
+
+  // The article's path under each locale, for the language switcher: its
+  // own slug where written, the English one elsewhere.
+  const slugByLocale: Record<string, string> = { [post.locale]: post.slug };
+  if (post.alternate) slugByLocale[post.alternate.locale] = post.alternate.slug;
+  const localePaths = Object.fromEntries(
+    routing.locales.flatMap((l) => {
+      const s = slugByLocale[blogContentLocale(l)];
+      return s ? [[l, `/blog/${s}`]] : [];
+    }),
+  );
 
   // The next articles in publication order, wrapping around, so that every
   // article receives links and not only the newest ones.
@@ -116,7 +131,7 @@ export default async function BlogArticlePage({
         description: post.metaDescription,
         datePublished: post.publishedAt,
         dateModified: post.updatedAt ?? post.publishedAt,
-        inLanguage: locale,
+        inLanguage: post.locale,
         image: post.coverUrl ?? undefined,
         about: post.game
           ? {
@@ -135,7 +150,7 @@ export default async function BlogArticlePage({
           name: 'Game Sales Tracker',
           url: SITE_URL,
         },
-        mainEntityOfPage: `${SITE_URL}/${locale}/blog/${post.slug}`,
+        mainEntityOfPage: `${SITE_URL}/${post.locale}/blog/${post.slug}`,
       },
       // Older articles only: new ones have no FAQ.
       ...(post.faq.length > 0
@@ -185,14 +200,7 @@ export default async function BlogArticlePage({
           __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c'),
         }}
       />
-      <SiteHeader
-        localePaths={{
-          [post.locale]: `/blog/${post.slug}`,
-          ...(post.alternate
-            ? { [post.alternate.locale]: `/blog/${post.alternate.slug}` }
-            : {}),
-        }}
-      />
+      <SiteHeader localePaths={localePaths} />
       <article className="mx-auto w-full max-w-3xl px-4 py-8">
         <nav className="mb-6 font-mono text-[0.72rem] text-text-faint">
           <Link href="/" className="text-muted-foreground hover:text-primary">
@@ -210,6 +218,7 @@ export default async function BlogArticlePage({
         </nav>
 
         <ArticleHeader
+          lang={post.locale}
           title={post.title}
           coverUrl={post.coverUrl}
           coverAlt={post.game?.name ?? post.title}
@@ -218,13 +227,14 @@ export default async function BlogArticlePage({
           }
           updatedLabel={updated ? t('updatedOn', { date: updated }) : null}
           asOfLabel={asOf ? t('figuresAsOf', { date: asOf }) : null}
+          note={hasBlog(locale) ? null : t('englishOnly')}
         />
 
         <aside className="my-6 border border-border bg-card px-4 py-3">
           <p className="font-mono text-[0.68rem] tracking-wide text-text-faint uppercase">
             {t('tldrTitle')}
           </p>
-          <ul className="mt-2 list-disc space-y-1 ps-5 text-sm">
+          <ul lang={post.locale} className="mt-2 list-disc space-y-1 ps-5 text-sm">
             {post.tldr.map((line) => (
               <li key={line}>{line}</li>
             ))}
@@ -235,7 +245,7 @@ export default async function BlogArticlePage({
 
         {post.figures && <PopularityCards signals={post.figures.signals} />}
 
-        <div className="blog-prose text-sm leading-relaxed">
+        <div lang={post.locale} className="blog-prose text-sm leading-relaxed">
           <Markdown
             remarkPlugins={[remarkGfm]}
             components={{
@@ -307,7 +317,7 @@ export default async function BlogArticlePage({
         {post.faq.length > 0 && (
           <section className="mt-10 border-t border-border pt-6">
             <h2 className="text-xl font-semibold">{t('faqTitle')}</h2>
-            <dl className="mt-4 space-y-4">
+            <dl lang={post.locale} className="mt-4 space-y-4">
               {post.faq.map((item) => (
                 <div key={item.question}>
                   <dt className="font-semibold">{item.question}</dt>
@@ -336,7 +346,7 @@ export default async function BlogArticlePage({
             <h2 className="mb-3 font-mono text-[0.8rem] font-bold tracking-wider uppercase">
               {t('moreArticles')}
             </h2>
-            <ul>
+            <ul lang={post.locale}>
               {moreArticles.map((item) => (
                 <li
                   key={item.slug}
@@ -365,24 +375,30 @@ export default async function BlogArticlePage({
 }
 
 function ArticleHeader({
+  lang,
   title,
   coverUrl,
   coverAlt,
   publishedLabel,
   updatedLabel,
   asOfLabel,
+  note,
 }: {
+  lang: string;
   title: string;
   coverUrl: string | null;
   coverAlt: string;
   publishedLabel: string | null;
   updatedLabel: string | null;
   asOfLabel: string | null;
+  note: string | null;
 }) {
   const cover = coverUrl ? displayCover(coverUrl) : null;
   const titleBlock = (
     <div className="min-w-0 flex-1">
-      <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
+      <h1 lang={lang} className="text-3xl font-bold tracking-tight">
+        {title}
+      </h1>
       <p className="mt-3 text-sm text-muted-foreground">
         {[publishedLabel, updatedLabel].filter(Boolean).join(' · ')}
       </p>
@@ -391,6 +407,7 @@ function ArticleHeader({
           {asOfLabel}
         </p>
       )}
+      {note && <p className="mt-2 text-sm text-text-faint">{note}</p>}
     </div>
   );
 

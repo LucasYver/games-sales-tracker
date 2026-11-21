@@ -2,7 +2,7 @@
 
 import { useLocale, useTranslations } from 'next-intl';
 import { usePathname, useRouter } from '@/i18n/navigation';
-import { hasBlog, routing } from '@/i18n/routing';
+import { routing } from '@/i18n/routing';
 import { useTransition } from 'react';
 import { Languages } from 'lucide-react';
 import { trackEvent } from '@/lib/analytics';
@@ -36,9 +36,9 @@ export function LanguageSwitcher({
 
   const change = (next: string) => {
     trackEvent('language_change', { to: next });
-    // Articles exist in some languages only: leave the blog for the others.
-    const fallback =
-      pathname.startsWith('/blog') && !hasBlog(next) ? '/' : pathname;
+    // Article slugs differ per language: without a path for that locale,
+    // land on the blog index rather than a slug that does not exist there.
+    const fallback = pathname.startsWith('/blog/') ? '/blog' : pathname;
     startTransition(() => {
       router.replace(localePaths?.[next] ?? fallback, { locale: next });
     });

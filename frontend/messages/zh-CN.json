@@ -390,7 +390,8 @@
     "metaIndexTitle": "游戏官方销量 — 博客",
     "publishedOn": "发布于 {date}",
     "tldrTitle": "要点",
-    "updatedOn": "更新于 {date}"
+    "updatedOn": "更新于 {date}",
+    "englishOnly": "文章目前仅提供英文版。"
   },
   "privacy": {
     "adsBody": "本站可能展示由 Google AdSense 提供的广告。Google 及其合作伙伴可能会使用 Cookie 来投放这些广告，并根据您访问本站和其他网站的情况进行个性化。",

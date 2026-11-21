@@ -8,14 +8,14 @@ import { Link, usePathname } from '@/i18n/navigation';
  * blog, one tap away on every public page. The current section is marked;
  * on a phone the row scrolls sideways instead of wrapping.
  */
-export function SiteNav({ blog }: { blog: boolean }) {
+export function SiteNav() {
   const tNav = useTranslations('nav');
   const pathname = usePathname();
   const items = [
     { href: '/studios', section: '/studio', label: tNav('studios') },
     { href: '/publishers', section: '/publisher', label: tNav('publishers') },
     { href: '/franchises', section: '/franchise', label: tNav('franchises') },
-    ...(blog ? [{ href: '/blog', section: '/blog', label: tNav('blog') }] : []),
+    { href: '/blog', section: '/blog', label: tNav('blog') },
   ];
 
   return (

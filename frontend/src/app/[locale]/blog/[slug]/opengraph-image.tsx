@@ -1,6 +1,7 @@
 import { ImageResponse } from 'next/og';
 import { getTranslations } from 'next-intl/server';
 import { API_URL, type PublicBlogPost } from '@/lib/api';
+import { blogContentLocale } from '@/i18n/routing';
 import {
   OG_COLORS,
   OG_CACHE_HEADERS,
@@ -43,7 +44,7 @@ export default async function Image({
 }) {
   const { locale, slug } = await params;
   const [post, t, tMeta, fonts] = await Promise.all([
-    getPostForCard(locale, slug),
+    getPostForCard(blogContentLocale(locale), slug),
     getTranslations({ locale, namespace: 'og' }),
     getTranslations({ locale, namespace: 'siteMeta' }),
     loadOgFonts(),

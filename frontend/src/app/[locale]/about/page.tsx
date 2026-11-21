@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { useLocale, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import { Link } from '@/i18n/navigation';
-import { hasBlog, localeLanguages, routing } from '@/i18n/routing';
+import { localeLanguages, routing } from '@/i18n/routing';
 import { SITE_URL } from '@/lib/site-url';
 import { OWNER_NAME } from '@/lib/contact';
 import { SiteHeader } from '@/components/chart-room/SiteHeader';
@@ -55,7 +55,6 @@ const LINK_CLASS = 'text-primary hover:underline';
 
 export default function AboutPage() {
   const t = useTranslations('about');
-  const locale = useLocale();
 
   return (
     <main className="flex min-h-screen flex-col">
@@ -70,13 +69,11 @@ export default function AboutPage() {
           <ul className="list-disc space-y-1 ps-5">
             <li>{t('offerGames')}</li>
             <li>{t('offerHubs')}</li>
-            {hasBlog(locale) && (
-              <li>
-                <Link href="/blog" className={LINK_CLASS}>
-                  {t('offerBlog')}
-                </Link>
-              </li>
-            )}
+            <li>
+              <Link href="/blog" className={LINK_CLASS}>
+                {t('offerBlog')}
+              </Link>
+            </li>
           </ul>
         </Section>
 

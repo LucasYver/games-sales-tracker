@@ -390,7 +390,8 @@
     "metaIndexTitle": "Ventes officielles — Blog",
     "publishedOn": "Publié le {date}",
     "tldrTitle": "En bref",
-    "updatedOn": "Mis à jour le {date}"
+    "updatedOn": "Mis à jour le {date}",
+    "englishOnly": "Les articles ne sont disponibles qu'en anglais pour le moment."
   },
   "privacy": {
     "adsBody": "Ce site peut afficher des publicités fournies par Google AdSense. Google et ses partenaires peuvent utiliser des cookies pour diffuser ces publicités et les personnaliser selon vos visites sur ce site et sur d'autres sites.",

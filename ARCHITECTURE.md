@@ -202,9 +202,11 @@ estimate rebuild, and matcher inspection.
 ## Frontend
 
 `frontend/src/app/`. Locales `en`, `fr`, `es`, `ru`, `ar` and `zh-CN` (Simplified Chinese) via `next-intl`. Admin is
-outside the locale prefix. The blog exists in `en` and `fr` only (`hasBlog` in
-`i18n/routing.ts`): one paid AI write per language, so `/es/blog`, `/ru/blog`,
-`/ar/blog` and `/zh-CN/blog` are 404s, left out of the header and the sitemap. The header's second row links the studio, publisher and franchise indexes and the blog, current section marked (`components/chart-room/SiteNav.tsx`).
+outside the locale prefix. Articles are written in `en` and `fr` only (`hasBlog` in
+`i18n/routing.ts`): one paid AI write per language. `/es/blog`, `/ru/blog`,
+`/ar/blog` and `/zh-CN/blog` show the English articles inside the translated
+page (`blogContentLocale`), with an "English only" note, a canonical to the
+English URL, and no entry in the sitemap or hreflang. The header's second row links the studio, publisher and franchise indexes and the blog, current section marked (`components/chart-room/SiteNav.tsx`).
 
 Arabic is right to left: the layout sets `dir="rtl"` (`isRtl` in
 `i18n/routing.ts`) and wraps the page in Radix's direction provider. Public
