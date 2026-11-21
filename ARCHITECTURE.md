@@ -245,7 +245,7 @@ match. The site search matches the localized names on every locale.
 | `/[locale]/privacy` | Privacy page: audience measurement, ads, contact |
 | `/[locale]/about` | About page: what the site is, sources, who runs it, funding (static, no backend call) |
 | `/[locale]/contact` | Contact page: `mailto:` link to the address in `frontend/src/lib/contact.ts` (static, no backend call) |
-| `/[locale]/methodology` | Public explanation of the estimates (all locales, no backend call), linked from the game headline and the footer |
+| `/[locale]/methodology` | Public explanation of the estimates (all locales), linked from the game headline and the footer; reads two example games from the API once a day (ISR, 24 h) |
 | `/admin/*` | Back-office |
 
 Share images (`opengraph-image.tsx`, shared code in `lib/og.tsx`): one default

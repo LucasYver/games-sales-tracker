@@ -121,8 +121,12 @@ To try a hypothesis: add a small subclass of `BEST` in `learned.py` (see
   "Other").
 - Left for later: the v1.5 code (`estimation/ml/`, `backfill-ml-estimates.ts`) is
   no longer called by anything (the admin estimate tab dropped its v1.5
-  explanation on 2026-11-20); the methodology page text was not reviewed;
-  the lab UI was not restarted.
+  explanation on 2026-11-20); the lab UI was not restarted. The public
+  methodology page was rewritten for the V2 on 2026-11-21 (anchoring, console
+  rule, ranges, locked-test accuracy by case, sales per review by price and
+  year): its numbers are hard-coded from this file and `ml2/README.md`, so
+  update `frontend/src/app/[locale]/methodology/page.tsx` and the
+  `methodology` messages after a new freeze.
 
 **The model is frozen (owner's decision, 2026-11-12): H27, snapshot
 `2026-11-09T1952`.** No new hypothesis on the model; the next step is the backend
